@@ -1,112 +1,114 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+Diese Datei bietet Anleitungen für Claude Code (claude.ai/code) bei der Arbeit mit dem Code in diesem Repository.
 
-## Project Overview
+## Projektüberblick
 
-This is "Putplan" (cleaning plan), a gamified cleaning task management application built as a Vue.js 3 project. The application is designed to help track and gamify household cleaning tasks with XP, levels, achievements, and leaderboards. The main development is happening in the `putzplan/` subdirectory.
+Dies ist "Putzplan", eine gamifizierte Putzaufgaben-Verwaltungsanwendung, die als Vue.js 3 Projekt entwickelt wird. Die Anwendung soll dabei helfen, Haushalts-Putzaufgaben mit XP, Leveln, Achievements und Ranglisten zu verfolgen und zu gamifizieren. Die Hauptentwicklung findet im `putzplan_vue/` Unterverzeichnis statt.
 
-**Important: This is a learning project.** The primary goal is to teach the user how to build modern web applications. When working on this codebase, always:
-- Explain what you're doing and why
-- Teach best practices and development patterns
-- Show alternative approaches when relevant
-- Help the user understand the underlying concepts
-- Be educational rather than just implementing features
+**Wichtig: Dies ist ein Lernprojekt.** Das primäre Ziel ist es, dem Benutzer beizubringen, wie man moderne Webanwendungen entwickelt. Bei der Arbeit mit dieser Codebasis solltest du immer:
+- Erklären, was du machst und warum
+- Best Practices und Entwicklungsmuster beibringen
+- Alternative Ansätze zeigen, wo relevant
+- Dem Benutzer helfen, die zugrundeliegenden Konzepte zu verstehen
+- Lehrreich sein, anstatt nur Features zu implementieren
 
-## Project Structure
+## Projektstruktur
 
-The repository has a nested structure:
-- Root directory contains a parent `package.json` with Supabase dependency
-- `putzplan/` contains the main Vue.js application
-- Development plan is documented in `putzplan-dev-plan.md` (German)
+Das Repository hat eine verschachtelte Struktur:
+- Root-Verzeichnis enthält eine übergeordnete `package.json` mit Supabase-Abhängigkeit
+- `putzplan_vue/` enthält die Haupt-Vue.js-Anwendung
+- Entwicklungsplan ist in `putzplan-dev-plan.md` dokumentiert (Deutsch)
 
-## Common Commands
+## Häufige Befehle
 
-All commands should be run from the `putzplan/` directory:
+Alle Befehle sollten aus dem `putzplan_vue/` Verzeichnis ausgeführt werden:
 
 ```bash
-cd putzplan
+cd putzplan_vue
 ```
 
-### Development
-- `npm run dev` - Start development server with hot reload
-- `npm run build` - Type-check, compile and minify for production  
-- `npm run build-only` - Build without type checking
-- `npm run preview` - Preview production build locally
+### Entwicklung
+- `npm run dev` - Entwicklungsserver mit Hot Reload starten
+- `npm run build` - Type-Check, kompilieren und minifizieren für Produktion  
+- `npm run build-only` - Build ohne Type-Checking
+- `npm run preview` - Produktions-Build lokal vorschauen
 
-### Code Quality
-- `npm run lint` - Run ESLint with auto-fix
-- `npm run format` - Format code with Prettier
-- `npm run type-check` - Run Vue TypeScript compiler
+Du brauchst keine Dev Server zu runnen. Du hast eh keinen Zugriff auf den Browser und ich hab immer einen am laufen. 
 
-## Tech Stack & Architecture
+### Code-Qualität
+- `npm run lint` - ESLint mit Auto-Fix ausführen
+- `npm run format` - Code mit Prettier formatieren
+- `npm run type-check` - Vue TypeScript Compiler ausführen
 
-- **Frontend**: Vue.js 3 with Composition API and `<script setup>` syntax
-- **TypeScript**: Full TypeScript support with vue-tsc
-- **State Management**: Pinia stores (Composition API style)
-- **Routing**: Vue Router with lazy-loaded routes
-- **Build Tool**: Vite with Vue plugin and dev tools
-- **Backend**: Supabase (database, authentication, real-time)
-- **Styling**: CSS with scoped styles, CSS custom properties
+## Tech Stack & Architektur
 
-### Key Directories
-- `src/components/` - Reusable Vue components
-- `src/views/` - Route-level components  
-- `src/stores/` - Pinia state stores
-- `src/router/` - Vue Router configuration
-- `src/assets/` - Static assets and global styles
-- `src/lib/` - Utility libraries and external service configurations
+- **Frontend**: Vue.js 3 mit Composition API und `<script setup>` Syntax
+- **TypeScript**: Vollständige TypeScript-Unterstützung mit vue-tsc
+- **State Management**: Pinia Stores (Composition API Stil)
+- **Routing**: Vue Router mit lazy-loaded Routes
+- **Build Tool**: Vite mit Vue Plugin und Dev Tools
+- **Backend**: Supabase (Datenbank, Authentifizierung, Echtzeit)
+- **Styling**: CSS mit scoped Styles, CSS Custom Properties
 
-### Architectural Patterns
-- Uses Vue 3 Composition API with `<script setup>` syntax
-- Pinia stores follow the Composition API pattern with `defineStore()`
-- Route-level code splitting with dynamic imports
-- Alias `@/` configured for `src/` directory
+### Wichtige Verzeichnisse
+- `src/components/` - Wiederverwendbare Vue-Komponenten
+- `src/views/` - Route-Level-Komponenten  
+- `src/stores/` - Pinia State Stores
+- `src/router/` - Vue Router Konfiguration
+- `src/assets/` - Statische Assets und globale Styles
+- `src/lib/` - Utility-Bibliotheken und externe Service-Konfigurationen
 
-## Development Features Planned
+### Architektur-Muster
+- Verwendet Vue 3 Composition API mit `<script setup>` Syntax
+- Pinia Stores folgen dem Composition API Muster mit `defineStore()`
+- Route-Level Code Splitting mit dynamischen Imports
+- Alias `@/` konfiguriert für `src/` Verzeichnis
 
-Based on `putzplan-dev-plan.md`, the application will include:
+## Geplante Entwicklungsfeatures
 
-### Core Features
-- User authentication via Supabase Auth
-- Task management with categories (Kitchen, Bathroom, Living Room)
-- XP system with different rewards per task category
-- Level progression system
-- Achievement/badge system
-- Streak tracking for daily cleaning
-- Personal statistics and progress tracking
-- Leaderboard functionality
+Basierend auf `putzplan-dev-plan.md` wird die Anwendung folgendes beinhalten:
 
-### Database Schema (Supabase)
-- `tasks` - Task templates with XP rewards and categories
-- `completed_tasks` - Track completed tasks with timestamps
-- `user_stats` - User XP, level, streaks, and totals
-- `achievements` - User achievement unlocks
+### Kernfeatures
+- Benutzerauthentifizierung über Supabase Auth
+- Aufgabenverwaltung mit Kategorien (Küche, Badezimmer, Wohnzimmer)
+- XP-System mit unterschiedlichen Belohnungen pro Aufgabenkategorie
+- Level-Progression-System
+- Achievement/Badge-System
+- Streak-Tracking für tägliches Putzen
+- Persönliche Statistiken und Fortschrittsverfolgung
+- Ranglisten-Funktionalität
+
+### Datenbankschema (Supabase)
+- `tasks` - Aufgaben-Templates mit XP-Belohnungen und Kategorien
+- `completed_tasks` - Abgeschlossene Aufgaben mit Zeitstempeln verfolgen
+- `user_stats` - Benutzer-XP, Level, Streaks und Gesamtwerte
+- `achievements` - Benutzer-Achievement-Freischaltungen
 
 ## Node.js Version
 
-Requires Node.js `^20.19.0 || >=22.12.0` as specified in package.json engines.
+Benötigt Node.js `^20.19.0 || >=22.12.0` wie in package.json engines spezifiziert.
 
-## Environment Configuration
+## Umgebungskonfiguration
 
-The project uses environment variables for configuration:
+Das Projekt verwendet Umgebungsvariablen für die Konfiguration:
 
 ### Setup
-- Copy `.env.example` to `.env` and fill in your values
-- Required variables:
-  - `VITE_SUPABASE_URL` - Your Supabase project URL
-  - `VITE_SUPABASE_ANON_KEY` - Your Supabase anon/public key (safe to be public)
+- Kopiere `.env.example` zu `.env` und fülle deine Werte ein
+- Erforderliche Variablen:
+  - `VITE_SUPABASE_URL` - Deine Supabase-Projekt-URL
+  - `VITE_SUPABASE_ANON_KEY` - Dein Supabase Anon/Public Key (sicher öffentlich zu machen)
 
 ### Supabase Integration
-- Supabase client is configured in `src/lib/supabase.ts`
-- Uses environment variables with error checking
-- The anon key is public and can be safely committed to Git
-- All VITE_ prefixed variables are available in the browser
+- Supabase-Client ist in `src/lib/supabase.ts` konfiguriert
+- Verwendet Umgebungsvariablen mit Fehlerprüfung
+- Der Anon-Key ist öffentlich und kann sicher in Git committed werden
+- Alle VITE_ prefixierten Variablen sind im Browser verfügbar
 
-## Development Notes
+## Entwicklungsnotizen
 
-- The project has completed Supabase setup and environment configuration
-- German language is used in planning documents and likely the UI
-- PWA features and mobile optimization are planned
-- Real-time updates between devices planned via Supabase
-- No test framework is currently configured
+- Das Projekt hat Supabase-Setup und Umgebungskonfiguration abgeschlossen
+- Deutsche Sprache wird in Planungsdokumenten und wahrscheinlich der UI verwendet
+- PWA-Features und mobile Optimierung sind geplant
+- Echtzeit-Updates zwischen Geräten geplant über Supabase
+- Aktuell ist kein Test-Framework konfiguriert
