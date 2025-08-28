@@ -105,6 +105,12 @@ Das Projekt verwendet Umgebungsvariablen für die Konfiguration:
 - Der Anon-Key ist öffentlich und kann sicher in Git committed werden
 - Alle VITE_ prefixierten Variablen sind im Browser verfügbar
 
+## Git & Commit-Verhalten
+
+**WICHTIG:** Immer alle geänderten/neuen Dateien committen, außer sie sind in .gitignore:
+- Führe `git add .` aus, um alle Änderungen zu stagen  
+- Erstelle aussagekräftige Commit-Messages
+
 ## Entwicklungsnotizen
 
 - Das Projekt hat Supabase-Setup und Umgebungskonfiguration abgeschlossen
