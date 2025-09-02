@@ -1,20 +1,26 @@
 <script setup lang="ts">
-import TaskCard  from './components/TaskCard.vue';
+import { ref, onMounted, computed } from "vue";
+import TaskList from './components/TaskList.vue';
+import type { Task } from "@/types/Task"
+import testTasksData from '@/data/testTasks.json';
+
+const tasks = ref<Task[]>([]);
+
+const openTasks = computed(() => tasks.value.filter(t => !t.completed))
+const completedTasks = computed(() => tasks.value.filter(t => t.completed))
 
 
-//TODO Test Tasks müssen wieder entfernt werden
-  const testTask = {
-    id: 1,
-    title: "Küche putzen",
-    effort: 3,
-    recurrence: { type: 'recurring', days: 7 }
+onMounted(() => {
+       // Simuliert später den Supabase API-Call
+       tasks.value = testTasksData as Task[];
+       });
+
+const completeTask = (taskID: number) =>{
+  const task = tasks.value.find(t => t.id === taskID)
+  if (task) {
+    task.completed = true
   }
-  const testTask2 = {
-    id: 1,
-    title: "Schrank aufbauen",
-    effort: 4,
-    recurrence: { type: 'once'}
-  }
+}
 </script>
 
 <template>
@@ -29,14 +35,14 @@ import TaskCard  from './components/TaskCard.vue';
       <div class="col-12">
         <h2 class="text-center">Bester Putzplan der Welt</h2>
       </div>
-
-      <!--TODO wieder entfernen nach dem testen--> 
-      <div class="col-4">
-        <TaskCard :task="testTask" />
-      </div>
-      <div class="col-4">
-        <TaskCard :task="testTask2" />
-      </div>
+      <h3> Muss gemacht werden </h3>
+      <TaskList :tasks="openTasks"
+      @completeTask="completeTask">
+      </TaskList>
+      <h3> Erledigt </h3>
+      <TaskList :tasks="completedTasks"
+      @completeTask="completeTask">
+      </TaskList>
     </main>
   </div>
 

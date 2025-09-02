@@ -11,15 +11,13 @@ interface Props {
 // abrufbar als props.task...
 const props = defineProps<Props>()
 
+const emit = defineEmits<{
+     completeTask: [taskId: number]
+}>()
 
-// SCHRITT 4: Hilfsdaten f�r die Darstellung
-// Diese Objects helfen uns, Icons und Farben basierend auf Kategorien/Schwierigkeit anzuzeigen
-// TODO: Erstelle Objects f�r:
-// - categoryIcons: Icons f�r jede Kategorie (<s f�r kitchen, =� f�r bathroom, etc.)
-// - categoryLabels: Deutsche Namen f�r Kategorien
-// - difficultyColors: Bootstrap-Farben f�r Schwierigkeiten (success, warning, danger)
-// - difficultyLabels: Deutsche Namen f�r Schwierigkeiten
-
+const handleCompleteTask = () => {
+    emit('completeTask', props.task.id)
+  }
 </script>
 
 <template>
@@ -39,7 +37,9 @@ const props = defineProps<Props>()
                </p>
           </div>
           <div class="card-footer">
-               <button class="btn btn-success w-30">Erledigt</button>
+               <button class="btn btn-success w-30"
+               @click="handleCompleteTask"
+               >Erledigt?</button>
           </div>
      </div>
 

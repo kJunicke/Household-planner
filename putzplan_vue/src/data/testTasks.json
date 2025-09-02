@@ -1,0 +1,61 @@
+[
+  {
+    "id": 1,
+    "title": "Küche putzen",
+    "effort": 3,
+    "completed": false,
+    "recurrence": {
+      "type": "recurring",
+      "days": 3
+    }
+  },
+  {
+    "id": 2,
+    "title": "Badezimmer säubern", 
+    "effort": 4,
+    "completed": false,
+    "recurrence": {
+      "type": "recurring",
+      "days": 7
+    }
+  },
+  {
+    "id": 3,
+    "title": "Staubsaugen Wohnzimmer",
+    "effort": 2,
+    "completed": true,
+    "recurrence": {
+      "type": "recurring", 
+      "days": 5
+    }
+  },
+  {
+    "id": 4,
+    "title": "Fenster putzen",
+    "effort": 5,
+    "completed": false,
+    "recurrence": {
+      "type": "once"
+    }
+  },
+  {
+    "id": 5,
+    "title": "Müll rausbringen",
+    "effort": 1,
+    "completed": false,
+    "recurrence": {
+      "type": "recurring",
+      "days": 7
+    }
+  },
+  {
+    "id": 6,
+    "title": "Boden wischen",
+    "effort": 3,
+    "completed": false,
+    "recurrence": {
+      "type": "recurring",
+      "days": 14
+    }
+  }
+]

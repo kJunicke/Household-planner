@@ -153,3 +153,6 @@ Nutze keine Shortcuts oder copout lösungen. Implementiere immer die Beste Lösu
 - Verfeinerungen und Optimierungen kommen nach dem ersten funktionsfähigen Stand
 - Trotzdem nicht den Sinn als Lernprojekt aus den Augen verlieren
 - behalte immer Dry prinzipien im Blick
+
+- Lese dir immer bei der ersten Nachricht CHANGELOG.md und TODO.md durch
+- Da es ein lernprojekt ist lasse mich Änderungen selbst machen und erkläre nur was getan werden muss. Mache nur Änderungen, wenn ich explizit dannach frage.
