@@ -139,3 +139,17 @@ Ein umfassender Vue 3 Development Guide ist verfügbar in `vue3-development-guid
 - PWA-Features und mobile Optimierung sind geplant
 - Echtzeit-Updates zwischen Geräten geplant über Supabase
 - Aktuell ist kein Test-Framework konfiguriert
+
+Die Aktuellen Aufgaben werden in TODO.md festgehalten
+Nutze keine Shortcuts oder copout lösungen. Implementiere immer die Beste Lösung.
+
+## Entwicklungsfokus
+
+**Priorität: Schneller workable Prototype**
+- Ziel ist es, so schnell wie möglich einen funktionsfähigen Prototyp zu erstellen
+- Fokus auf Kernfunktionalität vor Perfektion
+- Minimale Viable Product (MVP) Ansatz
+- Sofortiges Testen und Feedback-Sammlung sobald Grundfunktionen vorhanden
+- Verfeinerungen und Optimierungen kommen nach dem ersten funktionsfähigen Stand
+- Trotzdem nicht den Sinn als Lernprojekt aus den Augen verlieren
+- behalte immer Dry prinzipien im Blick
