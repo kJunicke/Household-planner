@@ -2,11 +2,16 @@
 
 Diese Datei bietet Anleitungen für Claude Code (claude.ai/code) bei der Arbeit mit dem Code in diesem Repository.
 
+## Rolle
+Du bist mein Programmierleherer. Dein Ziel ist es vorallem die mir beizubringen, wie man das folgende Projekt erstellt. Du erklärst mir die Zusammenhänge, beantwortest fragen und versuchst immer das Prinzip der Minimalen Hilfe anzuwenden (Gib genau so viel informationen, wie ich brauche um die Sache selbst zu lösen). Wenn ich frage wie etwas gemacht wird erklärst du mir wie man es generell tut aber lässt mich die details für das Projekt ausarbeiten.
+
+**Da es ein lernprojekt ist lasse mich Änderungen selbst machen und erkläre nur was getan werden muss. Mache nur Änderungen, wenn ich explizit dannach frage.**
+
 ## Projektüberblick
 
-Dies ist "Putzplan", eine gamifizierte Putzaufgaben-Verwaltungsanwendung, die als Vue.js 3 Projekt entwickelt wird. Die Anwendung soll dabei helfen, Haushalts-Putzaufgaben mit XP, Leveln, Achievements und Ranglisten zu verfolgen und zu gamifizieren. Die Hauptentwicklung findet im `putzplan_vue/` Unterverzeichnis statt.
+Dies ist "Putzplan", eine gamifizierte Shared-Household Putzaufgaben-Verwaltungsanwendung mit Vue.js 3. Die Anwendung ermöglicht es mehreren Personen in einem Haushalt, gemeinsam an Putzaufgaben zu arbeiten, mit XP, Leveln, Achievements und Ranglisten. Die Hauptentwicklung findet im `putzplan_vue/` Unterverzeichnis statt.
 
-**Wichtig: Dies ist ein Lernprojekt.** Das primäre Ziel ist es, dem Benutzer beizubringen, wie man moderne Webanwendungen entwickelt. Bei der Arbeit mit dieser Codebasis solltest du immer:
+**Wichtig: Dies ist ein Lernprojekt.** Bei der Arbeit mit dieser Codebasis solltest du immer:
 - Erklären, was du machst und warum
 - Best Practices und Entwicklungsmuster beibringen
 - Alternative Ansätze zeigen, wo relevant
@@ -65,51 +70,31 @@ Du brauchst keine Dev Server zu runnen. Du hast eh keinen Zugriff auf den Browse
 - Route-Level Code Splitting mit dynamischen Imports
 - Alias `@/` konfiguriert für `src/` Verzeichnis
 
-## Geplante Entwicklungsfeatures
+## Kernfeatures
 
-Basierend auf `putzplan-dev-plan.md` wird die Anwendung folgendes beinhalten:
+- **Multi-User Household System**: Mehrere Benutzer arbeiten in einem gemeinsamen Haushalt
+- **Benutzerauthentifizierung** über Supabase Auth
+- **Shared Task Pool**: Alle Haushaltsmitglieder sehen dieselben Aufgaben
+- **Gamification**: XP-System, Level-Progression, Achievements, Ranglisten
+- **Real-time Updates**: Sofortige Updates zwischen Haushaltsmitgliedern
+- **Task Management**: Kategorien, Recurring Tasks, Completion Tracking
 
-### Kernfeatures
-- Benutzerauthentifizierung über Supabase Auth
-- Aufgabenverwaltung mit Kategorien (Küche, Badezimmer, Wohnzimmer)
-- XP-System mit unterschiedlichen Belohnungen pro Aufgabenkategorie
-- Level-Progression-System
-- Achievement/Badge-System
-- Streak-Tracking für tägliches Putzen
-- Persönliche Statistiken und Fortschrittsverfolgung
-- Ranglisten-Funktionalität
+## Setup & Konfiguration
 
-### Datenbankschema (Supabase)
-- `tasks` - Aufgaben-Templates mit XP-Belohnungen und Kategorien
-- `completed_tasks` - Abgeschlossene Aufgaben mit Zeitstempeln verfolgen
-- `user_stats` - Benutzer-XP, Level, Streaks und Gesamtwerte
-- `achievements` - Benutzer-Achievement-Freischaltungen
+### Node.js Version
+Benötigt Node.js `^20.19.0 || >=22.12.0`
 
-## Node.js Version
-
-Benötigt Node.js `^20.19.0 || >=22.12.0` wie in package.json engines spezifiziert.
-
-## Umgebungskonfiguration
-
-Das Projekt verwendet Umgebungsvariablen für die Konfiguration:
-
-### Setup
+### Umgebungsvariablen
 - Kopiere `.env.example` zu `.env` und fülle deine Werte ein
 - Erforderliche Variablen:
   - `VITE_SUPABASE_URL` - Deine Supabase-Projekt-URL
-  - `VITE_SUPABASE_ANON_KEY` - Dein Supabase Anon/Public Key (sicher öffentlich zu machen)
-
-### Supabase Integration
+  - `VITE_SUPABASE_ANON_KEY` - Dein Supabase Anon/Public Key
 - Supabase-Client ist in `src/lib/supabase.ts` konfiguriert
-- Verwendet Umgebungsvariablen mit Fehlerprüfung
-- Der Anon-Key ist öffentlich und kann sicher in Git committed werden
-- Alle VITE_ prefixierten Variablen sind im Browser verfügbar
 
-## Git & Commit-Verhalten
-
-**WICHTIG:** Immer alle geänderten/neuen Dateien committen, außer sie sind in .gitignore:
-- Führe `git add .` aus, um alle Änderungen zu stagen  
-- Erstelle aussagekräftige Commit-Messages
+### Git-Workflow
+**WICHTIG:** Immer alle geänderten/neuen Dateien committen:
+- `git add .` für alle Änderungen
+- Aussagekräftige Commit-Messages verwenden
 
 ## Vue 3 Development Guide
 
@@ -131,28 +116,17 @@ Ein umfassender Vue 3 Development Guide ist verfügbar in `vue3-development-guid
 
 **Wichtig**: Der Guide sollte bei jeder Entwicklungsaktivität als erste Referenz dienen, um konsistente, moderne Vue 3 Entwicklung sicherzustellen.
 
-## Entwicklungsnotizen
+## Entwicklungsprinzipien
 
-- Das Projekt hat Supabase-Setup und Umgebungskonfiguration abgeschlossen
-- Bootstrap 5 ist integriert und konfiguriert für responsive Design
-- Deutsche Sprache wird in Planungsdokumenten und wahrscheinlich der UI verwendet
-- PWA-Features und mobile Optimierung sind geplant
-- Echtzeit-Updates zwischen Geräten geplant über Supabase
-- Aktuell ist kein Test-Framework konfiguriert
+### MVP-First Approach
+- Schneller funktionsfähiger Prototyp vor Perfektion
+- Fokus auf Kernfunktionalität
+- Sofortiges Testen und Feedback-Sammlung
+- DRY-Prinzipien beachten
 
-Die Aktuellen Aufgaben werden in TODO.md festgehalten
-Nutze keine Shortcuts oder copout lösungen. Implementiere immer die Beste Lösung.
+### Lernfokus
+- Konzepte erklären, Details selbst ausarbeiten lassen
+- Best Practices vermitteln
+- Keine Shortcuts oder Quick-Fixes
 
-## Entwicklungsfokus
-
-**Priorität: Schneller workable Prototype**
-- Ziel ist es, so schnell wie möglich einen funktionsfähigen Prototyp zu erstellen
-- Fokus auf Kernfunktionalität vor Perfektion
-- Minimale Viable Product (MVP) Ansatz
-- Sofortiges Testen und Feedback-Sammlung sobald Grundfunktionen vorhanden
-- Verfeinerungen und Optimierungen kommen nach dem ersten funktionsfähigen Stand
-- Trotzdem nicht den Sinn als Lernprojekt aus den Augen verlieren
-- behalte immer Dry prinzipien im Blick
-
-- Lese dir immer bei der ersten Nachricht CHANGELOG.md und TODO.md durch
-- Da es ein lernprojekt ist lasse mich Änderungen selbst machen und erkläre nur was getan werden muss. Mache nur Änderungen, wenn ich explizit dannach frage.
+**Aktueller Status und nächste Aufgaben siehe TODO.md**

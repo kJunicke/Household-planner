@@ -9,7 +9,7 @@ interface Props {
 const props = defineProps<Props>()
 
 const emit = defineEmits<{
-    completeTask: [taskId: number]
+    toggleTask: [taskId: number]
 }>()
 
 </script>
@@ -20,7 +20,7 @@ const emit = defineEmits<{
             :key="task.id"
             class="col-12 col-md-6 col-lg-3 mb-3">
                 <TaskCard :task="task" 
-                @completeTask="emit('completeTask', $event)"
+                @toggleTask="emit('toggleTask', $event)"
                 />
             </div>
         </div>

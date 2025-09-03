@@ -1,26 +1,20 @@
 <script setup lang="ts">
-import { ref, onMounted, computed } from "vue";
+import { onMounted, computed } from "vue";
 import TaskList from './components/TaskList.vue';
-import type { Task } from "@/types/Task"
-import testTasksData from '@/data/testTasks.json';
+import { useTaskStore } from "./stores/taskStore";
 
-const tasks = ref<Task[]>([]);
+const taskStore = useTaskStore()
 
-const openTasks = computed(() => tasks.value.filter(t => !t.completed))
-const completedTasks = computed(() => tasks.value.filter(t => t.completed))
+const openTasks = computed(() => taskStore.tasks.filter(t => !t.completed))
+const completedTasks = computed(() => taskStore.tasks.filter(t => t.completed))
 
 
 onMounted(() => {
-       // Simuliert später den Supabase API-Call
-       tasks.value = testTasksData as Task[];
+       // Lädt Tasks aus Supabase
+       taskStore.loadTasks()
        });
 
-const completeTask = (taskID: number) =>{
-  const task = tasks.value.find(t => t.id === taskID)
-  if (task) {
-    task.completed = true
-  }
-}
+const toggleTask = taskStore.toggleTask
 </script>
 
 <template>
@@ -37,11 +31,11 @@ const completeTask = (taskID: number) =>{
       </div>
       <h3> Muss gemacht werden </h3>
       <TaskList :tasks="openTasks"
-      @completeTask="completeTask">
+      @toggleTask="toggleTask">
       </TaskList>
       <h3> Erledigt </h3>
       <TaskList :tasks="completedTasks"
-      @completeTask="completeTask">
+      @toggleTask="toggleTask">
       </TaskList>
     </main>
   </div>
