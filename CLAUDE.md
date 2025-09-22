@@ -135,6 +135,14 @@ Ein umfassender Vue 3 Development Guide ist verfügbar in `vue3-development-guid
 - Best Practices vermitteln
 - Keine Shortcuts oder Quick-Fixes
 
+## State Management Best Practices
+
+### Pinia Store-Verwendung
+- **IMMER direkte Store-Verwendung in Components**: Mit Pinia sollen Components direkt Store Actions aufrufen
+- **NICHT das alte Event-Chain Pattern verwenden**: Kein "props down, events up" wenn zentraler Store existiert
+- **Beispiel**: `taskStore.deleteTask(id)` direkt im Component statt Event-Weiterleitung
+- **Vorteil**: Weniger Boilerplate, direkter Zugriff, automatische Reaktivität in allen Components
+
 ## UI/UX Design Patterns
 
 ### Modal vs. Inline Form Patterns

@@ -67,7 +67,9 @@ onMounted(() => {
             <div class="card-body">
               <form @submit.prevent="createTask">
                 <input type="text" v-model="newTask.title" placeholder="Task Titel" class="form-control">
-                <input type="number" v-model="newTask.effort" placeholder="3" class="form-control">
+                Aufwand (1-5): 
+                <input type="number" min="1" max="5" step="1" v-model="newTask.effort" placeholder="3" class="form-control">
+                Tage bis zum nächsten putzen:
                 <input type="number" v-model="newTask.recurrence_days" placeholder="3" class="form-control">
                 <button type="submit" class="btn btn-success">Aufgabe erstellen</button>
               </form>

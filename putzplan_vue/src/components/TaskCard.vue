@@ -12,6 +12,15 @@ const taskStore = useTaskStore()
 const handleToggleTask = () => {
     taskStore.toggleTask(props.task.task_id)
 }
+
+const handleDeleteTask = async () => {
+     try { 
+          await taskStore.deleteTask(props.task.task_id)
+          
+     } catch (error) {
+          console.error('Fehler beim Löschen:', error)
+     }
+}
 </script>
 
 <template>
@@ -40,6 +49,10 @@ const handleToggleTask = () => {
                        class="btn btn-success w-30" 
                        @click="handleToggleTask">
                     Sauber
+               </button>
+               <button class="btn btn-danger"
+               @click="handleDeleteTask">
+               Aufgabe Löschen
                </button>
           </div>
      </div>

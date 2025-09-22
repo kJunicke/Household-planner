@@ -1,22 +1,24 @@
 # Putzplan TODOs
 
-## Aktueller Entwicklungsstand (2025-09-03)
+## Aktueller Entwicklungsstand (2025-09-22)
 
 **ARCHITEKTUR:** Shared Household System - mehrere Benutzer arbeiten im selben Haushalt zusammen
 
-### Phase 2 Core Functionality - ✅ VOLLSTÄNDIG ABGESCHLOSSEN (2025-09-03)
+### Phase 2 Core Functionality - ✅ VOLLSTÄNDIG ABGESCHLOSSEN + CREATE TASK FORM (2025-09-22)
 - **✅ Pinia TaskStore** - Vollständig implementiert mit Supabase Integration
 - **✅ Task Interface Migration** - Von Mock-Schema zu DB-Schema erfolgreich migriert  
 - **✅ Frontend-Database Integration** - Tasks werden aus Supabase geladen, Updates persistieren
 - **✅ Reactive State Management** - App.vue nutzt TaskStore statt lokale JSON-Daten
 - **✅ Task Toggle Funktionalität** - Vollständig funktional mit DB-Persistence
+- **✅ Create Task Form** - Vollständiges Form mit TaskStore Integration funktionsfähig
 - **✅ Code Quality** - Alle Linting-Fehler behoben, TypeScript-Konformität sichergestellt
 
 ### Technische Implementierung Status
 - **Database Schema**: Hybrid-Ansatz mit `completed: boolean` + `task_completions` Historie
-- **TaskStore Functions**: `loadTasks()`, `toggleTask()` mit Error Handling implementiert
+- **TaskStore CRUD Functions**: `loadTasks()`, `createTask()`, `toggleTask()`, `updateTask()`, `deleteTask()` vollständig implementiert
+- **Create Task Form**: Bootstrap Form mit toggle functionality, form validation und TaskStore integration
 - **Event Chain**: TaskCard → TaskList → App.vue → TaskStore funktional
-- **Type Safety**: TypeScript Interfaces aligned mit Supabase Schema
+- **Type Safety**: TypeScript Interfaces aligned mit Supabase Schema, Property-Name Bugs behoben
 
 ### Development Lessons Learned
 - **Minimal Help Principle** angewendet - Konzepte erklären, Details selbst ausarbeiten lassen
@@ -58,7 +60,10 @@
    - [x] ~~TaskCard Toggle System~~ - Funktioniert mit Supabase Persistence ✓
    - [x] ~~App.vue State Management Migration~~ - TaskStore Integration ✓
    - [x] ~~Frontend-Database Sync~~ - Updates persistieren nach Page Reload ✓
-   - [ ] Task Creation für Household Admins (später)
+   - [x] ~~**Create Task Form**~~ - Vollständiges Form mit allen Feldern und TaskStore integration ✓
+   - [x] ~~**CRUD Operations Frontend**~~ - CREATE, READ, UPDATE (toggle), DELETE verfügbar im TaskStore ✓
+   - [x] ~~**DELETE Operations UI**~~ - Delete Buttons in TaskCards mit TaskStore Integration ✓
+   - [ ] **UPDATE Operations UI** - Edit Task Form
    - [ ] Advanced Completion Tracking (user_id, timestamp) (später für Gamification)
    - [ ] "Wer hat was gemacht" Anzeige (später für Multi-User)
 
@@ -78,15 +83,17 @@
 - [x] **TypeScript Type Safety** - Interfaces aligned mit Datenbank Schema ✓
 - [x] **Frontend-Database Sync** - Optimistic UI Updates + Database Persistence ✓
 
-### Nächste Development Phase: Phase 1 Foundation
-**Priorität:** Authentication System implementieren für Multi-User Support
+### Nächste Development Phase: CRUD UI Completion
+**Priorität:** Vollständige CRUD Operations im Frontend implementieren
 
 **Als nächstes zu implementieren:**
-1. **Authentication System** - Supabase Auth Integration
-2. **Household Management** - Household erstellen/beitreten
-3. **Multi-User Context** - Current Household State Management
+1. **Edit Task Functionality** - Task editing Form/Modal
+2. **Form Validation** - Input validation und Error handling für Create/Edit Forms
+3. **Delete Confirmation** - Confirmation Modal vor Task-Löschung
 
-### Priorität: Nächste Session
+**Danach:** Authentication System für Multi-User Support
+
+### Priorität: Nächste Session - CRUD UI fertigstellen
 
 ### Code Quality & Refactoring (Nach MVP)
 - [ ] **Supabase CLI Integration** - Migrations und lokale Entwicklung
