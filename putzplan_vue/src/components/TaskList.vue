@@ -1,27 +1,32 @@
 <script setup lang="ts">
-import TaskCard from './TaskCard.vue';
-import type { Task } from '@/types/Task'
+import TaskCard from './TaskCard.vue'
+import { useTaskStore } from '@/stores/taskStore'
+import { computed } from 'vue'
 
 interface Props {
-  tasks: Task[]
+  filter: 'todo' | 'completed'
 }
 
 const props = defineProps<Props>()
+const taskStore = useTaskStore()
 
-const emit = defineEmits<{
-    toggleTask: [taskId: number]
-}>()
+// Computed property für gefilterte Tasks basierend auf Props
+const filteredTasks = computed(() => {
+  if (props.filter === 'completed') {
+    return taskStore.tasks.filter(task => task.completed)
+  } else {
+    return taskStore.tasks.filter(task => !task.completed)
+  }
+})
 
 </script>
 <template>
     <div class="container-fluid">
         <div class="row">
-            <div v-for="task in props.tasks"
-            :key="task.id"
+            <div v-for="task in filteredTasks"
+            :key="task.task_id"
             class="col-12 col-md-6 col-lg-3 mb-3">
-                <TaskCard :task="task" 
-                @toggleTask="emit('toggleTask', $event)"
-                />
+                <TaskCard :task="task" />
             </div>
         </div>
     </div>

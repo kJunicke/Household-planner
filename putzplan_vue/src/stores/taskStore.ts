@@ -52,6 +52,69 @@ export const useTaskStore = defineStore('tasks', () => {
         }
 
     }
+
+    // CREATE - Neue Task erstellen
+    const createTask = async (taskData: Omit<Task, 'task_id'>) => {
+        const { data, error } = await supabase
+            .from('tasks')
+            .insert(taskData)
+            .select()
+            .single()
+
+        if (error) {
+            console.error('Error creating task:', error)
+            return null
+        }
+
+        // Lokalen State aktualisieren
+        tasks.value.push(data)
+        return data
+    }
+
+    // UPDATE - Task vollständig aktualisieren
+    const updateTask = async (taskId: string, updates: Partial<Omit<Task, 'task_id'>>) => {
+        const { error } = await supabase
+            .from('tasks')
+            .update(updates)
+            .eq('task_id', taskId)
+
+        if (error) {
+            console.error('Error updating task:', error)
+            return false
+        }
+
+        // Lokalen State aktualisieren
+        const taskIndex = tasks.value.findIndex(t => t.task_id === taskId)
+        if (taskIndex !== -1) {
+            tasks.value[taskIndex] = { ...tasks.value[taskIndex], ...updates }
+        }
+        return true
+    }
+
+    // DELETE - Task löschen
+    const deleteTask = async (taskId: string) => {
+        const { error } = await supabase
+            .from('tasks')
+            .delete()
+            .eq('task_id', taskId)
+
+        if (error) {
+            console.error('Error deleting task:', error)
+            return false
+        }
+
+        // Lokalen State aktualisieren
+        tasks.value = tasks.value.filter(t => t.task_id !== taskId)
+        return true
+    }
     // Return - was andere Komponenten verwenden können
-    return { tasks, completions, loadTasks, toggleTask }
+    return { 
+        tasks, 
+        completions, 
+        loadTasks, 
+        toggleTask, 
+        createTask, 
+        updateTask, 
+        deleteTask 
+    }
 })

@@ -1,23 +1,17 @@
 <script setup lang="ts">
-//@ importiert aus dem src verzeichnis um mühsame pfade zu sparen
 import type { Task } from '@/types/Task'
+import { useTaskStore } from '@/stores/taskStore'
 
-
-// Typescript überprüft ob die übergebenen Daten auch wirklich ein Task sind
 interface Props {
      task: Task
 }
-// props von der Elternkomponente werden in props gespeichert
-// abrufbar als props.task...
-const props = defineProps<Props>()
 
-const emit = defineEmits<{
-     toggleTask: [task_id: string]
-}>()
+const props = defineProps<Props>()
+const taskStore = useTaskStore()
 
 const handleToggleTask = () => {
-    emit('toggleTask', props.task.task_id)
-  }
+    taskStore.toggleTask(props.task.task_id)
+}
 </script>
 
 <template>

@@ -33,6 +33,7 @@
    - [x] ~~Tabellen erstellen~~ households ✓, household_members ✓, tasks ✓, task_completions ✓
    - [ ] Test-Daten für Development
    - [ ] Row Level Security (RLS) Policies konfigurieren (später, vor Multi-User Testing)
+   - [ ] **Hardcoded household_id in App.vue anpassen** - Derzeit placeholder in newTask Form
 
 2. **Authentication System** 
    - [ ] Supabase Auth Integration in Vue App

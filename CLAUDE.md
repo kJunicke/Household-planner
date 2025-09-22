@@ -124,9 +124,32 @@ Ein umfassender Vue 3 Development Guide ist verfügbar in `vue3-development-guid
 - Sofortiges Testen und Feedback-Sammlung
 - DRY-Prinzipien beachten
 
+### YAGNI-Prinzip (You Aren't Gonna Need It)
+- Implementiere nur Features die aktuell gebraucht werden
+- Keine vorzeitige Optimierung oder Abstraktion
+- Code erst refactoren/vereinheitlichen wenn sich Patterns zeigen
+- "Erstmal so lassen und später schauen was wir brauchen"
+
 ### Lernfokus
 - Konzepte erklären, Details selbst ausarbeiten lassen
 - Best Practices vermitteln
 - Keine Shortcuts oder Quick-Fixes
+
+## UI/UX Design Patterns
+
+### Modal vs. Inline Form Patterns
+- **Bootstrap Modal + Vue 3**: Kompatibilitätsprobleme (BootstrapVue nur Vue 2, DOM-Konflikte, Vue 3.4.9+ Regressions)
+- **Vue-Native Modals**: Teleport + v-if für komplexe Forms mit vielen Feldern
+- **Inline Toggle Forms**: Standard für einfache "Create New" Formulare (4 Felder oder weniger)
+
+### Industry Standards (2024)
+- **Slack**: Modals für komplexe Creation Forms (`/create` Pattern)
+- **Notion**: Inline Creation für schnelle Erstellung (`/notion create`)
+- **GitHub**: Modals für komplexe Forms, Inline für einfache Actions
+
+### Empfohlene Patterns für Putzplan
+- **Simple Task Creation**: Inline Toggle Form (Button → Form einblenden)
+- **Complex Forms**: Vue-native Modal mit Teleport
+- **Library Choice**: Vue Final Modal für erweiterte Modal-Features
 
 **Aktueller Status und nächste Aufgaben siehe TODO.md**
