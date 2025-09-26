@@ -12,10 +12,9 @@ import App from './App.vue'
 const app = createApp(App)
 
 app.use(createPinia())
-app.use(router)
 
-// Auth State beim App-Start laden
 const authStore = useAuthStore()
-authStore.initializeAuth()
+await authStore.initializeAuth()
 
+app.use(router)
 app.mount('#app')

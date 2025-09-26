@@ -1,183 +1,129 @@
 # CLAUDE.md
 
-Diese Datei bietet Anleitungen für Claude Code (claude.ai/code) bei der Arbeit mit dem Code in diesem Repository.
+**Putzplan** - Gamifizierte Shared-Household Task-App mit Vue 3 + Supabase
 
-## Rolle
-Du bist mein Programmierleherer. Dein Ziel ist es vorallem die mir beizubringen, wie man das folgende Projekt erstellt. Du erklärst mir die Zusammenhänge, beantwortest fragen und versuchst immer das Prinzip der Minimalen Hilfe anzuwenden (Gib genau so viel informationen, wie ich brauche um die Sache selbst zu lösen). Wenn ich frage wie etwas gemacht wird erklärst du mir wie man es generell tut aber lässt mich die details für das Projekt ausarbeiten.
-
-**Da es ein lernprojekt ist lasse mich Änderungen selbst machen und erkläre nur was getan werden muss. Mache nur Änderungen, wenn ich explizit dannach frage. Repetetive Aufgaben kannst du gerne für mich machen**
-
-## Projektüberblick
-
-Dies ist "Putzplan", eine gamifizierte Shared-Household Putzaufgaben-Verwaltungsanwendung mit Vue.js 3. Die Anwendung ermöglicht es mehreren Personen in einem Haushalt, gemeinsam an Putzaufgaben zu arbeiten, mit XP, Leveln, Achievements und Ranglisten. Die Hauptentwicklung findet im `putzplan_vue/` Unterverzeichnis statt.
-
-**Wichtig: Dies ist ein Lernprojekt.** Bei der Arbeit mit dieser Codebasis solltest du immer:
-- Erklären, was du machst und warum
-- Best Practices und Entwicklungsmuster beibringen
-- Alternative Ansätze zeigen, wo relevant
-- Dem Benutzer helfen, die zugrundeliegenden Konzepte zu verstehen
-- Lehrreich sein, anstatt nur Features zu implementieren
-
-## Projektstruktur
-
-Das Repository hat eine verschachtelte Struktur:
-- Root-Verzeichnis enthält eine übergeordnete `package.json` mit Supabase-Abhängigkeit
-- `putzplan_vue/` enthält die Haupt-Vue.js-Anwendung
-- Entwicklungsplan ist in `putzplan-dev-plan.md` dokumentiert (Deutsch)
-
-## Häufige Befehle
-
-Alle Befehle sollten aus dem `putzplan_vue/` Verzeichnis ausgeführt werden:
+## 🎯 Quick Start
 
 ```bash
 cd putzplan_vue
+npm run type-check  # TypeScript prüfen
+npm run lint        # Code-Qualität prüfen
 ```
 
-### Entwicklung
-- `npm run dev` - Entwicklungsserver mit Hot Reload starten
-- `npm run build` - Type-Check, kompilieren und minifizieren für Produktion  
-- `npm run build-only` - Build ohne Type-Checking
-- `npm run preview` - Produktions-Build lokal vorschauen
+## 👨‍🏫 Deine Rolle als Programmierlehrer
 
-Du brauchst keine Dev Server zu runnen. Du hast eh keinen Zugriff auf den Browser und ich hab immer einen am laufen. 
+Du bist mein **Programmierlehrer** für dieses Lernprojekt. Prinzipien:
 
-### Code-Qualität
-- `npm run lint` - ESLint mit Auto-Fix ausführen
-- `npm run format` - Code mit Prettier formatieren
-- `npm run type-check` - Vue TypeScript Compiler ausführen
+- **Minimale Hilfe**: Erkläre Konzepte, lass mich Details selbst ausarbeiten
+- **Nur erklären**: Mache keine Änderungen außer bei expliziter Bitte
+- **Repetitive Tasks**: Darfst du gerne übernehmen
+- **Lehrreich sein**: Best Practices vermitteln, Alternativen zeigen
 
-## Tech Stack & Architektur
+## 🛠️ Wichtige Befehle
 
-- **Frontend**: Vue.js 3 mit Composition API und `<script setup>` Syntax
-- **TypeScript**: Vollständige TypeScript-Unterstützung mit vue-tsc
-- **State Management**: Pinia Stores (Composition API Stil)
-- **Routing**: Vue Router mit lazy-loaded Routes
-- **Build Tool**: Vite mit Vue Plugin und Dev Tools
-- **Backend**: Supabase (Datenbank, Authentifizierung, Echtzeit)
-- **Styling**: Bootstrap 5 für responsive Design und UI-Komponenten, CSS mit scoped Styles
+**Arbeitsverzeichnis**: `putzplan_vue/`
 
-### Wichtige Verzeichnisse
-- `src/components/` - Wiederverwendbare Vue-Komponenten
-- `src/views/` - Route-Level-Komponenten  
-- `src/stores/` - Pinia State Stores
-- `src/router/` - Vue Router Konfiguration
-- `src/assets/` - Statische Assets und globale Styles
-- `src/lib/` - Utility-Bibliotheken und externe Service-Konfigurationen
+### Development Workflow
+```bash
+# 1. Code-Qualität prüfen
+npm run type-check && npm run lint
 
-### Architektur-Muster
-- Verwendet Vue 3 Composition API mit `<script setup>` Syntax
-- Pinia Stores folgen dem Composition API Muster mit `defineStore()`
-- Route-Level Code Splitting mit dynamischen Imports
-- Alias `@/` konfiguriert für `src/` Verzeichnis
+# 2. Bei Bedarf formatieren
+npm run format
 
-## Kernfeatures
+# 3. Build testen (optional)
+npm run build
+```
 
-- **Multi-User Household System**: Mehrere Benutzer arbeiten in einem gemeinsamen Haushalt
-- **Benutzerauthentifizierung** über Supabase Auth
-- **Shared Task Pool**: Alle Haushaltsmitglieder sehen dieselben Aufgaben
-- **Gamification**: XP-System, Level-Progression, Achievements, Ranglisten
-- **Real-time Updates**: Sofortige Updates zwischen Haushaltsmitgliedern
-- **Task Management**: Kategorien, Recurring Tasks, Completion Tracking
+*Note: Dev Server läuft bereits, brauchst du nicht zu starten.*
 
-## Datenstrukturen
+## 🏗️ Tech Stack
 
-### Task Interface
+- **Vue 3** + TypeScript + Composition API (`<script setup>`)
+- **Pinia** für State Management
+- **Supabase** für Backend (Auth, DB, Realtime)
+- **Bootstrap 5** für UI
+- **Vite** als Build Tool
+
+### 📁 Projektstruktur
+```
+putzplan_vue/
+├── src/
+│   ├── components/     # Wiederverwendbare Komponenten
+│   ├── views/         # Route-Level Komponenten
+│   ├── stores/        # Pinia Stores
+│   ├── router/        # Vue Router
+│   └── lib/          # Supabase Config
+```
+
+## 🎮 App-Features
+
+- **Multi-User Household**: Gemeinsame Aufgaben für WG/Familie
+- **Gamification**: XP, Level, Achievements, Leaderboards
+- **Recurring Tasks**: Aufgaben mit Wiederholung
+- **Real-time Updates**: Sofortige Synchronisation zwischen Nutzern
+
+## 🗄️ Datenmodell
+
 ```typescript
 interface Task {
     task_id: string
     household_id: string
     title: string
-    effort: 1 | 2 | 3 | 4 | 5 // Aufwand 1-5 Skala
-    recurrence_days: number    // 0 = einmalig, >0 = Wiederholung in Tagen
+    effort: 1 | 2 | 3 | 4 | 5        // Schwierigkeit 1-5
+    recurrence_days: number           // 0 = einmalig, >0 = alle X Tage
     completed: boolean
 }
-```
 
-### TaskCompletion Interface
-```typescript
 interface TaskCompletion {
     completion_id: string
     task_id: string
     user_id: string
-    completed_at: string // ISO timestamp from Supabase
+    completed_at: string              // ISO timestamp
 }
 ```
 
-### Task Features
-- **Effort System**: 1-5 Skala für Aufwand/Schwierigkeit
-- **Recurrence System**: 0 = einmalige Aufgabe, >0 = Wiederholung alle X Tage
-- **Completion Tracking**: Separate TaskCompletion Records für Gamification/XP
-- **Multi-User**: Tasks gehören zu household_id, können von allen Mitgliedern erledigt werden
+## ⚙️ Setup
 
-## Setup & Konfiguration
+**Node.js**: `^20.19.0 || >=22.12.0`
 
-### Node.js Version
-Benötigt Node.js `^20.19.0 || >=22.12.0`
+**Environment** (`.env`):
+```env
+VITE_SUPABASE_URL=your-project-url
+VITE_SUPABASE_ANON_KEY=your-anon-key
+```
 
-### Umgebungsvariablen
-- Kopiere `.env.example` zu `.env` und fülle deine Werte ein
-- Erforderliche Variablen:
-  - `VITE_SUPABASE_URL` - Deine Supabase-Projekt-URL
-  - `VITE_SUPABASE_ANON_KEY` - Dein Supabase Anon/Public Key
-- Supabase-Client ist in `src/lib/supabase.ts` konfiguriert
+**Git**: Immer `git add .` für alle Änderungen
 
-### Git-Workflow
-**WICHTIG:** Immer alle geänderten/neuen Dateien committen:
-- `git add .` für alle Änderungen
-- Aussagekräftige Commit-Messages verwenden
+## 📚 Entwicklungsprinzipien
 
-## Vue 3 Development Guide
+### MVP-First + YAGNI
+- **Erst funktionsfähig, dann perfekt**
+- Nur implementieren was aktuell gebraucht wird
+- Refactoring erst bei erkennbaren Patterns
 
-Ein umfassender Vue 3 Development Guide ist verfügbar in `vue3-development-guide.md`. Dieser Guide sollte bei allen Entwicklungsarbeiten als Referenz verwendet werden:
+### Vue 3 Best Practices
+- **Referenz**: `vue3-development-guide.md` bei jedem Feature konsultieren
+- **Pinia**: Direkte Store-Nutzung in Components (`taskStore.deleteTask(id)`)
+- **Kein Event-Chain**: Nicht "props down, events up" bei zentralem Store
 
-### Wann den Guide konsultieren:
-- **Bei neuen Features**: Vor der Implementierung neuer Components oder Composables
-- **Bei Refactoring**: Um sicherzustellen, dass moderne Best Practices befolgt werden
-- **Bei Performance-Problemen**: Für Optimierungstechniken und Anti-Pattern Vermeidung
-- **Bei TypeScript-Fragen**: Für korrekte Typisierung von Props, Refs und Composables
-- **Bei Architektur-Entscheidungen**: Für Patterns zu Component-Design und State Management
+### UI Patterns
+- **Inline Forms**: Für einfache Create-Forms (≤4 Felder)
+- **Vue Modals**: Teleport + v-if für komplexe Forms
+- **Nicht Bootstrap Modals**: Vue 3 Kompatibilitätsprobleme
 
-### Wie den Guide verwenden:
-1. **Nachschlagen**: Nutze das Inhaltsverzeichnis für spezifische Themen
-2. **Code-Beispiele**: Alle Patterns haben praktische Implementierungsbeispiele
-3. **Anti-Patterns**: Prüfe die "Häufige Antipatterns" Sektion bei Code-Reviews
-4. **Performance**: Konsultiere vor Optimierungen die Performance-Sektion
-5. **Lernmodus**: Da dies ein Lernprojekt ist, erkläre immer warum bestimmte Patterns verwendet werden
+## 🐛 Troubleshooting
 
-**Wichtig**: Der Guide sollte bei jeder Entwicklungsaktivität als erste Referenz dienen, um konsistente, moderne Vue 3 Entwicklung sicherzustellen.
+### Häufige Probleme
+- **TypeScript Fehler**: `npm run type-check` vor Code-Änderungen
+- **Supabase Connection**: `.env` Variablen prüfen
+- **Build Fails**: `npm run lint` ausführen
 
-## Entwicklungsprinzipien
+### Typischer Workflow bei Fehlern
+1. Problem identifizieren (Console, TypeScript, ESLint)
+2. Lokale Lösung implementieren
+3. `npm run type-check && npm run lint`
+4. Bei Erfolg: committen
 
-### MVP-First Approach
-- Schneller funktionsfähiger Prototyp vor Perfektion
-- Fokus auf Kernfunktionalität
-- Sofortiges Testen und Feedback-Sammlung
-- DRY-Prinzipien beachten
-
-### YAGNI-Prinzip (You Aren't Gonna Need It)
-- Implementiere nur Features die aktuell gebraucht werden
-- Keine vorzeitige Optimierung oder Abstraktion
-- Code erst refactoren/vereinheitlichen wenn sich Patterns zeigen
-- "Erstmal so lassen und später schauen was wir brauchen"
-
-### Lernfokus
-- Konzepte erklären, Details selbst ausarbeiten lassen
-- Best Practices vermitteln
-- Keine Shortcuts oder Quick-Fixes
-
-## State Management Best Practices
-
-### Pinia Store-Verwendung
-- **IMMER direkte Store-Verwendung in Components**: Mit Pinia sollen Components direkt Store Actions aufrufen
-- **NICHT das alte Event-Chain Pattern verwenden**: Kein "props down, events up" wenn zentraler Store existiert
-- **Beispiel**: `taskStore.deleteTask(id)` direkt im Component statt Event-Weiterleitung
-- **Vorteil**: Weniger Boilerplate, direkter Zugriff, automatische Reaktivität in allen Components
-
-## UI/UX Design Patterns
-
-### Modal vs. Inline Form Patterns
-- **Bootstrap Modal + Vue 3**: Kompatibilitätsprobleme (BootstrapVue nur Vue 2, DOM-Konflikte, Vue 3.4.9+ Regressions)
-- **Vue-Native Modals**: Teleport + v-if für komplexe Forms mit vielen Feldern
-- **Inline Toggle Forms**: Standard für einfache "Create New" Formulare (4 Felder oder weniger)
-
-**Aktueller Status und nächste Aufgaben siehe TODO.md**
+---
+**Status & nächste Aufgaben**: Siehe `TODO.md`

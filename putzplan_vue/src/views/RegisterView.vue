@@ -1,13 +1,18 @@
 <script setup lang="ts">
 import {useAuthStore} from "@/stores/authStore"
 import { ref } from "vue"
+import { useRouter } from 'vue-router'
 
 const authStore = useAuthStore()
+const router = useRouter()
 const email = ref('')
 const password = ref('')
 
-const handleRegister = () => {
-    authStore.register(email.value, password.value)
+const handleRegister = async () => {
+    const result = await authStore.register(email.value, password.value)
+    if (result.success) {
+        router.push('/login')
+    }
 }
 </script>
 

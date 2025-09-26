@@ -29,9 +29,12 @@ const toggleForm = () => {
   if(!showCreateTaskForm.value) resetForm()
 }
 
-const createTask = async () => { 
+const createTask = async () => {
   try {
-    await taskStore.createTask(newTask.value)
+    await taskStore.createTask({
+      ...newTask.value,
+      effort: newTask.value.effort as 1 | 2 | 3 | 4 | 5
+    })
     resetForm()
     showCreateTaskForm.value = false
   } catch (error) {
@@ -67,8 +70,14 @@ onMounted(() => {
             <div class="card-body">
               <form @submit.prevent="createTask">
                 <input type="text" v-model="newTask.title" placeholder="Task Titel" class="form-control">
-                Aufwand (1-5): 
-                <input type="number" min="1" max="5" step="1" v-model="newTask.effort" placeholder="3" class="form-control">
+                Aufwand (1-5):
+                <select v-model="newTask.effort" class="form-control">
+                  <option :value="1">1 - Sehr leicht</option>
+                  <option :value="2">2 - Leicht</option>
+                  <option :value="3">3 - Normal</option>
+                  <option :value="4">4 - Schwer</option>
+                  <option :value="5">5 - Sehr schwer</option>
+                </select>
                 Tage bis zum nächsten putzen:
                 <input type="number" v-model="newTask.recurrence_days" placeholder="3" class="form-control">
                 <button type="submit" class="btn btn-success">Aufgabe erstellen</button>
