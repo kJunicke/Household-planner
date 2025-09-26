@@ -5,7 +5,7 @@ Diese Datei bietet Anleitungen für Claude Code (claude.ai/code) bei der Arbeit 
 ## Rolle
 Du bist mein Programmierleherer. Dein Ziel ist es vorallem die mir beizubringen, wie man das folgende Projekt erstellt. Du erklärst mir die Zusammenhänge, beantwortest fragen und versuchst immer das Prinzip der Minimalen Hilfe anzuwenden (Gib genau so viel informationen, wie ich brauche um die Sache selbst zu lösen). Wenn ich frage wie etwas gemacht wird erklärst du mir wie man es generell tut aber lässt mich die details für das Projekt ausarbeiten.
 
-**Da es ein lernprojekt ist lasse mich Änderungen selbst machen und erkläre nur was getan werden muss. Mache nur Änderungen, wenn ich explizit dannach frage.**
+**Da es ein lernprojekt ist lasse mich Änderungen selbst machen und erkläre nur was getan werden muss. Mache nur Änderungen, wenn ich explizit dannach frage. Repetetive Aufgaben kannst du gerne für mich machen**
 
 ## Projektüberblick
 
@@ -79,6 +79,36 @@ Du brauchst keine Dev Server zu runnen. Du hast eh keinen Zugriff auf den Browse
 - **Real-time Updates**: Sofortige Updates zwischen Haushaltsmitgliedern
 - **Task Management**: Kategorien, Recurring Tasks, Completion Tracking
 
+## Datenstrukturen
+
+### Task Interface
+```typescript
+interface Task {
+    task_id: string
+    household_id: string
+    title: string
+    effort: 1 | 2 | 3 | 4 | 5 // Aufwand 1-5 Skala
+    recurrence_days: number    // 0 = einmalig, >0 = Wiederholung in Tagen
+    completed: boolean
+}
+```
+
+### TaskCompletion Interface
+```typescript
+interface TaskCompletion {
+    completion_id: string
+    task_id: string
+    user_id: string
+    completed_at: string // ISO timestamp from Supabase
+}
+```
+
+### Task Features
+- **Effort System**: 1-5 Skala für Aufwand/Schwierigkeit
+- **Recurrence System**: 0 = einmalige Aufgabe, >0 = Wiederholung alle X Tage
+- **Completion Tracking**: Separate TaskCompletion Records für Gamification/XP
+- **Multi-User**: Tasks gehören zu household_id, können von allen Mitgliedern erledigt werden
+
 ## Setup & Konfiguration
 
 ### Node.js Version
@@ -149,15 +179,5 @@ Ein umfassender Vue 3 Development Guide ist verfügbar in `vue3-development-guid
 - **Bootstrap Modal + Vue 3**: Kompatibilitätsprobleme (BootstrapVue nur Vue 2, DOM-Konflikte, Vue 3.4.9+ Regressions)
 - **Vue-Native Modals**: Teleport + v-if für komplexe Forms mit vielen Feldern
 - **Inline Toggle Forms**: Standard für einfache "Create New" Formulare (4 Felder oder weniger)
-
-### Industry Standards (2024)
-- **Slack**: Modals für komplexe Creation Forms (`/create` Pattern)
-- **Notion**: Inline Creation für schnelle Erstellung (`/notion create`)
-- **GitHub**: Modals für komplexe Forms, Inline für einfache Actions
-
-### Empfohlene Patterns für Putzplan
-- **Simple Task Creation**: Inline Toggle Form (Button → Form einblenden)
-- **Complex Forms**: Vue-native Modal mit Teleport
-- **Library Choice**: Vue Final Modal für erweiterte Modal-Features
 
 **Aktueller Status und nächste Aufgaben siehe TODO.md**
