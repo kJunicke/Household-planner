@@ -2,6 +2,7 @@ import { ref } from 'vue'
 import { defineStore } from 'pinia'
 import type { Task, TaskCompletion } from '@/types/Task'
 import { supabase } from '@/lib/supabase'
+import { useHouseholdStore } from './householdStore'
 
 export const useTaskStore = defineStore('tasks', () => {
     // State - wie ref() in Komponenten
@@ -12,9 +13,20 @@ export const useTaskStore = defineStore('tasks', () => {
     const loadTasks = async () => {
         console.log('Loading tasks...')
 
+        const householdStore = useHouseholdStore()
+
+        // Nur Tasks des aktuellen Households laden
+        if (!householdStore.currentHousehold) {
+            console.warn('No current household, cannot load tasks')
+            tasks.value = []
+            completions.value = []
+            return
+        }
+
         const { data: tasksData, error: tasksError } = await supabase
         .from('tasks')
         .select('*')
+        .eq('household_id', householdStore.currentHousehold.household_id)
 
         if (tasksError) {
             console.error('Error loading tasks', tasksError)
@@ -54,10 +66,20 @@ export const useTaskStore = defineStore('tasks', () => {
     }
 
     // CREATE - Neue Task erstellen
-    const createTask = async (taskData: Omit<Task, 'task_id'>) => {
+    const createTask = async (taskData: Omit<Task, 'task_id' | 'household_id'>) => {
+        const householdStore = useHouseholdStore()
+
+        if (!householdStore.currentHousehold) {
+            console.error('Cannot create task: No current household')
+            return null
+        }
+
         const { data, error } = await supabase
             .from('tasks')
-            .insert(taskData)
+            .insert({
+                ...taskData,
+                household_id: householdStore.currentHousehold.household_id
+            })
             .select()
             .single()
 

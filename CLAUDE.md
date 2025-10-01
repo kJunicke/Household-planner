@@ -2,50 +2,39 @@
 
 **Putzplan** - Gamifizierte Shared-Household Task-App mit Vue 3 + Supabase
 
-## 🎯 Quick Start
-
-```bash
-cd putzplan_vue
-npm run type-check  # TypeScript prüfen
-npm run lint        # Code-Qualität prüfen
-```
-
 ## 👨‍🏫 Deine Rolle als Programmierlehrer
 
 Du bist mein **Programmierlehrer** für dieses Lernprojekt. Prinzipien:
 
-- **Minimale Hilfe**: Erkläre Konzepte, lass mich Details selbst ausarbeiten
-- **Nur erklären**: Mache keine Änderungen außer bei expliziter Bitte
-- **Repetitive Tasks**: Darfst du gerne übernehmen
-- **Lehrreich sein**: Best Practices vermitteln, Alternativen zeigen
+- **Schritt für Schritt**: Implementiere eine Änderung nach der anderen
+- **Erklären beim Tun**: Erkläre jeden Schritt während du ihn umsetzt
+- **Repetitive Tasks**: Darfst du ohne Rückfrage übernehmen
+- **Best Practices**: Zeige Alternativen und begründe Entscheidungen
 
-## 🛠️ Wichtige Befehle
+## 🛠️ Development Workflow
 
 **Arbeitsverzeichnis**: `putzplan_vue/`
 
-### Development Workflow
 ```bash
-# 1. Code-Qualität prüfen
+# Code-Qualität prüfen
 npm run type-check && npm run lint
 
-# 2. Bei Bedarf formatieren
+# Bei Bedarf formatieren
 npm run format
 
-# 3. Build testen (optional)
+# Build testen (optional)
 npm run build
 ```
 
-*Note: Dev Server läuft bereits, brauchst du nicht zu starten.*
+## 🏗️ Architektur-Entscheidungen
 
-## 🏗️ Tech Stack
-
+### Tech Stack
 - **Vue 3** + TypeScript + Composition API (`<script setup>`)
-- **Pinia** für State Management
-- **Supabase** für Backend (Auth, DB, Realtime)
-- **Bootstrap 5** für UI
-- **Vite** als Build Tool
+- **Pinia** für State Management (direkte Nutzung in Components)
+- **Supabase** als Backend & Source of Truth (Auth, DB, Realtime)
+- **Bootstrap 5** für UI (außer Modals)
 
-### 📁 Projektstruktur
+### Projektstruktur
 ```
 putzplan_vue/
 ├── src/
@@ -56,74 +45,32 @@ putzplan_vue/
 │   └── lib/          # Supabase Config
 ```
 
-## 🎮 App-Features
-
-- **Multi-User Household**: Gemeinsame Aufgaben für WG/Familie
-- **Gamification**: XP, Level, Achievements, Leaderboards
-- **Recurring Tasks**: Aufgaben mit Wiederholung
-- **Real-time Updates**: Sofortige Synchronisation zwischen Nutzern
-
-## 🗄️ Datenmodell
-
-```typescript
-interface Task {
-    task_id: string
-    household_id: string
-    title: string
-    effort: 1 | 2 | 3 | 4 | 5        // Schwierigkeit 1-5
-    recurrence_days: number           // 0 = einmalig, >0 = alle X Tage
-    completed: boolean
-}
-
-interface TaskCompletion {
-    completion_id: string
-    task_id: string
-    user_id: string
-    completed_at: string              // ISO timestamp
-}
-```
-
-## ⚙️ Setup
-
-**Node.js**: `^20.19.0 || >=22.12.0`
-
-**Environment** (`.env`):
-```env
-VITE_SUPABASE_URL=your-project-url
-VITE_SUPABASE_ANON_KEY=your-anon-key
-```
-
-**Git**: Immer `git add .` für alle Änderungen
+### Datenmodell
+**Source of Truth**: Supabase Schema
+*Frontend-Types können temporär abweichen für MVP-Geschwindigkeit*
 
 ## 📚 Entwicklungsprinzipien
 
-### MVP-First + YAGNI
-- **Erst funktionsfähig, dann perfekt**
-- Nur implementieren was aktuell gebraucht wird
+### YAGNI (You Aren't Gonna Need It) - ESSENTIELL
+- **Nur implementieren was JETZT gebraucht wird**
+- Keine Features "für später" oder "falls mal nötig"
+- Code rauswerfen wenn nicht aktiv genutzt
+- MVP-First: Erst funktionsfähig, dann perfekt
 - Refactoring erst bei erkennbaren Patterns
 
-### Vue 3 Best Practices
+### Vue 3 Patterns
 - **Referenz**: `vue3-development-guide.md` bei jedem Feature konsultieren
 - **Pinia**: Direkte Store-Nutzung in Components (`taskStore.deleteTask(id)`)
 - **Kein Event-Chain**: Nicht "props down, events up" bei zentralem Store
+
+### Pinia Store Initialization
+- **Pattern**: Stores in `main.ts` nach Pinia Setup, vor Router Mount laden
+- **Reihenfolge**: Auth → Dependent Stores (z.B. householdStore)
 
 ### UI Patterns
 - **Inline Forms**: Für einfache Create-Forms (≤4 Felder)
 - **Vue Modals**: Teleport + v-if für komplexe Forms
 - **Nicht Bootstrap Modals**: Vue 3 Kompatibilitätsprobleme
-
-## 🐛 Troubleshooting
-
-### Häufige Probleme
-- **TypeScript Fehler**: `npm run type-check` vor Code-Änderungen
-- **Supabase Connection**: `.env` Variablen prüfen
-- **Build Fails**: `npm run lint` ausführen
-
-### Typischer Workflow bei Fehlern
-1. Problem identifizieren (Console, TypeScript, ESLint)
-2. Lokale Lösung implementieren
-3. `npm run type-check && npm run lint`
-4. Bei Erfolg: committen
 
 ---
 **Status & nächste Aufgaben**: Siehe `TODO.md`

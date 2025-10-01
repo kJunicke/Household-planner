@@ -1,6 +1,6 @@
 # Putzplan TODOs
 
-## Aktueller Entwicklungsstand (2025-09-26)
+## Aktueller Entwicklungsstand (2025-10-01)
 
 **ARCHITEKTUR:** Shared Household System - mehrere Benutzer arbeiten im selben Haushalt zusammen
 
@@ -24,33 +24,50 @@
 - **Session Persistence** - initializeAuth() für Browser-Reload
 - **Navigation** - router-link zwischen Login/Register/Home
 
+### Household Management System
+- **HouseholdStore** - Pinia Store mit currentHousehold State
+- **Household & HouseholdMember Interfaces** - TypeScript Types (YAGNI-Prinzip)
+- **Store Actions** - loadUserHousehold(), createHousehold(), joinHousehold(), leaveHousehold()
+- **Invite Code System** - Supabase UUID-basiert (collision-safe)
+- **Store Initialization** - In main.ts nach Auth geladen
+- **Frontend-Check** - User kann nicht zweiten Household joinen
+
 ### Database Schema
-- **`households`** - Haushalte mit auto-generierten Invite Codes
-- **`household_members`** - Benutzer-zu-Haushalt-Zuordnung mit Rollen
+- **`households`** - Haushalte mit auto-generierten Invite Codes (UUID-based)
+- **`household_members`** - Benutzer-zu-Haushalt-Zuordnung
 - **`tasks`** - Aufgaben-Templates mit Recurrence-System
 - **`task_completions`** - Task-Erledigung-Historie
 
 ## 🚀 Nächste Development-Phase
 
-### Priorität 1: Household Management
-- [ ] **Household erstellen** - Interface für ersten User
-- [ ] **Household beitreten** - Invite Code System
-- [ ] **HouseholdStore** - Current Household Context (Pinia)
-- [ ] **Hardcoded household_id entfernen** - Dynamic household assignment
+### Priorität 1: TaskStore Integration ✅ DONE
+- [x] **Hardcoded household_id entfernen** - TaskStore nutzt householdStore.currentHousehold.household_id
+- [x] **loadTasks() anpassen** - Filter nach currentHousehold
+- [x] **createTask() anpassen** - household_id aus Store statt hardcoded
+- [x] **HomeView anpassen** - hardcoded household_id entfernen
 
-### Priorität 2: Multi-User Experience
+### Priorität 2: Household Setup UI ✅ MOSTLY DONE
+- [x] **HouseholdSetupView erstellen** - Route /household-setup
+- [x] **Create Household Form** - Input für Household-Name mit Error/Loading States
+- [x] **Join Household Form** - Input für Invite Code mit Error/Loading States
+- [x] **Router Guard erweitern** - Redirect zu /household-setup wenn kein Household (aktiv)
+- [ ] **Household Info in Navbar** - Aktueller Household-Name + Invite Code anzeigen (NEXT)
+
+### Priorität 3: Multi-User Experience
 - [ ] **Real-time Updates** - Supabase Realtime Subscriptions
 - [ ] **Live Task Status Updates** - zwischen Haushaltsmitgliedern
 - [ ] **Advanced Completion Tracking** - user_id, timestamp für Gamification
 - [ ] **"Wer hat was gemacht" Anzeige** - Task completion history
 
-### Priorität 3: Form Enhancement
+### Priorität 4: Authentication UX Fixes
+- [ ] **Registration Flow Fix** - Router Guard leitet nach Registration fälschlicherweise zu Home statt Login weiter
 - [ ] **Form Validation** - Input validation und Error handling
-- [ ] **Better UX** - Loading states, success/error messages
+- [ ] **Loading & Error Feedback** - Loading states und Error messages zu LoginView & RegisterView hinzufügen (Pattern wie HouseholdSetupView)
 
-### Priorität 4: Database Setup
+### Priorität 5: Database Setup
 - [ ] **Test-Daten** für Development
 - [ ] **Row Level Security (RLS)** Policies für Multi-User Security
+- [ ] **UNIQUE Constraint auf household_members.user_id** - Garantiert dass User nur in einem Household sein kann (aktuell nur Frontend-Check)
 
 ## 🔧 Code Quality & Refactoring (Später)
 
@@ -73,13 +90,15 @@
 - Ranglisten und XP-System
 
 ## 📝 Development Lessons Learned
+- **YAGNI Prinzip** konsequent angewendet - Code entfernen wenn nicht gebraucht
 - **Minimal Help Principle** erfolgreich angewendet
 - **MVP-First Approach** bewährt für schnelle Iterationen
 - **TypeScript Compiler** als Schema-Migration Validator
 - **Pinia Composition API** Pattern gut verstanden
 - **Authentication-First** macht Multi-User Development einfacher
+- **Supabase UUID Defaults** für collision-safe Auto-Generation
 
 ---
 
-**Status: DEPLOYMENT-BEREIT** für Single-User Testing
-**Next Milestone: Multi-User Household System**
+**Status:** HouseholdStore komplett, TaskStore Integration folgt
+**Next:** Hardcoded household_id in TaskStore & HomeView entfernen

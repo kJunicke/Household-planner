@@ -10,7 +10,6 @@ const newTask = ref({
   title: '',
   effort: 1,
   recurrence_days: 0,
-  household_id: '9afbc01d-a963-4658-a149-83b747351af4', // Hardcoded fürs erste
   completed: false
 })
 
@@ -19,7 +18,6 @@ const resetForm = () => {
     title: '',
     effort: 1,
     recurrence_days: 0,
-    household_id: '9afbc01d-a963-4658-a149-83b747351af4',
     completed: false
   }
 }
