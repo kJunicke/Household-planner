@@ -46,12 +46,13 @@
 - [x] **createTask() anpassen** - household_id aus Store statt hardcoded
 - [x] **HomeView anpassen** - hardcoded household_id entfernen
 
-### Priorität 2: Household Setup UI ✅ MOSTLY DONE
+### Priorität 2: Household Setup UI ✅ DONE
 - [x] **HouseholdSetupView erstellen** - Route /household-setup
 - [x] **Create Household Form** - Input für Household-Name mit Error/Loading States
 - [x] **Join Household Form** - Input für Invite Code mit Error/Loading States
 - [x] **Router Guard erweitern** - Redirect zu /household-setup wenn kein Household (aktiv)
-- [ ] **Household Info in Navbar** - Aktueller Household-Name + Invite Code anzeigen (NEXT)
+- [x] **Household Info in Navbar** - Aktueller Household-Name + Invite Code anzeigen
+- [x] **User Info in Header** - Eingeloggter User (Email) mit Logout-Button
 
 ### Priorität 3: Multi-User Experience
 - [ ] **Real-time Updates** - Supabase Realtime Subscriptions
@@ -100,5 +101,5 @@
 
 ---
 
-**Status:** HouseholdStore komplett, TaskStore Integration folgt
-**Next:** Hardcoded household_id in TaskStore & HomeView entfernen
+**Status:** Household Setup UI & User Management komplett
+**Next:** Multi-User Real-time Features (Priorität 3)

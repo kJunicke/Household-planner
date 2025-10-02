@@ -1,9 +1,15 @@
 <script setup lang="ts">
 import { onMounted, ref } from "vue";
+import { useRouter } from "vue-router";
 import TaskList from '../components/TaskList.vue';
 import { useTaskStore } from "../stores/taskStore";
+import { useAuthStore } from "../stores/authStore";
+import { useHouseholdStore } from "../stores/householdStore";
 
+const router = useRouter()
 const taskStore = useTaskStore()
+const authStore = useAuthStore()
+const householdStore = useHouseholdStore()
 const showCreateTaskForm = ref(false)
 
 const newTask = ref({
@@ -40,6 +46,11 @@ const createTask = async () => {
   }
  }
 
+const handleLogout = async () => {
+  await authStore.logout()
+  router.push('/login')
+}
+
 onMounted(() => {
        // Lädt Tasks aus Supabase
        taskStore.loadTasks()
@@ -49,9 +60,22 @@ onMounted(() => {
 
 <template>
   <div id="app" class="container-fluid">
-    <header class="row">
-      <div class="col-12">
-        <h1 class="text-center py-3">Bester Putzplan der Welt</h1>
+    <header class="row align-items-center py-3">
+      <div class="col-4">
+        <span class="text-muted">
+          <strong>Haushalt:</strong> {{ householdStore.currentHousehold?.name }} <strong>Einladungs Code:</strong> {{ householdStore.currentHousehold?.invite_code }}
+        </span>
+      </div>
+      <div class="col-4">
+        <h1 class="text-center m-0">Bester Putzplan der Welt</h1>
+      </div>
+      <div class="col-4 text-end">
+        <span class="text-muted me-3">
+          <strong>Benutzer:</strong>  {{ authStore.user?.email }}
+        </span>
+        <button @click="handleLogout" class="btn btn-outline-danger btn-sm">
+          Logout
+        </button>
       </div>
     </header>
 
