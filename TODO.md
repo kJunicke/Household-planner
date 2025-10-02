@@ -54,6 +54,27 @@
 - [x] **Household Info in Navbar** - Aktueller Household-Name + Invite Code anzeigen
 - [x] **User Info in Header** - Eingeloggter User (Email) mit Logout-Button
 
+### Priorität 2.5: Task Recurrence System (Backend-Driven) 🔄
+**Architektur:** Supabase als Source of Truth - Task completion Status wird von PostgreSQL berechnet
+
+#### Phase 1: Database Schema & Functions
+- [ ] **Supabase Function erstellen** - `is_task_completed(task_id, recurrence_days)` für Status-Berechnung
+- [ ] **Trigger erstellen** - Auto-Update von `tasks.completed` bei neuer `task_completion`
+- [ ] **RLS Policies** - Row Level Security für `task_completions` Tabelle
+- [ ] **Database Index** - Performance-Optimierung für `task_completions(task_id, completed_at)`
+
+#### Phase 2: Frontend Integration
+- [ ] **taskStore.ts refactoring** - `toggleTask()` → `completeTask()` + `uncompleteTask()`
+- [ ] **completeTask() implementieren** - INSERT in `task_completions` statt UPDATE `tasks.completed`
+- [ ] **uncompleteTask() implementieren** - DELETE letzte completion für "Dreckig machen"
+- [ ] **TaskCard.vue anpassen** - Buttons nutzen neue Store-Actions
+- [ ] **HomeView.vue cleanup** - `completed: false` aus newTask entfernen
+
+#### Phase 3: Testing & Validation
+- [ ] **Manual Testing** - Task completion flow testen (Sauber → Dreckig)
+- [ ] **Recurrence Testing** - Wiederkehrende Tasks nach X Tagen testen
+- [ ] **Type-Check** - `npm run type-check` ohne Errors
+
 ### Priorität 3: Multi-User Experience
 - [ ] **Real-time Updates** - Supabase Realtime Subscriptions
 - [ ] **Live Task Status Updates** - zwischen Haushaltsmitgliedern
