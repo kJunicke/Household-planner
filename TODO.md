@@ -61,7 +61,6 @@
 - [ ] **"Wer hat was gemacht" Anzeige** - Task completion history
 
 ### Priorität 4: Authentication UX Fixes
-- [ ] **Registration Flow Fix** - Router Guard leitet nach Registration fälschlicherweise zu Home statt Login weiter
 - [ ] **Form Validation** - Input validation und Error handling
 - [ ] **Loading & Error Feedback** - Loading states und Error messages zu LoginView & RegisterView hinzufügen (Pattern wie HouseholdSetupView)
 
@@ -89,15 +88,6 @@
 - `user_stats` - Benutzer-XP, Level, Streaks pro Haushalt
 - `achievements` - Benutzer-Achievement-Freischaltungen
 - Ranglisten und XP-System
-
-## 📝 Development Lessons Learned
-- **YAGNI Prinzip** konsequent angewendet - Code entfernen wenn nicht gebraucht
-- **Minimal Help Principle** erfolgreich angewendet
-- **MVP-First Approach** bewährt für schnelle Iterationen
-- **TypeScript Compiler** als Schema-Migration Validator
-- **Pinia Composition API** Pattern gut verstanden
-- **Authentication-First** macht Multi-User Development einfacher
-- **Supabase UUID Defaults** für collision-safe Auto-Generation
 
 ---
 

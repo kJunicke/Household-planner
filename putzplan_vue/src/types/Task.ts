@@ -6,6 +6,7 @@ export interface Task {
   //measured only with values 1-5
 
   // Entweder nicht wiederholend ODER wiederholend mit Tagen
+  // Task wiederholt sich nicht wenn recurrence_days = 0
   recurrence_days: number
   completed: boolean
   }

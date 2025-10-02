@@ -63,7 +63,10 @@ onMounted(() => {
     <header class="row align-items-center py-3">
       <div class="col-4">
         <span class="text-muted">
-          <strong>Haushalt:</strong> {{ householdStore.currentHousehold?.name }} <strong>Einladungs Code:</strong> {{ householdStore.currentHousehold?.invite_code }}
+          <strong>Haushalt:</strong> {{ householdStore.currentHousehold?.name }} 
+          <span class="ms-3">
+            <strong>Einladungs Code:</strong> {{ householdStore.currentHousehold?.invite_code }}
+          </span>
         </span>
       </div>
       <div class="col-4">
