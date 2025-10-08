@@ -57,11 +57,11 @@
 ### Priorität 2.5: Task Recurrence System (Backend-Driven) 🔄
 **Architektur:** Supabase als Source of Truth - Task completion Status wird von PostgreSQL berechnet
 
-#### Phase 1: Database Schema & Functions
-- [ ] **Supabase Function erstellen** - `is_task_completed(task_id, recurrence_days)` für Status-Berechnung
-- [ ] **Trigger erstellen** - Auto-Update von `tasks.completed` bei neuer `task_completion`
-- [ ] **RLS Policies** - Row Level Security für `task_completions` Tabelle
-- [ ] **Database Index** - Performance-Optimierung für `task_completions(task_id, completed_at)`
+#### Phase 1: Database Schema & Functions (In Progress - SQL Files erstellt, noch nicht in Supabase ausgeführt!)
+- [x] **SQL Files erstellt** - Alle 4 Migration Files mit ausführlichen Kommentaren (`01_function.sql`, `02_trigger.sql`, `03_rls.sql`, `04_indexes.sql`)
+- [ ] **README.md erstellen** - Installations-Guide für Supabase SQL Editor
+- [ ] **SQL Files in Supabase ausführen** - Nacheinander im SQL Editor ausführen (1→2→3→4)
+- [ ] **Testing in Supabase** - Manuell testen ob Function/Trigger funktionieren
 
 #### Phase 2: Frontend Integration
 - [ ] **taskStore.ts refactoring** - `toggleTask()` → `completeTask()` + `uncompleteTask()`
