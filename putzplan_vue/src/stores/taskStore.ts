@@ -3,6 +3,7 @@ import { defineStore } from 'pinia'
 import type { Task, TaskCompletion } from '@/types/Task'
 import { supabase } from '@/lib/supabase'
 import { useHouseholdStore } from './householdStore'
+import { useAuthStore } from './authStore'
 
 export const useTaskStore = defineStore('tasks', () => {
     // State - wie ref() in Komponenten
@@ -57,7 +58,7 @@ export const useTaskStore = defineStore('tasks', () => {
         from('tasks')
         .update({completed: newState})
         .eq('task_id', taskId)
-        
+
         if (error) {
         console.error('Error updating task:', error)
         return
@@ -65,8 +66,68 @@ export const useTaskStore = defineStore('tasks', () => {
 
     }
 
+    // COMPLETE - Task als erledigt markieren
+    // Schreibt in task_completions Historie UND setzt tasks.completed = TRUE
+    const completeTask = async (taskId: string) => {
+        const authStore = useAuthStore()
+
+        if (!authStore.user) {
+            console.error('Cannot complete task: No user logged in')
+            return false
+        }
+
+        // 1. INSERT in task_completions (Historie für Gamification)
+        const { error: completionError } = await supabase
+            .from('task_completions')
+            .insert({
+                task_id: taskId,
+                user_id: authStore.user.id
+                // completed_at wird automatisch von Supabase gesetzt (DEFAULT NOW())
+            })
+
+        if (completionError) {
+            console.error('Error creating completion:', completionError)
+            return false
+        }
+
+        // 2. UPDATE tasks.completed = TRUE
+        const { error: updateError } = await supabase
+            .from('tasks')
+            .update({ completed: true })
+            .eq('task_id', taskId)
+
+        if (updateError) {
+            console.error('Error updating task status:', updateError)
+            return false
+        }
+
+        // 3. Reload tasks vom Backend (Source of Truth, kein optimistic update)
+        await loadTasks()
+        return true
+    }
+
+    // MARK AS DIRTY - Task wieder als "dreckig" markieren
+    // Ändert nur tasks.completed, löscht KEINE completions aus der Historie
+    const markAsDirty = async (taskId: string) => {
+        // UPDATE tasks.completed = FALSE
+        const { error } = await supabase
+            .from('tasks')
+            .update({ completed: false })
+            .eq('task_id', taskId)
+
+        if (error) {
+            console.error('Error marking task as dirty:', error)
+            return false
+        }
+
+        // Reload tasks vom Backend (Source of Truth)
+        await loadTasks()
+        return true
+    }
+
     // CREATE - Neue Task erstellen
-    const createTask = async (taskData: Omit<Task, 'task_id' | 'household_id'>) => {
+    // completed ist optional - Database setzt DEFAULT FALSE
+    const createTask = async (taskData: Omit<Task, 'task_id' | 'household_id' | 'completed'>) => {
         const householdStore = useHouseholdStore()
 
         if (!householdStore.currentHousehold) {
@@ -130,13 +191,15 @@ export const useTaskStore = defineStore('tasks', () => {
         return true
     }
     // Return - was andere Komponenten verwenden können
-    return { 
-        tasks, 
-        completions, 
-        loadTasks, 
-        toggleTask, 
-        createTask, 
-        updateTask, 
-        deleteTask 
+    return {
+        tasks,
+        completions,
+        loadTasks,
+        toggleTask,
+        completeTask,
+        markAsDirty,
+        createTask,
+        updateTask,
+        deleteTask
     }
 })

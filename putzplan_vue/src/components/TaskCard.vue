@@ -38,9 +38,13 @@ const handleDeleteTask = async () => {
      }
 }
 
-const handleToggleTask = () => {
-     taskStore.toggleTask(props.task.task_id)
-  }
+const handleCompleteTask = () => {
+     taskStore.completeTask(props.task.task_id)
+}
+
+const handleMarkDirty = () => {
+     taskStore.markAsDirty(props.task.task_id)
+}
 </script>
 
 <template>
@@ -102,12 +106,12 @@ const handleToggleTask = () => {
                <div v-if="!isEditing" class="d-flex gap-2">
                     <button v-if="props.task.completed"
                             class="btn btn-warning"
-                            @click="handleToggleTask">
+                            @click="handleMarkDirty">
                          Dreckig
                     </button>
                     <button v-else
                             class="btn btn-success"
-                            @click="handleToggleTask">
+                            @click="handleCompleteTask">
                          Sauber
                     </button>
                     <button class="btn btn-danger"

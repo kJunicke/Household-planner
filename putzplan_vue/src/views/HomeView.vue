@@ -15,16 +15,14 @@ const showCreateTaskForm = ref(false)
 const newTask = ref({
   title: '',
   effort: 1,
-  recurrence_days: 0,
-  completed: false
+  recurrence_days: 0
 })
 
 const resetForm = () => {
   newTask.value = {
     title: '',
     effort: 1,
-    recurrence_days: 0,
-    completed: false
+    recurrence_days: 0
   }
 }
 

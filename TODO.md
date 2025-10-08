@@ -66,23 +66,30 @@
 - [x] **Migrations gepusht** - Alle 4 Migrations erfolgreich in Supabase DB deployed
 - [x] **Security** - .env aus Git entfernt, SUPABASE_ACCESS_TOKEN sicher gespeichert
 
-#### Phase 2: Frontend Integration
-- [ ] **taskStore.ts refactoring** - `toggleTask()` → `completeTask()` + `uncompleteTask()`
-- [ ] **completeTask() implementieren** - INSERT in `task_completions` statt UPDATE `tasks.completed`
-- [ ] **uncompleteTask() implementieren** - DELETE letzte completion für "Dreckig machen"
-- [ ] **TaskCard.vue anpassen** - Buttons nutzen neue Store-Actions
-- [ ] **HomeView.vue cleanup** - `completed: false` aus newTask entfernen
+#### Phase 2: Frontend Integration ✅ DONE
+- [x] **Database Migration** - Triggers entfernt (rollback_task_triggers.sql)
+- [x] **taskStore.ts refactoring** - `completeTask()` + `markAsDirty()` implementiert
+- [x] **completeTask() implementieren** - INSERT in `task_completions` + UPDATE `tasks.completed = TRUE`
+- [x] **markAsDirty() implementieren** - UPDATE `tasks.completed = FALSE` (keine completions gelöscht!)
+- [x] **TaskCard.vue anpassen** - Buttons nutzen `handleCompleteTask()` und `handleMarkDirty()`
+- [x] **HomeView.vue cleanup** - `completed` aus newTask entfernt (Database DEFAULT FALSE)
+- [x] **Type-Check** - `npm run type-check` ohne Task-bezogene Errors
 
 #### Phase 3: Testing & Validation
 - [ ] **Manual Testing** - Task completion flow testen (Sauber → Dreckig)
 - [ ] **Recurrence Testing** - Wiederkehrende Tasks nach X Tagen testen
-- [ ] **Type-Check** - `npm run type-check` ohne Errors
+
+#### Phase 4: Automatic Recurrence (Backend Cron Job) - SPÄTER
+- [ ] **Supabase Edge Function** - daily-recurrence-check erstellen
+- [ ] **Cron Job Setup** - Täglicher Job der nur TRUE → FALSE setzt
+- [ ] **Testing** - Recurrence nach X Tagen automatisch testen
 
 ### Priorität 3: Multi-User Experience
 - [ ] **Real-time Updates** - Supabase Realtime Subscriptions
 - [ ] **Live Task Status Updates** - zwischen Haushaltsmitgliedern
 - [ ] **Advanced Completion Tracking** - user_id, timestamp für Gamification
 - [ ] **"Wer hat was gemacht" Anzeige** - Task completion history
+- [ ] **Undo Button** - Letzte eigene completion rückgängig machen (DELETE aus task_completions, nur eigene completions)
 
 ### Priorität 4: Authentication UX Fixes
 - [ ] **Form Validation** - Input validation und Error handling
@@ -115,5 +122,5 @@
 
 ---
 
-**Status:** Task Recurrence Backend komplett (Functions, Triggers, RLS)
-**Next:** Frontend Integration - taskStore refactoring (Priorität 2.5 Phase 2)
+**Status:** Task Recurrence Frontend Integration komplett (Hybrid-Architektur)
+**Next:** Manual Testing + Automatic Recurrence Cron Job (Priorität 2.5 Phase 3-4)

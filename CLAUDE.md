@@ -53,6 +53,11 @@ putzplan_vue/
 **Source of Truth**: Supabase Schema
 *Frontend-Types können temporär abweichen für MVP-Geschwindigkeit*
 
+**Tabellen**:
+- `households`, `household_members` - Haushaltsverwaltung
+- `tasks` - Task-Templates (keine separate recurrence-Tabelle!)
+- `task_completions` - Completion-Historie (tasks.completed wird von DB berechnet)
+
 ## 📚 Entwicklungsprinzipien
 
 ### YAGNI (You Aren't Gonna Need It) - ESSENTIELL
@@ -77,14 +82,9 @@ putzplan_vue/
 - **Nicht Bootstrap Modals**: Vue 3 Kompatibilitätsprobleme
 
 ### Database Migrations (Supabase CLI)
-- **Pattern**: Timestamp-based Migrations (`20250108230000_description.sql`)
-- **Workflow**:
-  1. `npx supabase migration new feature_name` - Neue Migration erstellen
-  2. SQL schreiben in `supabase/migrations/YYYYMMDDHHMMSS_*.sql`
-  3. `npx supabase db push` - Zu remote DB pushen
-- **Wichtig**: Migrations sind **append-only**, niemals bereits gepushte Migrations editieren!
-- **Änderungen**: Immer neue Migration erstellen (ALTER TABLE, etc.)
-- **Security**: `.env` mit `SUPABASE_ACCESS_TOKEN` nicht committen
+- **Workflow**: `supabase migration new name` → SQL schreiben → `supabase db push`
+- **Append-only**: Nie gepushte Migrations editieren, immer neue Migration für Änderungen
+- **Security**: `.env` nicht committen
 
 ---
 **Status & nächste Aufgaben**: Siehe `TODO.md`
