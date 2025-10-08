@@ -42,7 +42,11 @@ putzplan_vue/
 │   ├── views/         # Route-Level Komponenten
 │   ├── stores/        # Pinia Stores
 │   ├── router/        # Vue Router
+│   ├── types/         # TypeScript Interfaces
 │   └── lib/          # Supabase Config
+├── supabase/
+│   ├── config.toml    # Supabase CLI Config
+│   └── migrations/    # Database Migrations (timestamp-based)
 ```
 
 ### Datenmodell
@@ -71,6 +75,16 @@ putzplan_vue/
 - **Inline Forms**: Für einfache Create-Forms (≤4 Felder)
 - **Vue Modals**: Teleport + v-if für komplexe Forms
 - **Nicht Bootstrap Modals**: Vue 3 Kompatibilitätsprobleme
+
+### Database Migrations (Supabase CLI)
+- **Pattern**: Timestamp-based Migrations (`20250108230000_description.sql`)
+- **Workflow**:
+  1. `npx supabase migration new feature_name` - Neue Migration erstellen
+  2. SQL schreiben in `supabase/migrations/YYYYMMDDHHMMSS_*.sql`
+  3. `npx supabase db push` - Zu remote DB pushen
+- **Wichtig**: Migrations sind **append-only**, niemals bereits gepushte Migrations editieren!
+- **Änderungen**: Immer neue Migration erstellen (ALTER TABLE, etc.)
+- **Security**: `.env` mit `SUPABASE_ACCESS_TOKEN` nicht committen
 
 ---
 **Status & nächste Aufgaben**: Siehe `TODO.md`

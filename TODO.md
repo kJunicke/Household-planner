@@ -54,14 +54,17 @@
 - [x] **Household Info in Navbar** - Aktueller Household-Name + Invite Code anzeigen
 - [x] **User Info in Header** - Eingeloggter User (Email) mit Logout-Button
 
-### Priorität 2.5: Task Recurrence System (Backend-Driven) 🔄
+### Priorität 2.5: Task Recurrence System (Backend-Driven) ✅ DONE (Database)
 **Architektur:** Supabase als Source of Truth - Task completion Status wird von PostgreSQL berechnet
 
-#### Phase 1: Database Schema & Functions (In Progress - SQL Files erstellt, noch nicht in Supabase ausgeführt!)
-- [x] **SQL Files erstellt** - Alle 4 Migration Files mit ausführlichen Kommentaren (`01_function.sql`, `02_trigger.sql`, `03_rls.sql`, `04_indexes.sql`)
-- [ ] **README.md erstellen** - Installations-Guide für Supabase SQL Editor
-- [ ] **SQL Files in Supabase ausführen** - Nacheinander im SQL Editor ausführen (1→2→3→4)
-- [ ] **Testing in Supabase** - Manuell testen ob Function/Trigger funktionieren
+#### Phase 1: Database Schema & Functions ✅ COMPLETED
+- [x] **Supabase CLI Setup** - Professionelle Migration-Struktur mit `supabase/migrations/`
+- [x] **Base Schema Migration** - CREATE TABLE für alle 4 Tabellen (households, household_members, tasks, task_completions)
+- [x] **is_task_completed() Function** - PostgreSQL Function für Status-Berechnung
+- [x] **Auto-Update Triggers** - Automatisches Update von tasks.completed bei INSERT/DELETE in task_completions
+- [x] **RLS Policies** - Row Level Security für task_completions (SELECT, INSERT, DELETE)
+- [x] **Migrations gepusht** - Alle 4 Migrations erfolgreich in Supabase DB deployed
+- [x] **Security** - .env aus Git entfernt, SUPABASE_ACCESS_TOKEN sicher gespeichert
 
 #### Phase 2: Frontend Integration
 - [ ] **taskStore.ts refactoring** - `toggleTask()` → `completeTask()` + `uncompleteTask()`
@@ -92,11 +95,11 @@
 
 ## 🔧 Code Quality & Refactoring (Später)
 
-### Supabase CLI Integration
-- [ ] Supabase CLI installieren (`npm install supabase --save-dev`)
-- [ ] `supabase login` und Projekt verknüpfen
-- [ ] Database Migrations erstellen
-- [ ] Lokale Entwicklung mit `supabase start`
+### Supabase CLI Integration ✅ DONE
+- [x] Supabase CLI installieren (`npm install supabase --save-dev`)
+- [x] `supabase link` - Projekt verknüpfen mit Access Token
+- [x] Database Migrations erstellen und strukturieren
+- [ ] Lokale Entwicklung mit `supabase start` (requires Docker Desktop)
 
 ### Code Improvements
 - [ ] **camelCase/snake_case** Refactoring für konsistente Naming
@@ -112,5 +115,5 @@
 
 ---
 
-**Status:** Household Setup UI & User Management komplett
-**Next:** Multi-User Real-time Features (Priorität 3)
+**Status:** Task Recurrence Backend komplett (Functions, Triggers, RLS)
+**Next:** Frontend Integration - taskStore refactoring (Priorität 2.5 Phase 2)
