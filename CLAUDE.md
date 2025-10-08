@@ -55,8 +55,13 @@ putzplan_vue/
 
 **Tabellen**:
 - `households`, `household_members` - Haushaltsverwaltung
-- `tasks` - Task-Templates (keine separate recurrence-Tabelle!)
-- `task_completions` - Completion-Historie (tasks.completed wird von DB berechnet)
+- `tasks` - Task-Templates mit `recurrence_days` (0 = einmalig, >0 = wiederkehrend)
+- `task_completions` - Append-only Historie für Gamification (nie gelöscht)
+
+**Task Recurrence (Hybrid):**
+- Frontend: `completeTask()` schreibt in beide Tabellen, `markAsDirty()` setzt nur tasks.completed
+- Backend: Täglicher Cron (future) setzt automatisch TRUE → FALSE nach recurrence_days
+- Historie bleibt komplett erhalten
 
 ## 📚 Entwicklungsprinzipien
 
