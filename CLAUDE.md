@@ -64,7 +64,7 @@ putzplan_vue/
 **Task Recurrence (Hybrid):**
 - Frontend: `completeTask()` schreibt in beide Tabellen, `markAsDirty()` setzt nur tasks.completed
 - Backend: DB-Trigger aktualisiert automatisch `tasks.last_completed_at` aus `task_completions`
-- Backend Cron (future): Setzt automatisch TRUE → FALSE nach recurrence_days
+- Backend Cron: SQL Function `reset_recurring_tasks()` + pg_cron (täglich 3:00 UTC) setzt überfällige Tasks automatisch auf dreckig
 
 ## 📚 Entwicklungsprinzipien
 
@@ -93,18 +93,21 @@ putzplan_vue/
 
 **Empfohlener Workflow (Best Practice)**:
 ```bash
+# WICHTIG: Supabase CLI muss über npx aufgerufen werden!
+# Direkt "supabase" funktioniert nicht - immer "npx supabase" verwenden
+
 # 1. Lokale Migration erstellen
-supabase migration new my_feature_name
+npx supabase migration new my_feature_name
 
 # 2. SQL in die neue Migration-Datei schreiben
 # supabase/migrations/[timestamp]_my_feature_name.sql
 
 # 3. Migration zur Remote-DB pushen
-supabase db push
+npx supabase db push
 
 # 4. (Optional) Remote-Änderungen zurück pullen
 # Falls jemand Änderungen im Dashboard gemacht hat:
-supabase db pull
+npx supabase db pull
 ```
 
 **Wichtige Regeln**:

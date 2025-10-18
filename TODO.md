@@ -37,6 +37,7 @@
 - **Due Date Display** - "Fällig in X Tagen" UI für dreckige Tasks
 - **Database Trigger** - `last_completed_at` automatisch aus `task_completions` aktualisiert
 - **Robust Architecture** - Single Source of Truth in `task_completions`, keine Inkonsistenzen
+- **Automatic Recurrence (Cron Job)** - SQL Function + pg_cron für täglichen automatischen Reset überfälliger Tasks
 
 ### Database Schema & Security
 - **`households`** - Haushalte mit auto-generierten Invite Codes (UUID-based)
@@ -50,9 +51,8 @@
 ## 🚀 Nächste Development-Phase
 
 ### Priorität 1: Task Recurrence System - Testing & Validation 🎯
-- [ ] **Manual Testing** - Task completion flow testen (Sauber → Dreckig)
-- [ ] **Recurrence Testing** - Wiederkehrende Tasks nach X Tagen testen
-- [ ] **Automatic Recurrence (Backend Cron Job)** - Supabase Edge Function für täglichen Reset (SPÄTER)
+- [x] **Automatic Recurrence (Cron Job)** - ✅ SQL Function + pg_cron implementiert (läuft täglich um 3:00 UTC)
+- [ ] **Recurrence Testing** - Wiederkehrende Tasks nach X Tagen testen (manuell & automatisch)
 
 ### Priorität 2: Multi-User Experience
 - [ ] **Real-time Updates** - Supabase Realtime Subscriptions für Live-Updates zwischen Haushaltsmitgliedern
@@ -87,6 +87,6 @@
 
 ---
 
-**Status:** Production-ready Database Security implementiert
-**Letzte Änderung:** Vollständige RLS-Policies + Performance-Optimierung + Security-Hardening
-**Next:** Manual Testing des Task Completion Flows (Priorität 1)
+**Status:** Task Recurrence Cron Job implementiert
+**Letzte Änderung:** Automatic Task Reset via SQL Function + pg_cron (täglich um 3:00 UTC)
+**Next:** Recurrence Testing (Priorität 1)
