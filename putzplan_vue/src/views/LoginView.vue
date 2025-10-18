@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import {useAuthStore} from "@/stores/authStore"
+import {useHouseholdStore} from "@/stores/householdStore"
 import { ref } from "vue"
 import { useRouter } from 'vue-router'
 
 const authStore = useAuthStore()
+const householdStore = useHouseholdStore()
 const router = useRouter()
 const email = ref('')
 const password = ref('')
@@ -11,6 +13,8 @@ const password = ref('')
 const handleLogin = async () => {
     const result = await authStore.login(email.value, password.value)
     if (result.success) {
+        // Load household after successful login (prevents race condition with router guard)
+        await householdStore.loadUserHousehold()
         router.push('/')
     }
 }
