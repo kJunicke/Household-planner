@@ -90,9 +90,38 @@ putzplan_vue/
 - **Nicht Bootstrap Modals**: Vue 3 Kompatibilitätsprobleme
 
 ### Database Migrations (Supabase CLI)
-- **Workflow**: `supabase migration new name` → SQL schreiben → `supabase db push`
+
+**Empfohlener Workflow (Best Practice)**:
+```bash
+# 1. Lokale Migration erstellen
+supabase migration new my_feature_name
+
+# 2. SQL in die neue Migration-Datei schreiben
+# supabase/migrations/[timestamp]_my_feature_name.sql
+
+# 3. Migration zur Remote-DB pushen
+supabase db push
+
+# 4. (Optional) Remote-Änderungen zurück pullen
+# Falls jemand Änderungen im Dashboard gemacht hat:
+supabase db pull
+```
+
+**Wichtige Regeln**:
 - **Append-only**: Nie gepushte Migrations editieren, immer neue Migration für Änderungen
+- **No `db remote commit`**: Deprecated! Wurde durch `db pull` ersetzt
+- **Link project**: Einmalig `supabase link` ausführen für Remote-Zugriff
 - **Security**: `.env` nicht committen
+
+**Was macht was**:
+- `db push` - Pusht lokale Migrations zur Remote-DB (one-way)
+- `db pull` - Pullt Remote-Schema-Änderungen als neue Migration (reverse)
+- `db reset` - Löscht lokale DB und spielt alle Migrations neu ab
+- `db diff` - Zeigt Unterschiede zwischen lokal und remote
+
+**Security Checklist**:
+- ✅ RLS für alle Tabellen aktivieren
+- ✅ `SET search_path = public, pg_temp` bei Functions hinzufügen
 
 ---
 **Status & nächste Aufgaben**: Siehe `TODO.md`

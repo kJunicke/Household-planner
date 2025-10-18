@@ -38,11 +38,14 @@
 - **Database Trigger** - `last_completed_at` automatisch aus `task_completions` aktualisiert
 - **Robust Architecture** - Single Source of Truth in `task_completions`, keine Inkonsistenzen
 
-### Database Schema
+### Database Schema & Security
 - **`households`** - Haushalte mit auto-generierten Invite Codes (UUID-based)
 - **`household_members`** - Benutzer-zu-Haushalt-Zuordnung
 - **`tasks`** - Aufgaben-Templates mit Recurrence-System + `last_completed_at` (AUTO via Trigger)
 - **`task_completions`** - Task-Erledigung-Historie (Append-only, Single Source of Truth)
+- **Row Level Security (RLS)** - Production-ready mit optimierter Performance
+- **SECURITY DEFINER Helper** - `private.get_user_household_ids()` verhindert RLS-Rekursion
+- **Function Security** - `SET search_path` bei allen Functions gegen Schema-Injection
 
 ## 🚀 Nächste Development-Phase
 
@@ -63,7 +66,10 @@
 - [ ] **CSS Improvements** - Hover-Effekte für TaskCards, responsive Design
 
 ### Priorität 4: Database Security & Integrity
-- [ ] **RLS Policies** - Vollständige Row Level Security für alle Tabellen
+- [x] **RLS Policies** - ✅ Vollständige Row Level Security für alle Tabellen (Production-ready)
+- [x] **Function Security** - ✅ `SET search_path` für Schema-Injection-Schutz
+- [x] **RLS Performance** - ✅ SECURITY DEFINER Helper-Function in private Schema
+- [x] **Supabase CLI** - ✅ Updated zu v2.51.0
 - [ ] **UNIQUE Constraint** - household_members.user_id (aktuell nur Frontend-Check)
 - [ ] **Test-Daten** für Development Environment
 
@@ -81,6 +87,6 @@
 
 ---
 
-**Status:** Task Due Date Display implementiert mit robuster DB-Trigger-Architektur
-**Letzte Änderung:** "Fällig in X Tagen" Feature + DB-Trigger für last_completed_at
+**Status:** Production-ready Database Security implementiert
+**Letzte Änderung:** Vollständige RLS-Policies + Performance-Optimierung + Security-Hardening
 **Next:** Manual Testing des Task Completion Flows (Priorität 1)
