@@ -1,6 +1,6 @@
 # Putzplan TODOs
 
-## Aktueller Entwicklungsstand (2025-10-01)
+## Aktueller Entwicklungsstand (2025-10-18)
 
 **ARCHITEKTUR:** Shared Household System - mehrere Benutzer arbeiten im selben Haushalt zusammen
 
@@ -29,91 +29,50 @@
 - **Household & HouseholdMember Interfaces** - TypeScript Types (YAGNI-Prinzip)
 - **Store Actions** - loadUserHousehold(), createHousehold(), joinHousehold(), leaveHousehold()
 - **Invite Code System** - Supabase UUID-basiert (collision-safe)
-- **Store Initialization** - In main.ts nach Auth geladen
+- **Store Initialization** - In main.ts nach Auth geladen + nach Login geladen
+- **Login Race Condition Fix** - householdStore wird nach Login geladen (verhindert falschen Redirect)
 - **Frontend-Check** - User kann nicht zweiten Household joinen
+
+### Task Recurrence System
+- **Due Date Display** - "Fällig in X Tagen" UI für dreckige Tasks
+- **Database Trigger** - `last_completed_at` automatisch aus `task_completions` aktualisiert
+- **Robust Architecture** - Single Source of Truth in `task_completions`, keine Inkonsistenzen
 
 ### Database Schema
 - **`households`** - Haushalte mit auto-generierten Invite Codes (UUID-based)
 - **`household_members`** - Benutzer-zu-Haushalt-Zuordnung
-- **`tasks`** - Aufgaben-Templates mit Recurrence-System
-- **`task_completions`** - Task-Erledigung-Historie
+- **`tasks`** - Aufgaben-Templates mit Recurrence-System + `last_completed_at` (AUTO via Trigger)
+- **`task_completions`** - Task-Erledigung-Historie (Append-only, Single Source of Truth)
 
 ## 🚀 Nächste Development-Phase
 
-### Priorität 1: TaskStore Integration ✅ DONE
-- [x] **Hardcoded household_id entfernen** - TaskStore nutzt householdStore.currentHousehold.household_id
-- [x] **loadTasks() anpassen** - Filter nach currentHousehold
-- [x] **createTask() anpassen** - household_id aus Store statt hardcoded
-- [x] **HomeView anpassen** - hardcoded household_id entfernen
-
-### Priorität 2: Household Setup UI ✅ DONE
-- [x] **HouseholdSetupView erstellen** - Route /household-setup
-- [x] **Create Household Form** - Input für Household-Name mit Error/Loading States
-- [x] **Join Household Form** - Input für Invite Code mit Error/Loading States
-- [x] **Router Guard erweitern** - Redirect zu /household-setup wenn kein Household (aktiv)
-- [x] **Household Info in Navbar** - Aktueller Household-Name + Invite Code anzeigen
-- [x] **User Info in Header** - Eingeloggter User (Email) mit Logout-Button
-
-### Priorität 2.5: Task Recurrence System (Backend-Driven) ✅ DONE (Database)
-**Architektur:** Supabase als Source of Truth - Task completion Status wird von PostgreSQL berechnet
-
-#### Phase 1: Database Schema & Functions ✅ COMPLETED
-- [x] **Supabase CLI Setup** - Professionelle Migration-Struktur mit `supabase/migrations/`
-- [x] **Base Schema Migration** - CREATE TABLE für alle 4 Tabellen (households, household_members, tasks, task_completions)
-- [x] **is_task_completed() Function** - PostgreSQL Function für Status-Berechnung
-- [x] **Auto-Update Triggers** - Automatisches Update von tasks.completed bei INSERT/DELETE in task_completions
-- [x] **RLS Policies** - Row Level Security für task_completions (SELECT, INSERT, DELETE)
-- [x] **Migrations gepusht** - Alle 4 Migrations erfolgreich in Supabase DB deployed
-- [x] **Security** - .env aus Git entfernt, SUPABASE_ACCESS_TOKEN sicher gespeichert
-
-#### Phase 2: Frontend Integration ✅ DONE
-- [x] **Database Migration** - Triggers entfernt (rollback_task_triggers.sql)
-- [x] **taskStore.ts refactoring** - `completeTask()` + `markAsDirty()` implementiert
-- [x] **completeTask() implementieren** - INSERT in `task_completions` + UPDATE `tasks.completed = TRUE`
-- [x] **markAsDirty() implementieren** - UPDATE `tasks.completed = FALSE` (keine completions gelöscht!)
-- [x] **TaskCard.vue anpassen** - Buttons nutzen `handleCompleteTask()` und `handleMarkDirty()`
-- [x] **HomeView.vue cleanup** - `completed` aus newTask entfernt (Database DEFAULT FALSE)
-- [x] **Type-Check** - `npm run type-check` ohne Task-bezogene Errors
-
-#### Phase 3: Testing & Validation
+### Priorität 1: Task Recurrence System - Testing & Validation 🎯
 - [ ] **Manual Testing** - Task completion flow testen (Sauber → Dreckig)
 - [ ] **Recurrence Testing** - Wiederkehrende Tasks nach X Tagen testen
+- [ ] **Automatic Recurrence (Backend Cron Job)** - Supabase Edge Function für täglichen Reset (SPÄTER)
 
-#### Phase 4: Automatic Recurrence (Backend Cron Job) - SPÄTER
-- [ ] **Supabase Edge Function** - daily-recurrence-check erstellen
-- [ ] **Cron Job Setup** - Täglicher Job der nur TRUE → FALSE setzt
-- [ ] **Testing** - Recurrence nach X Tagen automatisch testen
+### Priorität 2: Multi-User Experience
+- [ ] **Real-time Updates** - Supabase Realtime Subscriptions für Live-Updates zwischen Haushaltsmitgliedern
+- [ ] **Advanced Completion Tracking** - user_id, timestamp in task_completions für Gamification
+- [ ] **"Wer hat was gemacht" Anzeige** - Task completion history in UI
+- [ ] **Undo Button** - Letzte eigene completion rückgängig machen
 
-### Priorität 3: Multi-User Experience
-- [ ] **Real-time Updates** - Supabase Realtime Subscriptions
-- [ ] **Live Task Status Updates** - zwischen Haushaltsmitgliedern
-- [ ] **Advanced Completion Tracking** - user_id, timestamp für Gamification
-- [ ] **"Wer hat was gemacht" Anzeige** - Task completion history
-- [ ] **Undo Button** - Letzte eigene completion rückgängig machen (DELETE aus task_completions, nur eigene completions)
+### Priorität 3: UX & Polish
+- [ ] **Authentication UX** - Loading & Error States zu LoginView/RegisterView (Pattern: HouseholdSetupView)
+- [ ] **Form Validation** - Input validation und besseres Error handling
+- [ ] **CSS Improvements** - Hover-Effekte für TaskCards, responsive Design
 
-### Priorität 4: Authentication UX Fixes
-- [ ] **Form Validation** - Input validation und Error handling
-- [ ] **Loading & Error Feedback** - Loading states und Error messages zu LoginView & RegisterView hinzufügen (Pattern wie HouseholdSetupView)
-
-### Priorität 5: Database Setup
-- [ ] **Test-Daten** für Development
-- [ ] **Row Level Security (RLS)** Policies für Multi-User Security
-- [ ] **UNIQUE Constraint auf household_members.user_id** - Garantiert dass User nur in einem Household sein kann (aktuell nur Frontend-Check)
+### Priorität 4: Database Security & Integrity
+- [ ] **RLS Policies** - Vollständige Row Level Security für alle Tabellen
+- [ ] **UNIQUE Constraint** - household_members.user_id (aktuell nur Frontend-Check)
+- [ ] **Test-Daten** für Development Environment
 
 ## 🔧 Code Quality & Refactoring (Später)
-
-### Supabase CLI Integration ✅ DONE
-- [x] Supabase CLI installieren (`npm install supabase --save-dev`)
-- [x] `supabase link` - Projekt verknüpfen mit Access Token
-- [x] Database Migrations erstellen und strukturieren
-- [ ] Lokale Entwicklung mit `supabase start` (requires Docker Desktop)
-
-### Code Improvements
-- [ ] **camelCase/snake_case** Refactoring für konsistente Naming
-- [ ] **Database Mapping Layer** für Property-Transformation
-- [ ] **CSS Hover-Effekte** für TaskCards
-- [ ] **Responsive Design** Verbesserungen
-- [ ] **PWA-Features** und mobile Optimierung
+- [ ] **ESLint Config Fix** - TypeScript Fehler in eslint.config.ts beheben ('files' does not exist in type)
+- [ ] **Lokale Supabase Dev** - `supabase start` mit Docker Desktop
+- [ ] **camelCase/snake_case** - Konsistente Naming Convention
+- [ ] **Database Mapping Layer** - Property-Transformation zwischen DB und Frontend
+- [ ] **PWA-Features** - Mobile Optimierung, Offline-Support
 
 ## 🎯 Gamification Features (Future)
 - `user_stats` - Benutzer-XP, Level, Streaks pro Haushalt
@@ -122,5 +81,6 @@
 
 ---
 
-**Status:** Task Recurrence Frontend Integration komplett (Hybrid-Architektur)
-**Next:** Manual Testing + Automatic Recurrence Cron Job (Priorität 2.5 Phase 3-4)
+**Status:** Task Due Date Display implementiert mit robuster DB-Trigger-Architektur
+**Letzte Änderung:** "Fällig in X Tagen" Feature + DB-Trigger für last_completed_at
+**Next:** Manual Testing des Task Completion Flows (Priorität 1)

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { Task } from '@/types/Task'
 import { useTaskStore } from '@/stores/taskStore'
-import { ref } from "vue";
+import { ref, computed } from "vue";
 
 interface Props {
      task: Task
@@ -45,6 +45,24 @@ const handleCompleteTask = () => {
 const handleMarkDirty = () => {
      taskStore.markAsDirty(props.task.task_id)
 }
+
+// Berechnet Tage bis Task wieder fällig ist (nur für dreckige, wiederkehrende Tasks)
+const daysUntilDue = computed(() => {
+     // Nur für wiederkehrende Tasks die completed sind
+     if (props.task.recurrence_days === 0 || !props.task.completed || !props.task.last_completed_at) {
+          return null
+     }
+
+     const lastCompleted = new Date(props.task.last_completed_at)
+     const dueDate = new Date(lastCompleted)
+     dueDate.setDate(dueDate.getDate() + props.task.recurrence_days)
+
+     const today = new Date()
+     const diffTime = dueDate.getTime() - today.getTime()
+     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
+
+     return diffDays
+})
 </script>
 
 <template>
@@ -57,6 +75,11 @@ const handleMarkDirty = () => {
                <!-- Für wiederkehrende Tasks -->
                <p v-if="props.task.recurrence_days > 0" class="text">
                     Wiederholt sich alle {{ props.task.recurrence_days }} Tage
+               </p>
+
+               <!-- Fälligkeitsdatum für dreckige, wiederkehrende Tasks -->
+               <p v-if="daysUntilDue !== null" class="text text-muted">
+                    Fällig in {{ daysUntilDue }} {{ daysUntilDue === 1 ? 'Tag' : 'Tagen' }}
                </p>
 
                <!-- Für einmalige Tasks -->

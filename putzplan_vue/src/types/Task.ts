@@ -1,5 +1,5 @@
 export interface Task {
-  task_id: string 
+  task_id: string
   household_id: string
   title: string
   effort: 1 | 2 | 3 | 4 | 5 // effort a cleaning activity usually takes.
@@ -9,6 +9,7 @@ export interface Task {
   // Task wiederholt sich nicht wenn recurrence_days = 0
   recurrence_days: number
   completed: boolean
+  last_completed_at: string | null // ISO timestamp, auto-updated via DB trigger from task_completions
   }
 
 export interface TaskCompletion {

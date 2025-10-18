@@ -126,8 +126,8 @@ export const useTaskStore = defineStore('tasks', () => {
     }
 
     // CREATE - Neue Task erstellen
-    // completed ist optional - Database setzt DEFAULT FALSE
-    const createTask = async (taskData: Omit<Task, 'task_id' | 'household_id' | 'completed'>) => {
+    // completed und last_completed_at sind optional - Database setzt Defaults
+    const createTask = async (taskData: Omit<Task, 'task_id' | 'household_id' | 'completed' | 'last_completed_at'>) => {
         const householdStore = useHouseholdStore()
 
         if (!householdStore.currentHousehold) {
