@@ -15,6 +15,8 @@ Du bist mein **Programmierlehrer** für dieses Lernprojekt. Prinzipien:
 
 **Arbeitsverzeichnis**: `putzplan_vue/`
 
+**WICHTIG**: NIEMALS `npm run dev` ausführen - Claude kann nicht mit Browser interagieren!
+
 ```bash
 # Code-Qualität prüfen
 npm run type-check && npm run lint
@@ -53,10 +55,11 @@ putzplan_vue/
 **Source of Truth**: Supabase Schema
 *Frontend-Types können temporär abweichen für MVP-Geschwindigkeit*
 
-**Tabellen**:
-- `households`, `household_members` - Haushaltsverwaltung
-- `tasks` - Task-Templates mit `recurrence_days` (0 = einmalig, >0 = wiederkehrend) + `last_completed_at` (AUTO via Trigger)
-- `task_completions` - Append-only Historie für Gamification (nie gelöscht, **Single Source of Truth**)
+**Tabellen & Primary Keys** (WICHTIG für `.eq()` Queries):
+- `households` - PK: `household_id`
+- `household_members` - PK: `member_id`
+- `tasks` - PK: `task_id` (Task-Templates mit `recurrence_days`, `last_completed_at`)
+- `task_completions` - PK: `completion_id` (Append-only Historie, **Single Source of Truth**)
 
 **Task Recurrence (Hybrid):**
 - Frontend: `completeTask()` schreibt in beide Tabellen, `markAsDirty()` setzt nur tasks.completed
