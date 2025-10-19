@@ -208,7 +208,7 @@ export const useTaskStore = defineStore('tasks', () => {
         return true
     }
 
-    // REALTIME - Subscribe zu Änderungen an tasks
+    // REALTIME - Subscribe zu Änderungen an tasks & task_completions
     // Muss manuell aufgerufen werden (z.B. in HomeView.onMounted)
     const subscribeToTasks = () => {
         const householdStore = useHouseholdStore()
@@ -237,7 +237,7 @@ export const useTaskStore = defineStore('tasks', () => {
                     filter: `household_id=eq.${householdStore.currentHousehold.household_id}`
                 },
                 (payload) => {
-                    console.log('📡 Realtime event:', payload)
+                    console.log('📡 Realtime tasks event:', payload)
 
                     // INSERT - Neuer Task wurde erstellt
                     if (payload.eventType === 'INSERT') {
@@ -261,6 +261,32 @@ export const useTaskStore = defineStore('tasks', () => {
                     if (payload.eventType === 'DELETE') {
                         const deletedTask = payload.old as Task
                         tasks.value = tasks.value.filter(t => t.task_id !== deletedTask.task_id)
+                    }
+                }
+            )
+            .on(
+                'postgres_changes',
+                {
+                    event: '*', // INSERT, UPDATE, DELETE
+                    schema: 'public',
+                    table: 'task_completions'
+                },
+                (payload) => {
+                    console.log('📡 Realtime completions event:', payload)
+
+                    // INSERT - Neue Completion wurde erstellt
+                    if (payload.eventType === 'INSERT') {
+                        const newCompletion = payload.new as TaskCompletion
+                        // Nur hinzufügen wenn nicht schon vorhanden
+                        if (!completions.value.find(c => c.completion_id === newCompletion.completion_id)) {
+                            completions.value.push(newCompletion)
+                        }
+                    }
+
+                    // DELETE - Completion wurde gelöscht (sollte nicht vorkommen, aber für Vollständigkeit)
+                    if (payload.eventType === 'DELETE') {
+                        const deletedCompletion = payload.old as TaskCompletion
+                        completions.value = completions.value.filter(c => c.completion_id !== deletedCompletion.completion_id)
                     }
                 }
             )
