@@ -15,4 +15,6 @@ export default defineConfig({
       '@': fileURLToPath(new URL('./src', import.meta.url))
     },
   },
+  // GitHub Pages deployment - repo wird unter /Household-planner/ gehostet
+  base: '/Household-planner/',
 })
