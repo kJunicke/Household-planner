@@ -39,6 +39,12 @@
 - **Robust Architecture** - Single Source of Truth in `task_completions`, keine Inkonsistenzen
 - **Automatic Recurrence (Cron Job)** - SQL Function + pg_cron für täglichen automatischen Reset überfälliger Tasks
 
+### Multi-User Real-time System
+- **Supabase Realtime Subscriptions** - WebSocket-basierte Live-Updates zwischen Haushaltsmitgliedern
+- **TaskStore Realtime Methods** - subscribeToTasks(), unsubscribeFromTasks() mit household_id filtering
+- **Automatic State Sync** - INSERT, UPDATE, DELETE Events synchronisieren lokalen State automatisch
+- **Lifecycle Management** - Subscription in HomeView mit onMounted/onUnmounted cleanup
+
 ### Database Schema & Security
 - **`households`** - Haushalte mit auto-generierten Invite Codes (UUID-based)
 - **`household_members`** - Benutzer-zu-Haushalt-Zuordnung
@@ -52,10 +58,12 @@
 
 ### Priorität 1: Task Recurrence System - Testing & Validation 🎯
 - [x] **Automatic Recurrence (Cron Job)** - ✅ SQL Function + pg_cron implementiert (läuft täglich um 3:00 UTC)
-- [ ] **Recurrence Testing** - Wiederkehrende Tasks nach X Tagen testen (manuell & automatisch)
+- [x] **Calendar Days Logic** - ✅ Fix: Verwendet ganze Kalendertage statt 24h-Perioden (Migration 20251019121735)
+- [x] **Recurrence Testing** - ✅ Manueller Test erfolgreich: Task "testetet" wurde nach 1 Tag korrekt resettet
 
 ### Priorität 2: Multi-User Experience
-- [ ] **Real-time Updates** - Supabase Realtime Subscriptions für Live-Updates zwischen Haushaltsmitgliedern
+- [x] **Real-time Updates** - ✅ Supabase Realtime Subscriptions für Live-Updates zwischen Haushaltsmitgliedern
+- [ ] **Realtime Testing** - Mit zwei Browsern testen (CREATE, UPDATE, DELETE Events)
 - [ ] **Advanced Completion Tracking** - user_id, timestamp in task_completions für Gamification
 - [ ] **"Wer hat was gemacht" Anzeige** - Task completion history in UI
 - [ ] **Undo Button** - Letzte eigene completion rückgängig machen
@@ -87,6 +95,6 @@
 
 ---
 
-**Status:** Task Recurrence Cron Job implementiert
-**Letzte Änderung:** Automatic Task Reset via SQL Function + pg_cron (täglich um 3:00 UTC)
-**Next:** Recurrence Testing (Priorität 1)
+**Status:** Task Recurrence System vollständig funktionsfähig (Calendar Days Logic)
+**Letzte Änderung:** Cron-Job verwendet jetzt ganze Kalendertage statt 24h-Perioden
+**Next:** Realtime Testing mit zwei Browsern (Priorität 2)

@@ -65,6 +65,8 @@ putzplan_vue/
 - Frontend: `completeTask()` schreibt in beide Tabellen, `markAsDirty()` setzt nur tasks.completed
 - Backend: DB-Trigger aktualisiert automatisch `tasks.last_completed_at` aus `task_completions`
 - Backend Cron: SQL Function `reset_recurring_tasks()` + pg_cron (täglich 3:00 UTC) setzt überfällige Tasks automatisch auf dreckig
+  - **Calendar Days Logic**: Verwendet `CURRENT_DATE - DATE(last_completed_at)` für ganze Tage (nicht 24h-Perioden)
+  - Beispiel: Task completed am 18.10. um 14:00 → Reset am 19.10. um 3:00 (1 ganzer Tag vergangen)
 
 ## 📚 Entwicklungsprinzipien
 
