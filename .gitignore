@@ -1,0 +1,12 @@
+# Dependencies
+node_modules/
+
+# Environment variables
+# CRITICAL: NEVER remove .env from gitignore!
+# Contains SUPABASE_ACCESS_TOKEN with full admin rights
+.env
+.env.local
+.env.*.local
+
+# Claude Code local settings (contains personal file paths)
+.claude/settings.local.json
