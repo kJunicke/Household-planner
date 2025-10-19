@@ -9,4 +9,5 @@ node_modules/
 .env.*.local
 
 # Claude Code local settings (contains personal file paths)
+# Note: Git is configured to use GitHub noreply email (kJunicke@users.noreply.github.com)
 .claude/settings.local.json
