@@ -46,7 +46,8 @@ const handleMarkDirty = () => {
      taskStore.markAsDirty(props.task.task_id)
 }
 
-// Berechnet Tage bis Task wieder fällig ist (nur für dreckige, wiederkehrende Tasks)
+// Berechnet Tage bis Task wieder fällig ist (nur für wiederkehrende Tasks die completed sind)
+// Verwendet CALENDAR DAYS (nicht 24h-Perioden), konsistent mit Backend-Cron-Logik
 const daysUntilDue = computed(() => {
      // Nur für wiederkehrende Tasks die completed sind
      if (props.task.recurrence_days === 0 || !props.task.completed || !props.task.last_completed_at) {
@@ -54,14 +55,20 @@ const daysUntilDue = computed(() => {
      }
 
      const lastCompleted = new Date(props.task.last_completed_at)
-     const dueDate = new Date(lastCompleted)
-     dueDate.setDate(dueDate.getDate() + props.task.recurrence_days)
-
      const today = new Date()
-     const diffTime = dueDate.getTime() - today.getTime()
-     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
 
-     return diffDays
+     // Calendar days: Nur Datum vergleichen, keine Uhrzeit
+     // Setzt Zeit auf 00:00:00 für beide Daten
+     const lastCompletedDate = new Date(lastCompleted.getFullYear(), lastCompleted.getMonth(), lastCompleted.getDate())
+     const todayDate = new Date(today.getFullYear(), today.getMonth(), today.getDate())
+
+     // Berechne vergangene Tage (in ganzen Kalendertagen)
+     const daysPassed = Math.floor((todayDate.getTime() - lastCompletedDate.getTime()) / (1000 * 60 * 60 * 24))
+
+     // Verbleibende Tage bis zum Reset
+     const daysRemaining = props.task.recurrence_days - daysPassed
+
+     return daysRemaining
 })
 </script>
 
