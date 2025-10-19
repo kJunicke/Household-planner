@@ -4,11 +4,15 @@ import type { Task, TaskCompletion } from '@/types/Task'
 import { supabase } from '@/lib/supabase'
 import { useHouseholdStore } from './householdStore'
 import { useAuthStore } from './authStore'
+import type { RealtimeChannel } from '@supabase/supabase-js'
 
 export const useTaskStore = defineStore('tasks', () => {
     // State - wie ref() in Komponenten
     const tasks = ref<Task[]>([])
     const completions = ref<TaskCompletion[]>([])
+
+    // Realtime subscription channel (wird in subscribe() initialisiert)
+    let realtimeChannel: RealtimeChannel | null = null
 
     // Actions - Funktionen die State ändern
     const loadTasks = async () => {
@@ -190,6 +194,76 @@ export const useTaskStore = defineStore('tasks', () => {
         tasks.value = tasks.value.filter(t => t.task_id !== taskId)
         return true
     }
+
+    // REALTIME - Subscribe zu Änderungen an tasks
+    // Muss manuell aufgerufen werden (z.B. in HomeView.onMounted)
+    const subscribeToTasks = () => {
+        const householdStore = useHouseholdStore()
+
+        if (!householdStore.currentHousehold) {
+            console.warn('Cannot subscribe: No current household')
+            return
+        }
+
+        // Alte Subscription cleanup (falls vorhanden)
+        if (realtimeChannel) {
+            supabase.removeChannel(realtimeChannel)
+        }
+
+        console.log('🔴 Subscribing to tasks for household:', householdStore.currentHousehold.household_id)
+
+        // Neuen Channel erstellen & filtern auf household_id
+        realtimeChannel = supabase
+            .channel('tasks-changes')
+            .on(
+                'postgres_changes',
+                {
+                    event: '*', // INSERT, UPDATE, DELETE
+                    schema: 'public',
+                    table: 'tasks',
+                    filter: `household_id=eq.${householdStore.currentHousehold.household_id}`
+                },
+                (payload) => {
+                    console.log('📡 Realtime event:', payload)
+
+                    // INSERT - Neuer Task wurde erstellt
+                    if (payload.eventType === 'INSERT') {
+                        const newTask = payload.new as Task
+                        // Nur hinzufügen wenn nicht schon vorhanden (Race Condition vermeiden)
+                        if (!tasks.value.find(t => t.task_id === newTask.task_id)) {
+                            tasks.value.push(newTask)
+                        }
+                    }
+
+                    // UPDATE - Task wurde geändert
+                    if (payload.eventType === 'UPDATE') {
+                        const updatedTask = payload.new as Task
+                        const index = tasks.value.findIndex(t => t.task_id === updatedTask.task_id)
+                        if (index !== -1) {
+                            tasks.value[index] = updatedTask
+                        }
+                    }
+
+                    // DELETE - Task wurde gelöscht
+                    if (payload.eventType === 'DELETE') {
+                        const deletedTask = payload.old as Task
+                        tasks.value = tasks.value.filter(t => t.task_id !== deletedTask.task_id)
+                    }
+                }
+            )
+            .subscribe()
+    }
+
+    // REALTIME - Unsubscribe von Änderungen
+    // Muss beim Component Cleanup aufgerufen werden (z.B. HomeView.onUnmounted)
+    const unsubscribeFromTasks = () => {
+        if (realtimeChannel) {
+            console.log('🔴 Unsubscribing from tasks')
+            supabase.removeChannel(realtimeChannel)
+            realtimeChannel = null
+        }
+    }
+
     // Return - was andere Komponenten verwenden können
     return {
         tasks,
@@ -200,6 +274,8 @@ export const useTaskStore = defineStore('tasks', () => {
         markAsDirty,
         createTask,
         updateTask,
-        deleteTask
+        deleteTask,
+        subscribeToTasks,
+        unsubscribeFromTasks
     }
 })

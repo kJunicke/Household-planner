@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref } from "vue";
+import { onMounted, onUnmounted, ref } from "vue";
 import { useRouter } from "vue-router";
 import TaskList from '../components/TaskList.vue';
 import { useTaskStore } from "../stores/taskStore";
@@ -50,9 +50,16 @@ const handleLogout = async () => {
 }
 
 onMounted(() => {
-       // Lädt Tasks aus Supabase
-       taskStore.loadTasks()
-       });
+  // Lädt Tasks aus Supabase
+  taskStore.loadTasks()
+  // Startet Realtime Subscriptions für Live-Updates
+  taskStore.subscribeToTasks()
+})
+
+onUnmounted(() => {
+  // Cleanup: Beendet Realtime Subscriptions
+  taskStore.unsubscribeFromTasks()
+})
 
 </script>
 
