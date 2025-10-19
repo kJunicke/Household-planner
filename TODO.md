@@ -57,6 +57,26 @@
 
 ## 🚀 Nächste Development-Phase
 
+### ⚠️ Priorität 0: GitHub Pages Deployment Vorbereitung - IN ARBEIT
+
+**Ziel:** App für Multi-User Testing auf Handy launchen
+
+#### Phase 1: Build Fix (KRITISCH - Blocker)
+- [ ] **ESLint Config Fix** - 'files' Property TypeScript Error in eslint.config.ts beheben
+- [ ] **Build Test** - `npm run build` erfolgreich durchlaufen lassen
+
+#### Phase 2: GitHub Pages Setup
+- [ ] **Vite Config** - `base: '/Putplan/'` für GitHub Repository Path setzen
+- [ ] **GitHub Actions Workflow** - `.github/workflows/deploy.yml` für Auto-Deploy bei main push
+- [ ] **Environment Variables** - Supabase Credentials via GitHub Secrets (VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY)
+- [ ] **README Update** - Deployment-Anleitung für GitHub Pages
+
+#### Phase 3: UX Polish (Empfohlen vor Launch)
+- [ ] **Page Title** - "Putzplan" statt "Vite App" in index.html setzen
+- [ ] **Favicon** - Custom Icon erstellen/setzen
+- [ ] **Error Messages** - Auth Error Display in LoginView/RegisterView (User-sichtbar)
+- [ ] **Loading States** - Feedback/Spinner bei Task Create/Delete/Update
+
 ### ✅ Priorität 1: Task Recurrence System - ABGESCHLOSSEN
 - [x] **Automatic Recurrence (Cron Job)** - ✅ SQL Function + pg_cron implementiert (läuft täglich um 3:00 UTC)
 - [x] **Calendar Days Logic (Backend)** - ✅ Migration 20251019121735: Backend verwendet Kalendertage
@@ -64,19 +84,22 @@
 - [x] **Recurrence Testing** - ✅ Diagnostische Migrations + manueller Test erfolgreich
 - [x] **Production Verification** - ✅ Cron-Job läuft in Produktion (pg_cron verified)
 
-### Priorität 2: Multi-User Experience
+### ✅ Priorität 3: Multi-User Experience - REALTIME IMPLEMENTIERT
 - [x] **Real-time Updates** - ✅ Supabase Realtime Subscriptions für Live-Updates zwischen Haushaltsmitgliedern
+- [x] **Database Migration** - ✅ Enable Realtime publication für `tasks` table
+- [x] **TaskStore Realtime** - ✅ subscribeToTasks(), unsubscribeFromTasks() mit household_id filtering
+- [x] **Lifecycle Management** - ✅ Subscription in HomeView mit onMounted/onUnmounted cleanup
 - [ ] **Realtime Testing** - Mit zwei Browsern testen (CREATE, UPDATE, DELETE Events)
 - [ ] **Advanced Completion Tracking** - user_id, timestamp in task_completions für Gamification
 - [ ] **"Wer hat was gemacht" Anzeige** - Task completion history in UI
 - [ ] **Undo Button** - Letzte eigene completion rückgängig machen
 
-### Priorität 3: UX & Polish
+### Priorität 4: UX & Polish (weitere Features)
 - [ ] **Authentication UX** - Loading & Error States zu LoginView/RegisterView (Pattern: HouseholdSetupView)
 - [ ] **Form Validation** - Input validation und besseres Error handling
 - [ ] **CSS Improvements** - Hover-Effekte für TaskCards, responsive Design
 
-### Priorität 4: Database Security & Integrity
+### Priorität 5: Database Security & Integrity
 - [x] **RLS Policies** - ✅ Vollständige Row Level Security für alle Tabellen (Production-ready)
 - [x] **Function Security** - ✅ `SET search_path` für Schema-Injection-Schutz
 - [x] **RLS Performance** - ✅ SECURITY DEFINER Helper-Function in private Schema
@@ -98,6 +121,6 @@
 
 ---
 
-**Status:** Task Recurrence System vollständig abgeschlossen ✅
-**Letzte Änderung:** Calendar Days Logic in Backend (Cron) und Frontend (UI) konsistent implementiert
-**Next:** Realtime Testing mit zwei Browsern (Priorität 2)
+**Status:** Vorbereitung für GitHub Pages Deployment 🚀
+**Letzte Änderung:** Priorität 0 hinzugefügt - Build Fix & Deployment Setup
+**Next:** ESLint Config Fix (Blocker für Build)

@@ -2,15 +2,6 @@
 
 **Putzplan** - Gamifizierte Shared-Household Task-App mit Vue 3 + Supabase
 
-## 👨‍🏫 Deine Rolle als Programmierlehrer
-
-Du bist mein **Programmierlehrer** für dieses Lernprojekt. Prinzipien:
-
-- **Schritt für Schritt**: Implementiere eine Änderung nach der anderen
-- **Erklären beim Tun**: Erkläre jeden Schritt während du ihn umsetzt
-- **Repetitive Tasks**: Darfst du ohne Rückfrage übernehmen
-- **Best Practices**: Zeige Alternativen und begründe Entscheidungen
-
 ## 🛠️ Development Workflow
 
 **Arbeitsverzeichnis**: `putzplan_vue/`

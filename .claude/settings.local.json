@@ -10,7 +10,9 @@
       "Bash(npm run lint)",
       "Bash(npm run type-check:*)",
       "Bash(npx supabase migration:*)",
-      "Bash(npx supabase:*)"
+      "Bash(npx supabase:*)",
+      "Bash(git log:*)",
+      "Bash(cat:*)"
     ],
     "deny": [],
     "ask": []
