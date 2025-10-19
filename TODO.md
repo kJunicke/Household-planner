@@ -94,10 +94,11 @@
 - [ ] **"Wer hat was gemacht" Anzeige** - Task completion history in UI
 - [ ] **Undo Button** - Letzte eigene completion rückgängig machen
 
-### Priorität 4: UX & Polish (weitere Features)
-- [ ] **Authentication UX** - Loading & Error States zu LoginView/RegisterView (Pattern: HouseholdSetupView)
+### ✅ Priorität 4: UX & Polish (weitere Features) - ABGESCHLOSSEN
+- [x] **Authentication UX** - ✅ Loading & Error States zu LoginView/RegisterView
+- [x] **CSS Improvements** - ✅ Hover-Effekte für TaskCards, modernes Design-System
+- [x] **PWA-Features** - ✅ App-Icons, Manifest, Service Worker für Installation
 - [ ] **Form Validation** - Input validation und besseres Error handling
-- [ ] **CSS Improvements** - Hover-Effekte für TaskCards, responsive Design
 
 ### Priorität 5: Database Security & Integrity
 - [x] **RLS Policies** - ✅ Vollständige Row Level Security für alle Tabellen (Production-ready)
@@ -109,10 +110,10 @@
 
 ## 🔧 Code Quality & Refactoring (Später)
 - [x] **ESLint Config Fix** - ✅ TypeScript Fehler in eslint.config.ts behoben ('files' does not exist in type)
+- [x] **PWA-Features** - ✅ Mobile Optimierung, Installation auf Home-Screen
 - [ ] **Lokale Supabase Dev** - `supabase start` mit Docker Desktop
 - [ ] **camelCase/snake_case** - Konsistente Naming Convention
 - [ ] **Database Mapping Layer** - Property-Transformation zwischen DB und Frontend
-- [ ] **PWA-Features** - Mobile Optimierung, Offline-Support
 
 ## 🎯 Gamification Features (Future)
 - `user_stats` - Benutzer-XP, Level, Streaks pro Haushalt

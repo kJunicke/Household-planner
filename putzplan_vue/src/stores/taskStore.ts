@@ -10,6 +10,7 @@ export const useTaskStore = defineStore('tasks', () => {
     // State - wie ref() in Komponenten
     const tasks = ref<Task[]>([])
     const completions = ref<TaskCompletion[]>([])
+    const isLoading = ref(false)
 
     // Realtime subscription channel (wird in subscribe() initialisiert)
     let realtimeChannel: RealtimeChannel | null = null
@@ -139,6 +140,8 @@ export const useTaskStore = defineStore('tasks', () => {
             return null
         }
 
+        isLoading.value = true
+
         const { data, error } = await supabase
             .from('tasks')
             .insert({
@@ -147,6 +150,8 @@ export const useTaskStore = defineStore('tasks', () => {
             })
             .select()
             .single()
+
+        isLoading.value = false
 
         if (error) {
             console.error('Error creating task:', error)
@@ -160,10 +165,14 @@ export const useTaskStore = defineStore('tasks', () => {
 
     // UPDATE - Task vollständig aktualisieren
     const updateTask = async (taskId: string, updates: Partial<Omit<Task, 'task_id'>>) => {
+        isLoading.value = true
+
         const { error } = await supabase
             .from('tasks')
             .update(updates)
             .eq('task_id', taskId)
+
+        isLoading.value = false
 
         if (error) {
             console.error('Error updating task:', error)
@@ -180,10 +189,14 @@ export const useTaskStore = defineStore('tasks', () => {
 
     // DELETE - Task löschen
     const deleteTask = async (taskId: string) => {
+        isLoading.value = true
+
         const { error } = await supabase
             .from('tasks')
             .delete()
             .eq('task_id', taskId)
+
+        isLoading.value = false
 
         if (error) {
             console.error('Error deleting task:', error)
@@ -268,6 +281,7 @@ export const useTaskStore = defineStore('tasks', () => {
     return {
         tasks,
         completions,
+        isLoading,
         loadTasks,
         toggleTask,
         completeTask,

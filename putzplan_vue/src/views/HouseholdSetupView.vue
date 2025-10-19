@@ -82,53 +82,66 @@ const joinHousehold = async () => {
 </script>
 
 <template>
-  <div class="container mt-5">
-    <div class="row justify-content-center">
-      <div class="col-md-8">
-        <div class="card">
-          <div class="card-body">
-            <h2 class="card-title text-center">Haushalt einrichten</h2>
+  <div class="household-container">
+    <div class="household-wrapper">
+      <div class="household-card">
+        <div class="card-body">
+          <h2 class="setup-title">Haushalt einrichten</h2>
+          <p class="setup-subtitle">Erstelle einen neuen Haushalt oder trete einem bestehenden bei.</p>
 
-            <!-- Create Household Form -->
-            <h4>Neuen Haushalt erstellen</h4>
-            <form @submit.prevent="createHousehold">
-              Haushalts-Name:
-              <input
-                type="text"
-                v-model="newHouseholdName"
-                :disabled="createLoading"
-                required
-              />
-              <div v-if="createError" class="alert alert-danger mt-2">
+          <!-- Create Household Form -->
+          <section class="setup-section">
+            <h4 class="section-title">Neuen Haushalt erstellen</h4>
+            <form @submit.prevent="createHousehold" class="setup-form">
+              <div class="form-group">
+                <label class="form-label">Haushalts-Name</label>
+                <input
+                  type="text"
+                  v-model="newHouseholdName"
+                  class="form-control"
+                  placeholder="z.B. WG Musterstraße"
+                  :disabled="createLoading"
+                  required
+                />
+              </div>
+              <div v-if="createError" class="alert alert-danger">
                 {{ createError }}
               </div>
-              <button type="submit" :disabled="createLoading">
+              <button type="submit" class="btn btn-primary w-100" :disabled="createLoading">
                 <span v-if="createLoading">Erstelle...</span>
                 <span v-else>Haushalt erstellen</span>
               </button>
             </form>
+          </section>
 
-            <hr class="my-4">
+          <div class="divider">
+            <span class="divider-text">oder</span>
+          </div>
 
-            <!-- Join Household Form -->
-            <h4>Haushalt beitreten</h4>
-            <form @submit.prevent="joinHousehold">
-              Invite Code:
-              <input
-                type="text"
-                v-model="inviteCode"
-                :disabled="joinLoading"
-                required
-              />
-              <div v-if="joinError" class="alert alert-danger mt-2">
+          <!-- Join Household Form -->
+          <section class="setup-section">
+            <h4 class="section-title">Haushalt beitreten</h4>
+            <form @submit.prevent="joinHousehold" class="setup-form">
+              <div class="form-group">
+                <label class="form-label">Einladungs-Code</label>
+                <input
+                  type="text"
+                  v-model="inviteCode"
+                  class="form-control"
+                  placeholder="Code eingeben"
+                  :disabled="joinLoading"
+                  required
+                />
+              </div>
+              <div v-if="joinError" class="alert alert-danger">
                 {{ joinError }}
               </div>
-              <button type="submit" :disabled="joinLoading">
+              <button type="submit" class="btn btn-success w-100" :disabled="joinLoading">
                 <span v-if="joinLoading">Trete bei...</span>
                 <span v-else>Beitreten</span>
               </button>
             </form>
-          </div>
+          </section>
         </div>
       </div>
     </div>
@@ -136,4 +149,84 @@ const joinHousehold = async () => {
 </template>
 
 <style scoped>
+.household-container {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--color-background);
+  padding: var(--spacing-lg);
+}
+
+.household-wrapper {
+  width: 100%;
+  max-width: 540px;
+}
+
+.household-card {
+  background: var(--color-background-elevated);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-xl);
+  border: 1px solid var(--color-border);
+}
+
+.setup-title {
+  font-size: 1.875rem;
+  font-weight: 700;
+  color: var(--color-text-primary);
+  margin-bottom: var(--spacing-xs);
+  text-align: center;
+}
+
+.setup-subtitle {
+  color: var(--color-text-secondary);
+  text-align: center;
+  margin-bottom: var(--spacing-xl);
+  font-size: 0.9375rem;
+}
+
+.setup-section {
+  margin-bottom: var(--spacing-xl);
+}
+
+.section-title {
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: var(--color-text-primary);
+  margin-bottom: var(--spacing-lg);
+}
+
+.setup-form {
+  margin-bottom: 0;
+}
+
+.form-group {
+  margin-bottom: var(--spacing-lg);
+}
+
+.divider {
+  position: relative;
+  text-align: center;
+  margin: var(--spacing-xl) 0;
+}
+
+.divider::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: var(--color-border);
+}
+
+.divider-text {
+  position: relative;
+  display: inline-block;
+  background: var(--color-background-elevated);
+  padding: 0 var(--spacing-md);
+  color: var(--color-text-secondary);
+  font-size: 0.875rem;
+  font-weight: 500;
+}
 </style>

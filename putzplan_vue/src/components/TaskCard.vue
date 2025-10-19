@@ -73,26 +73,33 @@ const daysUntilDue = computed(() => {
 </script>
 
 <template>
-     <!--h-100 macht alle Karten 100% der Höhe des Containers?-->
-     <div class="card h-100">
+     <div class="task-card h-100">
           <!-- Normal Display -->
           <div v-if="!isEditing" class="card-body">
-               <h6 class="card-title">{{ props.task.title }}</h6>
-               <p class="text">Aufwand: {{ props.task.effort }}</p>
-               <!-- Für wiederkehrende Tasks -->
-               <p v-if="props.task.recurrence_days > 0" class="text">
-                    Wiederholt sich alle {{ props.task.recurrence_days }} Tage
-               </p>
+               <h6 class="task-title">{{ props.task.title }}</h6>
+               <div class="task-details">
+                    <div class="task-info">
+                         <span class="info-label">Aufwand:</span>
+                         <span class="info-value">{{ props.task.effort }}</span>
+                    </div>
 
-               <!-- Fälligkeitsdatum für dreckige, wiederkehrende Tasks -->
-               <p v-if="daysUntilDue !== null" class="text text-muted">
-                    Fällig in {{ daysUntilDue }} {{ daysUntilDue === 1 ? 'Tag' : 'Tagen' }}
-               </p>
+                    <!-- Für wiederkehrende Tasks -->
+                    <div v-if="props.task.recurrence_days > 0" class="task-info">
+                         <span class="info-label">Wiederholung:</span>
+                         <span class="info-value">alle {{ props.task.recurrence_days }} Tage</span>
+                    </div>
 
-               <!-- Für einmalige Tasks -->
-               <p v-if="props.task.recurrence_days === 0" class="text">
-                    Einmalige Aufgabe
-               </p>
+                    <!-- Fälligkeitsdatum für dreckige, wiederkehrende Tasks -->
+                    <div v-if="daysUntilDue !== null" class="task-info">
+                         <span class="info-label">Fällig in:</span>
+                         <span class="info-value">{{ daysUntilDue }} {{ daysUntilDue === 1 ? 'Tag' : 'Tagen' }}</span>
+                    </div>
+
+                    <!-- Für einmalige Tasks -->
+                    <div v-if="props.task.recurrence_days === 0" class="task-badge">
+                         Einmalige Aufgabe
+                    </div>
+               </div>
           </div>
 
           <!-- Edit Form -->
@@ -133,36 +140,36 @@ const daysUntilDue = computed(() => {
           </div>
           <div class="card-footer">
                <!-- Normal Mode Buttons -->
-               <div v-if="!isEditing" class="d-flex gap-2">
+               <div v-if="!isEditing" class="d-flex gap-2 flex-wrap">
                     <button v-if="props.task.completed"
-                            class="btn btn-warning"
+                            class="btn btn-warning btn-sm flex-fill"
                             @click="handleMarkDirty">
                          Dreckig
                     </button>
                     <button v-else
-                            class="btn btn-success"
+                            class="btn btn-success btn-sm flex-fill"
                             @click="handleCompleteTask">
                          Sauber
                     </button>
-                    <button class="btn btn-danger"
-                            @click="handleDeleteTask">
-                         Aufgabe Löschen
-                    </button>
-                    <button class="btn btn-secondary"
+                    <button class="btn btn-secondary btn-sm"
                             @click="startEdit">
                          Bearbeiten
+                    </button>
+                    <button class="btn btn-danger btn-sm"
+                            @click="handleDeleteTask">
+                         Löschen
                     </button>
                </div>
 
                <!-- Edit Mode Buttons -->
                <div v-else class="d-flex gap-2">
                     <button type="submit"
-                            class="btn btn-primary"
+                            class="btn btn-primary btn-sm flex-fill"
                             @click="saveEdit">
                          Speichern
                     </button>
                     <button type="button"
-                            class="btn btn-secondary"
+                            class="btn btn-secondary btn-sm flex-fill"
                             @click="cancelEdit">
                          Abbrechen
                     </button>
@@ -173,4 +180,70 @@ const daysUntilDue = computed(() => {
 </template>
 
 <style scoped>
+.task-card {
+     border: 1px solid var(--color-border);
+     border-radius: var(--radius-lg);
+     background: var(--color-background-elevated);
+     box-shadow: var(--shadow-md);
+     transition: all var(--transition-base);
+     overflow: hidden;
+}
+
+.task-card:hover {
+     box-shadow: var(--shadow-lg);
+     transform: translateY(-2px);
+}
+
+.task-title {
+     font-size: 1.125rem;
+     font-weight: 600;
+     color: var(--color-text-primary);
+     margin-bottom: var(--spacing-md);
+}
+
+.task-details {
+     display: flex;
+     flex-direction: column;
+     gap: var(--spacing-xs);
+}
+
+.task-info {
+     display: flex;
+     align-items: center;
+     font-size: 0.875rem;
+}
+
+.info-label {
+     color: var(--color-text-secondary);
+     margin-right: 0.5rem;
+     font-weight: 500;
+}
+
+.info-value {
+     color: var(--color-text-primary);
+     font-weight: 500;
+}
+
+.task-badge {
+     display: inline-block;
+     background: var(--color-primary);
+     color: white;
+     padding: 0.25rem 0.75rem;
+     border-radius: var(--radius-sm);
+     font-size: 0.75rem;
+     font-weight: 500;
+     text-transform: uppercase;
+     letter-spacing: 0.5px;
+}
+
+.card-footer {
+     background: transparent;
+     border-top: 1px solid var(--color-border);
+     padding: var(--spacing-md);
+}
+
+.btn-sm {
+     font-size: 0.8125rem;
+     padding: 0.5rem 0.875rem;
+}
 </style>
