@@ -1,6 +1,6 @@
 # Putzplan TODOs
 
-## Aktueller Entwicklungsstand (2025-10-18)
+## Aktueller Entwicklungsstand (2025-10-19)
 
 **ARCHITEKTUR:** Shared Household System - mehrere Benutzer arbeiten im selben Haushalt zusammen
 
@@ -34,10 +34,11 @@
 - **Frontend-Check** - User kann nicht zweiten Household joinen
 
 ### Task Recurrence System
-- **Due Date Display** - "Fällig in X Tagen" UI für dreckige Tasks
+- **Due Date Display** - "Fällig in X Tagen" UI für wiederkehrende Tasks (Calendar Days Logic)
 - **Database Trigger** - `last_completed_at` automatisch aus `task_completions` aktualisiert
 - **Robust Architecture** - Single Source of Truth in `task_completions`, keine Inkonsistenzen
-- **Automatic Recurrence (Cron Job)** - SQL Function + pg_cron für täglichen automatischen Reset überfälliger Tasks
+- **Automatic Recurrence (Cron Job)** - SQL Function + pg_cron (täglich 3:00 UTC) mit Calendar Days Logic
+- **Calendar Days Consistency** - Backend (Cron) und Frontend (UI) verwenden identische Logik für Tagesberechnung
 
 ### Multi-User Real-time System
 - **Supabase Realtime Subscriptions** - WebSocket-basierte Live-Updates zwischen Haushaltsmitgliedern
@@ -56,10 +57,12 @@
 
 ## 🚀 Nächste Development-Phase
 
-### Priorität 1: Task Recurrence System - Testing & Validation 🎯
+### ✅ Priorität 1: Task Recurrence System - ABGESCHLOSSEN
 - [x] **Automatic Recurrence (Cron Job)** - ✅ SQL Function + pg_cron implementiert (läuft täglich um 3:00 UTC)
-- [x] **Calendar Days Logic** - ✅ Fix: Verwendet ganze Kalendertage statt 24h-Perioden (Migration 20251019121735)
-- [x] **Recurrence Testing** - ✅ Manueller Test erfolgreich: Task "testetet" wurde nach 1 Tag korrekt resettet
+- [x] **Calendar Days Logic (Backend)** - ✅ Migration 20251019121735: Backend verwendet Kalendertage
+- [x] **Calendar Days Logic (Frontend)** - ✅ TaskCard.vue: UI-Anzeige "Fällig in X Tagen" verwendet Kalendertage
+- [x] **Recurrence Testing** - ✅ Diagnostische Migrations + manueller Test erfolgreich
+- [x] **Production Verification** - ✅ Cron-Job läuft in Produktion (pg_cron verified)
 
 ### Priorität 2: Multi-User Experience
 - [x] **Real-time Updates** - ✅ Supabase Realtime Subscriptions für Live-Updates zwischen Haushaltsmitgliedern
@@ -95,6 +98,6 @@
 
 ---
 
-**Status:** Task Recurrence System vollständig funktionsfähig (Calendar Days Logic)
-**Letzte Änderung:** Cron-Job verwendet jetzt ganze Kalendertage statt 24h-Perioden
+**Status:** Task Recurrence System vollständig abgeschlossen ✅
+**Letzte Änderung:** Calendar Days Logic in Backend (Cron) und Frontend (UI) konsistent implementiert
 **Next:** Realtime Testing mit zwei Browsern (Priorität 2)
