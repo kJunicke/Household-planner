@@ -62,7 +62,7 @@
 **Ziel:** App für Multi-User Testing auf Handy launchen
 
 #### Phase 1: Build Fix (KRITISCH - Blocker)
-- [ ] **ESLint Config Fix** - 'files' Property TypeScript Error in eslint.config.ts beheben
+- [x] **ESLint Config Fix** - ✅ 'files' Property TypeScript Error in eslint.config.ts behoben (Type-Casting Workaround)
 - [ ] **Build Test** - `npm run build` erfolgreich durchlaufen lassen
 
 #### Phase 2: GitHub Pages Setup
@@ -108,7 +108,7 @@
 - [ ] **Test-Daten** für Development Environment
 
 ## 🔧 Code Quality & Refactoring (Später)
-- [ ] **ESLint Config Fix** - TypeScript Fehler in eslint.config.ts beheben ('files' does not exist in type)
+- [x] **ESLint Config Fix** - ✅ TypeScript Fehler in eslint.config.ts behoben ('files' does not exist in type)
 - [ ] **Lokale Supabase Dev** - `supabase start` mit Docker Desktop
 - [ ] **camelCase/snake_case** - Konsistente Naming Convention
 - [ ] **Database Mapping Layer** - Property-Transformation zwischen DB und Frontend

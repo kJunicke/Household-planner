@@ -12,7 +12,10 @@
       "Bash(npx supabase migration:*)",
       "Bash(npx supabase:*)",
       "Bash(git log:*)",
-      "Bash(cat:*)"
+      "Bash(cat:*)",
+      "Read(//c/Users/Kilian/Nextcloud/clientsync/Programming/**)",
+      "Bash(npx tsc:*)",
+      "Bash(npx create-vue:*)"
     ],
     "deny": [],
     "ask": []
