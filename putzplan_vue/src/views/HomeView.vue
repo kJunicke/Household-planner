@@ -11,6 +11,8 @@ const taskStore = useTaskStore()
 const authStore = useAuthStore()
 const householdStore = useHouseholdStore()
 const showCreateTaskForm = ref(false)
+const isEditingName = ref(false)
+const newDisplayName = ref('')
 
 const newTask = ref({
   title: '',
@@ -49,6 +51,27 @@ const handleLogout = async () => {
   router.push('/login')
 }
 
+const startEditingName = () => {
+  newDisplayName.value = authStore.getUserDisplayName()
+  isEditingName.value = true
+}
+
+const saveDisplayName = async () => {
+  if (!newDisplayName.value.trim()) {
+    return
+  }
+
+  const result = await authStore.updateDisplayName(newDisplayName.value.trim())
+  if (result.success) {
+    isEditingName.value = false
+  }
+}
+
+const cancelEditingName = () => {
+  isEditingName.value = false
+  newDisplayName.value = ''
+}
+
 onMounted(() => {
   // Lädt Tasks aus Supabase
   taskStore.loadTasks()
@@ -81,10 +104,35 @@ onUnmounted(() => {
           </div>
           <div class="col-lg-3 col-md-12 text-lg-end">
             <div class="user-info">
-              <span class="user-email">{{ authStore.user?.email }}</span>
-              <button @click="handleLogout" class="btn btn-outline-danger btn-sm ms-2">
-                Logout
-              </button>
+              <div v-if="!isEditingName" class="d-flex align-items-center gap-3 justify-content-end">
+                <div class="user-details">
+                  <div class="user-name">{{ authStore.getUserDisplayName() }}</div>
+                  <div class="user-email-small">{{ authStore.user?.email }}</div>
+                </div>
+                <button @click="startEditingName" class="btn btn-light border settings-btn btn-sm" title="Namen bearbeiten">
+                  <i class="bi bi-gear-fill fs-5"></i>
+                </button>
+                <button @click="handleLogout" class="btn btn-danger btn-sm">
+                  Logout
+                </button>
+              </div>
+              <div v-else class="d-flex align-items-center gap-2 justify-content-end">
+                <input
+                  v-model="newDisplayName"
+                  type="text"
+                  class="form-control form-control-sm"
+                  placeholder="Dein Name"
+                  @keyup.enter="saveDisplayName"
+                  @keyup.escape="cancelEditingName"
+                  style="max-width: 150px;"
+                />
+                <button @click="saveDisplayName" class="btn btn-success btn-sm">
+                  <i class="bi bi-check-lg"></i>
+                </button>
+                <button @click="cancelEditingName" class="btn btn-secondary btn-sm">
+                  <i class="bi bi-x-lg"></i>
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -194,6 +242,35 @@ onUnmounted(() => {
   font-size: 0.875rem;
   color: var(--color-text-secondary);
   font-weight: 500;
+}
+
+.user-details {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+}
+
+.user-name {
+  font-size: 0.9375rem;
+  color: var(--color-text-primary);
+  font-weight: 600;
+}
+
+.user-email-small {
+  font-size: 0.75rem;
+  color: var(--color-text-secondary);
+}
+
+.settings-btn {
+  padding: 0.5rem 0.75rem;
+}
+
+.settings-btn i {
+  color: #6c757d;
+}
+
+.settings-btn:hover i {
+  color: #495057;
 }
 
 .app-main {
