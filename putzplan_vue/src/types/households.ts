@@ -5,7 +5,8 @@ export interface Household {
 }
 
 export interface HouseholdMember {
-    member_id: string        // UUID - Primary Key
-    household_id: string     // Foreign Key zu Household
+    member_id?: string       // UUID - Primary Key (optional for queries)
+    household_id?: string    // Foreign Key zu Household (optional for queries)
     user_id: string          // Foreign Key zu auth.users (Supabase Auth)
+    display_name?: string    // Name des Mitglieds
 }

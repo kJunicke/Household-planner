@@ -10,8 +10,11 @@
 - [ ] Mobile Testing - PWA Installation auf iOS/Android testen
 - [ ] Household Invite Flow - Join-Prozess auf mobilen Geräten testen
 
+Live aktualisierung funktioniert noch nicht??? muss erforscht werden 
+
 ### Priorität 2: Gamification MVP
-- [x] User Display Names - Nutzer können ihren Namen setzen/ändern (auth.user_metadata.display_name)
+- [x] User Display Names - Nutzer können ihren Namen setzen/ändern (household_members.display_name)
+- [x] Mitgliederliste im Header - Alle Haushaltsmitglieder werden angezeigt
 - [ ] "Wer hat was gemacht" Anzeige - Completion history in UI (Namen statt user_id)
 - [ ] User Stats - XP, Level, Streaks pro Haushalt
 - [ ] Ranglisten - Mitglieder nach XP sortiert

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted, ref } from "vue";
+import { onMounted, onUnmounted, ref, computed } from "vue";
 import { useRouter } from "vue-router";
 import TaskList from '../components/TaskList.vue';
 import { useTaskStore } from "../stores/taskStore";
@@ -52,7 +52,7 @@ const handleLogout = async () => {
 }
 
 const startEditingName = () => {
-  newDisplayName.value = authStore.getUserDisplayName()
+  newDisplayName.value = householdStore.getCurrentMemberDisplayName()
   isEditingName.value = true
 }
 
@@ -61,7 +61,7 @@ const saveDisplayName = async () => {
     return
   }
 
-  const result = await authStore.updateDisplayName(newDisplayName.value.trim())
+  const result = await householdStore.updateMemberDisplayName(newDisplayName.value.trim())
   if (result.success) {
     isEditingName.value = false
   }
@@ -71,6 +71,10 @@ const cancelEditingName = () => {
   isEditingName.value = false
   newDisplayName.value = ''
 }
+
+const currentMemberName = computed(() => {
+  return householdStore.getCurrentMemberDisplayName()
+})
 
 onMounted(() => {
   // Lädt Tasks aus Supabase
@@ -98,6 +102,13 @@ onUnmounted(() => {
             <div class="info-badge mt-2">
               <strong>Code:</strong> {{ householdStore.currentHousehold?.invite_code }}
             </div>
+            <div class="info-badge mt-2">
+              <strong>Mitglieder:</strong>
+              <span v-if="householdStore.householdMembers.length > 0">
+                {{ householdStore.householdMembers.map(m => m.display_name || 'Unbekannt').join(', ') }}
+              </span>
+              <span v-else class="text-muted">Keine Mitglieder</span>
+            </div>
           </div>
           <div class="col-lg-6 col-md-12 mb-3 mb-lg-0">
             <h1 class="page-title">Bester Putzplan der Welt</h1>
@@ -106,7 +117,7 @@ onUnmounted(() => {
             <div class="user-info">
               <div v-if="!isEditingName" class="d-flex align-items-center gap-3 justify-content-end">
                 <div class="user-details">
-                  <div class="user-name">{{ authStore.getUserDisplayName() }}</div>
+                  <div class="user-name">{{ currentMemberName }}</div>
                   <div class="user-email-small">{{ authStore.user?.email }}</div>
                 </div>
                 <button @click="startEditingName" class="btn btn-light border settings-btn btn-sm" title="Namen bearbeiten">

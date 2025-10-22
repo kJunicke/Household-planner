@@ -32,15 +32,10 @@ export const useAuthStore = defineStore('auth', () => {
         session.value = null
     }
 
-    async function register(email: string, password: string, displayName?: string) {
+    async function register(email: string, password: string) {
         const { data, error } = await supabase.auth.signUp({
             email,
-            password,
-            options: {
-                data: {
-                    display_name: displayName || email.split('@')[0]
-                }
-            }
+            password
         })
         if (error) {
             console.error("Fehler bei Registration:", error.message)
@@ -49,45 +44,6 @@ export const useAuthStore = defineStore('auth', () => {
         user.value = data.user
         session.value = data.session
         return { success: true}
-    }
-
-    async function updateDisplayName(newName: string) {
-        const { data, error } = await supabase.auth.updateUser({
-            data: {
-                display_name: newName
-            }
-        })
-
-        if (error) {
-            console.error("Fehler beim Update des Display Names:", error.message)
-            return { success: false, error: error.message }
-        }
-
-        user.value = data.user
-        return { success: true }
-    }
-
-    function getUserDisplayName(userId?: string): string {
-        // Falls keine userId: Aktueller User
-        if (!userId) {
-            if (!user.value) return 'Unbekannt'
-
-            const displayName = user.value.user_metadata?.display_name
-            if (displayName && displayName.trim()) {
-                return displayName
-            }
-
-            // Fallback: Email-Prefix
-            return user.value.email?.split('@')[0] || 'User'
-        }
-
-        // Falls userId === aktueller User: Name anzeigen
-        if (user.value && userId === user.value.id) {
-            return getUserDisplayName() // Rekursiv ohne Parameter
-        }
-
-        // Für andere User: "Jemand anderes" (MVP - später mit DB lookup)
-        return 'Anderer Nutzer'
     }
 
     async function initializeAuth() {
@@ -103,8 +59,6 @@ export const useAuthStore = defineStore('auth', () => {
           login,
           logout,
           register,
-          updateDisplayName,
-          getUserDisplayName,
           initializeAuth
       }
 })

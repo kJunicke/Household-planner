@@ -1,12 +1,13 @@
 import { ref } from 'vue'
 import { defineStore } from 'pinia'
 import { supabase } from '@/lib/supabase'
-import type { Household } from '@/types/households'
+import type { Household, HouseholdMember } from '@/types/households'
 import { useAuthStore } from './authStore'
 
 export const useHouseholdStore = defineStore('household', () => {
     // State
     const currentHousehold = ref<Household | null>(null)
+    const householdMembers = ref<HouseholdMember[]>([])
 
     // Actions
     const loadUserHousehold = async () => {
@@ -47,6 +48,60 @@ export const useHouseholdStore = defineStore('household', () => {
 
         currentHousehold.value = householdData
         console.log('Loaded household:', householdData)
+
+        // 3. Lade alle Mitglieder des Households
+        await loadHouseholdMembers()
+    }
+
+    const loadHouseholdMembers = async () => {
+        if (!currentHousehold.value) {
+            householdMembers.value = []
+            return
+        }
+
+        const { data, error } = await supabase
+            .from('household_members')
+            .select('user_id, display_name')
+            .eq('household_id', currentHousehold.value.household_id)
+
+        if (error) {
+            console.error('Error loading household members:', error)
+            householdMembers.value = []
+            return
+        }
+
+        householdMembers.value = data || []
+        console.log('Loaded household members:', data)
+    }
+
+    const updateMemberDisplayName = async (newName: string) => {
+        const authStore = useAuthStore()
+        if (!authStore.user || !currentHousehold.value) {
+            return { success: false, error: 'Not logged in or no household' }
+        }
+
+        const { error } = await supabase
+            .from('household_members')
+            .update({ display_name: newName })
+            .eq('user_id', authStore.user.id)
+            .eq('household_id', currentHousehold.value.household_id)
+
+        if (error) {
+            console.error('Error updating display name:', error)
+            return { success: false, error: error.message }
+        }
+
+        // Update local state
+        await loadHouseholdMembers()
+        return { success: true }
+    }
+
+    const getCurrentMemberDisplayName = (): string => {
+        const authStore = useAuthStore()
+        if (!authStore.user) return 'Unbekannt'
+
+        const member = householdMembers.value.find(m => m.user_id === authStore.user!.id)
+        return member?.display_name || 'Unbekannt'
     }
 
     const createHousehold = async (name: string) => {
@@ -68,12 +123,14 @@ export const useHouseholdStore = defineStore('household', () => {
             throw new Error(householdError.message)
         }
 
-        // 2. Add user as member
+        // 2. Add user as member with email as fallback display_name
+        const displayName = authStore.user.email?.split('@')[0] || 'Unbekannt'
         const { error: memberError } = await supabase
             .from('household_members')
             .insert({
                 household_id: householdData.household_id,
-                user_id: authStore.user.id
+                user_id: authStore.user.id,
+                display_name: displayName
             })
 
         if (memberError) {
@@ -83,6 +140,9 @@ export const useHouseholdStore = defineStore('household', () => {
 
         currentHousehold.value = householdData
         console.log('Created household:', householdData)
+
+        // Load members (nur der Creator initial)
+        await loadHouseholdMembers()
     }
 
     const joinHousehold = async (inviteCode: string) => {
@@ -110,12 +170,14 @@ export const useHouseholdStore = defineStore('household', () => {
             return false
         }
 
-        // 2. Add user as member
+        // 2. Add user as member with email as fallback display_name
+        const displayName = authStore.user.email?.split('@')[0] || 'Unbekannt'
         const { error: memberError } = await supabase
             .from('household_members')
             .insert({
                 household_id: householdData.household_id,
-                user_id: authStore.user.id
+                user_id: authStore.user.id,
+                display_name: displayName
             })
 
         if (memberError) {
@@ -125,6 +187,9 @@ export const useHouseholdStore = defineStore('household', () => {
 
         currentHousehold.value = householdData
         console.log('Joined household:', householdData)
+
+        // Load all members
+        await loadHouseholdMembers()
         return true
     }
 
@@ -152,12 +217,17 @@ export const useHouseholdStore = defineStore('household', () => {
 
         // Clear state
         currentHousehold.value = null
+        householdMembers.value = []
         console.log('Left household')
     }
 
     return {
         currentHousehold,
+        householdMembers,
         loadUserHousehold,
+        loadHouseholdMembers,
+        updateMemberDisplayName,
+        getCurrentMemberDisplayName,
         createHousehold,
         joinHousehold,
         leaveHousehold

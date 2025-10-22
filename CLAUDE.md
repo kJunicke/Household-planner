@@ -48,7 +48,7 @@ putzplan_vue/
 
 **Tabellen & Primary Keys** (WICHTIG für `.eq()` Queries):
 - `households` - PK: `household_id`
-- `household_members` - PK: `member_id`
+- `household_members` - PK: `member_id`, hat `display_name` (Email-Prefix als Fallback beim Join/Create)
 - `tasks` - PK: `task_id` (Task-Templates mit `recurrence_days`, `last_completed_at`)
 - `task_completions` - PK: `completion_id` (Append-only Historie, **Single Source of Truth**)
 
