@@ -227,7 +227,7 @@ export const useTaskStore = defineStore('tasks', () => {
 
         // Neuen Channel erstellen & filtern auf household_id
         realtimeChannel = supabase
-            .channel('tasks-changes')
+            .channel(`tasks-changes-${Date.now()}`)
             .on(
                 'postgres_changes',
                 {
@@ -290,7 +290,19 @@ export const useTaskStore = defineStore('tasks', () => {
                     }
                 }
             )
-            .subscribe()
+            .subscribe((status) => {
+                console.log('📡 Realtime subscription status:', status)
+
+                if (status === 'SUBSCRIBED') {
+                    console.log('✅ Successfully subscribed to tasks and completions')
+                } else if (status === 'CHANNEL_ERROR') {
+                    console.error('❌ Channel subscription error')
+                } else if (status === 'TIMED_OUT') {
+                    console.error('❌ Subscription timed out')
+                } else if (status === 'CLOSED') {
+                    console.warn('⚠️ Channel was closed')
+                }
+            })
     }
 
     // REALTIME - Unsubscribe von Änderungen

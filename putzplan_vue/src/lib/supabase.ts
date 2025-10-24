@@ -9,4 +9,10 @@ if (!supabaseUrl || !supabaseKey) {
   throw new Error('Supabase URL und Key müssen in der .env Datei gesetzt sein')
 }
 
-export const supabase = createClient(supabaseUrl, supabaseKey)
+export const supabase = createClient(supabaseUrl, supabaseKey, {
+  realtime: {
+    params: {
+      eventsPerSecond: 10
+    }
+  }
+})

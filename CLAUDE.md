@@ -6,7 +6,25 @@
 
 **Arbeitsverzeichnis**: `putzplan_vue/`
 
-**WICHTIG**: NIEMALS `npm run dev` ausführen - Claude kann nicht mit Browser interagieren!
+**WICHTIG**: NIEMALS `npm run dev` ausführen - Ich hab immer schon einen am laufen
+
+### MCP Server Setup
+**Context7** für aktuelle Library-Dokumentation nutzen:
+```bash
+# Installation (einmalig)
+claude mcp add context7 -- npx -y @upstash/context7-mcp@latest
+
+# Bei jedem Feature: Context7 für Up-to-date Docs konsultieren
+# (Vue 3, Pinia, Supabase, TypeScript, etc.)
+```
+
+**Playwright** für Browser-Testing und Automatisierung:
+```bash
+# Installation (einmalig)
+claude mcp add playwright -- npx @playwright/mcp@latest
+
+# Für E2E-Tests, UI-Testing ohne manuellen Browser-Start
+```
 
 ```bash
 # Code-Qualität prüfen
