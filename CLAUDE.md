@@ -8,6 +8,14 @@
 
 **WICHTIG**: NIEMALS `npm run dev` ausführen - Ich hab immer schon einen am laufen
 
+### Test Account (Playwright E2E Tests)
+```
+Email: test@example.com
+Passwort: test123456
+Haushalt: Test-Haushalt
+Invite Code: FD1EB9CE
+```
+
 ### MCP Server Setup
 **Context7** für aktuelle Library-Dokumentation nutzen:
 ```bash

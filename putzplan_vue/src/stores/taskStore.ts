@@ -315,6 +315,56 @@ export const useTaskStore = defineStore('tasks', () => {
         }
     }
 
+    // FETCH COMPLETIONS - Hole Task-Completions mit JOIN für History-View
+    // Lädt alle completions des aktuellen Households mit Task- und Member-Namen
+    // JETZT EINFACHER: Direkter JOIN über user_id (keine Frontend-Matching mehr nötig!)
+    const fetchCompletions = async () => {
+        const householdStore = useHouseholdStore()
+
+        if (!householdStore.currentHousehold) {
+            console.warn('No current household, cannot fetch completions')
+            return []
+        }
+
+        // JOIN task_completions → tasks (via task_id)
+        // Filtern auf aktuellen Household über tasks.household_id
+        // NOTE: Kein direkter JOIN zu household_members möglich (keine FK-Relation)
+        // → Frontend matched display_name via user_id (householdMembers sind schon geladen)
+        const { data, error } = await supabase
+            .from('task_completions')
+            .select(`
+                completion_id,
+                completed_at,
+                user_id,
+                tasks!inner (
+                    title
+                )
+            `)
+            .eq('tasks.household_id', householdStore.currentHousehold.household_id)
+            .order('completed_at', { ascending: false })
+
+        if (error) {
+            console.error('Error fetching completions:', error)
+            return []
+        }
+
+        // Enriche mit display_name via Frontend-Matching
+        // user_id → householdMembers (bereits im Store geladen)
+        const enriched = data.map(completion => ({
+            completion_id: completion.completion_id,
+            completed_at: completion.completed_at,
+            tasks: completion.tasks,
+            household_members: {
+                display_name: householdStore.householdMembers.find(
+                    m => m.user_id === completion.user_id
+                )?.display_name || 'Unbekannt'
+            }
+        }))
+
+        console.log('Fetched completions:', enriched)
+        return enriched
+    }
+
     // Return - was andere Komponenten verwenden können
     return {
         tasks,
@@ -328,6 +378,7 @@ export const useTaskStore = defineStore('tasks', () => {
         updateTask,
         deleteTask,
         subscribeToTasks,
-        unsubscribeFromTasks
+        unsubscribeFromTasks,
+        fetchCompletions
     }
 })
