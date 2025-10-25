@@ -24,7 +24,8 @@ const chartData = computed(() => {
 
   completions.forEach(completion => {
     const task = taskStore.tasks.find(t => t.task_id === completion.task_id)
-    const effort = task?.effort || 1 // Fallback zu 1 wenn task nicht gefunden
+    // Priorisiere effort_override (Mehraufwand), sonst Standard-Effort
+    const effort = completion.effort_override ?? task?.effort ?? 1
 
     const currentEffort = effortByUser.get(completion.user_id) || 0
     effortByUser.set(completion.user_id, currentEffort + effort)

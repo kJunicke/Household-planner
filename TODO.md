@@ -17,6 +17,7 @@
 - [x] ✅ Verlauf bearbeiten - Einträge löschen bei irrtümlichem Abschluss
 - [x] ✅ Stats Tab - Tortendiagramm mit effort-gewichteter Aufgabenverteilung
 - [x] ✅ Effort Override Feature - Nutzer können beim Abschluss einen abweichenden Aufwand mit Begründung angeben
+- [x] ✅ Stats berechnen effort_override korrekt - Override-Werte werden in Statistik berücksichtigt
 - [ ] User Stats - XP, Level, Streaks pro Haushalt
 - [ ] Ranglisten - Mitglieder nach XP sortiert
 
