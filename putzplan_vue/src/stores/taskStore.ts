@@ -365,6 +365,28 @@ export const useTaskStore = defineStore('tasks', () => {
         return enriched
     }
 
+    // DELETE COMPLETION - Lösche einen Task-Completion Eintrag aus Historie
+    // Wichtig: Löscht NUR aus task_completions, ändert NICHT tasks.completed Status
+    const deleteCompletion = async (completionId: string) => {
+        isLoading.value = true
+
+        const { error } = await supabase
+            .from('task_completions')
+            .delete()
+            .eq('completion_id', completionId)
+
+        isLoading.value = false
+
+        if (error) {
+            console.error('Error deleting completion:', error)
+            return false
+        }
+
+        // Lokalen State aktualisieren
+        completions.value = completions.value.filter(c => c.completion_id !== completionId)
+        return true
+    }
+
     // Return - was andere Komponenten verwenden können
     return {
         tasks,
@@ -379,6 +401,7 @@ export const useTaskStore = defineStore('tasks', () => {
         deleteTask,
         subscribeToTasks,
         unsubscribeFromTasks,
-        fetchCompletions
+        fetchCompletions,
+        deleteCompletion
     }
 })

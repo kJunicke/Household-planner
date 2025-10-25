@@ -36,4 +36,11 @@ export default [
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     skipFormatting as any,
   ),
+
+  // Custom rules außerhalb von defineConfigWithVueTs um Type-Issues zu vermeiden
+  {
+    rules: {
+      'vue/multi-word-component-names': 'off'
+    }
+  }
 ]

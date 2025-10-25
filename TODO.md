@@ -13,7 +13,8 @@
 - [x] User Display Names - Nutzer können ihren Namen setzen/ändern (household_members.display_name)
 - [x] Mitgliederliste im Header - Alle Haushaltsmitglieder werden angezeigt
 - [x] ✅ "Wer hat was gemacht" Anzeige - Completion history mit Namen im Verlauf-Tab
-- [x] ✅ Navigation mit Header - Putzen/Verlauf Tabs
+- [x] ✅ Navigation mit Header - Putzen/Verlauf Tabs (Browser-Tab-Style)
+- [x] ✅ Verlauf bearbeiten - Einträge löschen bei irrtümlichem Abschluss
 - [ ] User Stats - XP, Level, Streaks pro Haushalt
 - [ ] Ranglisten - Mitglieder nach XP sortiert
 

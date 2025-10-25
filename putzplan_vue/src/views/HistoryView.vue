@@ -17,6 +17,8 @@ interface CompletionWithDetails {
 
 const completions = ref<CompletionWithDetails[]>([])
 const isLoading = ref(true)
+const showDeleteModal = ref(false)
+const completionToDelete = ref<CompletionWithDetails | null>(null)
 
 const loadCompletions = async () => {
   isLoading.value = true
@@ -33,6 +35,28 @@ const formatDate = (dateString: string) => {
     hour: '2-digit',
     minute: '2-digit'
   })
+}
+
+const openDeleteModal = (completion: CompletionWithDetails) => {
+  completionToDelete.value = completion
+  showDeleteModal.value = true
+}
+
+const closeDeleteModal = () => {
+  showDeleteModal.value = false
+  completionToDelete.value = null
+}
+
+const confirmDelete = async () => {
+  if (!completionToDelete.value) return
+
+  const success = await taskStore.deleteCompletion(completionToDelete.value.completion_id)
+
+  if (success) {
+    await loadCompletions()
+  }
+
+  closeDeleteModal()
 }
 
 onMounted(() => {
@@ -83,9 +107,49 @@ onMounted(() => {
               </span>
             </div>
           </div>
+          <div class="completion-actions">
+            <button
+              @click="openDeleteModal(completion)"
+              class="btn btn-sm btn-outline-danger"
+              title="Eintrag löschen"
+            >
+              <i class="bi bi-trash"></i>
+            </button>
+          </div>
         </div>
       </div>
     </div>
+
+    <!-- Delete Confirmation Modal -->
+    <Teleport to="body">
+      <div v-if="showDeleteModal" class="modal-overlay" @click="closeDeleteModal">
+        <div class="modal-content" @click.stop>
+          <div class="modal-header">
+            <h5 class="modal-title">Eintrag löschen</h5>
+            <button @click="closeDeleteModal" class="btn-close" aria-label="Schließen">
+              <i class="bi bi-x-lg"></i>
+            </button>
+          </div>
+          <div class="modal-body">
+            <p>
+              Möchtest du diesen Eintrag wirklich löschen?
+            </p>
+            <p class="text-muted mb-0">
+              <strong>{{ completionToDelete?.tasks?.title }}</strong> von
+              <strong>{{ completionToDelete?.household_members?.display_name }}</strong>
+            </p>
+          </div>
+          <div class="modal-footer">
+            <button @click="closeDeleteModal" class="btn btn-secondary">
+              Abbrechen
+            </button>
+            <button @click="confirmDelete" class="btn btn-danger">
+              <i class="bi bi-trash"></i> Löschen
+            </button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
   </main>
 </template>
 
@@ -175,5 +239,95 @@ onMounted(() => {
 .member-name i,
 .completion-date i {
   font-size: 0.875rem;
+}
+
+.completion-actions {
+  display: flex;
+  align-items: center;
+}
+
+/* Modal Styles */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1050;
+  padding: 1rem;
+}
+
+.modal-content {
+  background: white;
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  max-width: 500px;
+  width: 100%;
+  max-height: 90vh;
+  overflow-y: auto;
+}
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1.25rem;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.modal-title {
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: var(--color-text-primary);
+  margin: 0;
+}
+
+.btn-close {
+  background: none;
+  border: none;
+  font-size: 1.25rem;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  padding: 0.25rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.2s ease;
+}
+
+.btn-close:hover {
+  color: var(--color-text-primary);
+}
+
+.modal-body {
+  padding: 1.25rem;
+}
+
+.modal-body p {
+  margin-bottom: 0.75rem;
+  color: var(--color-text-primary);
+}
+
+.modal-footer {
+  display: flex;
+  gap: 0.75rem;
+  justify-content: flex-end;
+  padding: 1rem 1.25rem;
+  border-top: 1px solid var(--color-border);
+}
+
+/* Mobile: Stack buttons vertically */
+@media (max-width: 767px) {
+  .modal-footer {
+    flex-direction: column-reverse;
+  }
+
+  .modal-footer button {
+    width: 100%;
+  }
 }
 </style>

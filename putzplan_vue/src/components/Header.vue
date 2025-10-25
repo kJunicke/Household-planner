@@ -46,8 +46,9 @@ const currentMemberName = computed(() => {
 <template>
   <header class="app-header">
     <div class="container-fluid">
-      <div class="row align-items-center">
-        <div class="col-lg-3 col-md-12 mb-3 mb-lg-0">
+      <!-- Top section: Info, Title, User -->
+      <div class="row align-items-start mb-3">
+        <div class="col-md-3 col-12 mb-2 mb-md-0">
           <div class="info-badge">
             <strong>Haushalt:</strong> {{ householdStore.currentHousehold?.name }}
           </div>
@@ -62,22 +63,12 @@ const currentMemberName = computed(() => {
             <span v-else class="text-muted">Keine Mitglieder</span>
           </div>
         </div>
-        <div class="col-lg-6 col-md-12 mb-3 mb-lg-0">
+        <div class="col-md-6 col-12 mb-2 mb-md-0 text-center">
           <h1 class="page-title">Bester Putzplan der Welt</h1>
-
-          <!-- Navigation Tabs -->
-          <nav class="nav-tabs-container">
-            <router-link to="/" class="nav-tab" :class="{ active: route.path === '/' }">
-              <i class="bi bi-list-check"></i> Putzen
-            </router-link>
-            <router-link to="/history" class="nav-tab" :class="{ active: route.path === '/history' }">
-              <i class="bi bi-clock-history"></i> Verlauf
-            </router-link>
-          </nav>
         </div>
-        <div class="col-lg-3 col-md-12 text-lg-end">
+        <div class="col-md-3 col-12 text-md-end">
           <div class="user-info">
-            <div v-if="!isEditingName" class="d-flex align-items-center gap-3 justify-content-end">
+            <div v-if="!isEditingName" class="d-flex align-items-center gap-2 justify-content-md-end justify-content-center">
               <div class="user-details">
                 <div class="user-name">{{ currentMemberName }}</div>
                 <div class="user-email-small">{{ authStore.user?.email }}</div>
@@ -89,7 +80,7 @@ const currentMemberName = computed(() => {
                 Logout
               </button>
             </div>
-            <div v-else class="d-flex align-items-center gap-2 justify-content-end">
+            <div v-else class="d-flex align-items-center gap-2 justify-content-md-end justify-content-center">
               <input
                 v-model="newDisplayName"
                 type="text"
@@ -110,6 +101,20 @@ const currentMemberName = computed(() => {
         </div>
       </div>
     </div>
+
+    <!-- Navigation Tabs - Full width at bottom of header -->
+    <nav class="nav-tabs-container">
+      <div class="container-fluid">
+        <div class="nav-tabs-wrapper">
+          <router-link to="/" class="nav-tab" :class="{ active: route.path === '/' }">
+            <i class="bi bi-list-check"></i> Putzen
+          </router-link>
+          <router-link to="/history" class="nav-tab" :class="{ active: route.path === '/history' }">
+            <i class="bi bi-clock-history"></i> Verlauf
+          </router-link>
+        </div>
+      </div>
+    </nav>
   </header>
 </template>
 
@@ -117,38 +122,65 @@ const currentMemberName = computed(() => {
 .app-header {
   background: var(--color-background-elevated);
   border-bottom: 1px solid var(--color-border);
-  padding: var(--spacing-lg) 0;
+  padding: var(--spacing-lg) 0 0 0;
   box-shadow: var(--shadow-sm);
-  margin-bottom: var(--spacing-xl);
+  margin-bottom: 0;
 }
 
 .page-title {
-  font-size: 1.75rem;
+  font-size: 1.5rem;
   font-weight: 700;
   color: var(--color-text-primary);
-  margin: 0 0 1rem 0;
-  text-align: center;
+  margin: 0;
 }
 
+/* Mobile first: page title smaller */
+@media (min-width: 768px) {
+  .page-title {
+    font-size: 1.75rem;
+  }
+}
+
+/* Navigation Tabs Container - full width at bottom */
 .nav-tabs-container {
+  background: var(--color-background-elevated);
+  border-top: 1px solid var(--color-border);
+  margin-top: 0;
+}
+
+.nav-tabs-wrapper {
   display: flex;
-  justify-content: center;
-  gap: 0.5rem;
-  margin-top: 1rem;
+  gap: 0;
+  border-bottom: 2px solid var(--color-border);
 }
 
 .nav-tab {
-  padding: 0.5rem 1.5rem;
+  flex: 1;
+  padding: 0.75rem 1rem;
   background: var(--color-background);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md) var(--radius-md) 0 0;
+  border: none;
+  border-bottom: 3px solid transparent;
   color: var(--color-text-secondary);
   text-decoration: none;
   font-weight: 500;
   transition: all 0.2s ease;
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 0.5rem;
+  text-align: center;
+}
+
+/* Mobile: smaller font, adjust padding */
+@media (max-width: 767px) {
+  .nav-tab {
+    padding: 0.625rem 0.5rem;
+    font-size: 0.875rem;
+  }
+
+  .nav-tab i {
+    font-size: 1rem;
+  }
 }
 
 .nav-tab:hover {
@@ -157,9 +189,10 @@ const currentMemberName = computed(() => {
 }
 
 .nav-tab.active {
-  background: var(--color-primary);
-  color: white;
-  border-color: var(--color-primary);
+  background: white;
+  color: var(--color-primary);
+  border-bottom-color: var(--color-primary);
+  font-weight: 600;
 }
 
 .nav-tab i {
@@ -169,10 +202,17 @@ const currentMemberName = computed(() => {
 .info-badge {
   display: inline-block;
   background: var(--color-background);
-  padding: var(--spacing-xs) var(--spacing-md);
+  padding: var(--spacing-xs) var(--spacing-sm);
   border-radius: var(--radius-md);
-  font-size: 0.875rem;
+  font-size: 0.75rem;
   color: var(--color-text-secondary);
+}
+
+@media (min-width: 768px) {
+  .info-badge {
+    padding: var(--spacing-xs) var(--spacing-md);
+    font-size: 0.875rem;
+  }
 }
 
 .info-badge strong {
@@ -192,10 +232,23 @@ const currentMemberName = computed(() => {
   align-items: flex-end;
 }
 
+/* Mobile: center user details */
+@media (max-width: 767px) {
+  .user-details {
+    align-items: center;
+  }
+}
+
 .user-name {
-  font-size: 0.9375rem;
+  font-size: 0.875rem;
   color: var(--color-text-primary);
   font-weight: 600;
+}
+
+@media (min-width: 768px) {
+  .user-name {
+    font-size: 0.9375rem;
+  }
 }
 
 .user-email-small {
