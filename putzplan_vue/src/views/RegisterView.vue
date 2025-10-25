@@ -27,9 +27,9 @@ const handleRegister = async () => {
 </script>
 
 <template>
-    <div class="register-container">
-      <div class="register-wrapper">
-        <div class="register-card">
+    <div class="auth-container">
+      <div class="auth-wrapper">
+        <div class="auth-card">
           <div class="card-body">
             <h2 class="auth-title">Registrierung</h2>
             <p class="auth-subtitle">Erstelle einen Account, um loszulegen.</p>
@@ -83,73 +83,3 @@ const handleRegister = async () => {
       </div>
     </div>
   </template>
-
-  <style scoped>
-  .register-container {
-    min-height: 100vh;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: var(--color-background);
-    padding: var(--spacing-lg);
-  }
-
-  .register-wrapper {
-    width: 100%;
-    max-width: 440px;
-  }
-
-  .register-card {
-    background: var(--color-background-elevated);
-    border-radius: var(--radius-xl);
-    box-shadow: var(--shadow-xl);
-    border: 1px solid var(--color-border);
-  }
-
-  .auth-title {
-    font-size: 1.875rem;
-    font-weight: 700;
-    color: var(--color-text-primary);
-    margin-bottom: var(--spacing-xs);
-    text-align: center;
-  }
-
-  .auth-subtitle {
-    color: var(--color-text-secondary);
-    text-align: center;
-    margin-bottom: var(--spacing-xl);
-    font-size: 0.9375rem;
-  }
-
-  .auth-form {
-    margin-bottom: var(--spacing-lg);
-  }
-
-  .form-group {
-    margin-bottom: var(--spacing-lg);
-  }
-
-  .auth-footer {
-    text-align: center;
-    padding-top: var(--spacing-lg);
-    border-top: 1px solid var(--color-border);
-  }
-
-  .auth-footer p {
-    margin: 0;
-    color: var(--color-text-secondary);
-    font-size: 0.9375rem;
-  }
-
-  .auth-link {
-    color: var(--color-primary);
-    text-decoration: none;
-    font-weight: 500;
-    transition: color var(--transition-base);
-  }
-
-  .auth-link:hover {
-    color: var(--color-primary-light);
-    text-decoration: underline;
-  }
-  </style>

@@ -49,7 +49,8 @@ npm run build
 ```
 putzplan_vue/
 ├── src/
-│   ├── components/     # Wiederverwendbare Komponenten (Header.vue, TaskCard.vue, etc.)
+│   ├── assets/        # CSS (base.css, utilities.css, main.css)
+│   ├── components/    # Wiederverwendbare Komponenten (Header.vue, TaskCard.vue, etc.)
 │   ├── views/         # Route-Level Komponenten (CleaningView.vue, HistoryView.vue)
 │   ├── stores/        # Pinia Stores (authStore, householdStore, taskStore)
 │   ├── router/        # Vue Router
@@ -110,6 +111,18 @@ putzplan_vue/
 - **Inline Forms**: Für einfache Create-Forms (≤4 Felder)
 - **Vue Modals**: Teleport + v-if für komplexe Forms
 - **Nicht Bootstrap Modals**: Vue 3 Kompatibilitätsprobleme
+
+### CSS Architecture
+- **Design System**: CSS Variables in `base.css` (Farben, Spacing, Shadows, Border-Radius, Transitions)
+- **Bootstrap Overrides**: Zentrale Button/Card/Form-Styles in `base.css`
+- **Utility Classes**: Wiederverwendbare Patterns in `utilities.css`:
+  - Auth-Container Pattern (Login/Register/HouseholdSetup)
+  - Modal Pattern (TaskCompletionModal, HistoryView)
+  - Page-Container Pattern (alle Views)
+  - Section-Title Pattern
+  - Empty-State Pattern
+  - Form-Group Utility
+- **Component Styles**: Nur component-spezifische Styles in `<style scoped>`
 
 ### Database Migrations (Supabase CLI)
 

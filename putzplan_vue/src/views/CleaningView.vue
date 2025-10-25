@@ -53,7 +53,7 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <main class="app-main">
+  <main class="page-container">
     <div class="container-fluid">
       <div class="row mb-4">
         <div class="col-12 text-end">
@@ -110,20 +110,7 @@ onUnmounted(() => {
 </template>
 
 <style scoped>
-.app-main {
-  padding-bottom: var(--spacing-xl);
-}
-
 .task-section {
   margin-bottom: var(--spacing-xl);
-}
-
-.section-title {
-  font-size: 1.25rem;
-  font-weight: 600;
-  color: var(--color-text-primary);
-  margin-bottom: var(--spacing-lg);
-  padding-bottom: var(--spacing-sm);
-  border-bottom: 2px solid var(--color-border);
 }
 </style>

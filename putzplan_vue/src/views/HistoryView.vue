@@ -67,7 +67,7 @@ onMounted(() => {
 </script>
 
 <template>
-  <main class="history-view">
+  <main class="page-container">
     <div class="container-fluid">
       <div class="d-flex justify-content-between align-items-center mb-4">
         <h2 class="page-title">Verlauf</h2>
@@ -165,33 +165,7 @@ onMounted(() => {
 </template>
 
 <style scoped>
-.history-view {
-  padding-bottom: var(--spacing-xl);
-}
-
-.page-title {
-  font-size: 1.5rem;
-  font-weight: 600;
-  color: var(--color-text-primary);
-  margin: 0;
-}
-
-.empty-state {
-  text-align: center;
-  padding: 4rem 2rem;
-  color: var(--color-text-secondary);
-}
-
-.empty-state i {
-  font-size: 4rem;
-  margin-bottom: 1rem;
-  opacity: 0.3;
-}
-
-.empty-state p {
-  font-size: 1.125rem;
-  margin: 0;
-}
+/* Component-specific styles only */
 
 .completions-list {
   display: flex;
@@ -283,90 +257,5 @@ onMounted(() => {
   font-size: 0.875rem;
   color: var(--color-text-primary);
   line-height: 1.4;
-}
-
-/* Modal Styles */
-.modal-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.5);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 1050;
-  padding: 1rem;
-}
-
-.modal-content {
-  background: white;
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-lg);
-  max-width: 500px;
-  width: 100%;
-  max-height: 90vh;
-  overflow-y: auto;
-}
-
-.modal-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 1.25rem;
-  border-bottom: 1px solid var(--color-border);
-}
-
-.modal-title {
-  font-size: 1.125rem;
-  font-weight: 600;
-  color: var(--color-text-primary);
-  margin: 0;
-}
-
-.btn-close {
-  background: none;
-  border: none;
-  font-size: 1.25rem;
-  color: var(--color-text-secondary);
-  cursor: pointer;
-  padding: 0.25rem;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: color 0.2s ease;
-}
-
-.btn-close:hover {
-  color: var(--color-text-primary);
-}
-
-.modal-body {
-  padding: 1.25rem;
-}
-
-.modal-body p {
-  margin-bottom: 0.75rem;
-  color: var(--color-text-primary);
-}
-
-.modal-footer {
-  display: flex;
-  gap: 0.75rem;
-  justify-content: flex-end;
-  padding: 1rem 1.25rem;
-  border-top: 1px solid var(--color-border);
-}
-
-/* Mobile: Stack buttons vertically */
-@media (max-width: 767px) {
-  .modal-footer {
-    flex-direction: column-reverse;
-  }
-
-  .modal-footer button {
-    width: 100%;
-  }
 }
 </style>

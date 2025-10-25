@@ -82,17 +82,17 @@ const joinHousehold = async () => {
 </script>
 
 <template>
-  <div class="household-container">
-    <div class="household-wrapper">
-      <div class="household-card">
+  <div class="auth-container">
+    <div class="auth-wrapper" style="max-width: 540px;">
+      <div class="auth-card">
         <div class="card-body">
-          <h2 class="setup-title">Haushalt einrichten</h2>
-          <p class="setup-subtitle">Erstelle einen neuen Haushalt oder trete einem bestehenden bei.</p>
+          <h2 class="auth-title">Haushalt einrichten</h2>
+          <p class="auth-subtitle">Erstelle einen neuen Haushalt oder trete einem bestehenden bei.</p>
 
           <!-- Create Household Form -->
           <section class="setup-section">
             <h4 class="section-title">Neuen Haushalt erstellen</h4>
-            <form @submit.prevent="createHousehold" class="setup-form">
+            <form @submit.prevent="createHousehold" class="auth-form">
               <div class="form-group">
                 <label class="form-label">Haushalts-Name</label>
                 <input
@@ -121,7 +121,7 @@ const joinHousehold = async () => {
           <!-- Join Household Form -->
           <section class="setup-section">
             <h4 class="section-title">Haushalt beitreten</h4>
-            <form @submit.prevent="joinHousehold" class="setup-form">
+            <form @submit.prevent="joinHousehold" class="auth-form">
               <div class="form-group">
                 <label class="form-label">Einladungs-Code</label>
                 <input
@@ -149,42 +149,6 @@ const joinHousehold = async () => {
 </template>
 
 <style scoped>
-.household-container {
-  min-height: 100vh;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--color-background);
-  padding: var(--spacing-lg);
-}
-
-.household-wrapper {
-  width: 100%;
-  max-width: 540px;
-}
-
-.household-card {
-  background: var(--color-background-elevated);
-  border-radius: var(--radius-xl);
-  box-shadow: var(--shadow-xl);
-  border: 1px solid var(--color-border);
-}
-
-.setup-title {
-  font-size: 1.875rem;
-  font-weight: 700;
-  color: var(--color-text-primary);
-  margin-bottom: var(--spacing-xs);
-  text-align: center;
-}
-
-.setup-subtitle {
-  color: var(--color-text-secondary);
-  text-align: center;
-  margin-bottom: var(--spacing-xl);
-  font-size: 0.9375rem;
-}
-
 .setup-section {
   margin-bottom: var(--spacing-xl);
 }
@@ -193,14 +157,6 @@ const joinHousehold = async () => {
   font-size: 1.125rem;
   font-weight: 600;
   color: var(--color-text-primary);
-  margin-bottom: var(--spacing-lg);
-}
-
-.setup-form {
-  margin-bottom: 0;
-}
-
-.form-group {
   margin-bottom: var(--spacing-lg);
 }
 

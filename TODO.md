@@ -24,6 +24,7 @@
 ### Priorität 3: Database & Code Quality
 - [x] ✅ Refactoring - `member_id` entfernt, `user_id` als PK (One ID per user!)
 - [x] ✅ RLS Policies - Fixed infinite recursion mit SECURITY DEFINER
+- [x] ✅ CSS Refactoring - Zentrale utilities.css mit wiederverwendbaren Patterns (~223 Zeilen weniger Code)
 - [ ] Form Validation
 - [ ] Lokale Supabase Dev - `supabase start`
 
@@ -32,5 +33,3 @@
 - Task Categories (Küche, Bad, etc.)
 - Task Assignment
 - Push Notifications
-
-Styling sollte unified und ausgelagert werden, damit mans nicht für jede komponente einzeln machen muss
