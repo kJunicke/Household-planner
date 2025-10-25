@@ -4,23 +4,22 @@
 
 ## 🚀 Nächste Tasks
 
-### Priorität 1: Multi-User Testing 
- wird grad gemacht. 
-- [ ] Realtime Testing - Mit zwei Geräten/Browsern testen (CREATE, UPDATE, DELETE Events)
-- [ ] Mobile Testing - PWA Installation auf iOS/Android testen
+### Priorität 1: Multi-User Testing
+- [x] ✅ Realtime Testing - Funktioniert! (CREATE, UPDATE, DELETE Events)
+- [x] Mobile Testing - PWA Installation auf iOS/Android testen
 - [ ] Household Invite Flow - Join-Prozess auf mobilen Geräten testen
-
-Live aktualisierung funktioniert noch nicht??? muss erforscht werden 
 
 ### Priorität 2: Gamification MVP
 - [x] User Display Names - Nutzer können ihren Namen setzen/ändern (household_members.display_name)
 - [x] Mitgliederliste im Header - Alle Haushaltsmitglieder werden angezeigt
-- [ ] "Wer hat was gemacht" Anzeige - Completion history in UI (Namen statt user_id)
+- [x] ✅ "Wer hat was gemacht" Anzeige - Completion history mit Namen im Verlauf-Tab
+- [x] ✅ Navigation mit Header - Putzen/Verlauf Tabs
 - [ ] User Stats - XP, Level, Streaks pro Haushalt
 - [ ] Ranglisten - Mitglieder nach XP sortiert
 
 ### Priorität 3: Database & Code Quality
-- [ ] UNIQUE Constraint - `household_members.user_id`
+- [x] ✅ Refactoring - `member_id` entfernt, `user_id` als PK (One ID per user!)
+- [x] ✅ RLS Policies - Fixed infinite recursion mit SECURITY DEFINER
 - [ ] Form Validation
 - [ ] Lokale Supabase Dev - `supabase start`
 
@@ -29,3 +28,5 @@ Live aktualisierung funktioniert noch nicht??? muss erforscht werden
 - Task Categories (Küche, Bad, etc.)
 - Task Assignment
 - Push Notifications
+
+Styling sollte unified und ausgelagert werden, damit mans nicht für jede komponente einzeln machen muss

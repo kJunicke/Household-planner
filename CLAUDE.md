@@ -57,9 +57,9 @@ npm run build
 ```
 putzplan_vue/
 ├── src/
-│   ├── components/     # Wiederverwendbare Komponenten
-│   ├── views/         # Route-Level Komponenten
-│   ├── stores/        # Pinia Stores
+│   ├── components/     # Wiederverwendbare Komponenten (Header.vue, TaskCard.vue, etc.)
+│   ├── views/         # Route-Level Komponenten (CleaningView.vue, HistoryView.vue)
+│   ├── stores/        # Pinia Stores (authStore, householdStore, taskStore)
 │   ├── router/        # Vue Router
 │   ├── types/         # TypeScript Interfaces
 │   └── lib/          # Supabase Config
@@ -68,15 +68,25 @@ putzplan_vue/
 │   └── migrations/    # Database Migrations (timestamp-based)
 ```
 
+### Views & Routes
+- `/` - **CleaningView** - Task-Liste mit Erledigt/Dreckig Status
+- `/history` - **HistoryView** - Chronologischer Verlauf aller Completions
+- `/login` - LoginView
+- `/register` - RegisterView
+- `/household-setup` - HouseholdSetupView
+
 ### Datenmodell
 **Source of Truth**: Supabase Schema
 *Frontend-Types können temporär abweichen für MVP-Geschwindigkeit*
 
 **Tabellen & Primary Keys** (WICHTIG für `.eq()` Queries):
 - `households` - PK: `household_id`
-- `household_members` - PK: `member_id`, hat `display_name` (Email-Prefix als Fallback beim Join/Create)
+- `household_members` - PK: `user_id` (**One ID per user!** - referenziert `auth.users.id`)
+  - Hat `display_name` (Email-Prefix als Fallback beim Join/Create)
+  - Keine redundante `member_id` mehr (wurde entfernt für einfacheres Datenmodell)
 - `tasks` - PK: `task_id` (Task-Templates mit `recurrence_days`, `last_completed_at`)
 - `task_completions` - PK: `completion_id` (Append-only Historie, **Single Source of Truth**)
+  - `user_id` referenziert direkt `auth.users.id`
 
 **Task Recurrence (Hybrid):**
 - Frontend: `completeTask()` schreibt in beide Tabellen, `markAsDirty()` setzt nur tasks.completed
@@ -144,6 +154,12 @@ npx supabase db pull
 **Security Checklist**:
 - ✅ RLS für alle Tabellen aktivieren
 - ✅ `SET search_path = public, pg_temp` bei Functions hinzufügen
+- ✅ SECURITY DEFINER für RLS Helper-Functions (verhindert infinite recursion)
+
+**RLS Pattern für household_members**:
+- Problem: Kann nicht `household_members` in `household_members` RLS Policy abfragen (Rekursion!)
+- Lösung: SECURITY DEFINER Helper-Function `get_user_household_id()` die RLS bypassed
+- Beispiel siehe Migration: `20251024205322_fix_rls_no_subquery.sql`
 
 ---
 **Status & nächste Aufgaben**: Siehe `TODO.md`
