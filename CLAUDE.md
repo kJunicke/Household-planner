@@ -9,22 +9,22 @@
 **WICHTIG**: NIEMALS `npm run dev` ausführen - Ich hab immer schon einen am laufen
 
 ### Test Account (Playwright E2E Tests)
-```
 Email: test@example.com
 Passwort: test123456
 Haushalt: Test-Haushalt
 Invite Code: FD1EB9CE
-```
 
 ### MCP Server Setup
+
 **Context7** für aktuelle Library-Dokumentation nutzen:
-```bash
 
 Bei jedem Feature: Context7 für Up-to-date Docs konsultieren
 # (Vue 3, Pinia, Supabase, TypeScript, etc.)
-```
 
 **Playwright** für Browser-Testing und Automatisierung:
+- **Test-URL**: `http://localhost:5173/Household-planner/`
+- Features IMMER mit Playwright MCP testen (Browser-Automatisierung)
+- Dev-Server läuft bereits - NICHT `npm run dev` ausführen!
 
 ```bash
 # Code-Qualität prüfen
@@ -63,6 +63,7 @@ putzplan_vue/
 ### Views & Routes
 - `/` - **CleaningView** - Task-Liste mit Erledigt/Dreckig Status
 - `/history` - **HistoryView** - Chronologischer Verlauf aller Completions
+- `/stats` - **StatsView** - Gamification-Statistiken (Tortendiagramm mit Aufgabenverteilung)
 - `/login` - LoginView
 - `/register` - RegisterView
 - `/household-setup` - HouseholdSetupView
@@ -125,10 +126,6 @@ npx supabase migration new my_feature_name
 
 # 3. Migration zur Remote-DB pushen
 npx supabase db push
-
-# 4. (Optional) Remote-Änderungen zurück pullen
-# Falls jemand Änderungen im Dashboard gemacht hat:
-npx supabase db pull
 ```
 
 **Wichtige Regeln**:

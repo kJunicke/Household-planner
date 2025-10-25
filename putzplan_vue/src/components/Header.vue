@@ -112,6 +112,9 @@ const currentMemberName = computed(() => {
           <router-link to="/history" class="nav-tab" :class="{ active: route.path === '/history' }">
             <i class="bi bi-clock-history"></i> Verlauf
           </router-link>
+          <router-link to="/stats" class="nav-tab" :class="{ active: route.path === '/stats' }">
+            <i class="bi bi-pie-chart"></i> Stats
+          </router-link>
         </div>
       </div>
     </nav>
