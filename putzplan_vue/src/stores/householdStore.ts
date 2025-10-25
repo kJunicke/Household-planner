@@ -61,7 +61,7 @@ export const useHouseholdStore = defineStore('household', () => {
 
         const { data, error } = await supabase
             .from('household_members')
-            .select('user_id, display_name')
+            .select('user_id, household_id, display_name')
             .eq('household_id', currentHousehold.value.household_id)
 
         if (error) {
