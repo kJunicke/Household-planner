@@ -1,0 +1,110 @@
+# RLS Policies - Current State (Pre-Consolidation)
+# Extracted: 2025-10-26
+# Source: Migration files analysis
+
+## HOUSEHOLDS (4 policies)
+
+1. "Users can view households" (SELECT)
+   - Role: authenticated
+   - USING: true (public read access)
+   - Source: 20251019140500_fix_households_select_policy.sql
+   - Reason: Invite-code lookup before joining
+
+2. "Users can create households" (INSERT)
+   - Role: authenticated
+   - WITH CHECK: true
+   - Source: 20251018135010_add_rls_for_all_tables.sql
+   - Reason: User registration flow
+
+3. "Users can update their household" (UPDATE)
+   - Role: authenticated
+   - USING: household_id IN (SELECT household_id FROM household_members WHERE user_id = auth.uid())
+   - Source: 20251018135956_optimize_rls_performance.sql
+   - Reason: Members can update household name/settings
+
+4. "Users can delete their household" (DELETE)
+   - Role: authenticated
+   - USING: household_id IN (SELECT household_id FROM household_members WHERE user_id = auth.uid())
+   - Source: 20251018135956_optimize_rls_performance.sql
+   - Reason: Members can delete household (ANY member!)
+
+## HOUSEHOLD_MEMBERS (4 policies)
+
+1. "Users can view members of their household" (SELECT)
+   - Role: authenticated
+   - USING: household_id = get_user_household_id(auth.uid())
+   - Source: 20251024205322_fix_rls_no_subquery.sql
+   - Reason: See other household members (uses SECURITY DEFINER to avoid recursion)
+
+2. "Users can insert themselves into a household" (INSERT)
+   - Role: authenticated
+   - WITH CHECK: user_id = auth.uid()
+   - Source: 20251024204719_remove_member_id_use_user_id_as_pk.sql
+   - Reason: Join via invite code
+
+3. "Users can update their own member profile" (UPDATE)
+   - Role: authenticated
+   - USING: user_id = auth.uid()
+   - WITH CHECK: user_id = auth.uid()
+   - Source: 20251022215559_add_household_members_update_policy.sql
+   - Reason: Update display_name
+
+4. "Users can delete their own member record" (DELETE)
+   - Role: authenticated
+   - USING: user_id = auth.uid()
+   - Source: 20251024204719_remove_member_id_use_user_id_as_pk.sql
+   - Reason: Leave household
+
+## TASKS (4 policies)
+
+1. "Users can view household tasks" (SELECT)
+   - Role: authenticated
+   - USING: household_id IN (SELECT household_id FROM household_members WHERE user_id = auth.uid())
+   - Source: 20251018135956_optimize_rls_performance.sql
+   - Reason: View tasks in own household
+
+2. "Users can create household tasks" (INSERT)
+   - Role: authenticated
+   - WITH CHECK: household_id IN (SELECT household_id FROM household_members WHERE user_id = auth.uid())
+   - Source: 20251018135956_optimize_rls_performance.sql
+   - Reason: Create tasks in own household
+
+3. "Users can update household tasks" (UPDATE)
+   - Role: authenticated
+   - USING: household_id IN (SELECT household_id FROM household_members WHERE user_id = auth.uid())
+   - Source: 20251018135956_optimize_rls_performance.sql
+   - Reason: Update tasks (communal ownership - ANY member!)
+
+4. "Users can delete household tasks" (DELETE)
+   - Role: authenticated
+   - USING: household_id IN (SELECT household_id FROM household_members WHERE user_id = auth.uid())
+   - Source: 20251018135956_optimize_rls_performance.sql
+   - Reason: Delete tasks (communal ownership - ANY member!)
+
+## TASK_COMPLETIONS (3 policies)
+
+1. "Users can view completions in their household" (SELECT)
+   - Role: authenticated
+   - USING: task_id IN (SELECT task_id FROM tasks WHERE household_id IN (...))
+   - Source: 20250108230002_task_completions_rls.sql
+   - Reason: View completion history (2-hop check via tasks)
+
+2. "Users can create completions in their household" (INSERT)
+   - Role: authenticated
+   - WITH CHECK: task_id IN (...) AND user_id = auth.uid()
+   - Source: 20250108230002_task_completions_rls.sql
+   - Reason: Create completion (must be authenticated user, prevents spoofing)
+
+3. "Users can delete their own completions" (DELETE)
+   - Role: authenticated
+   - USING: user_id = auth.uid() AND task_id IN (...)
+   - Source: 20250108230002_task_completions_rls.sql
+   - Reason: Delete accidental completions (allows error correction)
+
+NO UPDATE POLICY - Completions are immutable history
+
+## TOTAL: 15 RLS Policies
+- households: 4
+- household_members: 4
+- tasks: 4
+- task_completions: 3

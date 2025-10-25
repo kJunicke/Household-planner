@@ -96,10 +96,9 @@ putzplan_vue/
 - Keine Features "für später" oder "falls mal nötig"
 - Code rauswerfen wenn nicht aktiv genutzt
 - MVP-First: Erst funktionsfähig, dann perfekt
-- Refactoring erst bei erkennbaren Patterns
 
 ### Vue 3 Patterns
-- **Referenz**: `vue3-development-guide.md` bei jedem Feature konsultieren
+- context 7 vue bei neuen features consultieren
 - **Pinia**: Direkte Store-Nutzung in Components (`taskStore.deleteTask(id)`)
 - **Kein Event-Chain**: Nicht "props down, events up" bei zentralem Store
 
@@ -126,6 +125,20 @@ putzplan_vue/
 
 ### Database Migrations (Supabase CLI)
 
+**Status:** ✅ Konsolidiert (26.10.2025)
+- **4 strukturierte Migrations** (war: 29)
+- Alte Migrations archiviert in `supabase/migrations/archive/`
+
+**Struktur:**
+```
+supabase/migrations/
+├── 20251026000000_consolidated_schema.sql  # Tables, Indexes, Triggers
+├── 20251026000001_rls_policies.sql         # RLS Policies (documented)
+├── 20251026000002_realtime.sql             # Realtime config
+├── 20251026000003_cron_jobs.sql            # Recurring tasks cron
+└── archive/                                 # Old migrations (reference)
+```
+
 **Empfohlener Workflow (Best Practice)**:
 ```bash
 # WICHTIG: Supabase CLI muss über npx aufgerufen werden!
@@ -137,7 +150,13 @@ npx supabase migration new my_feature_name
 # 2. SQL in die neue Migration-Datei schreiben
 # supabase/migrations/[timestamp]_my_feature_name.sql
 
-# 3. Migration zur Remote-DB pushen
+# 3. Lokaler Test
+npx supabase db reset
+
+# 4. Schema Lint
+npx supabase db lint --local
+
+# 5. Migration zur Remote-DB pushen
 npx supabase db push
 ```
 
@@ -152,16 +171,25 @@ npx supabase db push
 - `db pull` - Pullt Remote-Schema-Änderungen als neue Migration (reverse)
 - `db reset` - Löscht lokale DB und spielt alle Migrations neu ab
 - `db diff` - Zeigt Unterschiede zwischen lokal und remote
+- `db lint` - Prüft Schema auf common issues
+
+**Dokumentation:**
+- Security: `supabase/RLS_SECURITY.md`
+- Schema: Siehe Migration-Files (ausführlich kommentiert)
+- Tests: `supabase/tests/rls_security_tests.sql`
+- Audit: `supabase/MIGRATION_AUDIT.md`
 
 **Security Checklist**:
 - ✅ RLS für alle Tabellen aktivieren
 - ✅ `SET search_path = public, pg_temp` bei Functions hinzufügen
 - ✅ SECURITY DEFINER für RLS Helper-Functions (verhindert infinite recursion)
+- ✅ `(SELECT auth.uid())` für initPlan optimization
+- ✅ `TO authenticated` explizit angeben
 
 **RLS Pattern für household_members**:
 - Problem: Kann nicht `household_members` in `household_members` RLS Policy abfragen (Rekursion!)
 - Lösung: SECURITY DEFINER Helper-Function `get_user_household_id()` die RLS bypassed
-- Beispiel siehe Migration: `20251024205322_fix_rls_no_subquery.sql`
+- Siehe: `supabase/RLS_SECURITY.md`
 
 ---
 **Status & nächste Aufgaben**: Siehe `TODO.md`
