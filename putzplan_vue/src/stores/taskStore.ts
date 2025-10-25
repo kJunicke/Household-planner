@@ -354,7 +354,7 @@ export const useTaskStore = defineStore('tasks', () => {
             completion_id: completion.completion_id,
             completed_at: completion.completed_at,
             tasks: {
-                title: (completion.tasks as any)?.title || 'Unbekannte Aufgabe'
+                title: (completion.tasks as { title: string } | null)?.title || 'Unbekannte Aufgabe'
             },
             household_members: {
                 display_name: householdStore.householdMembers.find(
