@@ -73,7 +73,8 @@ export const useTaskStore = defineStore('tasks', () => {
 
     // COMPLETE - Task als erledigt markieren
     // Schreibt in task_completions Historie UND setzt tasks.completed = TRUE
-    const completeTask = async (taskId: string) => {
+    // Optional: effortOverride und overrideReason für Sonderfälle (z.B. unerwarteter Mehraufwand)
+    const completeTask = async (taskId: string, effortOverride?: number, overrideReason?: string) => {
         const authStore = useAuthStore()
 
         if (!authStore.user) {
@@ -81,14 +82,32 @@ export const useTaskStore = defineStore('tasks', () => {
             return false
         }
 
+        // Validierung: Wenn effortOverride gesetzt, muss auch overrideReason vorhanden sein
+        if (effortOverride !== undefined && !overrideReason?.trim()) {
+            console.error('Cannot complete task: effort_override requires override_reason')
+            return false
+        }
+
         // 1. INSERT in task_completions (Historie für Gamification)
+        const insertData: {
+            task_id: string
+            user_id: string
+            effort_override?: number
+            override_reason?: string
+        } = {
+            task_id: taskId,
+            user_id: authStore.user.id
+        }
+
+        // Optional: effort_override und override_reason hinzufügen
+        if (effortOverride !== undefined && overrideReason) {
+            insertData.effort_override = effortOverride
+            insertData.override_reason = overrideReason
+        }
+
         const { error: completionError } = await supabase
             .from('task_completions')
-            .insert({
-                task_id: taskId,
-                user_id: authStore.user.id
-                // completed_at wird automatisch von Supabase gesetzt (DEFAULT NOW())
-            })
+            .insert(insertData)
 
         if (completionError) {
             console.error('Error creating completion:', completionError)
@@ -336,6 +355,8 @@ export const useTaskStore = defineStore('tasks', () => {
                 completion_id,
                 completed_at,
                 user_id,
+                effort_override,
+                override_reason,
                 tasks!inner (
                     title
                 )
@@ -350,18 +371,27 @@ export const useTaskStore = defineStore('tasks', () => {
 
         // Enriche mit display_name via Frontend-Matching
         // user_id → householdMembers (bereits im Store geladen)
-        const enriched = data.map(completion => ({
-            completion_id: completion.completion_id,
-            completed_at: completion.completed_at,
-            tasks: {
-                title: (completion.tasks as { title: string } | null)?.title || 'Unbekannte Aufgabe'
-            },
-            household_members: {
-                display_name: householdStore.householdMembers.find(
-                    m => m.user_id === completion.user_id
-                )?.display_name || 'Unbekannt'
+        const enriched = data.map(completion => {
+            const taskData = Array.isArray(completion.tasks) ? completion.tasks[0] : completion.tasks
+            const completionData = completion as typeof completion & {
+                effort_override?: number | null
+                override_reason?: string | null
             }
-        }))
+            return {
+                completion_id: completion.completion_id,
+                completed_at: completion.completed_at,
+                effort_override: completionData.effort_override || null,
+                override_reason: completionData.override_reason || null,
+                tasks: {
+                    title: (taskData as { title: string } | null)?.title || 'Unbekannte Aufgabe'
+                },
+                household_members: {
+                    display_name: householdStore.householdMembers.find(
+                        m => m.user_id === completion.user_id
+                    )?.display_name || 'Unbekannt'
+                }
+            }
+        })
 
         console.log('Fetched completions:', enriched)
         return enriched

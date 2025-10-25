@@ -17,4 +17,6 @@ export interface TaskCompletion {
   task_id: string
   user_id: string
   completed_at: string // ISO timestamp from Supabase
+  effort_override: number | null // Optional override (1-5) when task was more/less effort than usual
+  override_reason: string | null // Required explanation when effort_override is set
 }

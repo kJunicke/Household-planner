@@ -2,6 +2,7 @@
 import type { Task } from '@/types/Task'
 import { useTaskStore } from '@/stores/taskStore'
 import { ref, computed } from "vue";
+import TaskCompletionModal from './TaskCompletionModal.vue'
 
 interface Props {
      task: Task
@@ -10,6 +11,7 @@ interface Props {
 const props = defineProps<Props>()
 const taskStore = useTaskStore()
 const isEditing = ref(false)
+const showCompletionModal = ref(false)
 
 const editForm = ref({
      ...props.task
@@ -30,9 +32,9 @@ const cancelEdit = () => {
 }
 
 const handleDeleteTask = async () => {
-     try { 
+     try {
           await taskStore.deleteTask(props.task.task_id)
-          
+
      } catch (error) {
           console.error('Fehler beim Löschen:', error)
      }
@@ -44,6 +46,19 @@ const handleCompleteTask = () => {
 
 const handleMarkDirty = () => {
      taskStore.markAsDirty(props.task.task_id)
+}
+
+const openCompletionModal = () => {
+     showCompletionModal.value = true
+}
+
+const closeCompletionModal = () => {
+     showCompletionModal.value = false
+}
+
+const handleCustomCompletion = async (effortOverride: number, reason: string) => {
+     await taskStore.completeTask(props.task.task_id, effortOverride, reason)
+     showCompletionModal.value = false
 }
 
 // Berechnet Tage bis Task wieder fällig ist (nur für wiederkehrende Tasks die completed sind)
@@ -146,11 +161,17 @@ const daysUntilDue = computed(() => {
                             @click="handleMarkDirty">
                          Dreckig
                     </button>
-                    <button v-else
-                            class="btn btn-success btn-sm flex-fill"
-                            @click="handleCompleteTask">
-                         Sauber
-                    </button>
+                    <template v-else>
+                         <button class="btn btn-success btn-sm flex-fill"
+                                 @click="handleCompleteTask">
+                              Sauber
+                         </button>
+                         <button class="btn btn-info btn-sm"
+                                 @click="openCompletionModal"
+                                 title="Aufwand anpassen">
+                              Mehr Aufwand
+                         </button>
+                    </template>
                     <button class="btn btn-secondary btn-sm"
                             @click="startEdit">
                          Bearbeiten
@@ -175,6 +196,15 @@ const daysUntilDue = computed(() => {
                     </button>
                </div>
           </div>
+
+          <!-- Task Completion Modal -->
+          <TaskCompletionModal
+               v-if="showCompletionModal"
+               :taskTitle="props.task.title"
+               :defaultEffort="props.task.effort"
+               @close="closeCompletionModal"
+               @confirm="handleCustomCompletion"
+          />
      </div>
 
 </template>

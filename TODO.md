@@ -16,6 +16,7 @@
 - [x] ✅ Navigation mit Header - Putzen/Verlauf/Stats Tabs (Browser-Tab-Style)
 - [x] ✅ Verlauf bearbeiten - Einträge löschen bei irrtümlichem Abschluss
 - [x] ✅ Stats Tab - Tortendiagramm mit effort-gewichteter Aufgabenverteilung
+- [x] ✅ Effort Override Feature - Nutzer können beim Abschluss einen abweichenden Aufwand mit Begründung angeben
 - [ ] User Stats - XP, Level, Streaks pro Haushalt
 - [ ] Ranglisten - Mitglieder nach XP sortiert
 

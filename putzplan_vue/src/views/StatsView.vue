@@ -4,7 +4,6 @@ import { Pie } from 'vue-chartjs'
 import { Chart as ChartJS, Title, Tooltip, Legend, ArcElement } from 'chart.js'
 import { useHouseholdStore } from '../stores/householdStore'
 import { useTaskStore } from '../stores/taskStore'
-import Header from '../components/Header.vue'
 
 ChartJS.register(Title, Tooltip, Legend, ArcElement)
 
@@ -93,7 +92,6 @@ const chartOptions = {
 
 <template>
   <div class="stats-view">
-    <Header />
     <div class="container mt-4">
       <div class="row">
         <div class="col-12 col-lg-8 offset-lg-2">

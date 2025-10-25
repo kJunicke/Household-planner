@@ -7,6 +7,8 @@ const taskStore = useTaskStore()
 interface CompletionWithDetails {
   completion_id: string
   completed_at: string
+  effort_override: number | null
+  override_reason: string | null
   tasks: {
     title: string
   }
@@ -105,6 +107,15 @@ onMounted(() => {
                 <i class="bi bi-clock"></i>
                 {{ formatDate(completion.completed_at) }}
               </span>
+            </div>
+            <div v-if="completion.effort_override" class="effort-override-note">
+              <div class="override-badge">
+                <i class="bi bi-exclamation-circle"></i>
+                Aufwand: {{ completion.effort_override }}
+              </div>
+              <div class="override-reason">
+                {{ completion.override_reason }}
+              </div>
             </div>
           </div>
           <div class="completion-actions">
@@ -244,6 +255,34 @@ onMounted(() => {
 .completion-actions {
   display: flex;
   align-items: center;
+}
+
+.effort-override-note {
+  margin-top: 0.75rem;
+  padding: 0.75rem;
+  background: var(--color-warning-light, #fff3cd);
+  border-left: 3px solid var(--color-warning, #ffc107);
+  border-radius: var(--radius-sm);
+}
+
+.override-badge {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--color-warning-dark, #856404);
+  margin-bottom: 0.375rem;
+}
+
+.override-badge i {
+  font-size: 1rem;
+}
+
+.override-reason {
+  font-size: 0.875rem;
+  color: var(--color-text-primary);
+  line-height: 1.4;
 }
 
 /* Modal Styles */
