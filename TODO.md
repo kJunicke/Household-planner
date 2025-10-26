@@ -37,6 +37,7 @@
 - [x] ✅ Stats Zeitraum-Filter - Tabs für Gesamt/Woche/Monat/Jahr mit reaktiver Filterung
 - [x] ✅ Chart Styling - Integration in App-Farbschema (Primary, Success, Warning colors)
 - [x] ✅ User Color Customization - Nutzer können ihre eigene Farbe wählen
+- [x] ✅ Confetti Animation - Celebration-Effekt beim Task-Completion (canvas-confetti)
 - [ ] User Stats - XP, Level, Streaks pro Haushalt
 - [ ] Ranglisten - Mitglieder nach XP sortiert
 

@@ -5,6 +5,7 @@ import { useHouseholdStore } from '@/stores/householdStore'
 import { ref, computed } from "vue";
 import TaskCompletionModal from './TaskCompletionModal.vue'
 import TaskAssignmentModal from './TaskAssignmentModal.vue'
+import confetti from 'canvas-confetti'
 
 interface Props {
      task: Task
@@ -44,8 +45,15 @@ const handleDeleteTask = async () => {
      }
 }
 
-const handleCompleteTask = () => {
-     taskStore.completeTask(props.task.task_id)
+const handleCompleteTask = async () => {
+     const success = await taskStore.completeTask(props.task.task_id)
+     if (success) {
+          confetti({
+               particleCount: 100,
+               spread: 70,
+               origin: { y: 0.6 }
+          })
+     }
 }
 
 const handleMarkDirty = () => {
@@ -61,12 +69,26 @@ const closeCompletionModal = () => {
 }
 
 const handleCustomCompletion = async (effortOverride: number, reason: string) => {
-     await taskStore.completeTask(props.task.task_id, effortOverride, reason)
+     const success = await taskStore.completeTask(props.task.task_id, effortOverride, reason)
      showCompletionModal.value = false
+     if (success) {
+          confetti({
+               particleCount: 100,
+               spread: 70,
+               origin: { y: 0.6 }
+          })
+     }
 }
 
 const handleDirectCompletion = async () => {
-     await taskStore.completeTask(props.task.task_id)
+     const success = await taskStore.completeTask(props.task.task_id)
+     if (success) {
+          confetti({
+               particleCount: 100,
+               spread: 70,
+               origin: { y: 0.6 }
+          })
+     }
 }
 
 // Berechnet Tage bis Task wieder fällig ist (nur für wiederkehrende Tasks die completed sind)
@@ -483,6 +505,7 @@ const handleAssignmentConfirm = async (userId: string | null, permanent: boolean
 
      .button-group {
           flex: 0 0 100%;
+          flex-wrap: nowrap;
      }
 
      .assignment-badge {
