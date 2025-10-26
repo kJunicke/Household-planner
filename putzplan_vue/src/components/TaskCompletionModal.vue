@@ -45,7 +45,6 @@ const handleClose = () => {
 
         <div class="modal-body">
           <p class="task-name">{{ taskTitle }}</p>
-          <p class="default-effort">Standard-Aufwand: {{ defaultEffort }}</p>
 
           <div class="effort-selection">
             <label class="selection-label">Tatsächlicher Aufwand:</label>
@@ -54,7 +53,10 @@ const handleClose = () => {
                 v-for="effort in effortOptions"
                 :key="effort"
                 class="effort-btn"
-                :class="{ active: selectedEffort === effort }"
+                :class="{
+                  active: selectedEffort === effort,
+                  default: effort === defaultEffort
+                }"
                 @click="selectedEffort = effort"
               >
                 {{ effort }}
@@ -138,16 +140,29 @@ const handleClose = () => {
   font-weight: 600;
   cursor: pointer;
   transition: all 0.15s;
+  position: relative;
 }
 
 .effort-btn:hover {
   border-color: var(--color-primary);
 }
 
+.effort-btn.default {
+  border-color: var(--color-primary);
+  background: var(--color-background-elevated);
+  box-shadow: 0 0 0 1px var(--color-primary);
+}
+
 .effort-btn.active {
   background: var(--color-primary);
   border-color: var(--color-primary);
   color: white;
+  box-shadow: none;
+}
+
+.effort-btn.active.default {
+  background: var(--color-primary);
+  box-shadow: 0 0 0 3px rgba(13, 110, 253, 0.25);
 }
 
 .reason-input {

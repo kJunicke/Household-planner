@@ -11,6 +11,22 @@ const householdStore = useHouseholdStore()
 
 const isEditingName = ref(false)
 const newDisplayName = ref('')
+const newUserColor = ref('')
+
+const predefinedColors = [
+  '#4A90E2', // Blue
+  '#E74C3C', // Red
+  '#2ECC71', // Green
+  '#F39C12', // Orange
+  '#9B59B6', // Purple
+  '#1ABC9C', // Turquoise
+  '#E67E22', // Dark Orange
+  '#34495E', // Dark Gray
+  '#3498DB', // Light Blue
+  '#E91E63', // Pink
+  '#16A085', // Dark Turquoise
+  '#C0392B', // Dark Red
+]
 
 const handleLogout = async () => {
   await authStore.logout()
@@ -19,6 +35,8 @@ const handleLogout = async () => {
 
 const startEditingName = () => {
   newDisplayName.value = householdStore.getCurrentMemberDisplayName()
+  const currentMember = householdStore.householdMembers.find(m => m.user_id === authStore.user?.id)
+  newUserColor.value = currentMember?.user_color || '#4A90E2'
   isEditingName.value = true
 }
 
@@ -27,7 +45,10 @@ const saveDisplayName = async () => {
     return
   }
 
-  const result = await householdStore.updateMemberDisplayName(newDisplayName.value.trim())
+  const result = await householdStore.updateMemberProfile(
+    newDisplayName.value.trim(),
+    newUserColor.value
+  )
   if (result.success) {
     isEditingName.value = false
   }
@@ -40,6 +61,11 @@ const cancelEditingName = () => {
 
 const currentMemberName = computed(() => {
   return householdStore.getCurrentMemberDisplayName()
+})
+
+const currentMemberColor = computed(() => {
+  const member = householdStore.householdMembers.find(m => m.user_id === authStore.user?.id)
+  return member?.user_color || '#4A90E2'
 })
 </script>
 
@@ -69,33 +95,52 @@ const currentMemberName = computed(() => {
         <div class="col-md-3 col-12 text-md-end">
           <div class="user-info">
             <div v-if="!isEditingName" class="d-flex align-items-center gap-2 justify-content-md-end justify-content-center">
+              <div class="user-color-indicator" :style="{ backgroundColor: currentMemberColor }" :title="'Deine Farbe: ' + currentMemberColor"></div>
               <div class="user-details">
                 <div class="user-name">{{ currentMemberName }}</div>
                 <div class="user-email-small">{{ authStore.user?.email }}</div>
               </div>
-              <button @click="startEditingName" class="btn btn-light border settings-btn btn-sm" title="Namen bearbeiten">
+              <button @click="startEditingName" class="btn btn-light border settings-btn btn-sm" title="Profil bearbeiten">
                 <i class="bi bi-gear-fill fs-5"></i>
               </button>
               <button @click="handleLogout" class="btn btn-danger btn-sm">
                 Logout
               </button>
             </div>
-            <div v-else class="d-flex align-items-center gap-2 justify-content-md-end justify-content-center">
-              <input
-                v-model="newDisplayName"
-                type="text"
-                class="form-control form-control-sm"
-                placeholder="Dein Name"
-                @keyup.enter="saveDisplayName"
-                @keyup.escape="cancelEditingName"
-                style="max-width: 150px;"
-              />
-              <button @click="saveDisplayName" class="btn btn-success btn-sm">
-                <i class="bi bi-check-lg"></i>
-              </button>
-              <button @click="cancelEditingName" class="btn btn-secondary btn-sm">
-                <i class="bi bi-x-lg"></i>
-              </button>
+            <div v-else class="edit-profile-container">
+              <div class="d-flex flex-column gap-2 mb-2">
+                <input
+                  v-model="newDisplayName"
+                  type="text"
+                  class="form-control form-control-sm"
+                  placeholder="Dein Name"
+                  @keyup.enter="saveDisplayName"
+                  @keyup.escape="cancelEditingName"
+                />
+                <div class="color-picker-section">
+                  <label class="color-label">Deine Farbe:</label>
+                  <div class="color-grid">
+                    <button
+                      v-for="color in predefinedColors"
+                      :key="color"
+                      type="button"
+                      class="color-option"
+                      :class="{ selected: newUserColor === color }"
+                      :style="{ backgroundColor: color }"
+                      @click="newUserColor = color"
+                      :title="color"
+                    />
+                  </div>
+                </div>
+              </div>
+              <div class="d-flex align-items-center gap-2 justify-content-center">
+                <button @click="saveDisplayName" class="btn btn-success btn-sm">
+                  <i class="bi bi-check-lg"></i> Speichern
+                </button>
+                <button @click="cancelEditingName" class="btn btn-secondary btn-sm">
+                  <i class="bi bi-x-lg"></i> Abbrechen
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -269,5 +314,61 @@ const currentMemberName = computed(() => {
 
 .settings-btn:hover i {
   color: #495057;
+}
+
+.user-color-indicator {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: 2px solid var(--color-border);
+  flex-shrink: 0;
+}
+
+.edit-profile-container {
+  background: var(--color-background);
+  padding: var(--spacing-md);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border);
+  min-width: 280px;
+}
+
+.color-picker-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.color-label {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--color-text-primary);
+  margin: 0;
+}
+
+.color-grid {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 0.5rem;
+}
+
+.color-option {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: 2px solid var(--color-border);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  padding: 0;
+}
+
+.color-option:hover {
+  transform: scale(1.1);
+  border-color: var(--color-text-primary);
+}
+
+.color-option.selected {
+  border: 3px solid var(--color-text-primary);
+  box-shadow: 0 0 0 2px var(--color-background), 0 0 0 4px var(--color-primary);
+  transform: scale(1.1);
 }
 </style>

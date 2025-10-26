@@ -139,8 +139,8 @@ export const useTaskStore = defineStore('tasks', () => {
     }
 
     // CREATE - Neue Task erstellen
-    // completed und last_completed_at sind optional - Database setzt Defaults
-    const createTask = async (taskData: Omit<Task, 'task_id' | 'household_id' | 'completed' | 'last_completed_at'>) => {
+    // completed, last_completed_at, assigned_to, assignment_permanent sind optional - Database setzt Defaults
+    const createTask = async (taskData: Omit<Task, 'task_id' | 'household_id' | 'completed' | 'last_completed_at' | 'assigned_to' | 'assignment_permanent'>) => {
         const householdStore = useHouseholdStore()
 
         if (!householdStore.currentHousehold) {
@@ -323,6 +323,34 @@ export const useTaskStore = defineStore('tasks', () => {
         }
     }
 
+    // ASSIGN TASK - Weise Task einem Household-Member zu
+    const assignTask = async (taskId: string, userId: string | null, permanent: boolean) => {
+        isLoading.value = true
+
+        const { error } = await supabase
+            .from('tasks')
+            .update({
+                assigned_to: userId,
+                assignment_permanent: permanent
+            })
+            .eq('task_id', taskId)
+
+        isLoading.value = false
+
+        if (error) {
+            console.error('Error assigning task:', error)
+            return false
+        }
+
+        // Lokalen State aktualisieren
+        const taskIndex = tasks.value.findIndex(t => t.task_id === taskId)
+        if (taskIndex !== -1) {
+            tasks.value[taskIndex].assigned_to = userId
+            tasks.value[taskIndex].assignment_permanent = permanent
+        }
+        return true
+    }
+
     // FETCH COMPLETIONS - Hole Task-Completions mit JOIN für History-View
     // Lädt alle completions des aktuellen Households mit Task- und Member-Namen
     // JETZT EINFACHER: Direkter JOIN über user_id (keine Frontend-Matching mehr nötig!)
@@ -475,6 +503,7 @@ export const useTaskStore = defineStore('tasks', () => {
         deleteTask,
         subscribeToTasks,
         unsubscribeFromTasks,
+        assignTask,
         fetchCompletions,
         deleteCompletion,
         deleteAllCompletions

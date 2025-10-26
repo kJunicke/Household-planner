@@ -96,14 +96,41 @@ Deno.serve(async (req) => {
       )
     }
 
-    // 6. UPDATE tasks.completed = TRUE + last_completed_at (replaces trigger logic!)
+    // 6. Get task to check assignment_permanent flag
+    const { data: task, error: taskError } = await supabase
+      .from('tasks')
+      .select('assignment_permanent')
+      .eq('task_id', taskId)
+      .single()
+
+    if (taskError) {
+      console.error('Error fetching task:', taskError)
+      return new Response(
+        JSON.stringify({ error: 'Failed to fetch task', details: taskError.message }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
+    // 7. UPDATE tasks.completed = TRUE + last_completed_at (replaces trigger logic!)
+    // If assignment is NOT permanent, clear assigned_to on completion
     const now = new Date().toISOString()
+    const updateData: {
+      completed: boolean
+      last_completed_at: string
+      assigned_to?: null
+    } = {
+      completed: true,
+      last_completed_at: now  // ← This was previously done by trigger
+    }
+
+    // Clear assignment if not permanent
+    if (!task.assignment_permanent) {
+      updateData.assigned_to = null
+    }
+
     const { error: updateError } = await supabase
       .from('tasks')
-      .update({
-        completed: true,
-        last_completed_at: now  // ← This was previously done by trigger
-      })
+      .update(updateData)
       .eq('task_id', taskId)
 
     if (updateError) {
@@ -114,7 +141,7 @@ Deno.serve(async (req) => {
       )
     }
 
-    // 7. Success!
+    // 8. Success!
     return new Response(
       JSON.stringify({ success: true }),
       { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }

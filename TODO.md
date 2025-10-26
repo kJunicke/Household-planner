@@ -36,6 +36,7 @@
 - [x] ✅ Stats Balkendiagramm - Punkteverteilung pro Mitglied als Bar Chart
 - [x] ✅ Stats Zeitraum-Filter - Tabs für Gesamt/Woche/Monat/Jahr mit reaktiver Filterung
 - [x] ✅ Chart Styling - Integration in App-Farbschema (Primary, Success, Warning colors)
+- [x] ✅ User Color Customization - Nutzer können ihre eigene Farbe wählen
 - [ ] User Stats - XP, Level, Streaks pro Haushalt
 - [ ] Ranglisten - Mitglieder nach XP sortiert
 
@@ -47,8 +48,10 @@
 - [ ] Form Validation
 - [ ] Lokale Supabase Dev - `supabase start`
 
+### Priorität 4: Task Management
+- [x] ✅ Task Assignment - Tasks können Mitgliedern zugewiesen werden (permanent oder temporär)
+
 ### Future
 - Achievements
 - Task Categories (Küche, Bad, etc.)
-- Task Assignment
 - Push Notifications

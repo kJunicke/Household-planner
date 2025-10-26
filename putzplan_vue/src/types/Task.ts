@@ -10,6 +10,10 @@ export interface Task {
   recurrence_days: number
   completed: boolean
   last_completed_at: string | null // ISO timestamp, auto-updated via DB trigger from task_completions
+
+  // Task Assignment
+  assigned_to: string | null // user_id of assigned household member (optional)
+  assignment_permanent: boolean // Whether assignment persists after completion
   }
 
 export interface TaskCompletion {

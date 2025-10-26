@@ -64,22 +64,12 @@ const filteredCompletions = computed(() => {
   return completions.filter(c => new Date(c.completed_at) >= cutoffDate)
 })
 
-// Farben für die Segmente (shared für Pie und Bar Chart)
-// Nutze App-Farbschema: Primary, Success, Warning, Danger, etc.
-const colors = [
-  'rgb(79, 70, 229)',   // Primary
-  'rgb(16, 185, 129)',  // Success
-  'rgb(245, 158, 11)',  // Warning
-  'rgb(239, 68, 68)',   // Danger
-  'rgb(153, 102, 255)', // Purple
-  'rgb(236, 72, 153)',  // Pink
-  'rgb(14, 165, 233)'   // Sky
-]
-
-const colorsWithAlpha = (alpha: number = 0.8) => colors.map(color => {
-  const rgb = color.match(/\d+/g)
-  return `rgba(${rgb![0]}, ${rgb![1]}, ${rgb![2]}, ${alpha})`
-})
+// Helper: Convert hex to rgba
+const hexToRgba = (hex: string, alpha: number = 1) => {
+  const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex)
+  if (!result) return `rgba(79, 70, 229, ${alpha})` // Fallback to primary color
+  return `rgba(${parseInt(result[1], 16)}, ${parseInt(result[2], 16)}, ${parseInt(result[3], 16)}, ${alpha})`
+}
 
 // Berechne Effort pro User basierend auf gefilterten Completions
 const effortByUser = computed(() => {
@@ -118,12 +108,14 @@ const pieChartData = computed(() => {
   const labels: string[] = []
   const data: number[] = []
   const backgroundColors: string[] = []
+  const borderColors: string[] = []
 
-  members.forEach((member, index) => {
+  members.forEach((member) => {
     const effort = effortMap.get(member.user_id) || 0
     labels.push(member.display_name || 'Unbekannt')
     data.push(effort)
-    backgroundColors.push(colorsWithAlpha(0.9)[index % colors.length])
+    backgroundColors.push(hexToRgba(member.user_color, 0.9))
+    borderColors.push(member.user_color)
   })
 
   return {
@@ -132,7 +124,7 @@ const pieChartData = computed(() => {
       label: 'Aufwand (gewichtet)',
       data,
       backgroundColor: backgroundColors,
-      borderColor: colors.map((_, i) => colors[i % colors.length]),
+      borderColor: borderColors,
       borderWidth: 2,
       hoverOffset: 8
     }]
@@ -152,12 +144,14 @@ const barChartData = computed(() => {
   const labels: string[] = []
   const data: number[] = []
   const backgroundColors: string[] = []
+  const borderColors: string[] = []
 
-  members.forEach((member, index) => {
+  members.forEach((member) => {
     const effort = effortMap.get(member.user_id) || 0
     labels.push(member.display_name || 'Unbekannt')
     data.push(effort)
-    backgroundColors.push(colorsWithAlpha(0.85)[index % colors.length])
+    backgroundColors.push(hexToRgba(member.user_color, 0.85))
+    borderColors.push(member.user_color)
   })
 
   return {
@@ -166,7 +160,7 @@ const barChartData = computed(() => {
       label: 'Punkte',
       data,
       backgroundColor: backgroundColors,
-      borderColor: colors.map((_, i) => colors[i % colors.length]),
+      borderColor: borderColors,
       borderWidth: 2,
       borderRadius: 8
     }]

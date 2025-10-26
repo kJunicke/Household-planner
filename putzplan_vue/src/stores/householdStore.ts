@@ -61,7 +61,7 @@ export const useHouseholdStore = defineStore('household', () => {
 
         const { data, error } = await supabase
             .from('household_members')
-            .select('user_id, household_id, display_name')
+            .select('user_id, household_id, display_name, user_color')
             .eq('household_id', currentHousehold.value.household_id)
 
         if (error) {
@@ -88,6 +88,31 @@ export const useHouseholdStore = defineStore('household', () => {
 
         if (error) {
             console.error('Error updating display name:', error)
+            return { success: false, error: error.message }
+        }
+
+        // Update local state
+        await loadHouseholdMembers()
+        return { success: true }
+    }
+
+    const updateMemberProfile = async (newName: string, newColor: string) => {
+        const authStore = useAuthStore()
+        if (!authStore.user || !currentHousehold.value) {
+            return { success: false, error: 'Not logged in or no household' }
+        }
+
+        const { error } = await supabase
+            .from('household_members')
+            .update({
+                display_name: newName,
+                user_color: newColor
+            })
+            .eq('user_id', authStore.user.id)
+            .eq('household_id', currentHousehold.value.household_id)
+
+        if (error) {
+            console.error('Error updating member profile:', error)
             return { success: false, error: error.message }
         }
 
@@ -227,6 +252,7 @@ export const useHouseholdStore = defineStore('household', () => {
         loadUserHousehold,
         loadHouseholdMembers,
         updateMemberDisplayName,
+        updateMemberProfile,
         getCurrentMemberDisplayName,
         createHousehold,
         joinHousehold,

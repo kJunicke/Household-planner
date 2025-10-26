@@ -140,7 +140,7 @@ supabase/migrations/
 └── archive/                                 # Old migrations (reference)
 ```
 
-**Empfohlener Workflow (Best Practice)**:
+**Empfohlener Workflow**:
 ```bash
 # WICHTIG: Supabase CLI muss über npx aufgerufen werden!
 
@@ -150,13 +150,14 @@ npx supabase migration new my_feature_name
 # 2. SQL in die neue Migration-Datei schreiben
 # supabase/migrations/[timestamp]_my_feature_name.sql
 
-# 3. Lokaler Test
-npx supabase db reset
+# 3a. MIT Docker Desktop (lokaler Test):
+npx supabase db reset          # Löscht lokale DB, spielt alle Migrations ab
+npx supabase db lint --local   # Prüft Schema auf common issues
 
-# 4. Schema Lint
-npx supabase db lint --local
+# 3b. OHNE Docker Desktop (direkt zur Remote):
+npx supabase db push           # Pusht Migration direkt zur Remote-DB
 
-# 5. Migration zur Remote-DB pushen
+# 4. Migration zur Remote-DB pushen (falls lokal getestet)
 npx supabase db push
 ```
 
