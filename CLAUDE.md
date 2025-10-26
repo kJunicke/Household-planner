@@ -62,6 +62,7 @@ putzplan_vue/
 - `/` - **CleaningView** - Task-Liste mit Erledigt/Dreckig Status
 - `/history` - **HistoryView** - Chronologischer Verlauf aller Completions
 - `/stats` - **StatsView** - Gamification-Statistiken (Tortendiagramm mit Aufgabenverteilung)
+- `/shopping` - **ShoppingView** - Einkaufsliste mit Autocomplete und Purchase-Tracking
 - `/login` - LoginView
 - `/register` - RegisterView
 - `/household-setup` - HouseholdSetupView
@@ -78,6 +79,10 @@ putzplan_vue/
 - `tasks` - PK: `task_id` (Task-Templates mit `recurrence_days`, `last_completed_at`)
 - `task_completions` - PK: `completion_id` (Append-only Historie, **Single Source of Truth**)
   - `user_id` referenziert direkt `auth.users.id`
+- `shopping_items` - PK: `shopping_item_id` (Einkaufsliste mit Purchase-Tracking)
+  - `times_purchased` - Counter für Kaufhäufigkeit
+  - `last_purchased_at`, `last_purchased_by` - Tracking von letztem Einkauf
+  - `purchased` - Boolean für aktuellen Status (gekauft/nicht gekauft)
 
 **Task Recurrence & Business Logic:**
 - Frontend: `completeTask()` ruft Edge Function auf, `markAsDirty()` setzt nur tasks.completed
