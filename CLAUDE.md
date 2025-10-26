@@ -85,6 +85,7 @@ putzplan_vue/
   - Schreibt in `task_completions` Historie
   - Updated `tasks.completed` + `tasks.last_completed_at`
   - Ersetzt alten DB-Trigger (besseres Debugging, TypeScript statt SQL)
+  - ✅ CORS-Headers für localhost Development
 - Backend Cron: SQL Function `reset_recurring_tasks()` + pg_cron (täglich 3:00 UTC) setzt überfällige Tasks automatisch auf dreckig
   - **Calendar Days Logic**: Verwendet `CURRENT_DATE - DATE(last_completed_at)` für ganze Tage (nicht 24h-Perioden)
   - Beispiel: Task completed am 18.10. um 14:00 → Reset am 19.10. um 3:00 (1 ganzer Tag vergangen)

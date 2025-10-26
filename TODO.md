@@ -32,6 +32,10 @@
 - [x] ✅ Stats Tab - Tortendiagramm mit effort-gewichteter Aufgabenverteilung
 - [x] ✅ Effort Override Feature - Nutzer können beim Abschluss einen abweichenden Aufwand mit Begründung angeben
 - [x] ✅ Stats berechnen effort_override korrekt - Override-Werte werden in Statistik berücksichtigt
+- [x] ✅ History "Alle löschen" Button - Gesamten Verlauf für Haushalt löschen mit Confirmation Modal
+- [x] ✅ Stats Balkendiagramm - Punkteverteilung pro Mitglied als Bar Chart
+- [x] ✅ Stats Zeitraum-Filter - Tabs für Gesamt/Woche/Monat/Jahr mit reaktiver Filterung
+- [x] ✅ Chart Styling - Integration in App-Farbschema (Primary, Success, Warning colors)
 - [ ] User Stats - XP, Level, Streaks pro Haushalt
 - [ ] Ranglisten - Mitglieder nach XP sortiert
 

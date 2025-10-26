@@ -21,6 +21,7 @@ const completions = ref<CompletionWithDetails[]>([])
 const isLoading = ref(true)
 const showDeleteModal = ref(false)
 const completionToDelete = ref<CompletionWithDetails | null>(null)
+const showDeleteAllModal = ref(false)
 
 const loadCompletions = async () => {
   isLoading.value = true
@@ -61,6 +62,24 @@ const confirmDelete = async () => {
   closeDeleteModal()
 }
 
+const openDeleteAllModal = () => {
+  showDeleteAllModal.value = true
+}
+
+const closeDeleteAllModal = () => {
+  showDeleteAllModal.value = false
+}
+
+const confirmDeleteAll = async () => {
+  const success = await taskStore.deleteAllCompletions()
+
+  if (success) {
+    await loadCompletions()
+  }
+
+  closeDeleteAllModal()
+}
+
 onMounted(() => {
   loadCompletions()
 })
@@ -71,9 +90,18 @@ onMounted(() => {
     <div class="container-fluid">
       <div class="d-flex justify-content-between align-items-center mb-4">
         <h2 class="page-title">Verlauf</h2>
-        <button @click="loadCompletions" class="btn btn-sm btn-outline-primary">
-          <i class="bi bi-arrow-clockwise"></i> Aktualisieren
-        </button>
+        <div class="d-flex gap-2">
+          <button @click="loadCompletions" class="btn btn-sm btn-outline-primary">
+            <i class="bi bi-arrow-clockwise"></i> Aktualisieren
+          </button>
+          <button
+            @click="openDeleteAllModal"
+            class="btn btn-sm btn-outline-danger"
+            :disabled="completions.length === 0"
+          >
+            <i class="bi bi-trash"></i> Alle löschen
+          </button>
+        </div>
       </div>
 
       <div v-if="isLoading" class="text-center py-5">
@@ -131,7 +159,7 @@ onMounted(() => {
       </div>
     </div>
 
-    <!-- Delete Confirmation Modal -->
+    <!-- Delete Single Entry Modal -->
     <Teleport to="body">
       <div v-if="showDeleteModal" class="modal-overlay" @click="closeDeleteModal">
         <div class="modal-content" @click.stop>
@@ -156,6 +184,40 @@ onMounted(() => {
             </button>
             <button @click="confirmDelete" class="btn btn-danger">
               <i class="bi bi-trash"></i> Löschen
+            </button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
+
+    <!-- Delete All Modal -->
+    <Teleport to="body">
+      <div v-if="showDeleteAllModal" class="modal-overlay" @click="closeDeleteAllModal">
+        <div class="modal-content" @click.stop>
+          <div class="modal-header">
+            <h5 class="modal-title">Gesamten Verlauf löschen</h5>
+            <button @click="closeDeleteAllModal" class="btn-close" aria-label="Schließen">
+              <i class="bi bi-x-lg"></i>
+            </button>
+          </div>
+          <div class="modal-body">
+            <p class="text-danger fw-bold">
+              <i class="bi bi-exclamation-triangle-fill"></i>
+              Achtung: Diese Aktion kann nicht rückgängig gemacht werden!
+            </p>
+            <p>
+              Möchtest du wirklich den gesamten Verlauf für diesen Haushalt löschen?
+            </p>
+            <p class="text-muted mb-0">
+              Es werden {{ completions.length }} Einträge gelöscht.
+            </p>
+          </div>
+          <div class="modal-footer">
+            <button @click="closeDeleteAllModal" class="btn btn-secondary">
+              Abbrechen
+            </button>
+            <button @click="confirmDeleteAll" class="btn btn-danger">
+              <i class="bi bi-trash"></i> Alle löschen
             </button>
           </div>
         </div>

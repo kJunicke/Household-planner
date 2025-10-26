@@ -344,6 +344,7 @@ export const useTaskStore = defineStore('tasks', () => {
                 completion_id,
                 completed_at,
                 user_id,
+                task_id,
                 effort_override,
                 override_reason,
                 tasks!inner (
@@ -369,6 +370,8 @@ export const useTaskStore = defineStore('tasks', () => {
             return {
                 completion_id: completion.completion_id,
                 completed_at: completion.completed_at,
+                user_id: completion.user_id, // WICHTIG: user_id für Stats-Berechnung
+                task_id: completion.task_id, // WICHTIG: task_id für Effort-Lookup
                 effort_override: completionData.effort_override || null,
                 override_reason: completionData.override_reason || null,
                 tasks: {
@@ -408,6 +411,56 @@ export const useTaskStore = defineStore('tasks', () => {
         return true
     }
 
+    // DELETE ALL COMPLETIONS - Lösche alle Task-Completions für den aktuellen Haushalt
+    // Verwendet tasks-Join um nur completions des aktuellen Households zu löschen
+    const deleteAllCompletions = async () => {
+        const householdStore = useHouseholdStore()
+
+        if (!householdStore.currentHousehold) {
+            console.warn('No current household, cannot delete completions')
+            return false
+        }
+
+        isLoading.value = true
+
+        // Erst alle task_ids des aktuellen Households holen
+        const { data: householdTasks, error: tasksError } = await supabase
+            .from('tasks')
+            .select('task_id')
+            .eq('household_id', householdStore.currentHousehold.household_id)
+
+        if (tasksError) {
+            console.error('Error fetching household tasks:', tasksError)
+            isLoading.value = false
+            return false
+        }
+
+        const taskIds = householdTasks.map(t => t.task_id)
+
+        if (taskIds.length === 0) {
+            console.warn('No tasks found for household')
+            isLoading.value = false
+            return true // Technisch erfolgreich, nur nichts zu löschen
+        }
+
+        // Dann alle completions für diese task_ids löschen
+        const { error } = await supabase
+            .from('task_completions')
+            .delete()
+            .in('task_id', taskIds)
+
+        isLoading.value = false
+
+        if (error) {
+            console.error('Error deleting all completions:', error)
+            return false
+        }
+
+        // Lokalen State aktualisieren
+        completions.value = []
+        return true
+    }
+
     // Return - was andere Komponenten verwenden können
     return {
         tasks,
@@ -423,6 +476,7 @@ export const useTaskStore = defineStore('tasks', () => {
         subscribeToTasks,
         unsubscribeFromTasks,
         fetchCompletions,
-        deleteCompletion
+        deleteCompletion,
+        deleteAllCompletions
     }
 })

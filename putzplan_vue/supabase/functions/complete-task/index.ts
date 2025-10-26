@@ -9,7 +9,21 @@ interface CompleteTaskRequest {
   overrideReason?: string
 }
 
+// CORS headers for all responses
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+}
+
 Deno.serve(async (req) => {
+  // Handle CORS preflight requests
+  if (req.method === 'OPTIONS') {
+    return new Response(null, {
+      status: 204,
+      headers: corsHeaders
+    })
+  }
+
   try {
     // 1. Parse request body
     const { taskId, effortOverride, overrideReason }: CompleteTaskRequest = await req.json()
@@ -18,7 +32,7 @@ Deno.serve(async (req) => {
     if (!taskId) {
       return new Response(
         JSON.stringify({ error: 'taskId is required' }),
-        { status: 400, headers: { 'Content-Type': 'application/json' } }
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }
 
@@ -26,7 +40,7 @@ Deno.serve(async (req) => {
     if (effortOverride !== undefined && !overrideReason?.trim()) {
       return new Response(
         JSON.stringify({ error: 'effort_override requires override_reason' }),
-        { status: 400, headers: { 'Content-Type': 'application/json' } }
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }
 
@@ -35,7 +49,7 @@ Deno.serve(async (req) => {
     if (!authHeader) {
       return new Response(
         JSON.stringify({ error: 'Missing authorization header' }),
-        { status: 401, headers: { 'Content-Type': 'application/json' } }
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }
 
@@ -50,7 +64,7 @@ Deno.serve(async (req) => {
     if (userError || !user) {
       return new Response(
         JSON.stringify({ error: 'Unauthorized' }),
-        { status: 401, headers: { 'Content-Type': 'application/json' } }
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }
 
@@ -78,7 +92,7 @@ Deno.serve(async (req) => {
       console.error('Error creating completion:', completionError)
       return new Response(
         JSON.stringify({ error: 'Failed to create completion', details: completionError.message }),
-        { status: 500, headers: { 'Content-Type': 'application/json' } }
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }
 
@@ -96,21 +110,21 @@ Deno.serve(async (req) => {
       console.error('Error updating task:', updateError)
       return new Response(
         JSON.stringify({ error: 'Failed to update task', details: updateError.message }),
-        { status: 500, headers: { 'Content-Type': 'application/json' } }
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }
 
     // 7. Success!
     return new Response(
       JSON.stringify({ success: true }),
-      { status: 200, headers: { 'Content-Type': 'application/json' } }
+      { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )
 
   } catch (error) {
     console.error('Unexpected error:', error)
     return new Response(
-      JSON.stringify({ error: 'Internal server error', details: error.message }),
-      { status: 500, headers: { 'Content-Type': 'application/json' } }
+      JSON.stringify({ error: 'Internal server error', details: (error as Error).message }),
+      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )
   }
 })
