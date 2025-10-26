@@ -71,8 +71,8 @@ export const useTaskStore = defineStore('tasks', () => {
 
     }
 
-    // COMPLETE - Task als erledigt markieren
-    // Schreibt in task_completions Historie UND setzt tasks.completed = TRUE
+    // COMPLETE - Task als erledigt markieren (via Edge Function)
+    // Edge Function schreibt in task_completions Historie UND setzt tasks.completed = TRUE + last_completed_at
     // Optional: effortOverride und overrideReason für Sonderfälle (z.B. unerwarteter Mehraufwand)
     const completeTask = async (taskId: string, effortOverride?: number, overrideReason?: string) => {
         const authStore = useAuthStore()
@@ -88,44 +88,33 @@ export const useTaskStore = defineStore('tasks', () => {
             return false
         }
 
-        // 1. INSERT in task_completions (Historie für Gamification)
-        const insertData: {
-            task_id: string
-            user_id: string
-            effort_override?: number
-            override_reason?: string
-        } = {
-            task_id: taskId,
-            user_id: authStore.user.id
-        }
+        // Call Edge Function (replaces direct DB access + trigger logic)
+        const payload: {
+            taskId: string
+            effortOverride?: number
+            overrideReason?: string
+        } = { taskId }
 
-        // Optional: effort_override und override_reason hinzufügen
         if (effortOverride !== undefined && overrideReason) {
-            insertData.effort_override = effortOverride
-            insertData.override_reason = overrideReason
+            payload.effortOverride = effortOverride
+            payload.overrideReason = overrideReason
         }
 
-        const { error: completionError } = await supabase
-            .from('task_completions')
-            .insert(insertData)
+        const { data, error } = await supabase.functions.invoke('complete-task', {
+            body: payload
+        })
 
-        if (completionError) {
-            console.error('Error creating completion:', completionError)
+        if (error) {
+            console.error('Error calling complete-task function:', error)
             return false
         }
 
-        // 2. UPDATE tasks.completed = TRUE
-        const { error: updateError } = await supabase
-            .from('tasks')
-            .update({ completed: true })
-            .eq('task_id', taskId)
-
-        if (updateError) {
-            console.error('Error updating task status:', updateError)
+        if (!data?.success) {
+            console.error('Edge function returned error:', data)
             return false
         }
 
-        // 3. Reload tasks vom Backend (Source of Truth, kein optimistic update)
+        // Reload tasks vom Backend (Source of Truth, kein optimistic update)
         await loadTasks()
         return true
     }

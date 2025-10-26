@@ -30,9 +30,6 @@ Bei jedem Feature: Context7 für Up-to-date Docs konsultieren
 # Code-Qualität prüfen
 npm run type-check && npm run lint
 
-# Bei Bedarf formatieren
-npm run format
-
 # Build testen (optional)
 npm run build
 ```
@@ -82,9 +79,12 @@ putzplan_vue/
 - `task_completions` - PK: `completion_id` (Append-only Historie, **Single Source of Truth**)
   - `user_id` referenziert direkt `auth.users.id`
 
-**Task Recurrence (Hybrid):**
-- Frontend: `completeTask()` schreibt in beide Tabellen, `markAsDirty()` setzt nur tasks.completed
-- Backend: DB-Trigger aktualisiert automatisch `tasks.last_completed_at` aus `task_completions`
+**Task Recurrence & Business Logic:**
+- Frontend: `completeTask()` ruft Edge Function auf, `markAsDirty()` setzt nur tasks.completed
+- **Edge Function** (`complete-task`): TypeScript Business-Logik für Task-Completion
+  - Schreibt in `task_completions` Historie
+  - Updated `tasks.completed` + `tasks.last_completed_at`
+  - Ersetzt alten DB-Trigger (besseres Debugging, TypeScript statt SQL)
 - Backend Cron: SQL Function `reset_recurring_tasks()` + pg_cron (täglich 3:00 UTC) setzt überfällige Tasks automatisch auf dreckig
   - **Calendar Days Logic**: Verwendet `CURRENT_DATE - DATE(last_completed_at)` für ganze Tage (nicht 24h-Perioden)
   - Beispiel: Task completed am 18.10. um 14:00 → Reset am 19.10. um 3:00 (1 ganzer Tag vergangen)
@@ -142,7 +142,6 @@ supabase/migrations/
 **Empfohlener Workflow (Best Practice)**:
 ```bash
 # WICHTIG: Supabase CLI muss über npx aufgerufen werden!
-# Direkt "supabase" funktioniert nicht - immer "npx supabase" verwenden
 
 # 1. Lokale Migration erstellen
 npx supabase migration new my_feature_name
@@ -172,12 +171,6 @@ npx supabase db push
 - `db reset` - Löscht lokale DB und spielt alle Migrations neu ab
 - `db diff` - Zeigt Unterschiede zwischen lokal und remote
 - `db lint` - Prüft Schema auf common issues
-
-**Dokumentation:**
-- Security: `supabase/RLS_SECURITY.md`
-- Schema: Siehe Migration-Files (ausführlich kommentiert)
-- Tests: `supabase/tests/rls_security_tests.sql`
-- Audit: `supabase/MIGRATION_AUDIT.md`
 
 **Security Checklist**:
 - ✅ RLS für alle Tabellen aktivieren

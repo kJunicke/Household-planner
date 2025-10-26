@@ -10,15 +10,31 @@
 -- - task_completions (INSERT events for live stats)
 -- =================================================================
 
--- Enable realtime for tasks table
+-- Enable realtime for tasks table (idempotent)
 -- Allows multi-user sync: when one user creates/updates/deletes a task,
 -- all other users in the household see the change immediately
-ALTER PUBLICATION supabase_realtime ADD TABLE tasks;
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_publication_tables
+    WHERE pubname = 'supabase_realtime' AND tablename = 'tasks'
+  ) THEN
+    ALTER PUBLICATION supabase_realtime ADD TABLE tasks;
+  END IF;
+END $$;
 
--- Enable realtime for task_completions table
+-- Enable realtime for task_completions table (idempotent)
 -- Allows live stats updates: when one user completes a task,
 -- others see the stats (pie chart, history) update in real-time
-ALTER PUBLICATION supabase_realtime ADD TABLE task_completions;
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_publication_tables
+    WHERE pubname = 'supabase_realtime' AND tablename = 'task_completions'
+  ) THEN
+    ALTER PUBLICATION supabase_realtime ADD TABLE task_completions;
+  END IF;
+END $$;
 
 -- =================================================================
 -- USAGE IN FRONTEND

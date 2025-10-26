@@ -18,9 +18,9 @@
 
 ## 🚀 Nächste Tasks
 
-### Priorität 1: Multi-User Testing
-- [x] ✅ Realtime Testing - Funktioniert! (CREATE, UPDATE, DELETE Events)
-- [x] Mobile Testing - PWA Installation auf iOS/Android testen
+### Priorität 1: Edge Functions & Testing
+- [x] ✅ Edge Function Migration - `completeTask()` von DB-Trigger zu TypeScript Edge Function
+- [ ] **E2E Testing** - Edge Function `complete-task` mit Playwright testen
 - [ ] Household Invite Flow - Join-Prozess auf mobilen Geräten testen
 
 ### Priorität 2: Gamification MVP
