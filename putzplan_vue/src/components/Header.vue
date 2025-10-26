@@ -160,6 +160,9 @@ const currentMemberColor = computed(() => {
           <router-link to="/stats" class="nav-tab" :class="{ active: route.path === '/stats' }">
             <i class="bi bi-pie-chart"></i> Stats
           </router-link>
+          <router-link to="/shopping" class="nav-tab" :class="{ active: route.path === '/shopping' }">
+            <i class="bi bi-cart3"></i> Einkauf
+          </router-link>
         </div>
       </div>
     </nav>
