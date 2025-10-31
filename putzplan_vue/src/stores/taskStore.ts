@@ -140,6 +140,7 @@ export const useTaskStore = defineStore('tasks', () => {
 
     // CREATE - Neue Task erstellen
     // completed, last_completed_at, assigned_to, assignment_permanent sind optional - Database setzt Defaults
+    // task_type defaults to 'recurring' if not provided (for backwards compatibility)
     const createTask = async (taskData: Omit<Task, 'task_id' | 'household_id' | 'completed' | 'last_completed_at' | 'assigned_to' | 'assignment_permanent'>) => {
         const householdStore = useHouseholdStore()
 

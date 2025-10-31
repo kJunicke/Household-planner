@@ -5,6 +5,12 @@ export interface Task {
   effort: 1 | 2 | 3 | 4 | 5 // effort a cleaning activity usually takes.
   //measured only with values 1-5
 
+  // Task Type - categorizes task behavior
+  // 'recurring': Traditional time-based tasks (recurrence_days > 0)
+  // 'daily': General daily tasks without recurrence logic (always visible)
+  // 'one-time': One-time tasks (recurrence_days = 0)
+  task_type: 'recurring' | 'daily' | 'one-time'
+
   // Entweder nicht wiederholend ODER wiederholend mit Tagen
   // Task wiederholt sich nicht wenn recurrence_days = 0
   recurrence_days: number

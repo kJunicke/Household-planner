@@ -4,7 +4,7 @@ import { useTaskStore } from '@/stores/taskStore'
 import { computed } from 'vue'
 
 interface Props {
-  filter: 'todo' | 'completed'
+  filter: 'daily-todo' | 'recurring-todo' | 'completed'
 }
 
 const props = defineProps<Props>()
@@ -14,9 +14,18 @@ const taskStore = useTaskStore()
 const filteredTasks = computed(() => {
   if (props.filter === 'completed') {
     return taskStore.tasks.filter(task => task.completed)
-  } else {
-    return taskStore.tasks.filter(task => !task.completed)
+  } else if (props.filter === 'daily-todo') {
+    // Tägliche Tasks (nicht completed) + einmalige Tasks
+    return taskStore.tasks.filter(task =>
+      !task.completed && (task.task_type === 'daily' || task.task_type === 'one-time')
+    )
+  } else if (props.filter === 'recurring-todo') {
+    // Wiederkehrende Tasks (nicht completed)
+    return taskStore.tasks.filter(task =>
+      !task.completed && task.task_type === 'recurring'
+    )
   }
+  return []
 })
 
 </script>

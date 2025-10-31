@@ -51,6 +51,16 @@
 
 ### Priorität 4: Task Management
 - [x] ✅ Task Assignment - Tasks können Mitgliedern zugewiesen werden (permanent oder temporär)
+- [x] ✅ Daily/General Tasks - Tasks mit `task_type` Enum (recurring, daily, one-time) für bessere Übersichtlichkeit
+  - Database: `task_type` Feld mit CHECK constraint
+  - Frontend: Sub-Tabs in CleaningView (Alltagsaufgaben / Putzaufgaben / Erledigt)
+  - Conditional rendering mit `v-if` für bessere Übersicht
+  - Mobile-responsive Button-Tab UI
+- [ ] **Subtasks Feature** - Nested tasks für komplexe Aufgaben (z.B. Wäsche: Sortieren, Waschen, Aufhängen)
+  - Neue Tabelle `subtasks` mit FK zu `tasks.task_id`
+  - Subtask UI in TaskCard (collapsible list)
+  - Subtask-Completions separat tracken
+  - Parent task wird automatisch "completed" wenn alle subtasks done
 
 ### Future
 - Achievements

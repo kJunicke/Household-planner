@@ -59,7 +59,7 @@ putzplan_vue/
 ```
 
 ### Views & Routes
-- `/` - **CleaningView** - Task-Liste mit Erledigt/Dreckig Status
+- `/` - **CleaningView** - Task-Liste mit Sub-Tabs (Alltagsaufgaben / Putzaufgaben / Erledigt)
 - `/history` - **HistoryView** - Chronologischer Verlauf aller Completions
 - `/stats` - **StatsView** - Gamification-Statistiken (Tortendiagramm mit Aufgabenverteilung)
 - `/shopping` - **ShoppingView** - Einkaufsliste mit Autocomplete und Purchase-Tracking
@@ -76,7 +76,8 @@ putzplan_vue/
 - `household_members` - PK: `user_id` (**One ID per user!** - referenziert `auth.users.id`)
   - Hat `display_name` (Email-Prefix als Fallback beim Join/Create)
   - Keine redundante `member_id` mehr (wurde entfernt für einfacheres Datenmodell)
-- `tasks` - PK: `task_id` (Task-Templates mit `recurrence_days`, `last_completed_at`)
+- `tasks` - PK: `task_id` (Task-Templates mit `recurrence_days`, `last_completed_at`, `task_type`)
+  - `task_type` - Enum: `'recurring'` (zeitbasiert), `'daily'` (immer sichtbar), `'one-time'` (einmalig)
 - `task_completions` - PK: `completion_id` (Append-only Historie, **Single Source of Truth**)
   - `user_id` referenziert direkt `auth.users.id`
 - `shopping_items` - PK: `shopping_item_id` (Einkaufsliste mit Purchase-Tracking)

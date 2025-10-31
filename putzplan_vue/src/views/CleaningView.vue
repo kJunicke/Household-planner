@@ -6,17 +6,23 @@ import { useTaskStore } from "../stores/taskStore";
 const taskStore = useTaskStore()
 const showCreateTaskForm = ref(false)
 
+// Tab state for task categories
+type TaskCategory = 'daily' | 'recurring' | 'completed'
+const selectedCategory = ref<TaskCategory>('daily')
+
 const newTask = ref({
   title: '',
   effort: 1,
-  recurrence_days: 0
+  recurrence_days: 0,
+  task_type: 'recurring' as 'recurring' | 'daily' | 'one-time'
 })
 
 const resetForm = () => {
   newTask.value = {
     title: '',
     effort: 1,
-    recurrence_days: 0
+    recurrence_days: 0,
+    task_type: 'recurring' as 'recurring' | 'daily' | 'one-time'
   }
 }
 
@@ -29,7 +35,8 @@ const createTask = async () => {
   try {
     await taskStore.createTask({
       ...newTask.value,
-      effort: newTask.value.effort as 1 | 2 | 3 | 4 | 5
+      effort: newTask.value.effort as 1 | 2 | 3 | 4 | 5,
+      task_type: newTask.value.task_type
     })
     resetForm()
     showCreateTaskForm.value = false
@@ -83,6 +90,14 @@ onUnmounted(() => {
                 </select>
               </div>
               <div class="mb-3">
+                <label class="form-label">Task-Typ</label>
+                <select v-model="newTask.task_type" class="form-control">
+                  <option value="daily">Täglich / Allgemein (immer sichtbar)</option>
+                  <option value="recurring">Wiederkehrend (zeitbasiert)</option>
+                  <option value="one-time">Einmalig</option>
+                </select>
+              </div>
+              <div class="mb-3" v-if="newTask.task_type === 'recurring'">
                 <label class="form-label">Tage bis zum nächsten Putzen</label>
                 <input type="number" v-model="newTask.recurrence_days" placeholder="3" class="form-control">
               </div>
@@ -95,14 +110,38 @@ onUnmounted(() => {
         </div>
       </section>
 
-      <!-- Task Listen danach -->
-      <section class="task-section">
-        <h3 class="section-title">Muss gemacht werden</h3>
-        <TaskList filter="todo" />
+      <!-- Category Tabs -->
+      <div class="task-category-tabs mb-4">
+        <button
+          @click="selectedCategory = 'daily'"
+          :class="['btn', 'btn-sm', selectedCategory === 'daily' ? 'btn-primary' : 'btn-outline-primary']"
+        >
+          <i class="bi bi-clock"></i> Alltagsaufgaben
+        </button>
+        <button
+          @click="selectedCategory = 'recurring'"
+          :class="['btn', 'btn-sm', selectedCategory === 'recurring' ? 'btn-primary' : 'btn-outline-primary']"
+        >
+          <i class="bi bi-arrow-repeat"></i> Putzaufgaben
+        </button>
+        <button
+          @click="selectedCategory = 'completed'"
+          :class="['btn', 'btn-sm', selectedCategory === 'completed' ? 'btn-primary' : 'btn-outline-primary']"
+        >
+          <i class="bi bi-check-circle"></i> Erledigt
+        </button>
+      </div>
+
+      <!-- Task Lists (conditional rendering) -->
+      <section v-if="selectedCategory === 'daily'" class="task-section">
+        <TaskList filter="daily-todo" />
       </section>
 
-      <section class="task-section mt-5">
-        <h3 class="section-title">Erledigt</h3>
+      <section v-if="selectedCategory === 'recurring'" class="task-section">
+        <TaskList filter="recurring-todo" />
+      </section>
+
+      <section v-if="selectedCategory === 'completed'" class="task-section">
         <TaskList filter="completed" />
       </section>
     </div>
@@ -112,5 +151,41 @@ onUnmounted(() => {
 <style scoped>
 .task-section {
   margin-bottom: var(--spacing-xl);
+}
+
+/* Category Tabs - Similar to StatsView time-period-tabs */
+.task-category-tabs {
+  display: flex;
+  gap: var(--spacing-sm);
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.task-category-tabs .btn {
+  flex: 1;
+  min-width: 140px;
+  font-weight: 500;
+  transition: all 0.2s ease;
+}
+
+/* Mobile: smaller buttons, allow wrapping */
+@media (max-width: 576px) {
+  .task-category-tabs .btn {
+    font-size: 0.8125rem;
+    padding: 0.5rem 0.75rem;
+    min-width: 120px;
+  }
+}
+
+/* Very small mobile: stack buttons */
+@media (max-width: 400px) {
+  .task-category-tabs {
+    flex-direction: column;
+  }
+
+  .task-category-tabs .btn-sm {
+    font-size: 0.875rem;
+    padding: 0.625rem 1rem;
+  }
 }
 </style>

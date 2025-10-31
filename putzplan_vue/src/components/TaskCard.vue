@@ -93,9 +93,10 @@ const handleDirectCompletion = async () => {
 
 // Berechnet Tage bis Task wieder fällig ist (nur für wiederkehrende Tasks die completed sind)
 // Verwendet CALENDAR DAYS (nicht 24h-Perioden), konsistent mit Backend-Cron-Logik
+// Daily tasks zeigen keine Fälligkeitsdaten
 const daysUntilDue = computed(() => {
      // Nur für wiederkehrende Tasks die completed sind
-     if (props.task.recurrence_days === 0 || !props.task.completed || !props.task.last_completed_at) {
+     if (props.task.task_type !== 'recurring' || props.task.recurrence_days === 0 || !props.task.completed || !props.task.last_completed_at) {
           return null
      }
 
@@ -175,8 +176,16 @@ const handleAssignmentConfirm = async (userId: string | null, permanent: boolean
                          <span class="info-value">{{ props.task.effort }}</span>
                     </div>
 
+                    <!-- Task Type Badge -->
+                    <div v-if="props.task.task_type === 'daily'" class="task-badge task-badge-daily">
+                         Täglich
+                    </div>
+                    <div v-else-if="props.task.task_type === 'one-time'" class="task-badge task-badge-one-time">
+                         Einmalig
+                    </div>
+
                     <!-- Für wiederkehrende Tasks -->
-                    <div v-if="props.task.recurrence_days > 0" class="task-info">
+                    <div v-if="props.task.task_type === 'recurring' && props.task.recurrence_days > 0" class="task-info">
                          <span class="info-label">Wiederholung:</span>
                          <span class="info-value">alle {{ props.task.recurrence_days }} Tage</span>
                     </div>
@@ -185,11 +194,6 @@ const handleAssignmentConfirm = async (userId: string | null, permanent: boolean
                     <div v-if="daysUntilDue !== null" class="task-info">
                          <span class="info-label">Fällig in:</span>
                          <span class="info-value">{{ daysUntilDue }} {{ daysUntilDue === 1 ? 'Tag' : 'Tagen' }}</span>
-                    </div>
-
-                    <!-- Für einmalige Tasks -->
-                    <div v-if="props.task.recurrence_days === 0" class="task-badge">
-                         Einmalige Aufgabe
                     </div>
                </div>
           </div>
@@ -364,6 +368,14 @@ const handleAssignmentConfirm = async (userId: string | null, permanent: boolean
      font-weight: 500;
      text-transform: uppercase;
      letter-spacing: 0.5px;
+}
+
+.task-badge-daily {
+     background: var(--bs-info);
+}
+
+.task-badge-one-time {
+     background: var(--bs-secondary);
 }
 
 .card-footer {
