@@ -390,11 +390,36 @@ const barChartOptions = {
 .time-period-tabs {
   display: flex;
   gap: 0.75rem;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   padding: 1rem;
   background: var(--color-background-elevated);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-sm);
+}
+
+.time-period-tabs .btn {
+  flex: 1;
+}
+
+/* Desktop: Limitiere maximale Breite der Buttons */
+@media (min-width: 768px) {
+  .time-period-tabs .btn {
+    flex: 0 1 auto;
+    min-width: 120px;
+  }
+}
+
+/* Mobile: Kleinere Buttons für bessere Platznutzung */
+@media (max-width: 480px) {
+  .time-period-tabs {
+    gap: 0.5rem;
+    padding: 0.75rem;
+  }
+
+  .time-period-tabs .btn-sm {
+    font-size: 0.75rem;
+    padding: 0.4rem 0.6rem;
+  }
 }
 
 .chart-container {

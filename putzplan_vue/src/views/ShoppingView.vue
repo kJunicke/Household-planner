@@ -112,9 +112,10 @@ onUnmounted(() => {
 
 <template>
   <div class="page-container">
-    <div class="section-title">
-      <i class="bi bi-cart3"></i> Einkaufsliste
-    </div>
+    <div class="container-fluid">
+      <div class="section-title">
+        <i class="bi bi-cart3"></i> Einkaufsliste
+      </div>
 
     <!-- Suchleiste mit Autocomplete -->
     <div class="search-container mb-4">
@@ -241,6 +242,7 @@ onUnmounted(() => {
         </div>
       </div>
     </div>
+    </div>
   </div>
 </template>
 
@@ -311,6 +313,7 @@ onUnmounted(() => {
   border-radius: var(--radius-md);
   border: 1px solid var(--color-border);
   transition: all 0.2s;
+  gap: var(--spacing-sm);
 }
 
 .shopping-item:hover {
@@ -320,11 +323,13 @@ onUnmounted(() => {
 
 .shopping-item.purchased {
   opacity: 0.7;
+  flex-wrap: wrap;
 }
 
 .form-check {
   flex: 1;
   margin: 0;
+  min-width: 0;
 }
 
 .form-check-input {
@@ -340,22 +345,35 @@ onUnmounted(() => {
 }
 
 .item-info {
+  flex: 0 0 100%;
   display: flex;
   align-items: center;
   gap: var(--spacing-sm);
+  margin-top: var(--spacing-xs);
+  padding-left: 2rem;
 }
 
 /* Mobile Optimierung */
-@media (max-width: 768px) {
+@media (max-width: 480px) {
   .shopping-item {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: var(--spacing-sm);
+    padding: var(--spacing-sm);
+  }
+
+  .form-check-label {
+    font-size: 0.9rem;
   }
 
   .item-info {
-    width: 100%;
-    justify-content: space-between;
+    padding-left: 1.75rem;
+  }
+
+  .item-info small {
+    font-size: 0.75rem;
+  }
+
+  .btn-sm {
+    padding: 0.25rem 0.4rem;
+    font-size: 0.75rem;
   }
 }
 </style>

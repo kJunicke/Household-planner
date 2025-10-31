@@ -383,18 +383,17 @@ const handleAssignmentConfirm = async (userId: string | null, permanent: boolean
      flex: 1;
      border-radius: var(--radius-md);
      overflow: hidden;
-     box-shadow: var(--shadow-sm);
 }
 
 .combined-main {
      flex: 1;
-     border-radius: 0;
+     border-radius: var(--radius-md) 0 0 var(--radius-md);
      border-right: none;
 }
 
 .combined-modifier {
      padding: 0.5rem 0.625rem;
-     border-radius: 0;
+     border-radius: 0 var(--radius-md) var(--radius-md) 0;
      border-left: 2px solid rgba(255, 255, 255, 0.3);
      display: flex;
      align-items: center;
@@ -497,19 +496,26 @@ const handleAssignmentConfirm = async (userId: string | null, permanent: boolean
      border-color: var(--color-primary-light);
 }
 
-/* Mobile: Stack badge below buttons if needed */
+/* Mobile: Ensure buttons and badge stay in one row */
 @media (max-width: 480px) {
      .footer-content {
-          flex-wrap: wrap;
+          gap: var(--spacing-sm);
      }
 
      .button-group {
-          flex: 0 0 100%;
-          flex-wrap: nowrap;
+          min-width: 0; /* Allow flex items to shrink below content size */
+     }
+
+     .combined-button-group,
+     .button-group > .btn {
+          font-size: 0.75rem;
+          padding: 0.4rem 0.5rem;
      }
 
      .assignment-badge {
-          margin-left: auto;
+          width: 32px;
+          height: 32px;
+          font-size: 0.7rem;
      }
 }
 </style>
