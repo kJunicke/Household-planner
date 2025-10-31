@@ -90,8 +90,10 @@ export const useShoppingStore = defineStore('shopping', () => {
       return null
     }
 
-    // Lokalen State aktualisieren
-    items.value.push(data)
+    // Lokalen State aktualisieren - nur wenn nicht schon vorhanden (Race Condition mit Realtime)
+    if (!items.value.find(i => i.shopping_item_id === data.shopping_item_id)) {
+      items.value.push(data)
+    }
     return data
   }
 
