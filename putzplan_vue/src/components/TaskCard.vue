@@ -154,6 +154,13 @@ const handleAssignmentConfirm = async (userId: string | null, permanent: boolean
 const subtasks = computed(() => taskStore.getSubtasks(props.task.task_id))
 const completedSubtasksCount = computed(() => subtasks.value.filter((s: Task) => s.completed).length)
 
+// Gruppiere Subtasks nach ihrem individuellen Punktemodus
+const subtasksByMode = computed(() => ({
+     checklist: subtasks.value.filter(s => s.subtask_points_mode === 'checklist'),
+     deduct: subtasks.value.filter(s => s.subtask_points_mode === 'deduct'),
+     bonus: subtasks.value.filter(s => s.subtask_points_mode === 'bonus')
+}))
+
 const toggleSubtasks = () => {
      subtasksExpanded.value = !subtasksExpanded.value
 }
@@ -167,13 +174,14 @@ const closeSubtaskManagementModal = () => {
      showSubtaskManagementModal.value = false
 }
 
-const handleCreateSubtask = async (subtaskData: { title: string; effort: 1 | 2 | 3 | 4 | 5 }) => {
+const handleCreateSubtask = async (subtaskData: { title: string; effort: 1 | 2 | 3 | 4 | 5; subtask_points_mode: 'checklist' | 'deduct' | 'bonus' }) => {
      // Bestimme order_index für neuen Subtask (höchster existierender + 1)
      const maxOrderIndex = subtasks.value.reduce((max: number, s: Task) => Math.max(max, s.order_index), 0)
 
      await taskStore.createTask({
           title: subtaskData.title,
           effort: subtaskData.effort,
+          subtask_points_mode: subtaskData.subtask_points_mode, // NEU: Individueller Punktemodus pro Subtask!
           recurrence_days: props.task.recurrence_days, // Erbt recurrence von Parent
           task_type: props.task.task_type, // Erbt task_type von Parent
           parent_task_id: props.task.task_id, // WICHTIG: Setzt parent_task_id!
@@ -181,8 +189,8 @@ const handleCreateSubtask = async (subtaskData: { title: string; effort: 1 | 2 |
      })
 }
 
-const handleUpdatePointsMode = async (mode: 'checklist' | 'deduct' | 'bonus') => {
-     await taskStore.updateTask(props.task.task_id, {
+const handleUpdateSubtaskPointsMode = async (subtaskId: string, mode: 'checklist' | 'deduct' | 'bonus') => {
+     await taskStore.updateTask(subtaskId, {
           subtask_points_mode: mode
      })
 }
@@ -238,7 +246,7 @@ const handleUpdatePointsMode = async (mode: 'checklist' | 'deduct' | 'bonus') =>
                     </div>
                </div>
 
-               <!-- SUBTASKS SECTION (nur für Parent Tasks) -->
+               <!-- SUBTASKS SECTION (nur für Parent Tasks) - Gruppiert nach Punktemodus -->
                <div v-if="!props.task.parent_task_id && subtasks.length > 0" class="subtasks-section">
                     <div class="subtasks-header" @click="toggleSubtasks">
                          <span class="toggle-icon">{{ subtasksExpanded ? '▼' : '▶' }}</span>
@@ -246,11 +254,44 @@ const handleUpdatePointsMode = async (mode: 'checklist' | 'deduct' | 'bonus') =>
                     </div>
 
                     <div v-show="subtasksExpanded" class="subtasks-list">
-                         <SubtaskItem
-                              v-for="subtask in subtasks"
-                              :key="subtask.task_id"
-                              :task="subtask"
-                         />
+                         <!-- Checkliste Gruppe -->
+                         <div v-if="subtasksByMode.checklist.length > 0" class="subtask-group">
+                              <div class="subtask-group-header">
+                                   <span class="subtask-group-badge badge-checklist">✓ Checkliste</span>
+                                   <span class="subtask-group-count">{{ subtasksByMode.checklist.length }}</span>
+                              </div>
+                              <SubtaskItem
+                                   v-for="subtask in subtasksByMode.checklist"
+                                   :key="subtask.task_id"
+                                   :task="subtask"
+                              />
+                         </div>
+
+                         <!-- Abziehen Gruppe -->
+                         <div v-if="subtasksByMode.deduct.length > 0" class="subtask-group">
+                              <div class="subtask-group-header">
+                                   <span class="subtask-group-badge badge-deduct">− Abziehen</span>
+                                   <span class="subtask-group-count">{{ subtasksByMode.deduct.length }}</span>
+                              </div>
+                              <SubtaskItem
+                                   v-for="subtask in subtasksByMode.deduct"
+                                   :key="subtask.task_id"
+                                   :task="subtask"
+                              />
+                         </div>
+
+                         <!-- Bonus Gruppe -->
+                         <div v-if="subtasksByMode.bonus.length > 0" class="subtask-group">
+                              <div class="subtask-group-header">
+                                   <span class="subtask-group-badge badge-bonus">+ Bonus</span>
+                                   <span class="subtask-group-count">{{ subtasksByMode.bonus.length }}</span>
+                              </div>
+                              <SubtaskItem
+                                   v-for="subtask in subtasksByMode.bonus"
+                                   :key="subtask.task_id"
+                                   :task="subtask"
+                              />
+                         </div>
                     </div>
                </div>
 
@@ -262,19 +303,6 @@ const handleUpdatePointsMode = async (mode: 'checklist' | 'deduct' | 'bonus') =>
                     >
                          ⚙ Subtasks verwalten
                     </button>
-
-                    <!-- Points Mode Badge (wenn Subtasks vorhanden) -->
-                    <div v-if="subtasks.length > 0" class="points-mode-badge">
-                         <span v-if="props.task.subtask_points_mode === 'checklist'" class="badge badge-checklist">
-                              ✓ Checkliste
-                         </span>
-                         <span v-else-if="props.task.subtask_points_mode === 'deduct'" class="badge badge-deduct">
-                              − Abziehen
-                         </span>
-                         <span v-else-if="props.task.subtask_points_mode === 'bonus'" class="badge badge-bonus">
-                              + Bonus
-                         </span>
-                    </div>
                </div>
           </div>
 
@@ -397,7 +425,7 @@ const handleUpdatePointsMode = async (mode: 'checklist' | 'deduct' | 'bonus') =>
                :existingSubtasks="subtasks"
                @close="closeSubtaskManagementModal"
                @createSubtask="handleCreateSubtask"
-               @updatePointsMode="handleUpdatePointsMode"
+               @updateSubtaskPointsMode="handleUpdateSubtaskPointsMode"
           />
      </div>
 
@@ -631,28 +659,42 @@ const handleUpdatePointsMode = async (mode: 'checklist' | 'deduct' | 'bonus') =>
      margin-top: var(--spacing-sm);
      display: flex;
      flex-direction: column;
+     gap: var(--spacing-md);
+}
+
+/* Subtask Groups (by points mode) */
+.subtask-group {
+     display: flex;
+     flex-direction: column;
      gap: var(--spacing-xs);
 }
 
-/* Manage Subtasks Section */
-.add-subtask-section {
-     margin-top: var(--spacing-md);
-}
-
-/* Points Mode Badge */
-.points-mode-badge {
-     margin-top: var(--spacing-xs);
+.subtask-group-header {
      display: flex;
-     justify-content: center;
+     align-items: center;
+     justify-content: space-between;
+     padding: 0.375rem 0.625rem;
+     background: var(--color-background-muted);
+     border-radius: var(--radius-sm);
+     margin-bottom: var(--spacing-xs);
 }
 
-.points-mode-badge .badge {
+.subtask-group-badge {
      font-size: 0.75rem;
      padding: 0.25rem 0.625rem;
      border-radius: var(--radius-sm);
-     font-weight: 500;
+     font-weight: 600;
      text-transform: uppercase;
      letter-spacing: 0.5px;
+}
+
+.subtask-group-count {
+     font-size: 0.75rem;
+     font-weight: 600;
+     color: var(--color-text-secondary);
+     background: var(--color-background-elevated);
+     padding: 0.25rem 0.5rem;
+     border-radius: var(--radius-sm);
 }
 
 .badge-checklist {
@@ -668,6 +710,11 @@ const handleUpdatePointsMode = async (mode: 'checklist' | 'deduct' | 'bonus') =>
 .badge-bonus {
      background: var(--bs-success);
      color: white;
+}
+
+/* Manage Subtasks Section */
+.add-subtask-section {
+     margin-top: var(--spacing-md);
 }
 
 /* Mobile: Ensure buttons and badge stay in one row */

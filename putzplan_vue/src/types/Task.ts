@@ -25,12 +25,12 @@ export interface Task {
   parent_task_id: string | null // NULL = parent task, UUID = subtask
   order_index: number // Sorting order for subtasks within parent
 
-  // Subtask Points Mode - Only relevant for parent tasks with subtasks
-  // Determines how subtask effort affects parent task points calculation
+  // Subtask Points Mode - Only relevant for SUBTASKS (parent_task_id IS NOT NULL)
+  // Determines how THIS INDIVIDUAL subtask effort affects points calculation when completed
   subtask_points_mode: 'checklist' | 'deduct' | 'bonus'
-  // 'checklist': Subtasks count 0 points (only parent completion gives effort points)
-  // 'deduct': Parent effort - SUM(completed subtask efforts)
-  // 'bonus': Subtasks give full effort points in addition to parent
+  // 'checklist': This subtask counts 0 points (only for tracking completion)
+  // 'deduct': This subtask effort is deducted from parent effort when completed
+  // 'bonus': This subtask gives full effort points in addition to parent
   }
 
 export interface TaskCompletion {

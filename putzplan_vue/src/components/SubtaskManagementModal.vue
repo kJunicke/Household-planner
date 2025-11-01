@@ -9,44 +9,31 @@ interface Props {
 
 interface Emits {
   (e: 'close'): void
-  (e: 'createSubtask', subtaskData: { title: string; effort: 1 | 2 | 3 | 4 | 5 }): void
-  (e: 'updatePointsMode', mode: 'checklist' | 'deduct' | 'bonus'): void
+  (e: 'createSubtask', subtaskData: { title: string; effort: 1 | 2 | 3 | 4 | 5; subtask_points_mode: 'checklist' | 'deduct' | 'bonus' }): void
+  (e: 'updateSubtaskPointsMode', subtaskId: string, mode: 'checklist' | 'deduct' | 'bonus'): void
 }
 
 const props = defineProps<Props>()
 const emit = defineEmits<Emits>()
 
-// Points Mode Selection
-const selectedMode = ref<'checklist' | 'deduct' | 'bonus'>(props.parentTask.subtask_points_mode)
-
 // Add Subtask Form
 const newSubtaskTitle = ref('')
 const newSubtaskEffort = ref<1 | 2 | 3 | 4 | 5>(1)
+const newSubtaskPointsMode = ref<'checklist' | 'deduct' | 'bonus'>('checklist')
 
-// Points Mode descriptions
+// Points Mode descriptions (für Create Form Hint)
 const modeDescriptions = {
   checklist: {
     title: '✓ Checkliste',
-    description: 'Unteraufgaben geben keine Punkte. Nur das Abschließen der Hauptaufgabe zählt.',
-    example: `Beispiel: "${props.parentTask.title}" gibt ${props.parentTask.effort} Punkte`
+    description: 'Diese Unteraufgabe gibt keine Punkte',
   },
   deduct: {
     title: '− Abziehen',
-    description: 'Unteraufgaben-Aufwand wird von der Hauptaufgabe abgezogen.',
-    example: computed(() => {
-      const subtaskEffortSum = props.existingSubtasks.reduce((sum, s) => sum + s.effort, 0)
-      const remainingEffort = Math.max(0, props.parentTask.effort - subtaskEffortSum)
-      return `Beispiel: "${props.parentTask.title}" gibt ${remainingEffort} Punkte (${props.parentTask.effort} - ${subtaskEffortSum} Unteraufgaben-Punkte)`
-    })
+    description: 'Aufwand wird von Hauptaufgabe abgezogen',
   },
   bonus: {
     title: '+ Bonus',
-    description: 'Unteraufgaben geben zusätzliche Punkte zur Hauptaufgabe.',
-    example: computed(() => {
-      const subtaskEffortSum = props.existingSubtasks.reduce((sum, s) => sum + s.effort, 0)
-      const totalEffort = props.parentTask.effort + subtaskEffortSum
-      return `Beispiel: "${props.parentTask.title}" gibt ${totalEffort} Punkte (${props.parentTask.effort} + ${subtaskEffortSum} Unteraufgaben-Punkte)`
-    })
+    description: 'Gibt zusätzliche Bonuspunkte',
   }
 }
 
@@ -59,27 +46,22 @@ const handleAddSubtask = () => {
 
   emit('createSubtask', {
     title: newSubtaskTitle.value.trim(),
-    effort: newSubtaskEffort.value
+    effort: newSubtaskEffort.value,
+    subtask_points_mode: newSubtaskPointsMode.value
   })
 
   // Reset form
   newSubtaskTitle.value = ''
   newSubtaskEffort.value = 1
-}
-
-const handleSavePointsMode = () => {
-  if (selectedMode.value !== props.parentTask.subtask_points_mode) {
-    emit('updatePointsMode', selectedMode.value)
-  }
+  newSubtaskPointsMode.value = 'checklist' // Reset to default
 }
 
 const handleClose = () => {
   emit('close')
 }
 
-const handleConfirm = () => {
-  handleSavePointsMode()
-  handleClose()
+const handlePointsModeChange = (subtaskId: string, mode: 'checklist' | 'deduct' | 'bonus') => {
+  emit('updateSubtaskPointsMode', subtaskId, mode)
 }
 </script>
 
@@ -104,22 +86,49 @@ const handleConfirm = () => {
                 placeholder="Name der Unteraufgabe"
                 @keyup.enter="handleAddSubtask"
               />
-              <div class="effort-selector">
-                <label
-                  v-for="effort in [1, 2, 3, 4, 5]"
-                  :key="effort"
-                  class="effort-option"
-                  :class="{ active: newSubtaskEffort === effort }"
-                >
-                  <input
-                    type="radio"
-                    :value="effort"
-                    v-model.number="newSubtaskEffort"
-                    name="subtaskEffort"
-                  />
-                  {{ effort }}
-                </label>
+              <!-- Effort Selector -->
+              <div class="form-row">
+                <label class="form-label-inline">Aufwand:</label>
+                <div class="effort-selector">
+                  <label
+                    v-for="effort in [1, 2, 3, 4, 5]"
+                    :key="effort"
+                    class="effort-option"
+                    :class="{ active: newSubtaskEffort === effort }"
+                  >
+                    <input
+                      type="radio"
+                      :value="effort"
+                      v-model.number="newSubtaskEffort"
+                      name="subtaskEffort"
+                    />
+                    {{ effort }}
+                  </label>
+                </div>
               </div>
+
+              <!-- Points Mode Selector -->
+              <div class="form-row">
+                <label class="form-label-inline">Punktemodus:</label>
+                <div class="points-mode-selector">
+                  <label
+                    v-for="mode in ['checklist', 'deduct', 'bonus'] as const"
+                    :key="mode"
+                    class="mode-option-compact"
+                    :class="{ active: newSubtaskPointsMode === mode }"
+                  >
+                    <input
+                      type="radio"
+                      :value="mode"
+                      v-model="newSubtaskPointsMode"
+                      name="newSubtaskPointsMode"
+                    />
+                    <span class="mode-icon">{{ modeDescriptions[mode].title.substring(0, 1) }}</span>
+                    <span class="mode-text">{{ modeDescriptions[mode].title.substring(2) }}</span>
+                  </label>
+                </div>
+              </div>
+
               <button
                 class="btn btn-sm btn-success"
                 :disabled="!canAddSubtask"
@@ -142,48 +151,28 @@ const handleConfirm = () => {
               >
                 <span class="subtask-title">{{ subtask.title }}</span>
                 <span class="subtask-effort">{{ subtask.effort }}</span>
-              </div>
-            </div>
-          </div>
 
-          <!-- SECTION 3: Points Mode Selection -->
-          <div class="section">
-            <h6 class="section-title">Punktemodus für Unteraufgaben</h6>
-
-            <div class="mode-options">
-              <label
-                v-for="mode in ['checklist', 'deduct', 'bonus'] as const"
-                :key="mode"
-                class="mode-option"
-                :class="{ active: selectedMode === mode }"
-              >
-                <input
-                  type="radio"
-                  :value="mode"
-                  v-model="selectedMode"
-                  name="pointsMode"
-                />
-                <div class="mode-content">
-                  <div class="mode-header">
-                    <span class="mode-title">{{ modeDescriptions[mode].title }}</span>
-                  </div>
-                  <p class="mode-description">{{ modeDescriptions[mode].description }}</p>
-                  <p class="mode-example">{{ typeof modeDescriptions[mode].example === 'string' ? modeDescriptions[mode].example : modeDescriptions[mode].example.value }}</p>
+                <!-- Points Mode Selector für existierende Subtasks -->
+                <div class="subtask-mode-selector">
+                  <button
+                    v-for="mode in ['checklist', 'deduct', 'bonus'] as const"
+                    :key="mode"
+                    class="mode-btn"
+                    :class="{ active: subtask.subtask_points_mode === mode }"
+                    @click="handlePointsModeChange(subtask.task_id, mode)"
+                    :title="modeDescriptions[mode].title"
+                  >
+                    {{ modeDescriptions[mode].title.substring(0, 1) }}
+                  </button>
                 </div>
-              </label>
+              </div>
             </div>
           </div>
         </div>
 
         <div class="modal-footer">
           <button class="btn btn-secondary" @click="handleClose">
-            Abbrechen
-          </button>
-          <button
-            class="btn btn-primary"
-            @click="handleConfirm"
-          >
-            Speichern
+            Schließen
           </button>
         </div>
       </div>
@@ -352,11 +341,26 @@ const handleConfirm = () => {
   font-size: 0.875rem;
 }
 
+/* Form Row Layout */
+.form-row {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+}
+
+.form-label-inline {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--color-text-primary);
+  min-width: 100px;
+  margin: 0;
+}
+
 /* Effort Selector */
 .effort-selector {
   display: flex;
   gap: 0.5rem;
-  justify-content: center;
+  flex: 1;
 }
 
 .effort-option {
@@ -387,6 +391,89 @@ const handleConfirm = () => {
 
 .effort-option input[type="radio"] {
   display: none;
+}
+
+/* Points Mode Selector (for Add Form) */
+.points-mode-selector {
+  display: flex;
+  gap: 0.5rem;
+  flex: 1;
+}
+
+.mode-option-compact {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 0.5rem 0.75rem;
+  border: 2px solid var(--color-border);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: all var(--transition-base);
+  background: var(--color-background);
+  min-width: 70px;
+}
+
+.mode-option-compact:hover {
+  border-color: var(--color-primary);
+  background: var(--color-background-elevated);
+}
+
+.mode-option-compact.active {
+  border-color: var(--color-primary);
+  background: var(--color-primary);
+  color: white;
+}
+
+.mode-option-compact input[type="radio"] {
+  display: none;
+}
+
+.mode-option-compact .mode-icon {
+  font-size: 1.25rem;
+  font-weight: 700;
+  margin-bottom: 0.25rem;
+}
+
+.mode-option-compact .mode-text {
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+/* Subtask Mode Selector (for Existing Subtasks) */
+.subtask-mode-selector {
+  display: flex;
+  gap: 0.25rem;
+  margin-left: auto;
+}
+
+.mode-btn {
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-background);
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  transition: all var(--transition-base);
+  font-size: 0.875rem;
+  font-weight: 700;
+}
+
+.mode-btn:hover {
+  border-color: var(--color-primary);
+  background: var(--color-background-elevated);
+}
+
+.mode-btn.active {
+  border-color: var(--color-primary);
+  background: var(--color-primary);
+  color: white;
 }
 
 .add-subtask-form .btn {

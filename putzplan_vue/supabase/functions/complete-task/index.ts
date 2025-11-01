@@ -68,10 +68,10 @@ Deno.serve(async (req) => {
       )
     }
 
-    // 5. Fetch task details (for subtask_points_mode + parent_task_id check)
+    // 5. Fetch task details (for parent_task_id check + assignment_permanent)
     const { data: taskDetails, error: fetchError } = await supabase
       .from('tasks')
-      .select('effort, parent_task_id, subtask_points_mode, assignment_permanent')
+      .select('effort, parent_task_id, assignment_permanent')
       .eq('task_id', taskId)
       .single()
 
@@ -83,46 +83,67 @@ Deno.serve(async (req) => {
       )
     }
 
-    // 6. Calculate final effort based on subtask_points_mode (only for PARENT tasks with NO effortOverride)
+    // 6. Calculate final effort based on SUBTASK-level subtask_points_mode (only for PARENT tasks with NO effortOverride)
     let finalEffort = taskDetails.effort // Default: use task's base effort
     let autoReason: string | undefined = undefined
 
-    // Only apply subtask_points_mode logic if:
+    // Only apply subtask points logic if:
     // - This is a PARENT task (parent_task_id === null)
     // - User did NOT provide effortOverride (user override takes precedence!)
     if (taskDetails.parent_task_id === null && effortOverride === undefined) {
-      const mode = taskDetails.subtask_points_mode as 'checklist' | 'deduct' | 'bonus' | null
+      // Fetch ALL subtasks for this parent task (with their individual subtask_points_mode)
+      const { data: subtasks, error: subtasksError } = await supabase
+        .from('tasks')
+        .select('task_id, effort, completed, subtask_points_mode')
+        .eq('parent_task_id', taskId)
 
-      if (mode === 'deduct' || mode === 'checklist') {
-        // Fetch ALL subtasks for this parent task
-        const { data: subtasks, error: subtasksError } = await supabase
-          .from('tasks')
-          .select('task_id, effort, completed')
-          .eq('parent_task_id', taskId)
+      if (subtasksError) {
+        console.error('Error fetching subtasks:', subtasksError)
+        // Don't fail entire request, just use default effort
+      } else if (subtasks && subtasks.length > 0) {
+        // Group completed subtasks by their individual points mode
+        const completedSubtasks = subtasks.filter(s => s.completed)
 
-        if (subtasksError) {
-          console.error('Error fetching subtasks:', subtasksError)
-          // Don't fail entire request, just use default effort
-        } else if (subtasks && subtasks.length > 0) {
-          if (mode === 'checklist') {
-            // Checklist mode: Subtasks count 0 points, only parent gives points
-            // NO change to finalEffort (already set to taskDetails.effort)
-            autoReason = 'Checklist Mode: Subtasks zählen nicht'
-          } else if (mode === 'deduct') {
-            // Deduct mode: Subtract completed subtask efforts from parent effort
-            const completedSubtaskEffortSum = subtasks
-              .filter(s => s.completed)
-              .reduce((sum, s) => sum + s.effort, 0)
+        const checklistSubtasks = completedSubtasks.filter(s => s.subtask_points_mode === 'checklist')
+        const deductSubtasks = completedSubtasks.filter(s => s.subtask_points_mode === 'deduct')
+        const bonusSubtasks = completedSubtasks.filter(s => s.subtask_points_mode === 'bonus')
 
-            finalEffort = Math.max(0, taskDetails.effort - completedSubtaskEffortSum)
+        const checklistCount = checklistSubtasks.length
+        const deductSum = deductSubtasks.reduce((sum, s) => sum + s.effort, 0)
+        const bonusSum = bonusSubtasks.reduce((sum, s) => sum + s.effort, 0)
 
-            if (completedSubtaskEffortSum > 0) {
-              autoReason = `Deduct Mode: ${taskDetails.effort} - ${completedSubtaskEffortSum} Subtask-Punkte = ${finalEffort}`
-            }
-          }
+        // Calculate final effort
+        // Formula: parentEffort - deductSum + bonusSum
+        // (checklist subtasks count 0, so they're ignored in calculation)
+        finalEffort = taskDetails.effort - deductSum + bonusSum
+
+        // VALIDATION: Prevent negative points
+        if (finalEffort < 0) {
+          return new Response(
+            JSON.stringify({
+              error: 'Nicht genug Punkte!',
+              message: `Abziehen-Subtasks (${deductSum} Punkte) übersteigen Parent-Aufwand (${taskDetails.effort} Punkte). Bitte passe die Subtask-Aufwände oder den Parent-Aufwand an.`,
+              details: {
+                parentEffort: taskDetails.effort,
+                deductSum,
+                bonusSum,
+                resultingEffort: finalEffort
+              }
+            }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          )
+        }
+
+        // Build auto-reason for tracking
+        const reasonParts: string[] = []
+        if (checklistCount > 0) reasonParts.push(`${checklistCount} Checkliste`)
+        if (deductSum > 0) reasonParts.push(`${deductSum} abgezogen`)
+        if (bonusSum > 0) reasonParts.push(`${bonusSum} Bonus`)
+
+        if (reasonParts.length > 0) {
+          autoReason = `Subtasks: ${reasonParts.join(', ')} → ${finalEffort} Punkte`
         }
       }
-      // mode === 'bonus': Subtasks count separately (handled via separate completions) - NO change to parent effort
     }
 
     // 7. INSERT task_completion (RLS checks: task belongs to user's household + user_id matches auth)
@@ -217,7 +238,7 @@ Deno.serve(async (req) => {
 
   curl -i --location --request POST 'http://127.0.0.1:54321/functions/v1/complete-task' \
     --header 'Authorization: Bearer YOUR_USER_JWT_TOKEN' \
-    --header 'Content-Type: application/json' \
+    --header 'Content-Type': application/json' \
     --data '{"taskId":"some-uuid-here","effortOverride":5,"overrideReason":"War viel dreckiger als gedacht"}'
 
 */

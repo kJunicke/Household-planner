@@ -255,8 +255,11 @@ const handleAssignmentConfirm = async (userId: string | null, permanent: boolean
   font-size: 0.875rem;
   color: var(--color-text-primary);
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  display: -webkit-box;
+  -webkit-line-clamp: 2; /* Max 2 Zeilen */
+  -webkit-box-orient: vertical;
+  line-height: 1.4;
+  word-break: break-word;
 }
 
 .subtask-effort {
