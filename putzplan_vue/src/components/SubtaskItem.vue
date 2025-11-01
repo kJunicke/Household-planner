@@ -119,6 +119,7 @@ const handleAssignmentConfirm = async (userId: string | null, permanent: boolean
         placeholder="Subtask Name"
       />
       <input
+        v-if="task.subtask_points_mode !== 'checklist'"
         type="number"
         v-model.number="editForm.effort"
         class="form-control form-control-sm effort-input"
@@ -131,10 +132,10 @@ const handleAssignmentConfirm = async (userId: string | null, permanent: boolean
 
     <!-- Normal Display (2 Zeilen Layout) -->
     <div v-else class="subtask-wrapper">
-      <!-- Zeile 1: Titel + Effort -->
+      <!-- Zeile 1: Titel (+ Effort nur bei non-checklist) -->
       <div class="subtask-header">
         <span class="subtask-title">{{ task.title }}</span>
-        <span class="subtask-effort">{{ task.effort }}</span>
+        <span v-if="task.subtask_points_mode !== 'checklist'" class="subtask-effort">{{ task.effort }}</span>
       </div>
 
       <!-- Zeile 2: Alle Action Buttons -->
@@ -148,10 +149,10 @@ const handleAssignmentConfirm = async (userId: string | null, permanent: boolean
           ✓ Sauber
         </button>
         <button
+          v-if="!task.completed && task.subtask_points_mode !== 'checklist'"
           class="subtask-btn subtask-btn-success"
           @click="openCompletionModal"
           title="Mehr Aufwand"
-          v-if="!task.completed"
         >
           ↑
         </button>

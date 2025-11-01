@@ -86,28 +86,7 @@ const handlePointsModeChange = (subtaskId: string, mode: 'checklist' | 'deduct' 
                 placeholder="Name der Unteraufgabe"
                 @keyup.enter="handleAddSubtask"
               />
-              <!-- Effort Selector -->
-              <div class="form-row">
-                <label class="form-label-inline">Aufwand:</label>
-                <div class="effort-selector">
-                  <label
-                    v-for="effort in [1, 2, 3, 4, 5]"
-                    :key="effort"
-                    class="effort-option"
-                    :class="{ active: newSubtaskEffort === effort }"
-                  >
-                    <input
-                      type="radio"
-                      :value="effort"
-                      v-model.number="newSubtaskEffort"
-                      name="subtaskEffort"
-                    />
-                    {{ effort }}
-                  </label>
-                </div>
-              </div>
-
-              <!-- Points Mode Selector -->
+              <!-- Points Mode Selector (zuerst, da es die Aufwand-Anzeige steuert) -->
               <div class="form-row">
                 <label class="form-label-inline">Punktemodus:</label>
                 <div class="points-mode-selector">
@@ -125,6 +104,27 @@ const handlePointsModeChange = (subtaskId: string, mode: 'checklist' | 'deduct' 
                     />
                     <span class="mode-icon">{{ modeDescriptions[mode].title.substring(0, 1) }}</span>
                     <span class="mode-text">{{ modeDescriptions[mode].title.substring(2) }}</span>
+                  </label>
+                </div>
+              </div>
+
+              <!-- Effort Selector (nur bei non-checklist) -->
+              <div v-if="newSubtaskPointsMode !== 'checklist'" class="form-row">
+                <label class="form-label-inline">Aufwand:</label>
+                <div class="effort-selector">
+                  <label
+                    v-for="effort in [1, 2, 3, 4, 5]"
+                    :key="effort"
+                    class="effort-option"
+                    :class="{ active: newSubtaskEffort === effort }"
+                  >
+                    <input
+                      type="radio"
+                      :value="effort"
+                      v-model.number="newSubtaskEffort"
+                      name="subtaskEffort"
+                    />
+                    {{ effort }}
                   </label>
                 </div>
               </div>
@@ -150,7 +150,7 @@ const handlePointsModeChange = (subtaskId: string, mode: 'checklist' | 'deduct' 
                 :class="{ completed: subtask.completed }"
               >
                 <span class="subtask-title">{{ subtask.title }}</span>
-                <span class="subtask-effort">{{ subtask.effort }}</span>
+                <span v-if="subtask.subtask_points_mode !== 'checklist'" class="subtask-effort">{{ subtask.effort }}</span>
 
                 <!-- Points Mode Selector für existierende Subtasks -->
                 <div class="subtask-mode-selector">

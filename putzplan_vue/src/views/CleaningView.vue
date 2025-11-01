@@ -8,7 +8,18 @@ const showCreateTaskForm = ref(false)
 
 // Tab state for task categories
 type TaskCategory = 'daily' | 'recurring' | 'completed'
-const selectedCategory = ref<TaskCategory>('daily')
+const STORAGE_KEY = 'putzplan_selected_category'
+
+// Load from localStorage or default to 'daily'
+const selectedCategory = ref<TaskCategory>(
+  (localStorage.getItem(STORAGE_KEY) as TaskCategory) || 'daily'
+)
+
+// Save to localStorage when category changes
+const selectCategory = (category: TaskCategory) => {
+  selectedCategory.value = category
+  localStorage.setItem(STORAGE_KEY, category)
+}
 
 const newTask = ref({
   title: '',
@@ -113,19 +124,19 @@ onUnmounted(() => {
       <!-- Category Tabs -->
       <div class="task-category-tabs mb-4">
         <button
-          @click="selectedCategory = 'daily'"
+          @click="selectCategory('daily')"
           :class="['btn', 'btn-sm', selectedCategory === 'daily' ? 'btn-primary' : 'btn-outline-primary']"
         >
           <i class="bi bi-clock"></i> Alltagsaufgaben
         </button>
         <button
-          @click="selectedCategory = 'recurring'"
+          @click="selectCategory('recurring')"
           :class="['btn', 'btn-sm', selectedCategory === 'recurring' ? 'btn-primary' : 'btn-outline-primary']"
         >
           <i class="bi bi-arrow-repeat"></i> Putzaufgaben
         </button>
         <button
-          @click="selectedCategory = 'completed'"
+          @click="selectCategory('completed')"
           :class="['btn', 'btn-sm', selectedCategory === 'completed' ? 'btn-primary' : 'btn-outline-primary']"
         >
           <i class="bi bi-check-circle"></i> Erledigt
