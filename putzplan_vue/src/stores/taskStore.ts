@@ -1,4 +1,4 @@
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import { defineStore } from 'pinia'
 import type { Task, TaskCompletion } from '@/types/Task'
 import { supabase } from '@/lib/supabase'
@@ -139,9 +139,9 @@ export const useTaskStore = defineStore('tasks', () => {
     }
 
     // CREATE - Neue Task erstellen
-    // completed, last_completed_at, assigned_to, assignment_permanent sind optional - Database setzt Defaults
+    // completed, last_completed_at, assigned_to, assignment_permanent, parent_task_id, order_index sind optional - Database setzt Defaults
     // task_type defaults to 'recurring' if not provided (for backwards compatibility)
-    const createTask = async (taskData: Omit<Task, 'task_id' | 'household_id' | 'completed' | 'last_completed_at' | 'assigned_to' | 'assignment_permanent'>) => {
+    const createTask = async (taskData: Partial<Task> & Pick<Task, 'title' | 'effort' | 'recurrence_days' | 'task_type'>) => {
         const householdStore = useHouseholdStore()
 
         if (!householdStore.currentHousehold) {
@@ -490,6 +490,18 @@ export const useTaskStore = defineStore('tasks', () => {
         return true
     }
 
+    // SUBTASKS - Helper für Self-Referencing Tasks
+    // Parent Tasks = tasks ohne parent_task_id
+    const parentTasks = computed(() =>
+        tasks.value.filter(t => t.parent_task_id === null)
+    )
+
+    // Subtasks für eine bestimmte Parent Task holen (sortiert nach order_index)
+    const getSubtasks = (parentTaskId: string) =>
+        tasks.value
+            .filter(t => t.parent_task_id === parentTaskId)
+            .sort((a, b) => a.order_index - b.order_index)
+
     // Return - was andere Komponenten verwenden können
     return {
         tasks,
@@ -507,6 +519,9 @@ export const useTaskStore = defineStore('tasks', () => {
         assignTask,
         fetchCompletions,
         deleteCompletion,
-        deleteAllCompletions
+        deleteAllCompletions,
+        // Subtasks
+        parentTasks,
+        getSubtasks
     }
 })

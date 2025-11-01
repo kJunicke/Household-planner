@@ -56,13 +56,23 @@
   - Frontend: Sub-Tabs in CleaningView (Alltagsaufgaben / Putzaufgaben / Erledigt)
   - Conditional rendering mit `v-if` für bessere Übersicht
   - Mobile-responsive Button-Tab UI
-- [ ] **Subtasks Feature** - Nested tasks für komplexe Aufgaben (z.B. Wäsche: Sortieren, Waschen, Aufhängen)
-  - Neue Tabelle `subtasks` mit FK zu `tasks.task_id`
-  - Subtask UI in TaskCard (collapsible list)
-  - Subtask-Completions separat tracken
-  - Parent task wird automatisch "completed" wenn alle subtasks done
+- [x] ✅ **Subtasks Feature** - Nested tasks für komplexe Aufgaben (z.B. Wäsche: Sortieren, Waschen, Aufhängen)
+  - Self-referencing FK `parent_task_id` in tasks table (statt separate subtasks table)
+  - SubtaskManagementModal für Subtask-Verwaltung (Create, Edit, Delete, Reorder)
+  - Subtask-Completion-Modes: `'all'` (alle müssen), `'any'` (einer reicht), `'none'` (optional)
+  - Separates Effort-System: Parent-Task-Effort + individuelle Subtask-Effort-Werte
+  - Collapsible Subtask-Liste in TaskCard mit Expand/Collapse-Icon
+  - Subtask-Completions werden einzeln in task_completions getrackt
+  - Cron-Job resettet auch Subtasks automatisch bei recurring tasks
 
 ### Future
 - Achievements
 - Task Categories (Küche, Bad, etc.)
 - Push Notifications
+
+
+tasks bearbeiten erlaubt grad noch nicht diese in verschieden zeitstrukturen zu verschieben
+
+Einkäufe zumindest müssen irgendwie auch offline funktionieren. Muss dann geklärt werden, wie das mit dem nachträglichen synchronisieren dann funktionieren soll
+
+Subtask optik optimieren

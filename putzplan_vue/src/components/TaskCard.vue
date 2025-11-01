@@ -5,6 +5,8 @@ import { useHouseholdStore } from '@/stores/householdStore'
 import { ref, computed } from "vue";
 import TaskCompletionModal from './TaskCompletionModal.vue'
 import TaskAssignmentModal from './TaskAssignmentModal.vue'
+import SubtaskManagementModal from './SubtaskManagementModal.vue'
+import SubtaskItem from './SubtaskItem.vue'
 import confetti from 'canvas-confetti'
 
 interface Props {
@@ -17,6 +19,8 @@ const householdStore = useHouseholdStore()
 const isEditing = ref(false)
 const showCompletionModal = ref(false)
 const showAssignmentModal = ref(false)
+const showSubtaskManagementModal = ref(false)
+const subtasksExpanded = ref(true)
 
 const editForm = ref({
      ...props.task
@@ -145,6 +149,43 @@ const handleAssignmentConfirm = async (userId: string | null, permanent: boolean
      await taskStore.assignTask(props.task.task_id, userId, permanent)
      showAssignmentModal.value = false
 }
+
+// SUBTASKS
+const subtasks = computed(() => taskStore.getSubtasks(props.task.task_id))
+const completedSubtasksCount = computed(() => subtasks.value.filter((s: Task) => s.completed).length)
+
+const toggleSubtasks = () => {
+     subtasksExpanded.value = !subtasksExpanded.value
+}
+
+// SUBTASK MANAGEMENT MODAL
+const openSubtaskManagementModal = () => {
+     showSubtaskManagementModal.value = true
+}
+
+const closeSubtaskManagementModal = () => {
+     showSubtaskManagementModal.value = false
+}
+
+const handleCreateSubtask = async (subtaskData: { title: string; effort: 1 | 2 | 3 | 4 | 5 }) => {
+     // Bestimme order_index für neuen Subtask (höchster existierender + 1)
+     const maxOrderIndex = subtasks.value.reduce((max: number, s: Task) => Math.max(max, s.order_index), 0)
+
+     await taskStore.createTask({
+          title: subtaskData.title,
+          effort: subtaskData.effort,
+          recurrence_days: props.task.recurrence_days, // Erbt recurrence von Parent
+          task_type: props.task.task_type, // Erbt task_type von Parent
+          parent_task_id: props.task.task_id, // WICHTIG: Setzt parent_task_id!
+          order_index: maxOrderIndex + 1
+     })
+}
+
+const handleUpdatePointsMode = async (mode: 'checklist' | 'deduct' | 'bonus') => {
+     await taskStore.updateTask(props.task.task_id, {
+          subtask_points_mode: mode
+     })
+}
 </script>
 
 <template>
@@ -194,6 +235,45 @@ const handleAssignmentConfirm = async (userId: string | null, permanent: boolean
                     <div v-if="daysUntilDue !== null" class="task-info">
                          <span class="info-label">Fällig in:</span>
                          <span class="info-value">{{ daysUntilDue }} {{ daysUntilDue === 1 ? 'Tag' : 'Tagen' }}</span>
+                    </div>
+               </div>
+
+               <!-- SUBTASKS SECTION (nur für Parent Tasks) -->
+               <div v-if="!props.task.parent_task_id && subtasks.length > 0" class="subtasks-section">
+                    <div class="subtasks-header" @click="toggleSubtasks">
+                         <span class="toggle-icon">{{ subtasksExpanded ? '▼' : '▶' }}</span>
+                         Subtasks ({{ completedSubtasksCount }}/{{ subtasks.length }})
+                    </div>
+
+                    <div v-show="subtasksExpanded" class="subtasks-list">
+                         <SubtaskItem
+                              v-for="subtask in subtasks"
+                              :key="subtask.task_id"
+                              :task="subtask"
+                         />
+                    </div>
+               </div>
+
+               <!-- MANAGE SUBTASKS BUTTON (nur für Parent Tasks) -->
+               <div v-if="!props.task.parent_task_id" class="add-subtask-section">
+                    <button
+                         class="btn btn-sm btn-outline-primary w-100"
+                         @click="openSubtaskManagementModal"
+                    >
+                         ⚙ Subtasks verwalten
+                    </button>
+
+                    <!-- Points Mode Badge (wenn Subtasks vorhanden) -->
+                    <div v-if="subtasks.length > 0" class="points-mode-badge">
+                         <span v-if="props.task.subtask_points_mode === 'checklist'" class="badge badge-checklist">
+                              ✓ Checkliste
+                         </span>
+                         <span v-else-if="props.task.subtask_points_mode === 'deduct'" class="badge badge-deduct">
+                              − Abziehen
+                         </span>
+                         <span v-else-if="props.task.subtask_points_mode === 'bonus'" class="badge badge-bonus">
+                              + Bonus
+                         </span>
                     </div>
                </div>
           </div>
@@ -308,6 +388,16 @@ const handleAssignmentConfirm = async (userId: string | null, permanent: boolean
                :householdMembers="householdStore.householdMembers"
                @close="closeAssignmentModal"
                @confirm="handleAssignmentConfirm"
+          />
+
+          <!-- Subtask Management Modal -->
+          <SubtaskManagementModal
+               v-if="showSubtaskManagementModal"
+               :parentTask="props.task"
+               :existingSubtasks="subtasks"
+               @close="closeSubtaskManagementModal"
+               @createSubtask="handleCreateSubtask"
+               @updatePointsMode="handleUpdatePointsMode"
           />
      </div>
 
@@ -506,6 +596,78 @@ const handleAssignmentConfirm = async (userId: string | null, permanent: boolean
 .assignment-badge.has-assignment:hover {
      background: var(--color-primary-light);
      border-color: var(--color-primary-light);
+}
+
+/* Subtasks Section */
+.subtasks-section {
+     margin-top: var(--spacing-md);
+     padding-top: var(--spacing-md);
+     border-top: 1px solid var(--color-border);
+}
+
+.subtasks-header {
+     font-size: 0.875rem;
+     font-weight: 600;
+     color: var(--color-text-primary);
+     cursor: pointer;
+     padding: var(--spacing-xs) var(--spacing-sm);
+     border-radius: var(--radius-sm);
+     transition: background var(--transition-base);
+     display: flex;
+     align-items: center;
+     gap: var(--spacing-xs);
+}
+
+.subtasks-header:hover {
+     background: var(--color-background-muted);
+}
+
+.toggle-icon {
+     font-size: 0.75rem;
+     color: var(--color-text-secondary);
+}
+
+.subtasks-list {
+     margin-top: var(--spacing-sm);
+     display: flex;
+     flex-direction: column;
+     gap: var(--spacing-xs);
+}
+
+/* Manage Subtasks Section */
+.add-subtask-section {
+     margin-top: var(--spacing-md);
+}
+
+/* Points Mode Badge */
+.points-mode-badge {
+     margin-top: var(--spacing-xs);
+     display: flex;
+     justify-content: center;
+}
+
+.points-mode-badge .badge {
+     font-size: 0.75rem;
+     padding: 0.25rem 0.625rem;
+     border-radius: var(--radius-sm);
+     font-weight: 500;
+     text-transform: uppercase;
+     letter-spacing: 0.5px;
+}
+
+.badge-checklist {
+     background: var(--bs-info);
+     color: white;
+}
+
+.badge-deduct {
+     background: var(--bs-warning);
+     color: white;
+}
+
+.badge-bonus {
+     background: var(--bs-success);
+     color: white;
 }
 
 /* Mobile: Ensure buttons and badge stay in one row */

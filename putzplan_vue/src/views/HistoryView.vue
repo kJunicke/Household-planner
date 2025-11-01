@@ -1,14 +1,18 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, computed } from 'vue'
 import { useTaskStore } from '../stores/taskStore'
+import { useHouseholdStore } from '../stores/householdStore'
+import type { Task } from '@/types/Task'
 
 const taskStore = useTaskStore()
+const householdStore = useHouseholdStore()
 
 interface CompletionWithDetails {
   completion_id: string
   completed_at: string
   effort_override: number | null
   override_reason: string | null
+  task_id: string // Für Subtask-Lookup
   tasks: {
     title: string
   }
@@ -17,17 +21,26 @@ interface CompletionWithDetails {
   }
 }
 
-const completions = ref<CompletionWithDetails[]>([])
-const isLoading = ref(true)
 const showDeleteModal = ref(false)
 const completionToDelete = ref<CompletionWithDetails | null>(null)
 const showDeleteAllModal = ref(false)
 
-const loadCompletions = async () => {
-  isLoading.value = true
-  completions.value = await taskStore.fetchCompletions() as CompletionWithDetails[]
-  isLoading.value = false
-}
+// Reactive completions from store (updated via Realtime)
+const completions = computed(() => {
+  // Enriche mit display_name via Frontend-Matching
+  return taskStore.completions.map(completion => {
+    const member = householdStore.householdMembers.find(m => m.user_id === completion.user_id)
+    return {
+      ...completion,
+      household_members: {
+        display_name: member?.display_name || 'Unbekannt'
+      },
+      tasks: {
+        title: taskStore.tasks.find(t => t.task_id === completion.task_id)?.title || 'Unbekannte Aufgabe'
+      }
+    }
+  })
+})
 
 const formatDate = (dateString: string) => {
   const date = new Date(dateString)
@@ -53,12 +66,7 @@ const closeDeleteModal = () => {
 const confirmDelete = async () => {
   if (!completionToDelete.value) return
 
-  const success = await taskStore.deleteCompletion(completionToDelete.value.completion_id)
-
-  if (success) {
-    await loadCompletions()
-  }
-
+  await taskStore.deleteCompletion(completionToDelete.value.completion_id)
   closeDeleteModal()
 }
 
@@ -71,18 +79,28 @@ const closeDeleteAllModal = () => {
 }
 
 const confirmDeleteAll = async () => {
-  const success = await taskStore.deleteAllCompletions()
-
-  if (success) {
-    await loadCompletions()
-  }
-
+  await taskStore.deleteAllCompletions()
   closeDeleteAllModal()
 }
 
-onMounted(() => {
-  loadCompletions()
-})
+// Helper: Check if task is a subtask and get parent task info
+const getTaskInfo = (completion: CompletionWithDetails) => {
+  const task = taskStore.tasks.find((t: Task) => t.task_id === completion.task_id)
+  const isSubtask = task?.parent_task_id !== null
+
+  if (isSubtask && task) {
+    const parentTask = taskStore.tasks.find((t: Task) => t.task_id === task.parent_task_id)
+    return {
+      isSubtask: true,
+      parentTaskTitle: parentTask?.title || 'Unbekannt'
+    }
+  }
+
+  return {
+    isSubtask: false,
+    parentTaskTitle: null
+  }
+}
 </script>
 
 <template>
@@ -90,27 +108,16 @@ onMounted(() => {
     <div class="container-fluid">
       <div class="d-flex justify-content-between align-items-center mb-4">
         <h2 class="page-title">Verlauf</h2>
-        <div class="d-flex gap-2">
-          <button @click="loadCompletions" class="btn btn-sm btn-outline-primary">
-            <i class="bi bi-arrow-clockwise"></i> Aktualisieren
-          </button>
-          <button
-            @click="openDeleteAllModal"
-            class="btn btn-sm btn-outline-danger"
-            :disabled="completions.length === 0"
-          >
-            <i class="bi bi-trash"></i> Alle löschen
-          </button>
-        </div>
+        <button
+          @click="openDeleteAllModal"
+          class="btn btn-sm btn-outline-danger"
+          :disabled="completions.length === 0"
+        >
+          <i class="bi bi-trash"></i> Alle löschen
+        </button>
       </div>
 
-      <div v-if="isLoading" class="text-center py-5">
-        <div class="spinner-border text-primary" role="status">
-          <span class="visually-hidden">Lädt...</span>
-        </div>
-      </div>
-
-      <div v-else-if="completions.length === 0" class="empty-state">
+      <div v-if="completions.length === 0" class="empty-state">
         <i class="bi bi-clock-history"></i>
         <p>Noch keine erledigten Tasks</p>
       </div>
@@ -125,7 +132,13 @@ onMounted(() => {
             <i class="bi bi-check-circle-fill text-success"></i>
           </div>
           <div class="completion-details">
-            <div class="task-title">{{ completion.tasks?.title || 'Unbekannte Aufgabe' }}</div>
+            <div class="task-title">
+              {{ completion.tasks?.title || 'Unbekannte Aufgabe' }}
+              <!-- Subtask Badge -->
+              <span v-if="getTaskInfo(completion).isSubtask" class="subtask-badge">
+                Subtask von: {{ getTaskInfo(completion).parentTaskTitle }}
+              </span>
+            </div>
             <div class="completion-meta">
               <span class="member-name">
                 <i class="bi bi-person-fill"></i>
@@ -267,6 +280,20 @@ onMounted(() => {
   font-size: 1rem;
   font-weight: 600;
   color: var(--color-text-primary);
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+}
+
+.subtask-badge {
+  display: inline-block;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--bs-info);
+  background: var(--bs-info-bg, #cfe2ff);
+  padding: 0.125rem 0.5rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--bs-info);
 }
 
 .completion-meta {

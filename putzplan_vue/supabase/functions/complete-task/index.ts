@@ -68,7 +68,64 @@ Deno.serve(async (req) => {
       )
     }
 
-    // 5. INSERT task_completion (RLS checks: task belongs to user's household + user_id matches auth)
+    // 5. Fetch task details (for subtask_points_mode + parent_task_id check)
+    const { data: taskDetails, error: fetchError } = await supabase
+      .from('tasks')
+      .select('effort, parent_task_id, subtask_points_mode, assignment_permanent')
+      .eq('task_id', taskId)
+      .single()
+
+    if (fetchError || !taskDetails) {
+      console.error('Error fetching task details:', fetchError)
+      return new Response(
+        JSON.stringify({ error: 'Task not found', details: fetchError?.message }),
+        { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
+    // 6. Calculate final effort based on subtask_points_mode (only for PARENT tasks with NO effortOverride)
+    let finalEffort = taskDetails.effort // Default: use task's base effort
+    let autoReason: string | undefined = undefined
+
+    // Only apply subtask_points_mode logic if:
+    // - This is a PARENT task (parent_task_id === null)
+    // - User did NOT provide effortOverride (user override takes precedence!)
+    if (taskDetails.parent_task_id === null && effortOverride === undefined) {
+      const mode = taskDetails.subtask_points_mode as 'checklist' | 'deduct' | 'bonus' | null
+
+      if (mode === 'deduct' || mode === 'checklist') {
+        // Fetch ALL subtasks for this parent task
+        const { data: subtasks, error: subtasksError } = await supabase
+          .from('tasks')
+          .select('task_id, effort, completed')
+          .eq('parent_task_id', taskId)
+
+        if (subtasksError) {
+          console.error('Error fetching subtasks:', subtasksError)
+          // Don't fail entire request, just use default effort
+        } else if (subtasks && subtasks.length > 0) {
+          if (mode === 'checklist') {
+            // Checklist mode: Subtasks count 0 points, only parent gives points
+            // NO change to finalEffort (already set to taskDetails.effort)
+            autoReason = 'Checklist Mode: Subtasks zählen nicht'
+          } else if (mode === 'deduct') {
+            // Deduct mode: Subtract completed subtask efforts from parent effort
+            const completedSubtaskEffortSum = subtasks
+              .filter(s => s.completed)
+              .reduce((sum, s) => sum + s.effort, 0)
+
+            finalEffort = Math.max(0, taskDetails.effort - completedSubtaskEffortSum)
+
+            if (completedSubtaskEffortSum > 0) {
+              autoReason = `Deduct Mode: ${taskDetails.effort} - ${completedSubtaskEffortSum} Subtask-Punkte = ${finalEffort}`
+            }
+          }
+        }
+      }
+      // mode === 'bonus': Subtasks count separately (handled via separate completions) - NO change to parent effort
+    }
+
+    // 7. INSERT task_completion (RLS checks: task belongs to user's household + user_id matches auth)
     const completionData: {
       task_id: string
       user_id: string
@@ -79,9 +136,14 @@ Deno.serve(async (req) => {
       user_id: user.id
     }
 
+    // User override takes precedence over auto-calculation
     if (effortOverride !== undefined && overrideReason) {
       completionData.effort_override = effortOverride
       completionData.override_reason = overrideReason
+    } else if (finalEffort !== taskDetails.effort && autoReason) {
+      // Auto-calculated effort (from subtask_points_mode)
+      completionData.effort_override = finalEffort
+      completionData.override_reason = autoReason
     }
 
     const { error: completionError } = await supabase
@@ -96,22 +158,7 @@ Deno.serve(async (req) => {
       )
     }
 
-    // 6. Get task to check assignment_permanent flag
-    const { data: task, error: taskError } = await supabase
-      .from('tasks')
-      .select('assignment_permanent')
-      .eq('task_id', taskId)
-      .single()
-
-    if (taskError) {
-      console.error('Error fetching task:', taskError)
-      return new Response(
-        JSON.stringify({ error: 'Failed to fetch task', details: taskError.message }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      )
-    }
-
-    // 7. UPDATE tasks.completed = TRUE + last_completed_at (replaces trigger logic!)
+    // 8. UPDATE tasks.completed = TRUE + last_completed_at (replaces trigger logic!)
     // If assignment is NOT permanent, clear assigned_to on completion
     const now = new Date().toISOString()
     const updateData: {
@@ -123,8 +170,8 @@ Deno.serve(async (req) => {
       last_completed_at: now  // ← This was previously done by trigger
     }
 
-    // Clear assignment if not permanent
-    if (!task.assignment_permanent) {
+    // Clear assignment if not permanent (using taskDetails.assignment_permanent fetched earlier)
+    if (!taskDetails.assignment_permanent) {
       updateData.assigned_to = null
     }
 
@@ -141,7 +188,7 @@ Deno.serve(async (req) => {
       )
     }
 
-    // 8. Success!
+    // 9. Success!
     return new Response(
       JSON.stringify({ success: true }),
       { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }

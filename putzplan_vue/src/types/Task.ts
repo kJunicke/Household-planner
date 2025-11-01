@@ -20,6 +20,17 @@ export interface Task {
   // Task Assignment
   assigned_to: string | null // user_id of assigned household member (optional)
   assignment_permanent: boolean // Whether assignment persists after completion
+
+  // Subtasks - Self-Referencing FK
+  parent_task_id: string | null // NULL = parent task, UUID = subtask
+  order_index: number // Sorting order for subtasks within parent
+
+  // Subtask Points Mode - Only relevant for parent tasks with subtasks
+  // Determines how subtask effort affects parent task points calculation
+  subtask_points_mode: 'checklist' | 'deduct' | 'bonus'
+  // 'checklist': Subtasks count 0 points (only parent completion gives effort points)
+  // 'deduct': Parent effort - SUM(completed subtask efforts)
+  // 'bonus': Subtasks give full effort points in addition to parent
   }
 
 export interface TaskCompletion {

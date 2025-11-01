@@ -4,6 +4,7 @@ import { Pie, Bar } from 'vue-chartjs'
 import { Chart as ChartJS, Title, Tooltip, Legend, ArcElement, BarElement, CategoryScale, LinearScale } from 'chart.js'
 import { useHouseholdStore } from '../stores/householdStore'
 import { useTaskStore } from '../stores/taskStore'
+import type { Task } from '@/types/Task'
 
 ChartJS.register(Title, Tooltip, Legend, ArcElement, BarElement, CategoryScale, LinearScale)
 
@@ -84,7 +85,7 @@ const effortByUser = computed(() => {
   const effortMap = new Map<string, number>()
 
   completions.forEach(completion => {
-    const task = taskStore.tasks.find(t => t.task_id === completion.task_id)
+    const task = taskStore.tasks.find((t: Task) => t.task_id === completion.task_id)
     // Priorisiere effort_override (Mehraufwand), sonst Standard-Effort
     const effort = completion.effort_override ?? task?.effort ?? 1
 
