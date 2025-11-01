@@ -110,15 +110,6 @@ const handleAssignmentConfirm = async (userId: string | null, permanent: boolean
 
 <template>
   <div class="subtask-item" :class="{ completed: task.completed }">
-    <!-- Checkbox -->
-    <input
-      type="checkbox"
-      :checked="task.completed"
-      class="subtask-checkbox"
-      @click.prevent="handleCompleteTask"
-      :disabled="isEditing"
-    />
-
     <!-- Edit Mode -->
     <div v-if="isEditing" class="subtask-edit">
       <input
@@ -138,20 +129,23 @@ const handleAssignmentConfirm = async (userId: string | null, permanent: boolean
       <button class="btn btn-sm btn-secondary" @click="cancelEdit">✕</button>
     </div>
 
-    <!-- Normal Display -->
-    <div v-else class="subtask-content">
-      <span class="subtask-title">{{ task.title }}</span>
-      <span class="subtask-effort">{{ task.effort }}</span>
+    <!-- Normal Display (2 Zeilen Layout) -->
+    <div v-else class="subtask-wrapper">
+      <!-- Zeile 1: Titel + Effort -->
+      <div class="subtask-header">
+        <span class="subtask-title">{{ task.title }}</span>
+        <span class="subtask-effort">{{ task.effort }}</span>
+      </div>
 
-      <!-- Action Buttons -->
-      <div class="subtask-actions">
+      <!-- Zeile 2: Alle Action Buttons -->
+      <div class="subtask-actions-row">
         <button
           class="subtask-btn subtask-btn-success"
           @click="handleCompleteTask"
           title="Sauber"
           v-if="!task.completed"
         >
-          ✓
+          ✓ Sauber
         </button>
         <button
           class="subtask-btn subtask-btn-success"
@@ -175,17 +169,17 @@ const handleAssignmentConfirm = async (userId: string | null, permanent: boolean
         >
           🗑️
         </button>
-      </div>
 
-      <!-- Assignment Badge Mini -->
-      <div
-        class="assignment-badge-mini"
-        :class="{ 'has-assignment': task.assigned_to }"
-        :style="assignedMember ? { backgroundColor: assignedMember.user_color, borderColor: assignedMember.user_color } : {}"
-        @click="openAssignmentModal"
-        :title="assignedMember ? assignedMember.display_name : 'Zuweisen'"
-      >
-        {{ assignedInitials }}
+        <!-- Assignment Badge Mini -->
+        <div
+          class="assignment-badge-mini"
+          :class="{ 'has-assignment': task.assigned_to }"
+          :style="assignedMember ? { backgroundColor: assignedMember.user_color, borderColor: assignedMember.user_color } : {}"
+          @click="openAssignmentModal"
+          :title="assignedMember ? assignedMember.display_name : 'Zuweisen'"
+        >
+          {{ assignedInitials }}
+        </div>
       </div>
     </div>
 
@@ -213,7 +207,7 @@ const handleAssignmentConfirm = async (userId: string | null, permanent: boolean
 <style scoped>
 .subtask-item {
   display: flex;
-  align-items: center;
+  flex-direction: column;
   gap: var(--spacing-sm);
   padding: var(--spacing-sm) var(--spacing-md);
   background: var(--color-background);
@@ -235,19 +229,20 @@ const handleAssignmentConfirm = async (userId: string | null, permanent: boolean
   text-decoration: line-through;
 }
 
-.subtask-checkbox {
-  width: 18px;
-  height: 18px;
-  cursor: pointer;
-  flex-shrink: 0;
+/* 2-Zeilen Wrapper */
+.subtask-wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+  width: 100%;
 }
 
-.subtask-content {
+/* Zeile 1: Titel + Effort */
+.subtask-header {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: var(--spacing-sm);
-  flex: 1;
-  min-width: 0;
 }
 
 .subtask-title {
@@ -255,11 +250,8 @@ const handleAssignmentConfirm = async (userId: string | null, permanent: boolean
   font-size: 0.875rem;
   color: var(--color-text-primary);
   overflow: hidden;
-  display: -webkit-box;
-  -webkit-line-clamp: 2; /* Max 2 Zeilen */
-  -webkit-box-orient: vertical;
-  line-height: 1.4;
-  word-break: break-word;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .subtask-effort {
@@ -272,10 +264,12 @@ const handleAssignmentConfirm = async (userId: string | null, permanent: boolean
   flex-shrink: 0;
 }
 
-.subtask-actions {
+/* Zeile 2: Action Buttons Row */
+.subtask-actions-row {
   display: flex;
+  align-items: center;
   gap: var(--spacing-xs);
-  flex-shrink: 0;
+  flex-wrap: wrap;
 }
 
 .subtask-btn {

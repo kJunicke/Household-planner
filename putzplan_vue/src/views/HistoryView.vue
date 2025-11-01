@@ -39,7 +39,7 @@ const completions = computed(() => {
         title: taskStore.tasks.find(t => t.task_id === completion.task_id)?.title || 'Unbekannte Aufgabe'
       }
     }
-  })
+  }).sort((a, b) => new Date(b.completed_at).getTime() - new Date(a.completed_at).getTime())
 })
 
 const formatDate = (dateString: string) => {

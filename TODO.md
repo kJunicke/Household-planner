@@ -71,8 +71,7 @@
 - Push Notifications
 
 
-tasks bearbeiten erlaubt grad noch nicht diese in verschieden zeitstrukturen zu verschieben
-
-Einkäufe zumindest müssen irgendwie auch offline funktionieren. Muss dann geklärt werden, wie das mit dem nachträglichen synchronisieren dann funktionieren soll
-
-Subtask optik optimieren
+### Offene Issues
+- [ ] tasks bearbeiten erlaubt grad noch nicht diese in verschieden zeitstrukturen zu verschieben
+- [ ] Einkäufe zumindest müssen irgendwie auch offline funktionieren. Muss dann geklärt werden, wie das mit dem nachträglichen synchronisieren dann funktionieren soll
+- [x] ✅ Subtask Optik optimieren - Simplified layout: Checkbox entfernt, 2-Zeilen Layout (Titel+Effort | Buttons)
