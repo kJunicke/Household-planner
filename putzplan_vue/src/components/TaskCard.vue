@@ -32,7 +32,13 @@ const startEdit = () => {
 }
 
 const saveEdit = async () => {
-     await taskStore.updateTask(props.task.task_id, editForm.value)
+     // Validierung: Wenn task_type !== 'recurring', setze recurrence_days = 0
+     const updates = { ...editForm.value }
+     if (updates.task_type !== 'recurring') {
+          updates.recurrence_days = 0
+     }
+
+     await taskStore.updateTask(props.task.task_id, updates)
      isEditing.value = false
 }
 
@@ -226,10 +232,7 @@ const handleUpdateSubtaskPointsMode = async (subtaskId: string, mode: 'checklist
                     </div>
 
                     <!-- Task Type Badge -->
-                    <div v-if="props.task.task_type === 'daily'" class="task-badge task-badge-daily">
-                         Täglich
-                    </div>
-                    <div v-else-if="props.task.task_type === 'one-time'" class="task-badge task-badge-one-time">
+                    <div v-if="props.task.task_type === 'one-time'" class="task-badge task-badge-one-time">
                          Einmalig
                     </div>
 
@@ -320,6 +323,19 @@ const handleUpdateSubtaskPointsMode = async (subtaskId: string, mode: 'checklist
                     </div>
 
                     <div class="mb-3">
+                         <label for="task-type" class="form-label">Typ</label>
+                         <select
+                              class="form-select"
+                              id="task-type"
+                              v-model="editForm.task_type"
+                              required>
+                              <option value="recurring">Zeitbasiert</option>
+                              <option value="daily">Täglich</option>
+                              <option value="one-time">Einmalig</option>
+                         </select>
+                    </div>
+
+                    <div class="mb-3">
                          <label for="effort" class="form-label">Aufwand</label>
                          <input
                               type="number"
@@ -330,14 +346,14 @@ const handleUpdateSubtaskPointsMode = async (subtaskId: string, mode: 'checklist
                               required>
                     </div>
 
-                    <div class="mb-3">
-                         <label for="recurrence" class="form-label">Wiederholung (Tage, 0 = einmalig)</label>
+                    <div v-if="editForm.task_type === 'recurring'" class="mb-3">
+                         <label for="recurrence" class="form-label">Wiederholung (Tage)</label>
                          <input
                               type="number"
                               class="form-control"
                               id="recurrence"
                               v-model.number="editForm.recurrence_days"
-                              min="0"
+                              min="1"
                               required>
                     </div>
                </form>
