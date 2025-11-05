@@ -101,6 +101,18 @@ const getTaskInfo = (completion: CompletionWithDetails) => {
     parentTaskTitle: null
   }
 }
+
+// Helper: Calculate points for completion
+const getCompletionPoints = (completion: CompletionWithDetails): number => {
+  // If effort_override is set, use that
+  if (completion.effort_override !== null) {
+    return completion.effort_override
+  }
+
+  // Otherwise, use task's effort
+  const task = taskStore.tasks.find((t: Task) => t.task_id === completion.task_id)
+  return task?.effort || 0
+}
 </script>
 
 <template>
@@ -148,8 +160,12 @@ const getTaskInfo = (completion: CompletionWithDetails) => {
                 <i class="bi bi-clock"></i>
                 {{ formatDate(completion.completed_at) }}
               </span>
+              <span class="completion-points">
+                <i class="bi bi-star-fill"></i>
+                {{ getCompletionPoints(completion) }} Punkte
+              </span>
             </div>
-            <div v-if="completion.effort_override" class="effort-override-note">
+            <div v-if="completion.effort_override !== null" class="effort-override-note">
               <div class="override-badge">
                 <i class="bi bi-exclamation-circle"></i>
                 Aufwand: {{ completion.effort_override }}
@@ -304,15 +320,26 @@ const getTaskInfo = (completion: CompletionWithDetails) => {
 }
 
 .member-name,
-.completion-date {
+.completion-date,
+.completion-points {
   display: flex;
   align-items: center;
   gap: 0.25rem;
 }
 
 .member-name i,
-.completion-date i {
+.completion-date i,
+.completion-points i {
   font-size: 0.875rem;
+}
+
+.completion-points {
+  color: var(--bs-warning);
+  font-weight: 600;
+}
+
+.completion-points i {
+  color: var(--bs-warning);
 }
 
 .completion-actions {

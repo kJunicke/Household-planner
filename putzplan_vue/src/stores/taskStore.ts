@@ -106,11 +106,13 @@ export const useTaskStore = defineStore('tasks', () => {
 
         if (error) {
             console.error('Error calling complete-task function:', error)
+            console.error('Full error object:', JSON.stringify(error, null, 2))
             return false
         }
 
         if (!data?.success) {
             console.error('Edge function returned error:', data)
+            console.error('Full response data:', JSON.stringify(data, null, 2))
             return false
         }
 
@@ -502,6 +504,31 @@ export const useTaskStore = defineStore('tasks', () => {
             .filter(t => t.parent_task_id === parentTaskId)
             .sort((a, b) => a.order_index - b.order_index)
 
+    // RESET SUBTASKS - Setze alle Subtasks einer Parent Task auf uncompleted
+    const resetSubtasks = async (parentTaskId: string) => {
+        const subtasks = getSubtasks(parentTaskId)
+
+        if (subtasks.length === 0) {
+            return true
+        }
+
+        const subtaskIds = subtasks.map(s => s.task_id)
+
+        const { error } = await supabase
+            .from('tasks')
+            .update({ completed: false })
+            .in('task_id', subtaskIds)
+
+        if (error) {
+            console.error('Error resetting subtasks:', error)
+            return false
+        }
+
+        // Reload tasks vom Backend (Source of Truth)
+        await loadTasks()
+        return true
+    }
+
     // Return - was andere Komponenten verwenden können
     return {
         tasks,
@@ -522,6 +549,7 @@ export const useTaskStore = defineStore('tasks', () => {
         deleteAllCompletions,
         // Subtasks
         parentTasks,
-        getSubtasks
+        getSubtasks,
+        resetSubtasks
     }
 })

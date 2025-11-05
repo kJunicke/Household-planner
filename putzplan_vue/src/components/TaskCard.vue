@@ -200,6 +200,10 @@ const handleUpdateSubtaskPointsMode = async (subtaskId: string, mode: 'checklist
           subtask_points_mode: mode
      })
 }
+
+const handleResetSubtasks = async () => {
+     await taskStore.resetSubtasks(props.task.task_id)
+}
 </script>
 
 <template>
@@ -251,9 +255,19 @@ const handleUpdateSubtaskPointsMode = async (subtaskId: string, mode: 'checklist
 
                <!-- SUBTASKS SECTION (nur für Parent Tasks) - Gruppiert nach Punktemodus -->
                <div v-if="!props.task.parent_task_id && subtasks.length > 0" class="subtasks-section">
-                    <div class="subtasks-header" @click="toggleSubtasks">
-                         <span class="toggle-icon">{{ subtasksExpanded ? '▼' : '▶' }}</span>
-                         Subtasks ({{ completedSubtasksCount }}/{{ subtasks.length }})
+                    <div class="subtasks-header-row">
+                         <div class="subtasks-header" @click="toggleSubtasks">
+                              <span class="toggle-icon">{{ subtasksExpanded ? '▼' : '▶' }}</span>
+                              Subtasks ({{ completedSubtasksCount }}/{{ subtasks.length }})
+                         </div>
+                         <button
+                              v-if="completedSubtasksCount > 0"
+                              class="btn btn-sm btn-outline-secondary reset-subtasks-btn"
+                              @click="handleResetSubtasks"
+                              title="Alle Subtasks zurücksetzen"
+                         >
+                              ↺
+                         </button>
                     </div>
 
                     <div v-show="subtasksExpanded" class="subtasks-list">
@@ -649,6 +663,13 @@ const handleUpdateSubtaskPointsMode = async (subtaskId: string, mode: 'checklist
      border-top: 1px solid var(--color-border);
 }
 
+.subtasks-header-row {
+     display: flex;
+     align-items: center;
+     gap: var(--spacing-sm);
+     justify-content: space-between;
+}
+
 .subtasks-header {
      font-size: 0.875rem;
      font-weight: 600;
@@ -660,10 +681,18 @@ const handleUpdateSubtaskPointsMode = async (subtaskId: string, mode: 'checklist
      display: flex;
      align-items: center;
      gap: var(--spacing-xs);
+     flex: 1;
 }
 
 .subtasks-header:hover {
      background: var(--color-background-muted);
+}
+
+.reset-subtasks-btn {
+     padding: 0.25rem 0.5rem;
+     font-size: 1rem;
+     line-height: 1;
+     flex-shrink: 0;
 }
 
 .toggle-icon {

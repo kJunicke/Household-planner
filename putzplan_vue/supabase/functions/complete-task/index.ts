@@ -68,10 +68,10 @@ Deno.serve(async (req) => {
       )
     }
 
-    // 5. Fetch task details (for parent_task_id check + assignment_permanent)
+    // 5. Fetch task details (for parent_task_id check + assignment_permanent + task_type)
     const { data: taskDetails, error: fetchError } = await supabase
       .from('tasks')
-      .select('effort, parent_task_id, assignment_permanent')
+      .select('effort, parent_task_id, assignment_permanent, task_type')
       .eq('task_id', taskId)
       .single()
 
@@ -179,16 +179,22 @@ Deno.serve(async (req) => {
       )
     }
 
-    // 8. UPDATE tasks.completed = TRUE + last_completed_at (replaces trigger logic!)
-    // If assignment is NOT permanent, clear assigned_to on completion
+    // 8. UPDATE tasks (replaces trigger logic!)
+    // Daily tasks: log completion + reset subtasks, but DON'T mark as completed (stay in Alltagsaufgaben tab)
+    // Other tasks: mark as completed + update last_completed_at
     const now = new Date().toISOString()
     const updateData: {
-      completed: boolean
+      completed?: boolean
       last_completed_at: string
       assigned_to?: null
     } = {
-      completed: true,
-      last_completed_at: now  // ← This was previously done by trigger
+      last_completed_at: now  // ← Always update timestamp
+    }
+
+    // Daily tasks stay uncompleted (always visible in Alltagsaufgaben tab)
+    // Other task types (recurring, one-time) get marked as completed
+    if (taskDetails.task_type !== 'daily') {
+      updateData.completed = true
     }
 
     // Clear assignment if not permanent (using taskDetails.assignment_permanent fetched earlier)
@@ -209,7 +215,22 @@ Deno.serve(async (req) => {
       )
     }
 
-    // 9. Success!
+    // 9. Reset all subtasks to uncompleted (für saubere Punkteberechnung bei erneutem Putzen)
+    // Wenn eine Parent Task completed wird, starten alle Subtasks "fresh"
+    if (taskDetails.parent_task_id === null) {
+      const { error: subtaskResetError } = await supabase
+        .from('tasks')
+        .update({ completed: false })
+        .eq('parent_task_id', taskId)
+
+      if (subtaskResetError) {
+        console.error('Error resetting subtasks:', subtaskResetError)
+        // Don't fail entire request - parent task completion was successful
+        // Subtask reset is best-effort to avoid UX disruption
+      }
+    }
+
+    // 10. Success!
     return new Response(
       JSON.stringify({ success: true }),
       { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
