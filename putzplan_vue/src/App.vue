@@ -2,6 +2,7 @@
 import { computed } from 'vue'
 import { useRoute } from 'vue-router'
 import Header from './components/Header.vue'
+import ToastContainer from './components/ToastContainer.vue'
 
 const route = useRoute()
 
@@ -16,6 +17,7 @@ const showHeader = computed(() => {
   <div class="app-wrapper">
     <Header v-if="showHeader" />
     <router-view />
+    <ToastContainer />
   </div>
 </template>
 

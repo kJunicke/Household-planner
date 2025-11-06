@@ -6,7 +6,7 @@
 
 **Arbeitsverzeichnis**: `putzplan_vue/`
 
-**WICHTIG**: NIEMALS `npm run dev` ausführen - Ich hab immer schon einen am laufen
+**WICHTIG**: `npm run dev` läuft bereits
 
 ### Test Account (Playwright E2E Tests)
 Email: test@example.com
@@ -16,10 +16,7 @@ Invite Code: FD1EB9CE
 
 ### MCP Server Setup
 
-**Context7** für aktuelle Library-Dokumentation nutzen:
-
-Bei jedem Feature: Context7 für Up-to-date Docs konsultieren
-# (Vue 3, Pinia, Supabase, TypeScript, etc.)
+**Context7** - Bei jedem Feature für Up-to-date Library-Docs konsultieren (Vue 3, Pinia, Supabase, TypeScript)
 
 **Playwright** für Browser-Testing und Automatisierung:
 - **Test-URL**: `http://localhost:5173/Household-planner/`
@@ -27,8 +24,6 @@ Bei jedem Feature: Context7 für Up-to-date Docs konsultieren
 - **Mobile Testing**: IMMER mit schmaler Viewport testen (360x740 für Smartphone)
   - Standard Playwright Viewport ist zu breit für echtes Mobile Testing
   - Verwende `browser_resize` mit width: 360, height: 740 vor dem Testen
-- Dev-Server läuft bereits - NICHT `npm run dev` ausführen!
-
 ```bash
 # Code-Qualität prüfen
 npm run type-check && npm run lint
@@ -50,15 +45,14 @@ npm run build
 putzplan_vue/
 ├── src/
 │   ├── assets/        # CSS (base.css, utilities.css, main.css)
-│   ├── components/    # Wiederverwendbare Komponenten (Header.vue, TaskCard.vue, etc.)
-│   ├── views/         # Route-Level Komponenten (CleaningView.vue, HistoryView.vue)
-│   ├── stores/        # Pinia Stores (authStore, householdStore, taskStore)
-│   ├── router/        # Vue Router
-│   ├── types/         # TypeScript Interfaces
+│   ├── components/
+│   ├── views/
+│   ├── stores/
+│   ├── router/
+│   ├── types/
 │   └── lib/          # Supabase Config
 ├── supabase/
-│   ├── config.toml    # Supabase CLI Config
-│   └── migrations/    # Database Migrations (timestamp-based)
+│   └── migrations/    # Timestamp-based SQL migrations
 ```
 
 ### Views & Routes
@@ -108,13 +102,8 @@ putzplan_vue/
 - MVP-First: Erst funktionsfähig, dann perfekt
 
 ### Vue 3 Patterns
-- context 7 vue bei neuen features consultieren
 - **Pinia**: Direkte Store-Nutzung in Components (`taskStore.deleteTask(id)`)
 - **Kein Event-Chain**: Nicht "props down, events up" bei zentralem Store
-
-### Pinia Store Initialization
-- **Pattern**: Stores in `main.ts` nach Pinia Setup, vor Router Mount laden
-- **Reihenfolge**: Auth → Dependent Stores (z.B. householdStore)
 
 ### UI Patterns
 - **Inline Forms**: Für einfache Create-Forms (≤4 Felder)
@@ -149,51 +138,26 @@ supabase/migrations/
 └── archive/                                 # Old migrations (reference)
 ```
 
-**Empfohlener Workflow**:
+**Workflow** (WICHTIG: CLI über `npx` ausführen):
 ```bash
-# WICHTIG: Supabase CLI muss über npx aufgerufen werden!
-
-# 1. Lokale Migration erstellen
+# Migration erstellen und bearbeiten
 npx supabase migration new my_feature_name
+# → SQL in supabase/migrations/[timestamp]_my_feature_name.sql schreiben
 
-# 2. SQL in die neue Migration-Datei schreiben
-# supabase/migrations/[timestamp]_my_feature_name.sql
-
-# 3a. MIT Docker Desktop (lokaler Test):
-npx supabase db reset          # Löscht lokale DB, spielt alle Migrations ab
-npx supabase db lint --local   # Prüft Schema auf common issues
-
-# 3b. OHNE Docker Desktop (direkt zur Remote):
-npx supabase db push           # Pusht Migration direkt zur Remote-DB
-
-# 4. Migration zur Remote-DB pushen (falls lokal getestet)
+# Migration pushen
 npx supabase db push
+
+# Remote-Schema-Änderungen pullen (optional)
+npx supabase db pull
+
+# Migration-Status checken (optional)
+npx supabase migration list --linked
 ```
 
 **Wichtige Regeln**:
-- **Append-only**: Nie gepushte Migrations editieren, immer neue Migration für Änderungen
-- **No `db remote commit`**: Deprecated! Wurde durch `db pull` ersetzt
-- **Link project**: Einmalig `supabase link` ausführen für Remote-Zugriff
-- **Security**: `.env` nicht committen
-
-**Was macht was**:
-- `db push` - Pusht lokale Migrations zur Remote-DB (one-way)
-- `db pull` - Pullt Remote-Schema-Änderungen als neue Migration (reverse)
-- `db reset` - Löscht lokale DB und spielt alle Migrations neu ab
-- `db diff` - Zeigt Unterschiede zwischen lokal und remote
-- `db lint` - Prüft Schema auf common issues
-
-**Security Checklist**:
-- ✅ RLS für alle Tabellen aktivieren
-- ✅ `SET search_path = public, pg_temp` bei Functions hinzufügen
-- ✅ SECURITY DEFINER für RLS Helper-Functions (verhindert infinite recursion)
-- ✅ `(SELECT auth.uid())` für initPlan optimization
-- ✅ `TO authenticated` explizit angeben
-
-**RLS Pattern für household_members**:
-- Problem: Kann nicht `household_members` in `household_members` RLS Policy abfragen (Rekursion!)
-- Lösung: SECURITY DEFINER Helper-Function `get_user_household_id()` die RLS bypassed
-- Siehe: `supabase/RLS_SECURITY.md`
+- **Append-only**: Nie gepushte Migrations editieren
+- **Security**: RLS für alle Tabellen, SECURITY DEFINER für Helper-Functions (`get_user_household_id()`)
+- `.env` nicht committen
 
 ---
 **Status & nächste Aufgaben**: Siehe `TODO.md`

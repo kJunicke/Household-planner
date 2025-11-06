@@ -4,6 +4,7 @@ import type { Task, TaskCompletion } from '@/types/Task'
 import { supabase } from '@/lib/supabase'
 import { useHouseholdStore } from './householdStore'
 import { useAuthStore } from './authStore'
+import { useToastStore } from './toastStore'
 import type { RealtimeChannel } from '@supabase/supabase-js'
 
 export const useTaskStore = defineStore('tasks', () => {
@@ -20,6 +21,7 @@ export const useTaskStore = defineStore('tasks', () => {
         console.log('Loading tasks...')
 
         const householdStore = useHouseholdStore()
+        const toastStore = useToastStore()
 
         // Nur Tasks des aktuellen Households laden
         if (!householdStore.currentHousehold) {
@@ -36,6 +38,7 @@ export const useTaskStore = defineStore('tasks', () => {
 
         if (tasksError) {
             console.error('Error loading tasks', tasksError)
+            toastStore.showToast('Fehler beim Laden der Aufgaben', 'error')
             return
         }
 
@@ -45,15 +48,17 @@ export const useTaskStore = defineStore('tasks', () => {
 
         if (completionsError) {
             console.error('Error loading completions', completionsError)
+            toastStore.showToast('Fehler beim Laden der Historie', 'error')
             return
         }
 
         tasks.value = tasksData || []
-        completions.value = completionsData || [] 
+        completions.value = completionsData || []
         console.log('Loaded tasks:', tasks.value)
         console.log('Loaded completions:', completions.value)
     }
     const toggleTask = async (taskId:string) => {
+        const toastStore = useToastStore()
         const task = tasks.value.find(t => t.task_id === taskId)
         if(!task) return
         const newState = !task.completed
@@ -65,8 +70,9 @@ export const useTaskStore = defineStore('tasks', () => {
         .eq('task_id', taskId)
 
         if (error) {
-        console.error('Error updating task:', error)
-        return
+            console.error('Error updating task:', error)
+            toastStore.showToast('Fehler beim Aktualisieren der Aufgabe', 'error')
+            return
         }
 
     }
@@ -76,15 +82,18 @@ export const useTaskStore = defineStore('tasks', () => {
     // Optional: effortOverride und overrideReason für Sonderfälle (z.B. unerwarteter Mehraufwand)
     const completeTask = async (taskId: string, effortOverride?: number, overrideReason?: string) => {
         const authStore = useAuthStore()
+        const toastStore = useToastStore()
 
         if (!authStore.user) {
             console.error('Cannot complete task: No user logged in')
+            toastStore.showToast('Fehler: Nicht angemeldet', 'error')
             return false
         }
 
         // Validierung: Wenn effortOverride gesetzt, muss auch overrideReason vorhanden sein
         if (effortOverride !== undefined && !overrideReason?.trim()) {
             console.error('Cannot complete task: effort_override requires override_reason')
+            toastStore.showToast('Aufwandsüberschreibung benötigt eine Begründung', 'error')
             return false
         }
 
@@ -107,23 +116,27 @@ export const useTaskStore = defineStore('tasks', () => {
         if (error) {
             console.error('Error calling complete-task function:', error)
             console.error('Full error object:', JSON.stringify(error, null, 2))
+            toastStore.showToast('Fehler beim Abschließen der Aufgabe', 'error')
             return false
         }
 
         if (!data?.success) {
             console.error('Edge function returned error:', data)
             console.error('Full response data:', JSON.stringify(data, null, 2))
+            toastStore.showToast('Fehler beim Abschließen der Aufgabe', 'error')
             return false
         }
 
         // Reload tasks vom Backend (Source of Truth, kein optimistic update)
         await loadTasks()
+        toastStore.showToast('Aufgabe abgeschlossen', 'success', 3000)
         return true
     }
 
     // MARK AS DIRTY - Task wieder als "dreckig" markieren
     // Ändert nur tasks.completed, löscht KEINE completions aus der Historie
     const markAsDirty = async (taskId: string) => {
+        const toastStore = useToastStore()
         // UPDATE tasks.completed = FALSE
         const { error } = await supabase
             .from('tasks')
@@ -132,6 +145,7 @@ export const useTaskStore = defineStore('tasks', () => {
 
         if (error) {
             console.error('Error marking task as dirty:', error)
+            toastStore.showToast('Fehler beim Zurücksetzen der Aufgabe', 'error')
             return false
         }
 
@@ -145,9 +159,11 @@ export const useTaskStore = defineStore('tasks', () => {
     // task_type defaults to 'recurring' if not provided (for backwards compatibility)
     const createTask = async (taskData: Partial<Task> & Pick<Task, 'title' | 'effort' | 'recurrence_days' | 'task_type'>) => {
         const householdStore = useHouseholdStore()
+        const toastStore = useToastStore()
 
         if (!householdStore.currentHousehold) {
             console.error('Cannot create task: No current household')
+            toastStore.showToast('Fehler: Kein Haushalt ausgewählt', 'error')
             return null
         }
 
@@ -166,16 +182,19 @@ export const useTaskStore = defineStore('tasks', () => {
 
         if (error) {
             console.error('Error creating task:', error)
+            toastStore.showToast('Fehler beim Erstellen der Aufgabe', 'error')
             return null
         }
 
         // Lokalen State aktualisieren
         tasks.value.push(data)
+        toastStore.showToast('Aufgabe erstellt', 'success', 3000)
         return data
     }
 
     // UPDATE - Task vollständig aktualisieren
     const updateTask = async (taskId: string, updates: Partial<Omit<Task, 'task_id'>>) => {
+        const toastStore = useToastStore()
         isLoading.value = true
 
         const { error } = await supabase
@@ -187,6 +206,7 @@ export const useTaskStore = defineStore('tasks', () => {
 
         if (error) {
             console.error('Error updating task:', error)
+            toastStore.showToast('Fehler beim Aktualisieren der Aufgabe', 'error')
             return false
         }
 
@@ -195,11 +215,13 @@ export const useTaskStore = defineStore('tasks', () => {
         if (taskIndex !== -1) {
             tasks.value[taskIndex] = { ...tasks.value[taskIndex], ...updates }
         }
+        toastStore.showToast('Aufgabe aktualisiert', 'success', 3000)
         return true
     }
 
     // DELETE - Task löschen
     const deleteTask = async (taskId: string) => {
+        const toastStore = useToastStore()
         isLoading.value = true
 
         const { error } = await supabase
@@ -211,11 +233,13 @@ export const useTaskStore = defineStore('tasks', () => {
 
         if (error) {
             console.error('Error deleting task:', error)
+            toastStore.showToast('Fehler beim Löschen der Aufgabe', 'error')
             return false
         }
 
         // Lokalen State aktualisieren
         tasks.value = tasks.value.filter(t => t.task_id !== taskId)
+        toastStore.showToast('Aufgabe gelöscht', 'success', 3000)
         return true
     }
 
@@ -328,6 +352,7 @@ export const useTaskStore = defineStore('tasks', () => {
 
     // ASSIGN TASK - Weise Task einem Household-Member zu
     const assignTask = async (taskId: string, userId: string | null, permanent: boolean) => {
+        const toastStore = useToastStore()
         isLoading.value = true
 
         const { error } = await supabase
@@ -342,6 +367,7 @@ export const useTaskStore = defineStore('tasks', () => {
 
         if (error) {
             console.error('Error assigning task:', error)
+            toastStore.showToast('Fehler beim Zuweisen der Aufgabe', 'error')
             return false
         }
 
@@ -351,6 +377,7 @@ export const useTaskStore = defineStore('tasks', () => {
             tasks.value[taskIndex].assigned_to = userId
             tasks.value[taskIndex].assignment_permanent = permanent
         }
+        toastStore.showToast('Aufgabe zugewiesen', 'success', 3000)
         return true
     }
 
@@ -359,6 +386,7 @@ export const useTaskStore = defineStore('tasks', () => {
     // JETZT EINFACHER: Direkter JOIN über user_id (keine Frontend-Matching mehr nötig!)
     const fetchCompletions = async () => {
         const householdStore = useHouseholdStore()
+        const toastStore = useToastStore()
 
         if (!householdStore.currentHousehold) {
             console.warn('No current household, cannot fetch completions')
@@ -387,6 +415,7 @@ export const useTaskStore = defineStore('tasks', () => {
 
         if (error) {
             console.error('Error fetching completions:', error)
+            toastStore.showToast('Fehler beim Laden der Historie', 'error')
             return []
         }
 
@@ -423,6 +452,7 @@ export const useTaskStore = defineStore('tasks', () => {
     // DELETE COMPLETION - Lösche einen Task-Completion Eintrag aus Historie
     // Wichtig: Löscht NUR aus task_completions, ändert NICHT tasks.completed Status
     const deleteCompletion = async (completionId: string) => {
+        const toastStore = useToastStore()
         isLoading.value = true
 
         const { error } = await supabase
@@ -434,11 +464,13 @@ export const useTaskStore = defineStore('tasks', () => {
 
         if (error) {
             console.error('Error deleting completion:', error)
+            toastStore.showToast('Fehler beim Löschen des Eintrags', 'error')
             return false
         }
 
         // Lokalen State aktualisieren
         completions.value = completions.value.filter(c => c.completion_id !== completionId)
+        toastStore.showToast('Eintrag gelöscht', 'success', 3000)
         return true
     }
 
@@ -446,6 +478,7 @@ export const useTaskStore = defineStore('tasks', () => {
     // Verwendet tasks-Join um nur completions des aktuellen Households zu löschen
     const deleteAllCompletions = async () => {
         const householdStore = useHouseholdStore()
+        const toastStore = useToastStore()
 
         if (!householdStore.currentHousehold) {
             console.warn('No current household, cannot delete completions')
@@ -462,6 +495,7 @@ export const useTaskStore = defineStore('tasks', () => {
 
         if (tasksError) {
             console.error('Error fetching household tasks:', tasksError)
+            toastStore.showToast('Fehler beim Löschen der Historie', 'error')
             isLoading.value = false
             return false
         }
@@ -484,11 +518,13 @@ export const useTaskStore = defineStore('tasks', () => {
 
         if (error) {
             console.error('Error deleting all completions:', error)
+            toastStore.showToast('Fehler beim Löschen der Historie', 'error')
             return false
         }
 
         // Lokalen State aktualisieren
         completions.value = []
+        toastStore.showToast('Historie gelöscht', 'success', 3000)
         return true
     }
 
@@ -506,6 +542,7 @@ export const useTaskStore = defineStore('tasks', () => {
 
     // RESET SUBTASKS - Setze alle Subtasks einer Parent Task auf uncompleted
     const resetSubtasks = async (parentTaskId: string) => {
+        const toastStore = useToastStore()
         const subtasks = getSubtasks(parentTaskId)
 
         if (subtasks.length === 0) {
@@ -521,6 +558,7 @@ export const useTaskStore = defineStore('tasks', () => {
 
         if (error) {
             console.error('Error resetting subtasks:', error)
+            toastStore.showToast('Fehler beim Zurücksetzen der Unteraufgaben', 'error')
             return false
         }
 

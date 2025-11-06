@@ -4,6 +4,7 @@ import type { ShoppingItem } from '@/types/ShoppingItem'
 import { supabase } from '@/lib/supabase'
 import { useHouseholdStore } from './householdStore'
 import { useAuthStore } from './authStore'
+import { useToastStore } from './toastStore'
 import type { RealtimeChannel } from '@supabase/supabase-js'
 
 export const useShoppingStore = defineStore('shopping', () => {
@@ -37,6 +38,7 @@ export const useShoppingStore = defineStore('shopping', () => {
     console.log('Loading shopping items...')
 
     const householdStore = useHouseholdStore()
+    const toastStore = useToastStore()
 
     if (!householdStore.currentHousehold) {
       console.warn('No current household, cannot load shopping items')
@@ -51,6 +53,7 @@ export const useShoppingStore = defineStore('shopping', () => {
 
     if (error) {
       console.error('Error loading shopping items:', error)
+      toastStore.showToast('Fehler beim Laden der Einkaufsliste', 'error')
       return
     }
 
@@ -61,14 +64,17 @@ export const useShoppingStore = defineStore('shopping', () => {
   // CREATE - Neues Item erstellen
   const createItem = async (name: string) => {
     const householdStore = useHouseholdStore()
+    const toastStore = useToastStore()
 
     if (!householdStore.currentHousehold) {
       console.error('Cannot create item: No current household')
+      toastStore.showToast('Fehler: Kein Haushalt ausgewählt', 'error')
       return null
     }
 
     if (!name.trim()) {
       console.error('Cannot create item: Name is empty')
+      toastStore.showToast('Artikel-Name darf nicht leer sein', 'error')
       return null
     }
 
@@ -87,6 +93,7 @@ export const useShoppingStore = defineStore('shopping', () => {
 
     if (error) {
       console.error('Error creating shopping item:', error)
+      toastStore.showToast('Fehler beim Hinzufügen des Artikels', 'error')
       return null
     }
 
@@ -94,6 +101,7 @@ export const useShoppingStore = defineStore('shopping', () => {
     if (!items.value.find(i => i.shopping_item_id === data.shopping_item_id)) {
       items.value.push(data)
     }
+    toastStore.showToast('Artikel hinzugefügt', 'success', 2000)
     return data
   }
 
@@ -101,15 +109,18 @@ export const useShoppingStore = defineStore('shopping', () => {
   // Inkrementiert times_purchased, setzt purchased = true und Timestamps
   const markPurchased = async (itemId: string) => {
     const authStore = useAuthStore()
+    const toastStore = useToastStore()
 
     if (!authStore.user) {
       console.error('Cannot mark purchased: No user logged in')
+      toastStore.showToast('Fehler: Nicht angemeldet', 'error')
       return false
     }
 
     const item = items.value.find(i => i.shopping_item_id === itemId)
     if (!item) {
       console.error('Cannot mark purchased: Item not found')
+      toastStore.showToast('Artikel nicht gefunden', 'error')
       return false
     }
 
@@ -129,6 +140,7 @@ export const useShoppingStore = defineStore('shopping', () => {
 
     if (error) {
       console.error('Error marking item purchased:', error)
+      toastStore.showToast('Fehler beim Abhaken des Artikels', 'error')
       return false
     }
 
@@ -147,6 +159,7 @@ export const useShoppingStore = defineStore('shopping', () => {
   // MARK UNPURCHASED - Item zurück auf Todo-Liste
   // Setzt nur purchased = false, lässt times_purchased unverändert
   const markUnpurchased = async (itemId: string) => {
+    const toastStore = useToastStore()
     isLoading.value = true
 
     const { error } = await supabase
@@ -160,6 +173,7 @@ export const useShoppingStore = defineStore('shopping', () => {
 
     if (error) {
       console.error('Error marking item unpurchased:', error)
+      toastStore.showToast('Fehler beim Zurücksetzen des Artikels', 'error')
       return false
     }
 
@@ -174,6 +188,7 @@ export const useShoppingStore = defineStore('shopping', () => {
 
   // DELETE - Item permanent löschen
   const deleteItem = async (itemId: string) => {
+    const toastStore = useToastStore()
     isLoading.value = true
 
     const { error } = await supabase
@@ -185,11 +200,13 @@ export const useShoppingStore = defineStore('shopping', () => {
 
     if (error) {
       console.error('Error deleting shopping item:', error)
+      toastStore.showToast('Fehler beim Löschen des Artikels', 'error')
       return false
     }
 
     // Lokalen State aktualisieren
     items.value = items.value.filter(i => i.shopping_item_id !== itemId)
+    toastStore.showToast('Artikel gelöscht', 'success', 2000)
     return true
   }
 

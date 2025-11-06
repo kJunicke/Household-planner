@@ -3,6 +3,7 @@ import { defineStore } from 'pinia'
 import { supabase } from '@/lib/supabase'
 import type { Household, HouseholdMember } from '@/types/households'
 import { useAuthStore } from './authStore'
+import { useToastStore } from './toastStore'
 
 export const useHouseholdStore = defineStore('household', () => {
     // State
@@ -12,6 +13,8 @@ export const useHouseholdStore = defineStore('household', () => {
     // Actions
     const loadUserHousehold = async () => {
         const authStore = useAuthStore()
+        const toastStore = useToastStore()
+
         if (!authStore.user) {
             console.error('No user logged in')
             return
@@ -26,6 +29,7 @@ export const useHouseholdStore = defineStore('household', () => {
 
         if (memberError) {
             console.error('Error loading household member:', memberError)
+            toastStore.showToast('Fehler beim Laden des Haushalts', 'error')
             return
         }
 
@@ -43,6 +47,7 @@ export const useHouseholdStore = defineStore('household', () => {
 
         if (householdError) {
             console.error('Error loading household:', householdError)
+            toastStore.showToast('Fehler beim Laden des Haushalts', 'error')
             return
         }
 
@@ -54,6 +59,8 @@ export const useHouseholdStore = defineStore('household', () => {
     }
 
     const loadHouseholdMembers = async () => {
+        const toastStore = useToastStore()
+
         if (!currentHousehold.value) {
             householdMembers.value = []
             return
@@ -66,6 +73,7 @@ export const useHouseholdStore = defineStore('household', () => {
 
         if (error) {
             console.error('Error loading household members:', error)
+            toastStore.showToast('Fehler beim Laden der Haushaltsmitglieder', 'error')
             householdMembers.value = []
             return
         }
@@ -76,6 +84,8 @@ export const useHouseholdStore = defineStore('household', () => {
 
     const updateMemberDisplayName = async (newName: string) => {
         const authStore = useAuthStore()
+        const toastStore = useToastStore()
+
         if (!authStore.user || !currentHousehold.value) {
             return { success: false, error: 'Not logged in or no household' }
         }
@@ -88,16 +98,20 @@ export const useHouseholdStore = defineStore('household', () => {
 
         if (error) {
             console.error('Error updating display name:', error)
+            toastStore.showToast('Fehler beim Aktualisieren des Namens', 'error')
             return { success: false, error: error.message }
         }
 
         // Update local state
         await loadHouseholdMembers()
+        toastStore.showToast('Name aktualisiert', 'success', 3000)
         return { success: true }
     }
 
     const updateMemberProfile = async (newName: string, newColor: string) => {
         const authStore = useAuthStore()
+        const toastStore = useToastStore()
+
         if (!authStore.user || !currentHousehold.value) {
             return { success: false, error: 'Not logged in or no household' }
         }
@@ -113,11 +127,13 @@ export const useHouseholdStore = defineStore('household', () => {
 
         if (error) {
             console.error('Error updating member profile:', error)
+            toastStore.showToast('Fehler beim Aktualisieren des Profils', 'error')
             return { success: false, error: error.message }
         }
 
         // Update local state
         await loadHouseholdMembers()
+        toastStore.showToast('Profil aktualisiert', 'success', 3000)
         return { success: true }
     }
 
@@ -131,8 +147,11 @@ export const useHouseholdStore = defineStore('household', () => {
 
     const createHousehold = async (name: string) => {
         const authStore = useAuthStore()
+        const toastStore = useToastStore()
+
         if (!authStore.user) {
             console.error('No user logged in')
+            toastStore.showToast('Fehler: Nicht angemeldet', 'error')
             throw new Error('Not logged in')
         }
 
@@ -145,6 +164,7 @@ export const useHouseholdStore = defineStore('household', () => {
 
         if (householdError) {
             console.error('Error creating household:', householdError)
+            toastStore.showToast('Fehler beim Erstellen des Haushalts', 'error')
             throw new Error(householdError.message)
         }
 
@@ -160,6 +180,7 @@ export const useHouseholdStore = defineStore('household', () => {
 
         if (memberError) {
             console.error('Error adding user to household:', memberError)
+            toastStore.showToast('Fehler beim Beitreten zum Haushalt', 'error')
             throw new Error(memberError.message)
         }
 
@@ -168,18 +189,23 @@ export const useHouseholdStore = defineStore('household', () => {
 
         // Load members (nur der Creator initial)
         await loadHouseholdMembers()
+        toastStore.showToast('Haushalt erstellt', 'success', 3000)
     }
 
     const joinHousehold = async (inviteCode: string) => {
         const authStore = useAuthStore()
+        const toastStore = useToastStore()
+
         if (!authStore.user) {
             console.error('No user logged in')
+            toastStore.showToast('Fehler: Nicht angemeldet', 'error')
             return false
         }
 
         // Check if user already has a household
         if (currentHousehold.value) {
             console.error('User already in household')
+            toastStore.showToast('Du bist bereits in einem Haushalt', 'error')
             return false
         }
 
@@ -192,6 +218,7 @@ export const useHouseholdStore = defineStore('household', () => {
 
         if (householdError || !householdData) {
             console.error('Error finding household:', householdError)
+            toastStore.showToast('Ungültiger Einladungscode', 'error')
             return false
         }
 
@@ -207,6 +234,7 @@ export const useHouseholdStore = defineStore('household', () => {
 
         if (memberError) {
             console.error('Error joining household:', memberError)
+            toastStore.showToast('Fehler beim Beitreten zum Haushalt', 'error')
             return false
         }
 
@@ -215,17 +243,22 @@ export const useHouseholdStore = defineStore('household', () => {
 
         // Load all members
         await loadHouseholdMembers()
+        toastStore.showToast('Haushalt beigetreten', 'success', 3000)
         return true
     }
 
     const leaveHousehold = async () => {
         const authStore = useAuthStore()
+        const toastStore = useToastStore()
+
         if (!authStore.user) {
             console.error('No user logged in')
+            toastStore.showToast('Fehler: Nicht angemeldet', 'error')
             throw new Error('Not logged in')
         }
 
         if (!currentHousehold.value) {
+            toastStore.showToast('Fehler: Kein Haushalt vorhanden', 'error')
             throw new Error('Not in a household')
         }
 
@@ -237,6 +270,7 @@ export const useHouseholdStore = defineStore('household', () => {
 
         if (error) {
             console.error('Error leaving household:', error)
+            toastStore.showToast('Fehler beim Verlassen des Haushalts', 'error')
             throw new Error(error.message)
         }
 
@@ -244,6 +278,7 @@ export const useHouseholdStore = defineStore('household', () => {
         currentHousehold.value = null
         householdMembers.value = []
         console.log('Left household')
+        toastStore.showToast('Haushalt verlassen', 'success', 3000)
     }
 
     return {
