@@ -20,6 +20,12 @@ export const useTaskStore = defineStore('tasks', () => {
     const loadTasks = async () => {
         console.log('Loading tasks...')
 
+        // Verhindere parallele Calls
+        if (isLoading.value) {
+            console.log('Already loading tasks, skipping...')
+            return
+        }
+
         const householdStore = useHouseholdStore()
         const toastStore = useToastStore()
 
@@ -31,31 +37,32 @@ export const useTaskStore = defineStore('tasks', () => {
             return
         }
 
-        const { data: tasksData, error: tasksError } = await supabase
-        .from('tasks')
-        .select('*')
-        .eq('household_id', householdStore.currentHousehold.household_id)
+        isLoading.value = true
 
-        if (tasksError) {
-            console.error('Error loading tasks', tasksError)
+        try {
+            const { data: tasksData, error: tasksError } = await supabase
+                .from('tasks')
+                .select('*')
+                .eq('household_id', householdStore.currentHousehold.household_id)
+
+            if (tasksError) throw tasksError
+
+            const { data: completionsData, error: completionsError } = await supabase
+                .from('task_completions')
+                .select('*')
+
+            if (completionsError) throw completionsError
+
+            tasks.value = tasksData || []
+            completions.value = completionsData || []
+            console.log('Loaded tasks:', tasks.value)
+            console.log('Loaded completions:', completions.value)
+        } catch (error) {
+            console.error('Error loading tasks:', error)
             toastStore.showToast('Fehler beim Laden der Aufgaben', 'error')
-            return
+        } finally {
+            isLoading.value = false
         }
-
-        const { data: completionsData, error: completionsError} = await supabase
-        .from('task_completions')
-        .select('*')
-
-        if (completionsError) {
-            console.error('Error loading completions', completionsError)
-            toastStore.showToast('Fehler beim Laden der Historie', 'error')
-            return
-        }
-
-        tasks.value = tasksData || []
-        completions.value = completionsData || []
-        console.log('Loaded tasks:', tasks.value)
-        console.log('Loaded completions:', completions.value)
     }
     const toggleTask = async (taskId:string) => {
         const toastStore = useToastStore()

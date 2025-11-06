@@ -37,6 +37,12 @@ export const useShoppingStore = defineStore('shopping', () => {
   const loadItems = async () => {
     console.log('Loading shopping items...')
 
+    // Verhindere parallele Calls
+    if (isLoading.value) {
+      console.log('Already loading shopping items, skipping...')
+      return
+    }
+
     const householdStore = useHouseholdStore()
     const toastStore = useToastStore()
 
@@ -46,19 +52,24 @@ export const useShoppingStore = defineStore('shopping', () => {
       return
     }
 
-    const { data, error } = await supabase
-      .from('shopping_items')
-      .select('*')
-      .eq('household_id', householdStore.currentHousehold.household_id)
+    isLoading.value = true
 
-    if (error) {
+    try {
+      const { data, error } = await supabase
+        .from('shopping_items')
+        .select('*')
+        .eq('household_id', householdStore.currentHousehold.household_id)
+
+      if (error) throw error
+
+      items.value = data || []
+      console.log('Loaded shopping items:', items.value)
+    } catch (error) {
       console.error('Error loading shopping items:', error)
       toastStore.showToast('Fehler beim Laden der Einkaufsliste', 'error')
-      return
+    } finally {
+      isLoading.value = false
     }
-
-    items.value = data || []
-    console.log('Loaded shopping items:', items.value)
   }
 
   // CREATE - Neues Item erstellen

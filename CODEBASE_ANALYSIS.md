@@ -17,8 +17,12 @@
 
 ### 🚨 Kritische Probleme (SOFORT fixen)
 
-1. ✅ **Error Handling implementiert** - Toast-System mit Bootstrap 5 + Pinia für alle 65+ Error-Points (06.11.2025)
-2. **⚠️ Loading States fehlen** - Race Conditions, flackernde UI, schlechte UX
+1. ✅ **Kein Error Handling** - ~~Alle 45+ Supabase-Calls haben nur `console.error()`, User sieht nichts~~
+   - **Fixed 06.11.2025:** Toast Notification System implementiert (Bootstrap 5 + Pinia)
+
+2. ✅ **Loading States fehlen** - ~~Race Conditions, flackernde UI, schlechte UX~~
+   - **Fixed 06.11.2025:** Skeleton Screens, Button Disabled States, Sequential Load Pattern
+
 3. **🐌 Zu viele Full-Reloads** - `loadTasks()` nach jeder Mutation statt Optimistic Updates
 4. **🔓 Keine Input-Validierung** - Forms akzeptieren invalide Daten (effort: 999, empty titles)
 

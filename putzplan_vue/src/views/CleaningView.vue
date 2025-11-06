@@ -99,10 +99,10 @@ const createTask = async () => {
   }
  }
 
-onMounted(() => {
-  // Lädt Tasks aus Supabase
-  taskStore.loadTasks()
-  // Startet Realtime Subscriptions für Live-Updates
+onMounted(async () => {
+  // Lädt Tasks aus Supabase - WARTE bis fertig geladen
+  await taskStore.loadTasks()
+  // Startet Realtime Subscriptions für Live-Updates (erst NACH initialem Load)
   taskStore.subscribeToTasks()
 })
 
@@ -118,7 +118,7 @@ onUnmounted(() => {
     <div class="container-fluid">
       <div class="row mb-4">
         <div class="col-12 text-end">
-          <button @click="toggleForm" class="btn btn-primary">
+          <button @click="toggleForm" class="btn btn-primary" :disabled="taskStore.isLoading">
             <i class="bi bi-plus"></i> Aufgabe hinzufügen
           </button>
         </div>
@@ -131,11 +131,11 @@ onUnmounted(() => {
             <form @submit.prevent="createTask">
               <div class="mb-3">
                 <label class="form-label">Task Titel</label>
-                <input type="text" v-model="newTask.title" placeholder="z.B. Küche putzen" class="form-control">
+                <input type="text" v-model="newTask.title" placeholder="z.B. Küche putzen" class="form-control" :disabled="taskStore.isLoading">
               </div>
               <div class="mb-3">
                 <label class="form-label">Aufwand (1-5)</label>
-                <select v-model="newTask.effort" class="form-control">
+                <select v-model="newTask.effort" class="form-control" :disabled="taskStore.isLoading">
                   <option :value="1">1 - Sehr leicht</option>
                   <option :value="2">2 - Leicht</option>
                   <option :value="3">3 - Normal</option>
@@ -145,7 +145,7 @@ onUnmounted(() => {
               </div>
               <div class="mb-3">
                 <label class="form-label">Task-Typ</label>
-                <select v-model="newTask.task_type" class="form-control">
+                <select v-model="newTask.task_type" class="form-control" :disabled="taskStore.isLoading">
                   <option value="daily">Täglich / Allgemein (immer sichtbar)</option>
                   <option value="recurring">Wiederkehrend (zeitbasiert)</option>
                   <option value="one-time">Einmalig</option>
@@ -153,11 +153,17 @@ onUnmounted(() => {
               </div>
               <div class="mb-3" v-if="newTask.task_type === 'recurring'">
                 <label class="form-label">Tage bis zum nächsten Putzen</label>
-                <input type="number" v-model="newTask.recurrence_days" placeholder="3" class="form-control">
+                <input type="number" v-model="newTask.recurrence_days" placeholder="3" class="form-control" :disabled="taskStore.isLoading">
               </div>
               <div class="d-flex gap-2">
-                <button type="submit" class="btn btn-success">Aufgabe erstellen</button>
-                <button type="button" @click="toggleForm" class="btn btn-secondary">Abbrechen</button>
+                <button type="submit" class="btn btn-success" :disabled="taskStore.isLoading">
+                  <span v-if="!taskStore.isLoading">Aufgabe erstellen</span>
+                  <span v-else>
+                    <span class="spinner-border spinner-border-sm me-2"></span>
+                    Erstellt...
+                  </span>
+                </button>
+                <button type="button" @click="toggleForm" class="btn btn-secondary" :disabled="taskStore.isLoading">Abbrechen</button>
               </div>
             </form>
           </div>
@@ -209,9 +215,24 @@ onUnmounted(() => {
         </button>
       </div>
 
+      <!-- Loading Skeleton (nur beim initialen Load) -->
+      <div v-if="taskStore.isLoading && taskStore.tasks.length === 0" class="skeleton-loading">
+        <div class="row">
+          <div class="col-12 col-md-6 col-lg-3 mb-3">
+            <div class="skeleton-card"></div>
+          </div>
+          <div class="col-12 col-md-6 col-lg-3 mb-3">
+            <div class="skeleton-card"></div>
+          </div>
+          <div class="col-12 col-md-6 col-lg-3 mb-3">
+            <div class="skeleton-card"></div>
+          </div>
+        </div>
+      </div>
+
       <!-- Task Lists (conditional rendering) -->
       <!-- Search Results -->
-      <section v-if="searchFilteredTasks !== null" class="task-section">
+      <section v-else-if="searchFilteredTasks !== null" class="task-section">
         <div v-if="searchFilteredTasks.length === 0" class="empty-state">
           <i class="bi bi-search"></i>
           <p>Keine Tasks gefunden für "{{ searchQuery }}"</p>

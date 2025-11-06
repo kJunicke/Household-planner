@@ -12,6 +12,7 @@
 
 ### Code Quality
 - ✅ **Toast Notifications** - Zentralisiertes Error & Success Feedback (Bootstrap 5 + Pinia)
+- ✅ **Loading States** - Skeleton Screens, Button Disabled States, Race Condition Fixes (06.11.2025)
 - **Form Validation** - Input-Validierung für alle Forms
 - **Lokale Supabase Dev** - `supabase start` Setup für lokales Testing
 
@@ -42,9 +43,14 @@
 **Migrations:** Konsolidiert am 26.10.2025 (29 → 4 Migrations)
 
 **Letzte größere Features:**
+- Loading States & Race Condition Fixes - 06.11.2025
+  - Skeleton Screens für Initial Load
+  - Button Disabled States während Actions
+  - Guard Clauses gegen parallele Calls
+  - Sequential Load → Subscribe Pattern
 - Toast Notification System (Bootstrap 5 + Pinia) - 06.11.2025
 - Subtasks System mit Completion-Modes
 - Effort Override mit Begründung
 - Stats Dashboard mit Zeit-Filtern
 - User Color Customization
-- Confetti Animation bei Task-Completion 
+- Confetti Animation bei Task-Completion

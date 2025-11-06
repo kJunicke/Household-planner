@@ -100,8 +100,10 @@ const formatDate = (dateString: string | null) => {
   })
 }
 
-onMounted(() => {
-  shoppingStore.loadItems()
+onMounted(async () => {
+  // Lädt Items aus Supabase - WARTE bis fertig geladen
+  await shoppingStore.loadItems()
+  // Startet Realtime Subscriptions für Live-Updates (erst NACH initialem Load)
   shoppingStore.subscribeToItems()
 })
 
@@ -128,13 +130,20 @@ onUnmounted(() => {
           @keyup.enter="handleAddItem"
           @focus="handleInputFocus"
           @blur="handleInputBlur"
+          :disabled="shoppingStore.isLoading"
         />
         <button
           class="btn btn-primary"
           @click="handleAddItem"
-          :disabled="!searchInput.trim()"
+          :disabled="!searchInput.trim() || shoppingStore.isLoading"
         >
-          <i class="bi bi-plus-lg"></i> Hinzufügen
+          <span v-if="!shoppingStore.isLoading">
+            <i class="bi bi-plus-lg"></i> Hinzufügen
+          </span>
+          <span v-else>
+            <span class="spinner-border spinner-border-sm me-2"></span>
+            Lädt...
+          </span>
         </button>
       </div>
 
@@ -152,8 +161,15 @@ onUnmounted(() => {
       </div>
     </div>
 
+    <!-- Loading Skeleton (nur beim initialen Load) -->
+    <div v-if="shoppingStore.isLoading && shoppingStore.items.length === 0" class="skeleton-loading">
+      <div class="skeleton-card" style="height: 80px;"></div>
+      <div class="skeleton-card" style="height: 80px;"></div>
+      <div class="skeleton-card" style="height: 80px;"></div>
+    </div>
+
     <!-- Liste 1: Zu kaufen (unpurchased) -->
-    <div class="shopping-section mb-4">
+    <div v-else class="shopping-section mb-4">
       <h5 class="shopping-list-title">
         <i class="bi bi-cart-dash"></i> Zu kaufen ({{ shoppingStore.unpurchasedItems.length }})
       </h5>
