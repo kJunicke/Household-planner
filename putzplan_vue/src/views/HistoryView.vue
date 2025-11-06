@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useTaskStore } from '../stores/taskStore'
 import { useHouseholdStore } from '../stores/householdStore'
 import type { Task } from '@/types/Task'
@@ -18,22 +18,25 @@ interface CompletionWithDetails {
   }
   household_members: {
     display_name: string
+    user_color: string
   }
 }
 
 const showDeleteModal = ref(false)
 const completionToDelete = ref<CompletionWithDetails | null>(null)
 const showDeleteAllModal = ref(false)
+const showOptionsDropdown = ref(false)
 
 // Reactive completions from store (updated via Realtime)
 const completions = computed(() => {
-  // Enriche mit display_name via Frontend-Matching
+  // Enriche mit display_name und user_color via Frontend-Matching
   return taskStore.completions.map(completion => {
     const member = householdStore.householdMembers.find(m => m.user_id === completion.user_id)
     return {
       ...completion,
       household_members: {
-        display_name: member?.display_name || 'Unbekannt'
+        display_name: member?.display_name || 'Unbekannt',
+        user_color: member?.user_color || '#6c757d'
       },
       tasks: {
         title: taskStore.tasks.find(t => t.task_id === completion.task_id)?.title || 'Unbekannte Aufgabe'
@@ -113,6 +116,22 @@ const getCompletionPoints = (completion: CompletionWithDetails): number => {
   const task = taskStore.tasks.find((t: Task) => t.task_id === completion.task_id)
   return task?.effort || 0
 }
+
+// Close dropdown when clicking outside
+const handleClickOutside = (event: MouseEvent) => {
+  const target = event.target as HTMLElement
+  if (!target.closest('.dropdown')) {
+    showOptionsDropdown.value = false
+  }
+}
+
+onMounted(() => {
+  document.addEventListener('click', handleClickOutside)
+})
+
+onUnmounted(() => {
+  document.removeEventListener('click', handleClickOutside)
+})
 </script>
 
 <template>
@@ -120,13 +139,23 @@ const getCompletionPoints = (completion: CompletionWithDetails): number => {
     <div class="container-fluid">
       <div class="d-flex justify-content-between align-items-center mb-4">
         <h2 class="page-title">Verlauf</h2>
-        <button
-          @click="openDeleteAllModal"
-          class="btn btn-sm btn-outline-danger"
-          :disabled="completions.length === 0"
-        >
-          <i class="bi bi-trash"></i> Alle löschen
-        </button>
+        <div class="dropdown">
+          <button
+            class="btn btn-sm btn-outline-secondary dropdown-toggle"
+            type="button"
+            @click="showOptionsDropdown = !showOptionsDropdown"
+            :disabled="completions.length === 0"
+          >
+            <i class="bi bi-three-dots-vertical"></i> Optionen
+          </button>
+          <ul class="dropdown-menu" :class="{ show: showOptionsDropdown }">
+            <li>
+              <button class="dropdown-item text-danger" @click="openDeleteAllModal(); showOptionsDropdown = false">
+                <i class="bi bi-trash"></i> Alle löschen
+              </button>
+            </li>
+          </ul>
+        </div>
       </div>
 
       <div v-if="completions.length === 0" class="empty-state">
@@ -139,6 +168,10 @@ const getCompletionPoints = (completion: CompletionWithDetails): number => {
           v-for="completion in completions"
           :key="completion.completion_id"
           class="completion-item"
+          :style="{
+            '--user-color': completion.household_members.user_color,
+            'background': `linear-gradient(to right, ${completion.household_members.user_color}15 0%, var(--color-background-elevated) 100%)`
+          }"
         >
           <div class="completion-icon">
             <i class="bi bi-check-circle-fill text-success"></i>
@@ -269,13 +302,16 @@ const getCompletionPoints = (completion: CompletionWithDetails): number => {
   gap: 1rem;
   padding: 1rem;
   background: var(--color-background-elevated);
-  border: 1px solid var(--color-border);
+  border-left: 3px solid var(--user-color, var(--color-border));
+  border-top: 1px solid var(--color-border);
+  border-right: 1px solid var(--color-border);
+  border-bottom: 1px solid var(--color-border);
   border-radius: var(--radius-md);
   transition: all 0.2s ease;
 }
 
 .completion-item:hover {
-  border-color: var(--color-primary);
+  border-left-color: var(--user-color, var(--color-primary));
   box-shadow: var(--shadow-sm);
 }
 
@@ -314,7 +350,8 @@ const getCompletionPoints = (completion: CompletionWithDetails): number => {
 
 .completion-meta {
   display: flex;
-  gap: 1.5rem;
+  flex-wrap: wrap;
+  gap: 0.75rem;
   font-size: 0.875rem;
   color: var(--color-text-secondary);
 }
@@ -340,6 +377,19 @@ const getCompletionPoints = (completion: CompletionWithDetails): number => {
 
 .completion-points i {
   color: var(--bs-warning);
+}
+
+/* Mobile optimization */
+@media (max-width: 576px) {
+  .completion-meta {
+    gap: 0.5rem;
+    font-size: 0.8125rem;
+  }
+
+  .completion-points {
+    flex-basis: 100%;
+    margin-top: 0.25rem;
+  }
 }
 
 .completion-actions {
@@ -373,5 +423,17 @@ const getCompletionPoints = (completion: CompletionWithDetails): number => {
   font-size: 0.875rem;
   color: var(--color-text-primary);
   line-height: 1.4;
+}
+
+.dropdown {
+  position: relative;
+}
+
+.dropdown-menu {
+  position: absolute;
+  right: 0;
+  top: 100%;
+  margin-top: 0.25rem;
+  z-index: 1000;
 }
 </style>

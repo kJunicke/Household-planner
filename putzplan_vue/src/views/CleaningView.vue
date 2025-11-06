@@ -1,10 +1,46 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted, ref } from "vue";
+import { onMounted, onUnmounted, ref, computed } from "vue";
 import TaskList from '../components/TaskList.vue';
+import TaskCard from '../components/TaskCard.vue';
 import { useTaskStore } from "../stores/taskStore";
+import type { Task } from '@/types/Task';
 
 const taskStore = useTaskStore()
 const showCreateTaskForm = ref(false)
+
+// Search state
+const searchQuery = ref('')
+
+// Filtered tasks based on search query
+// Wenn eine Subtask matched, wird die ganze Parent Task Card angezeigt
+const searchFilteredTasks = computed(() => {
+  const query = searchQuery.value.trim().toLowerCase()
+  if (!query) return null // Null = kein Suchfilter aktiv
+
+  const matchedParentIds = new Set<string>()
+
+  // Durchsuche alle Tasks
+  taskStore.tasks.forEach((task: Task) => {
+    const titleMatch = task.title.toLowerCase().includes(query)
+
+    if (task.parent_task_id === null) {
+      // Parent Task
+      if (titleMatch) {
+        matchedParentIds.add(task.task_id)
+      }
+    } else {
+      // Subtask - wenn matched, füge Parent hinzu
+      if (titleMatch) {
+        matchedParentIds.add(task.parent_task_id)
+      }
+    }
+  })
+
+  // Gib nur Parent Tasks zurück (TaskCard zeigt Subtasks intern)
+  return taskStore.tasks.filter((task: Task) =>
+    matchedParentIds.has(task.task_id) && task.parent_task_id === null
+  )
+})
 
 // Tab state for task categories
 type TaskCategory = 'daily' | 'recurring' | 'completed'
@@ -39,7 +75,14 @@ const resetForm = () => {
 
 const toggleForm = () => {
   showCreateTaskForm.value = !showCreateTaskForm.value
-  if(!showCreateTaskForm.value) resetForm()
+  if(!showCreateTaskForm.value) {
+    resetForm()
+  } else {
+    // Wenn Form geöffnet wird und Suchquery existiert, in title übernehmen
+    if (searchQuery.value.trim()) {
+      newTask.value.title = searchQuery.value.trim()
+    }
+  }
 }
 
 const createTask = async () => {
@@ -121,6 +164,29 @@ onUnmounted(() => {
         </div>
       </section>
 
+      <!-- Search Field -->
+      <div class="mb-4">
+        <div class="input-group">
+          <span class="input-group-text">
+            <i class="bi bi-search"></i>
+          </span>
+          <input
+            type="text"
+            v-model="searchQuery"
+            class="form-control"
+            placeholder="Tasks oder Subtasks durchsuchen..."
+          />
+          <button
+            v-if="searchQuery"
+            @click="searchQuery = ''"
+            class="btn btn-outline-secondary"
+            type="button"
+          >
+            <i class="bi bi-x-lg"></i>
+          </button>
+        </div>
+      </div>
+
       <!-- Category Tabs -->
       <div class="task-category-tabs mb-4">
         <button
@@ -144,17 +210,37 @@ onUnmounted(() => {
       </div>
 
       <!-- Task Lists (conditional rendering) -->
-      <section v-if="selectedCategory === 'daily'" class="task-section">
-        <TaskList filter="daily-todo" />
+      <!-- Search Results -->
+      <section v-if="searchFilteredTasks !== null" class="task-section">
+        <div v-if="searchFilteredTasks.length === 0" class="empty-state">
+          <i class="bi bi-search"></i>
+          <p>Keine Tasks gefunden für "{{ searchQuery }}"</p>
+        </div>
+        <div v-else class="container-fluid">
+          <div class="row">
+            <div v-for="task in searchFilteredTasks"
+              :key="task.task_id"
+              class="col-12 col-md-6 col-lg-3 mb-3">
+              <TaskCard :task="task" />
+            </div>
+          </div>
+        </div>
       </section>
 
-      <section v-if="selectedCategory === 'recurring'" class="task-section">
-        <TaskList filter="recurring-todo" />
-      </section>
+      <!-- Category Filtered Lists (only when no search) -->
+      <template v-else>
+        <section v-if="selectedCategory === 'daily'" class="task-section">
+          <TaskList filter="daily-todo" />
+        </section>
 
-      <section v-if="selectedCategory === 'completed'" class="task-section">
-        <TaskList filter="completed" />
-      </section>
+        <section v-if="selectedCategory === 'recurring'" class="task-section">
+          <TaskList filter="recurring-todo" />
+        </section>
+
+        <section v-if="selectedCategory === 'completed'" class="task-section">
+          <TaskList filter="completed" />
+        </section>
+      </template>
     </div>
   </main>
 </template>

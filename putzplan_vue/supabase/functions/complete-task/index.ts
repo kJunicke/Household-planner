@@ -68,10 +68,10 @@ Deno.serve(async (req) => {
       )
     }
 
-    // 5. Fetch task details (for parent_task_id check + assignment_permanent + task_type)
+    // 5. Fetch task details (for parent_task_id check + assignment_permanent + task_type + subtask_points_mode)
     const { data: taskDetails, error: fetchError } = await supabase
       .from('tasks')
-      .select('effort, parent_task_id, assignment_permanent, task_type')
+      .select('effort, parent_task_id, assignment_permanent, task_type, subtask_points_mode')
       .eq('task_id', taskId)
       .single()
 
@@ -83,7 +83,52 @@ Deno.serve(async (req) => {
       )
     }
 
-    // 6. Calculate final effort based on SUBTASK-level subtask_points_mode (only for PARENT tasks with NO effortOverride)
+    // 6. Handle CHECKLIST-MODE SUBTASKS: Award 0 points when completed individually
+    // Checklist subtasks only matter for parent tracking, NOT for individual points
+    if (taskDetails.parent_task_id !== null && taskDetails.subtask_points_mode === 'checklist') {
+      // Force 0 points for checklist subtasks (unless user explicitly overrides)
+      if (effortOverride === undefined) {
+        const completionData = {
+          task_id: taskId,
+          user_id: user.id,
+          effort_override: 0,
+          override_reason: 'Checklist-Subtask (nur Tracking, keine Punkte)'
+        }
+
+        const { error: completionError } = await supabase
+          .from('task_completions')
+          .insert(completionData)
+
+        if (completionError) {
+          console.error('Error creating completion:', completionError)
+          return new Response(
+            JSON.stringify({ error: 'Failed to create completion', details: completionError.message }),
+            { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          )
+        }
+
+        // Mark subtask as completed (but award 0 points)
+        const { error: updateError } = await supabase
+          .from('tasks')
+          .update({ completed: true, last_completed_at: new Date().toISOString() })
+          .eq('task_id', taskId)
+
+        if (updateError) {
+          console.error('Error updating task:', updateError)
+          return new Response(
+            JSON.stringify({ error: 'Failed to update task', details: updateError.message }),
+            { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          )
+        }
+
+        return new Response(
+          JSON.stringify({ success: true }),
+          { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+    }
+
+    // 7. Calculate final effort based on SUBTASK-level subtask_points_mode (only for PARENT tasks with NO effortOverride)
     let finalEffort = taskDetails.effort // Default: use task's base effort
     let autoReason: string | undefined = undefined
 
@@ -110,12 +155,13 @@ Deno.serve(async (req) => {
 
         const checklistCount = checklistSubtasks.length
         const deductSum = deductSubtasks.reduce((sum, s) => sum + s.effort, 0)
-        const bonusSum = bonusSubtasks.reduce((sum, s) => sum + s.effort, 0)
+        const bonusCount = bonusSubtasks.length
 
         // Calculate final effort
-        // Formula: parentEffort - deductSum + bonusSum
-        // (checklist subtasks count 0, so they're ignored in calculation)
-        finalEffort = taskDetails.effort - deductSum + bonusSum
+        // Formula: parentEffort - deductSum
+        // Bonus subtasks award points when completed individually, NOT at parent completion
+        // Checklist subtasks count 0 (tracking only)
+        finalEffort = taskDetails.effort - deductSum
 
         // VALIDATION: Prevent negative points
         if (finalEffort < 0) {
@@ -126,7 +172,6 @@ Deno.serve(async (req) => {
               details: {
                 parentEffort: taskDetails.effort,
                 deductSum,
-                bonusSum,
                 resultingEffort: finalEffort
               }
             }),
@@ -138,7 +183,7 @@ Deno.serve(async (req) => {
         const reasonParts: string[] = []
         if (checklistCount > 0) reasonParts.push(`${checklistCount} Checkliste`)
         if (deductSum > 0) reasonParts.push(`${deductSum} abgezogen`)
-        if (bonusSum > 0) reasonParts.push(`${bonusSum} Bonus`)
+        if (bonusCount > 0) reasonParts.push(`${bonusCount} Bonus (bereits belohnt)`)
 
         if (reasonParts.length > 0) {
           autoReason = `Subtasks: ${reasonParts.join(', ')} → ${finalEffort} Punkte`
@@ -146,7 +191,7 @@ Deno.serve(async (req) => {
       }
     }
 
-    // 7. INSERT task_completion (RLS checks: task belongs to user's household + user_id matches auth)
+    // 8. INSERT task_completion (RLS checks: task belongs to user's household + user_id matches auth)
     const completionData: {
       task_id: string
       user_id: string
@@ -179,7 +224,7 @@ Deno.serve(async (req) => {
       )
     }
 
-    // 8. UPDATE tasks (replaces trigger logic!)
+    // 9. UPDATE tasks (replaces trigger logic!)
     // Daily tasks: log completion + reset subtasks, but DON'T mark as completed (stay in Alltagsaufgaben tab)
     // Other tasks: mark as completed + update last_completed_at
     const now = new Date().toISOString()
@@ -215,7 +260,7 @@ Deno.serve(async (req) => {
       )
     }
 
-    // 9. Reset all subtasks to uncompleted (für saubere Punkteberechnung bei erneutem Putzen)
+    // 10. Reset all subtasks to uncompleted (für saubere Punkteberechnung bei erneutem Putzen)
     // Wenn eine Parent Task completed wird, starten alle Subtasks "fresh"
     if (taskDetails.parent_task_id === null) {
       const { error: subtaskResetError } = await supabase
@@ -230,7 +275,7 @@ Deno.serve(async (req) => {
       }
     }
 
-    // 10. Success!
+    // 11. Success!
     return new Response(
       JSON.stringify({ success: true }),
       { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }

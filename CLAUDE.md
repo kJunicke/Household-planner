@@ -24,6 +24,9 @@ Bei jedem Feature: Context7 für Up-to-date Docs konsultieren
 **Playwright** für Browser-Testing und Automatisierung:
 - **Test-URL**: `http://localhost:5173/Household-planner/`
 - Features IMMER mit Playwright MCP testen (Browser-Automatisierung)
+- **Mobile Testing**: IMMER mit schmaler Viewport testen (360x740 für Smartphone)
+  - Standard Playwright Viewport ist zu breit für echtes Mobile Testing
+  - Verwende `browser_resize` mit width: 360, height: 740 vor dem Testen
 - Dev-Server läuft bereits - NICHT `npm run dev` ausführen!
 
 ```bash
