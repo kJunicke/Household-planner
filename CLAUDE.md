@@ -74,7 +74,7 @@ putzplan_vue/
   - Hat `display_name` (Email-Prefix als Fallback beim Join/Create)
   - Keine redundante `member_id` mehr (wurde entfernt für einfacheres Datenmodell)
 - `tasks` - PK: `task_id` (Task-Templates mit `recurrence_days`, `last_completed_at`, `task_type`)
-  - `task_type` - Enum: `'recurring'` (zeitbasiert), `'daily'` (immer sichtbar), `'one-time'` (einmalig)
+  - `task_type` - Enum: `'recurring'` (zeitbasiert), `'daily'` (immer sichtbar), `'one-time'` (einmalig), `'project'` (langfristig)
 - `task_completions` - PK: `completion_id` (Append-only Historie, **Single Source of Truth**)
   - `user_id` referenziert direkt `auth.users.id`
 - `shopping_items` - PK: `shopping_item_id` (Einkaufsliste mit Purchase-Tracking)

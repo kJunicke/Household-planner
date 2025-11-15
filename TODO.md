@@ -43,6 +43,13 @@
 **Migrations:** Konsolidiert am 26.10.2025 (29 → 4 Migrations)
 
 **Letzte größere Features:**
+- Projects Feature für langfristige Task-Verwaltung - 15.11.2025
+  - Eigener "Projekte" Tab mit separater Completed-Sektion
+  - Auto-generierter "Am Projekt arbeiten" Subtask
+  - ProjectWorkModal für Effort-Logging (1-5 Punkte) + Notes
+  - Nur Bonus/Checklist Subtasks erlaubt (Deduct disabled)
+  - ProjectCompleteModal mit Bestätigung
+  - Custom Effort Tracking in History & Stats
 - Loading States & Race Condition Fixes - 06.11.2025
   - Skeleton Screens für Initial Load
   - Button Disabled States während Actions

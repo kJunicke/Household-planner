@@ -213,16 +213,6 @@ const handleResetSubtasks = async () => {
 const isProject = computed(() => props.task.task_type === 'project')
 const projectEffort = computed(() => isProject.value ? taskStore.getProjectEffort(props.task.task_id) : 0)
 
-// Check if this is the "Am Projekt arbeiten" default subtask
-const isProjectWorkSubtask = computed(() =>
-     props.task.title === 'Am Projekt arbeiten' &&
-     props.task.parent_task_id !== null
-)
-
-const openProjectWorkModal = () => {
-     showProjectWorkModal.value = true
-}
-
 const closeProjectWorkModal = () => {
      showProjectWorkModal.value = false
 }
