@@ -19,7 +19,13 @@ export const useShoppingStore = defineStore('shopping', () => {
   const unpurchasedItems = computed(() => {
     return items.value
       .filter(item => !item.purchased)
-      .sort((a, b) => a.name.localeCompare(b.name))
+      .sort((a, b) => {
+        // Priority items first
+        if (a.is_priority && !b.is_priority) return -1
+        if (!a.is_priority && b.is_priority) return 1
+        // Then sort alphabetically
+        return a.name.localeCompare(b.name)
+      })
   })
 
   const purchasedItems = computed(() => {
@@ -116,8 +122,46 @@ export const useShoppingStore = defineStore('shopping', () => {
     return data
   }
 
+  // TOGGLE PRIORITY - Item als prioritär markieren/demarkieren
+  const togglePriority = async (itemId: string) => {
+    const toastStore = useToastStore()
+
+    const item = items.value.find(i => i.shopping_item_id === itemId)
+    if (!item) {
+      console.error('Cannot toggle priority: Item not found')
+      toastStore.showToast('Artikel nicht gefunden', 'error')
+      return false
+    }
+
+    isLoading.value = true
+
+    const { error } = await supabase
+      .from('shopping_items')
+      .update({
+        is_priority: !item.is_priority
+      })
+      .eq('shopping_item_id', itemId)
+
+    isLoading.value = false
+
+    if (error) {
+      console.error('Error toggling priority:', error)
+      toastStore.showToast('Fehler beim Setzen der Priorität', 'error')
+      return false
+    }
+
+    // Lokalen State aktualisieren
+    const itemIndex = items.value.findIndex(i => i.shopping_item_id === itemId)
+    if (itemIndex !== -1) {
+      items.value[itemIndex].is_priority = !items.value[itemIndex].is_priority
+    }
+
+    return true
+  }
+
   // MARK PURCHASED - Item als gekauft markieren
   // Inkrementiert times_purchased, setzt purchased = true und Timestamps
+  // Priority wird automatisch vom DB-Trigger entfernt
   const markPurchased = async (itemId: string) => {
     const authStore = useAuthStore()
     const toastStore = useToastStore()
@@ -159,6 +203,7 @@ export const useShoppingStore = defineStore('shopping', () => {
     const itemIndex = items.value.findIndex(i => i.shopping_item_id === itemId)
     if (itemIndex !== -1) {
       items.value[itemIndex].purchased = true
+      items.value[itemIndex].is_priority = false // Trigger entfernt Priorität
       items.value[itemIndex].times_purchased += 1
       items.value[itemIndex].last_purchased_at = new Date().toISOString()
       items.value[itemIndex].last_purchased_by = authStore.user.id
@@ -307,6 +352,7 @@ export const useShoppingStore = defineStore('shopping', () => {
     purchasedItems,
     loadItems,
     createItem,
+    togglePriority,
     markPurchased,
     markUnpurchased,
     deleteItem,

@@ -21,7 +21,7 @@
 ## 📋 Medium Priority
 
 ### Shopping-Liste Features
-- **Priorisierung** - Items nach Wichtigkeit sortieren/markieren
+- ✅ **Priorisierung** - Items nach Wichtigkeit sortieren/markieren (15.11.2025)
 - **Offline-Modus** - Shopping-Liste offline nutzbar (mit Sync beim Reconnect)
 
 ---
@@ -43,6 +43,12 @@
 **Migrations:** Konsolidiert am 26.10.2025 (29 → 4 Migrations)
 
 **Letzte größere Features:**
+- Shopping-Liste Priorisierung - 15.11.2025
+  - `is_priority` Boolean-Flag in DB
+  - Stern-Button zum Markieren/Demarkieren
+  - Orange Gradient-Hintergrund für Priority-Items
+  - Auto-Sortierung: Priority Items ganz oben
+  - DB-Trigger: Priorität wird beim Abhaken automatisch entfernt
 - Projects Feature für langfristige Task-Verwaltung - 15.11.2025
   - Eigener "Projekte" Tab mit separater Completed-Sektion
   - Auto-generierter "Am Projekt arbeiten" Subtask

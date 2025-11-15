@@ -184,6 +184,7 @@ onUnmounted(() => {
           v-for="item in shoppingStore.unpurchasedItems"
           :key="item.shopping_item_id"
           class="shopping-item"
+          :class="{ 'priority': item.is_priority }"
         >
           <div class="form-check">
             <input
@@ -197,13 +198,23 @@ onUnmounted(() => {
               {{ item.name }}
             </label>
           </div>
-          <button
-            class="btn btn-sm btn-outline-danger"
-            @click="shoppingStore.deleteItem(item.shopping_item_id)"
-            title="Löschen"
-          >
-            <i class="bi bi-trash"></i>
-          </button>
+          <div class="item-actions">
+            <button
+              class="btn btn-sm"
+              :class="item.is_priority ? 'btn-warning' : 'btn-outline-secondary'"
+              @click="shoppingStore.togglePriority(item.shopping_item_id)"
+              :title="item.is_priority ? 'Priorität entfernen' : 'Als prioritär markieren'"
+            >
+              <i class="bi bi-star-fill"></i>
+            </button>
+            <button
+              class="btn btn-sm btn-outline-danger"
+              @click="shoppingStore.deleteItem(item.shopping_item_id)"
+              title="Löschen"
+            >
+              <i class="bi bi-trash"></i>
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -337,6 +348,17 @@ onUnmounted(() => {
   box-shadow: var(--shadow-sm);
 }
 
+.shopping-item.priority {
+  background: linear-gradient(135deg, #fff3cd 0%, #ffe69c 100%);
+  border-color: #ffc107;
+  border-width: 2px;
+}
+
+.shopping-item.priority:hover {
+  border-color: #ff9800;
+  box-shadow: 0 4px 8px rgba(255, 152, 0, 0.2);
+}
+
 .shopping-item.purchased {
   opacity: 0.7;
   flex-wrap: wrap;
@@ -346,6 +368,11 @@ onUnmounted(() => {
   flex: 1;
   margin: 0;
   min-width: 0;
+}
+
+.item-actions {
+  display: flex;
+  gap: var(--spacing-xs);
 }
 
 .form-check-input {
