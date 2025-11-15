@@ -13,13 +13,26 @@ interface Emits {
   (e: 'updateSubtaskPointsMode', subtaskId: string, mode: 'checklist' | 'deduct' | 'bonus'): void
 }
 
-defineProps<Props>()
+const props = defineProps<Props>()
 const emit = defineEmits<Emits>()
+
+// Check if parent is a project
+const isProject = computed(() => props.parentTask.task_type === 'project')
 
 // Add Subtask Form
 const newSubtaskTitle = ref('')
 const newSubtaskEffort = ref<1 | 2 | 3 | 4 | 5>(1)
 const newSubtaskPointsMode = ref<'checklist' | 'deduct' | 'bonus'>('checklist')
+
+// Available modes (filtered for projects)
+const availableModes = computed(() => {
+  if (isProject.value) {
+    // Projects: only checklist and bonus allowed
+    return ['checklist', 'bonus'] as const
+  }
+  // Regular tasks: all modes allowed
+  return ['checklist', 'deduct', 'bonus'] as const
+})
 
 // Points Mode descriptions (für Create Form Hint)
 const modeDescriptions = {
@@ -75,6 +88,12 @@ const handlePointsModeChange = (subtaskId: string, mode: 'checklist' | 'deduct' 
         </div>
 
         <div class="modal-body">
+          <!-- PROJECT INFO (nur bei Projekten) -->
+          <div v-if="isProject" class="project-info-banner">
+            <i class="bi bi-info-circle"></i>
+            <span>Projekt-Unteraufgaben: Nur <strong>Checkliste</strong> und <strong>Bonus</strong> verfügbar</span>
+          </div>
+
           <!-- SECTION 1: Add New Subtask -->
           <div class="section">
             <h6 class="section-title">Neue Unteraufgabe</h6>
@@ -91,7 +110,7 @@ const handlePointsModeChange = (subtaskId: string, mode: 'checklist' | 'deduct' 
                 <label class="form-label-inline">Punktemodus:</label>
                 <div class="points-mode-selector">
                   <label
-                    v-for="mode in ['checklist', 'deduct', 'bonus'] as const"
+                    v-for="mode in availableModes"
                     :key="mode"
                     class="mode-option-compact"
                     :class="{ active: newSubtaskPointsMode === mode }"
@@ -181,6 +200,25 @@ const handlePointsModeChange = (subtaskId: string, mode: 'checklist' | 'deduct' 
 </template>
 
 <style scoped>
+/* Project Info Banner */
+.project-info-banner {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem 1rem;
+  background: var(--bs-info-bg-subtle, #cfe2ff);
+  border: 1px solid var(--bs-info-border-subtle, #9ec5fe);
+  border-radius: var(--radius-md);
+  color: var(--bs-info-text, #084298);
+  font-size: 0.875rem;
+  margin-bottom: 1rem;
+}
+
+.project-info-banner i {
+  font-size: 1rem;
+  flex-shrink: 0;
+}
+
 /* Section Styling */
 .section {
   margin-bottom: 1.5rem;

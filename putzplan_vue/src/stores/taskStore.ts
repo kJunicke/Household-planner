@@ -195,6 +195,31 @@ export const useTaskStore = defineStore('tasks', () => {
 
         // Lokalen State aktualisieren
         tasks.value.push(data)
+
+        // If it's a project, auto-create "Am Projekt arbeiten" subtask
+        if (data.task_type === 'project' && !taskData.parent_task_id) {
+            const { data: subtaskData, error: subtaskError } = await supabase
+                .from('tasks')
+                .insert({
+                    title: 'Am Projekt arbeiten',
+                    effort: 1, // Default effort, will be overridden on completion
+                    recurrence_days: 0,
+                    task_type: 'daily', // Always visible, never recurs
+                    subtask_points_mode: 'bonus',
+                    parent_task_id: data.task_id,
+                    order_index: 0,
+                    household_id: householdStore.currentHousehold.household_id
+                })
+                .select()
+                .single()
+
+            if (subtaskError) {
+                console.error('Error creating default project subtask:', subtaskError)
+            } else if (subtaskData) {
+                tasks.value.push(subtaskData)
+            }
+        }
+
         toastStore.showToast('Aufgabe erstellt', 'success', 3000)
         return data
     }
@@ -574,6 +599,52 @@ export const useTaskStore = defineStore('tasks', () => {
         return true
     }
 
+    // PROJECTS - Complete a project permanently
+    const completeProject = async (projectId: string) => {
+        const toastStore = useToastStore()
+        isLoading.value = true
+
+        const { error } = await supabase
+            .from('tasks')
+            .update({
+                completed: true,
+                last_completed_at: new Date().toISOString()
+            })
+            .eq('task_id', projectId)
+
+        isLoading.value = false
+
+        if (error) {
+            console.error('Error completing project:', error)
+            toastStore.showToast('Fehler beim Abschließen des Projekts', 'error')
+            return false
+        }
+
+        // Reload tasks vom Backend (Source of Truth)
+        await loadTasks()
+        toastStore.showToast('Projekt abgeschlossen', 'success', 3000)
+        return true
+    }
+
+    // PROJECTS - Calculate total effort contributed to a project from subtask completions
+    const getProjectEffort = (projectId: string): number => {
+        const subtasks = getSubtasks(projectId)
+        const subtaskIds = subtasks.map(s => s.task_id)
+
+        // Sum up effort from all completions of project subtasks
+        return completions.value
+            .filter(c => subtaskIds.includes(c.task_id))
+            .reduce((total, completion) => {
+                // Find the subtask to get its effort value
+                const subtask = tasks.value.find(t => t.task_id === completion.task_id)
+                if (!subtask) return total
+
+                // Use effort_override if present, otherwise use subtask's default effort
+                const effort = completion.effort_override ?? subtask.effort
+                return total + effort
+            }, 0)
+    }
+
     // Return - was andere Komponenten verwenden können
     return {
         tasks,
@@ -595,6 +666,9 @@ export const useTaskStore = defineStore('tasks', () => {
         // Subtasks
         parentTasks,
         getSubtasks,
-        resetSubtasks
+        resetSubtasks,
+        // Projects
+        completeProject,
+        getProjectEffort
     }
 })

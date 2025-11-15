@@ -43,7 +43,7 @@ const searchFilteredTasks = computed(() => {
 })
 
 // Tab state for task categories
-type TaskCategory = 'daily' | 'recurring' | 'completed'
+type TaskCategory = 'daily' | 'recurring' | 'project' | 'completed'
 const STORAGE_KEY = 'putzplan_selected_category'
 
 // Load from localStorage or default to 'daily'
@@ -61,7 +61,7 @@ const newTask = ref({
   title: '',
   effort: 1,
   recurrence_days: 0,
-  task_type: 'recurring' as 'recurring' | 'daily' | 'one-time'
+  task_type: 'recurring' as 'recurring' | 'daily' | 'one-time' | 'project'
 })
 
 const resetForm = () => {
@@ -69,7 +69,7 @@ const resetForm = () => {
     title: '',
     effort: 1,
     recurrence_days: 0,
-    task_type: 'recurring' as 'recurring' | 'daily' | 'one-time'
+    task_type: 'recurring' as 'recurring' | 'daily' | 'one-time' | 'project'
   }
 }
 
@@ -149,11 +149,18 @@ onUnmounted(() => {
                   <option value="daily">Täglich / Allgemein (immer sichtbar)</option>
                   <option value="recurring">Wiederkehrend (zeitbasiert)</option>
                   <option value="one-time">Einmalig</option>
+                  <option value="project">Projekt (langfristig)</option>
                 </select>
               </div>
               <div class="mb-3" v-if="newTask.task_type === 'recurring'">
                 <label class="form-label">Tage bis zum nächsten Putzen</label>
                 <input type="number" v-model="newTask.recurrence_days" placeholder="3" class="form-control" :disabled="taskStore.isLoading">
+              </div>
+              <div v-if="newTask.task_type === 'project'" class="mb-3">
+                <p class="text-muted small">
+                  <i class="bi bi-info-circle"></i>
+                  Projekte sind langfristige Aufgaben ohne Wiederholung. Es wird automatisch ein "Am Projekt arbeiten" Subtask erstellt.
+                </p>
               </div>
               <div class="d-flex gap-2">
                 <button type="submit" class="btn btn-success" :disabled="taskStore.isLoading">
@@ -208,6 +215,12 @@ onUnmounted(() => {
           <i class="bi bi-arrow-repeat"></i> Putzaufgaben
         </button>
         <button
+          @click="selectCategory('project')"
+          :class="['btn', 'btn-sm', selectedCategory === 'project' ? 'btn-primary' : 'btn-outline-primary']"
+        >
+          <i class="bi bi-kanban"></i> Projekte
+        </button>
+        <button
           @click="selectCategory('completed')"
           :class="['btn', 'btn-sm', selectedCategory === 'completed' ? 'btn-primary' : 'btn-outline-primary']"
         >
@@ -256,6 +269,10 @@ onUnmounted(() => {
 
         <section v-if="selectedCategory === 'recurring'" class="task-section">
           <TaskList filter="recurring-todo" />
+        </section>
+
+        <section v-if="selectedCategory === 'project'" class="task-section">
+          <TaskList filter="project-todo" />
         </section>
 
         <section v-if="selectedCategory === 'completed'" class="task-section">

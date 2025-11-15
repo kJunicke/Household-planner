@@ -5,6 +5,7 @@ import { useHouseholdStore } from '@/stores/householdStore'
 import { ref, computed } from "vue";
 import TaskCompletionModal from './TaskCompletionModal.vue'
 import TaskAssignmentModal from './TaskAssignmentModal.vue'
+import ProjectWorkModal from './ProjectWorkModal.vue'
 import confetti from 'canvas-confetti'
 
 interface Props {
@@ -17,6 +18,7 @@ const householdStore = useHouseholdStore()
 const isEditing = ref(false)
 const showCompletionModal = ref(false)
 const showAssignmentModal = ref(false)
+const showProjectWorkModal = ref(false)
 
 const editForm = ref({
   title: props.task.title,
@@ -106,6 +108,40 @@ const handleAssignmentConfirm = async (userId: string | null, permanent: boolean
   await taskStore.assignTask(props.task.task_id, userId, permanent)
   showAssignmentModal.value = false
 }
+
+// Check if this is the "Am Projekt arbeiten" default subtask
+const isProjectWorkSubtask = computed(() => props.task.title === 'Am Projekt arbeiten')
+
+// Get parent task (project) info
+const parentTask = computed(() => {
+  if (!props.task.parent_task_id) return null
+  return taskStore.tasks.find(t => t.task_id === props.task.parent_task_id)
+})
+
+const openProjectWorkModal = () => {
+  showProjectWorkModal.value = true
+}
+
+const closeProjectWorkModal = () => {
+  showProjectWorkModal.value = false
+}
+
+const handleProjectWork = async (effort: number, note: string) => {
+  // Complete the subtask with custom effort and note
+  const success = await taskStore.completeTask(props.task.task_id, effort, note)
+
+  if (success) {
+    // Immediately reset the subtask so it's always available
+    await taskStore.markAsDirty(props.task.task_id)
+    confetti({
+      particleCount: 50,
+      spread: 50,
+      origin: { y: 0.7 }
+    })
+  }
+
+  showProjectWorkModal.value = false
+}
 </script>
 
 <template>
@@ -140,22 +176,35 @@ const handleAssignmentConfirm = async (userId: string | null, permanent: boolean
 
       <!-- Zeile 2: Alle Action Buttons -->
       <div class="subtask-actions-row">
+        <!-- SPECIAL: "Am Projekt arbeiten" subtask always opens ProjectWorkModal -->
         <button
-          class="subtask-btn subtask-btn-success"
-          @click="handleCompleteTask"
-          title="Sauber"
-          v-if="!task.completed"
+          v-if="isProjectWorkSubtask"
+          class="subtask-btn subtask-btn-project"
+          @click="openProjectWorkModal"
+          title="Arbeit dokumentieren"
         >
-          ✓ Sauber
+          ✏️ Arbeit dokumentieren
         </button>
-        <button
-          v-if="!task.completed && task.subtask_points_mode !== 'checklist'"
-          class="subtask-btn subtask-btn-success"
-          @click="openCompletionModal"
-          title="Mehr Aufwand"
-        >
-          ↑
-        </button>
+
+        <!-- REGULAR SUBTASKS: Standard completion logic -->
+        <template v-else>
+          <button
+            class="subtask-btn subtask-btn-success"
+            @click="handleCompleteTask"
+            title="Sauber"
+            v-if="!task.completed"
+          >
+            ✓ Sauber
+          </button>
+          <button
+            v-if="!task.completed && task.subtask_points_mode !== 'checklist'"
+            class="subtask-btn subtask-btn-success"
+            @click="openCompletionModal"
+            title="Mehr Aufwand"
+          >
+            ↑
+          </button>
+        </template>
         <button
           class="subtask-btn"
           @click="startEdit"
@@ -201,6 +250,14 @@ const handleAssignmentConfirm = async (userId: string | null, permanent: boolean
       :householdMembers="householdStore.householdMembers"
       @close="closeAssignmentModal"
       @confirm="handleAssignmentConfirm"
+    />
+
+    <!-- Project Work Modal -->
+    <ProjectWorkModal
+      v-if="showProjectWorkModal"
+      :projectTitle="parentTask?.title || 'Projekt'"
+      @close="closeProjectWorkModal"
+      @confirm="handleProjectWork"
     />
   </div>
 </template>
@@ -301,6 +358,18 @@ const handleAssignmentConfirm = async (userId: string | null, permanent: boolean
 .subtask-btn-success:hover {
   background: var(--bs-success-dark, #157347);
   border-color: var(--bs-success-dark, #157347);
+}
+
+.subtask-btn-project {
+  background: var(--bs-primary);
+  color: white;
+  border-color: var(--bs-primary);
+  font-weight: 500;
+}
+
+.subtask-btn-project:hover {
+  background: var(--bs-primary-dark, #0b5ed7);
+  border-color: var(--bs-primary-dark, #0b5ed7);
 }
 
 .subtask-btn-danger:hover {

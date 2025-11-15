@@ -7,6 +7,8 @@ import TaskCompletionModal from './TaskCompletionModal.vue'
 import TaskAssignmentModal from './TaskAssignmentModal.vue'
 import SubtaskManagementModal from './SubtaskManagementModal.vue'
 import SubtaskItem from './SubtaskItem.vue'
+import ProjectWorkModal from './ProjectWorkModal.vue'
+import ProjectCompleteModal from './ProjectCompleteModal.vue'
 import confetti from 'canvas-confetti'
 
 interface Props {
@@ -20,6 +22,8 @@ const isEditing = ref(false)
 const showCompletionModal = ref(false)
 const showAssignmentModal = ref(false)
 const showSubtaskManagementModal = ref(false)
+const showProjectWorkModal = ref(false)
+const showProjectCompleteModal = ref(false)
 const subtasksExpanded = ref(true)
 
 const editForm = ref({
@@ -204,6 +208,61 @@ const handleUpdateSubtaskPointsMode = async (subtaskId: string, mode: 'checklist
 const handleResetSubtasks = async () => {
      await taskStore.resetSubtasks(props.task.task_id)
 }
+
+// PROJECTS - Project-specific handlers
+const isProject = computed(() => props.task.task_type === 'project')
+const projectEffort = computed(() => isProject.value ? taskStore.getProjectEffort(props.task.task_id) : 0)
+
+// Check if this is the "Am Projekt arbeiten" default subtask
+const isProjectWorkSubtask = computed(() =>
+     props.task.title === 'Am Projekt arbeiten' &&
+     props.task.parent_task_id !== null
+)
+
+const openProjectWorkModal = () => {
+     showProjectWorkModal.value = true
+}
+
+const closeProjectWorkModal = () => {
+     showProjectWorkModal.value = false
+}
+
+const handleProjectWork = async (effort: number, note: string) => {
+     // Complete the subtask with custom effort and note
+     const success = await taskStore.completeTask(props.task.task_id, effort, note)
+
+     if (success) {
+          // Immediately reset the subtask so it's always available
+          await taskStore.markAsDirty(props.task.task_id)
+          confetti({
+               particleCount: 100,
+               spread: 70,
+               origin: { y: 0.6 }
+          })
+     }
+
+     showProjectWorkModal.value = false
+}
+
+const openProjectCompleteModal = () => {
+     showProjectCompleteModal.value = true
+}
+
+const closeProjectCompleteModal = () => {
+     showProjectCompleteModal.value = false
+}
+
+const handleCompleteProject = async () => {
+     const success = await taskStore.completeProject(props.task.task_id)
+     showProjectCompleteModal.value = false
+     if (success) {
+          confetti({
+               particleCount: 150,
+               spread: 100,
+               origin: { y: 0.6 }
+          })
+     }
+}
 </script>
 
 <template>
@@ -230,14 +289,22 @@ const handleResetSubtasks = async () => {
 
                <h6 class="task-title">{{ props.task.title }}</h6>
                <div class="task-details">
-                    <div class="task-info">
+                    <!-- Effort für normale Tasks, Gesamt-Effort für Projekte -->
+                    <div v-if="!isProject" class="task-info">
                          <span class="info-label">Aufwand:</span>
                          <span class="info-value">{{ props.task.effort }}</span>
+                    </div>
+                    <div v-else class="task-info">
+                         <span class="info-label">Gesamt-Effort:</span>
+                         <span class="info-value effort-badge">{{ projectEffort }}</span>
                     </div>
 
                     <!-- Task Type Badge -->
                     <div v-if="props.task.task_type === 'one-time'" class="task-badge task-badge-one-time">
                          Einmalig
+                    </div>
+                    <div v-if="props.task.task_type === 'project'" class="task-badge task-badge-project">
+                         Projekt
                     </div>
 
                     <!-- Für wiederkehrende Tasks -->
@@ -376,7 +443,19 @@ const handleResetSubtasks = async () => {
                <!-- Normal Mode Buttons -->
                <div v-if="!isEditing" class="footer-content">
                     <div class="button-group">
-                         <template v-if="props.task.completed">
+                         <!-- PROJECTS: Different button logic -->
+                         <template v-if="isProject">
+                              <button v-if="!props.task.completed" class="btn btn-primary btn-sm flex-fill"
+                                      @click="openProjectCompleteModal">
+                                   Projekt abschließen
+                              </button>
+                              <div v-else class="project-completed-badge">
+                                   ✓ Abgeschlossen
+                              </div>
+                         </template>
+
+                         <!-- REGULAR TASKS: Standard logic -->
+                         <template v-else-if="props.task.completed">
                               <button class="btn btn-warning btn-sm flex-fill"
                                       @click="handleMarkDirty">
                                    Dreckig
@@ -457,6 +536,22 @@ const handleResetSubtasks = async () => {
                @createSubtask="handleCreateSubtask"
                @updateSubtaskPointsMode="handleUpdateSubtaskPointsMode"
           />
+
+          <!-- Project Work Modal -->
+          <ProjectWorkModal
+               v-if="showProjectWorkModal"
+               :projectTitle="props.task.parent_task_id ? taskStore.tasks.find(t => t.task_id === props.task.parent_task_id)?.title || 'Projekt' : 'Projekt'"
+               @close="closeProjectWorkModal"
+               @confirm="handleProjectWork"
+          />
+
+          <!-- Project Complete Modal -->
+          <ProjectCompleteModal
+               v-if="showProjectCompleteModal"
+               :projectTitle="props.task.title"
+               @close="closeProjectCompleteModal"
+               @confirm="handleCompleteProject"
+          />
      </div>
 
 </template>
@@ -506,6 +601,16 @@ const handleResetSubtasks = async () => {
      font-weight: 500;
 }
 
+.effort-badge {
+     display: inline-block;
+     background: var(--bs-primary);
+     color: white;
+     padding: 0.125rem 0.5rem;
+     border-radius: var(--radius-sm);
+     font-size: 0.875rem;
+     font-weight: 600;
+}
+
 .task-badge {
      display: inline-block;
      background: var(--color-primary);
@@ -524,6 +629,23 @@ const handleResetSubtasks = async () => {
 
 .task-badge-one-time {
      background: var(--bs-secondary);
+}
+
+.task-badge-project {
+     background: var(--bs-primary);
+}
+
+.project-completed-badge {
+     display: flex;
+     align-items: center;
+     justify-content: center;
+     padding: 0.5rem 1rem;
+     background: var(--bs-success);
+     color: white;
+     border-radius: var(--radius-md);
+     font-size: 0.875rem;
+     font-weight: 600;
+     flex: 1;
 }
 
 .card-footer {

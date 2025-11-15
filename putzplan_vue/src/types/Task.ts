@@ -9,13 +9,15 @@ export interface Task {
   // 'recurring': Traditional time-based tasks (recurrence_days > 0)
   // 'daily': General daily tasks without recurrence logic (always visible)
   // 'one-time': One-time tasks (recurrence_days = 0)
-  task_type: 'recurring' | 'daily' | 'one-time'
+  // 'project': Long-term projects with continuous work tracking (no recurrence)
+  task_type: 'recurring' | 'daily' | 'one-time' | 'project'
 
   // Entweder nicht wiederholend ODER wiederholend mit Tagen
   // Task wiederholt sich nicht wenn recurrence_days = 0
   recurrence_days: number
   completed: boolean
   last_completed_at: string | null // ISO timestamp, auto-updated via DB trigger from task_completions
+                                   // For projects: Timestamp when project was marked as completed
 
   // Task Assignment
   assigned_to: string | null // user_id of assigned household member (optional)
