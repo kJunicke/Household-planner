@@ -1,6 +1,7 @@
 <script setup lang="ts">
 interface Props {
   projectTitle: string
+  isLoading: boolean
 }
 
 interface Emits {
@@ -8,11 +9,13 @@ interface Emits {
   (e: 'confirm'): void
 }
 
-defineProps<Props>()
+const props = defineProps<Props>()
 const emit = defineEmits<Emits>()
 
 const handleConfirm = () => {
-  emit('confirm')
+  if (!props.isLoading) {
+    emit('confirm')
+  }
 }
 
 const handleClose = () => {
@@ -37,11 +40,12 @@ const handleClose = () => {
         </div>
 
         <div class="modal-footer">
-          <button class="btn btn-secondary" @click="handleClose">
+          <button class="btn btn-secondary" :disabled="isLoading" @click="handleClose">
             Abbrechen
           </button>
-          <button class="btn btn-success" @click="handleConfirm">
-            Projekt abschließen
+          <button class="btn btn-success" :disabled="isLoading" @click="handleConfirm">
+            <span v-if="isLoading" class="spinner-border spinner-border-sm me-1"></span>
+            {{ isLoading ? 'Schließt ab...' : 'Projekt abschließen' }}
           </button>
         </div>
       </div>

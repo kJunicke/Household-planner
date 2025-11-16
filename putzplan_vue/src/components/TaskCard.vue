@@ -26,6 +26,11 @@ const showProjectWorkModal = ref(false)
 const showProjectCompleteModal = ref(false)
 const subtasksExpanded = ref(true)
 
+// Loading states for async operations in modals
+const isCompletingTask = ref(false)
+const isCompletingProject = ref(false)
+const isLoggingWork = ref(false)
+
 const editForm = ref({
      ...props.task
 })
@@ -83,15 +88,19 @@ const closeCompletionModal = () => {
 }
 
 const handleCustomCompletion = async (effortOverride: number, reason: string) => {
+     isCompletingTask.value = true
      const success = await taskStore.completeTask(props.task.task_id, effortOverride, reason)
-     showCompletionModal.value = false
+     isCompletingTask.value = false
+
      if (success) {
+          showCompletionModal.value = false
           confetti({
                particleCount: 100,
                spread: 70,
                origin: { y: 0.6 }
           })
      }
+     // If failed, modal stays open so user can retry
 }
 
 const handleDirectCompletion = async () => {
@@ -218,20 +227,22 @@ const closeProjectWorkModal = () => {
 }
 
 const handleProjectWork = async (effort: number, note: string) => {
+     isLoggingWork.value = true
      // Complete the subtask with custom effort and note
      const success = await taskStore.completeTask(props.task.task_id, effort, note)
+     isLoggingWork.value = false
 
      if (success) {
           // Immediately reset the subtask so it's always available
           await taskStore.markAsDirty(props.task.task_id)
+          showProjectWorkModal.value = false
           confetti({
                particleCount: 100,
                spread: 70,
                origin: { y: 0.6 }
           })
      }
-
-     showProjectWorkModal.value = false
+     // If failed, modal stays open so user can retry
 }
 
 const openProjectCompleteModal = () => {
@@ -243,15 +254,19 @@ const closeProjectCompleteModal = () => {
 }
 
 const handleCompleteProject = async () => {
+     isCompletingProject.value = true
      const success = await taskStore.completeProject(props.task.task_id)
-     showProjectCompleteModal.value = false
+     isCompletingProject.value = false
+
      if (success) {
+          showProjectCompleteModal.value = false
           confetti({
                particleCount: 150,
                spread: 100,
                origin: { y: 0.6 }
           })
      }
+     // If failed, modal stays open so user can retry
 }
 </script>
 
@@ -503,6 +518,7 @@ const handleCompleteProject = async () => {
                v-if="showCompletionModal"
                :taskTitle="props.task.title"
                :defaultEffort="props.task.effort"
+               :isLoading="isCompletingTask"
                @close="closeCompletionModal"
                @confirm="handleCustomCompletion"
           />
@@ -531,6 +547,7 @@ const handleCompleteProject = async () => {
           <ProjectWorkModal
                v-if="showProjectWorkModal"
                :projectTitle="props.task.parent_task_id ? taskStore.tasks.find(t => t.task_id === props.task.parent_task_id)?.title || 'Projekt' : 'Projekt'"
+               :isLoading="isLoggingWork"
                @close="closeProjectWorkModal"
                @confirm="handleProjectWork"
           />
@@ -539,6 +556,7 @@ const handleCompleteProject = async () => {
           <ProjectCompleteModal
                v-if="showProjectCompleteModal"
                :projectTitle="props.task.title"
+               :isLoading="isCompletingProject"
                @close="closeProjectCompleteModal"
                @confirm="handleCompleteProject"
           />

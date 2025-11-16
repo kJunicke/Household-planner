@@ -3,6 +3,7 @@ import { ref, computed } from 'vue'
 
 interface Props {
   projectTitle: string
+  isLoading: boolean
 }
 
 interface Emits {
@@ -10,7 +11,7 @@ interface Emits {
   (e: 'confirm', effort: number, note: string): void
 }
 
-defineProps<Props>()
+const props = defineProps<Props>()
 const emit = defineEmits<Emits>()
 
 const selectedEffort = ref<number | null>(null)
@@ -23,7 +24,7 @@ const canConfirm = computed(() => {
 })
 
 const handleConfirm = () => {
-  if (canConfirm.value && selectedEffort.value !== null) {
+  if (canConfirm.value && selectedEffort.value !== null && !props.isLoading) {
     emit('confirm', selectedEffort.value, note.value.trim())
   }
 }
@@ -76,15 +77,16 @@ const handleClose = () => {
         </div>
 
         <div class="modal-footer">
-          <button class="btn btn-secondary" @click="handleClose">
+          <button class="btn btn-secondary" :disabled="isLoading" @click="handleClose">
             Abbrechen
           </button>
           <button
             class="btn btn-primary"
-            :disabled="!canConfirm"
+            :disabled="!canConfirm || isLoading"
             @click="handleConfirm"
           >
-            Bestätigen
+            <span v-if="isLoading" class="spinner-border spinner-border-sm me-1"></span>
+            {{ isLoading ? 'Speichert...' : 'Bestätigen' }}
           </button>
         </div>
       </div>
