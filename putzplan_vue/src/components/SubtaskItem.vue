@@ -238,6 +238,7 @@ const handleProjectWork = async (effort: number, note: string) => {
       v-if="showCompletionModal"
       :taskTitle="task.title"
       :defaultEffort="task.effort"
+      :isLoading="false"
       @close="closeCompletionModal"
       @confirm="handleCustomCompletion"
     />
@@ -256,6 +257,7 @@ const handleProjectWork = async (effort: number, note: string) => {
     <ProjectWorkModal
       v-if="showProjectWorkModal"
       :projectTitle="parentTask?.title || 'Projekt'"
+      :isLoading="false"
       @close="closeProjectWorkModal"
       @confirm="handleProjectWork"
     />
