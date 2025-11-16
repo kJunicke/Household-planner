@@ -1,13 +1,23 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted, ref, computed } from 'vue'
+import { onMounted, onUnmounted, ref, computed, watch } from 'vue'
 import { useShoppingStore } from '@/stores/shoppingStore'
 import { useHouseholdStore } from '@/stores/householdStore'
+import { useNetworkStatus } from '@/composables/useNetworkStatus'
 
 const shoppingStore = useShoppingStore()
 const householdStore = useHouseholdStore()
+const { isOnline } = useNetworkStatus()
 
 const searchInput = ref('')
 const showSuggestions = ref(false)
+
+// Trigger sync when coming back online
+watch(isOnline, async (online) => {
+  if (online && shoppingStore.hasPendingMutations) {
+    console.log('🌐 Back online - triggering sync...')
+    await shoppingStore.syncMutations()
+  }
+})
 
 // Autocomplete: Filtere existierende Item-Namen basierend auf Input
 const suggestions = computed(() => {
@@ -118,6 +128,17 @@ onUnmounted(() => {
       <div class="section-title">
         <i class="bi bi-cart3"></i> Einkaufsliste
       </div>
+
+    <!-- Offline/Sync Status Banner -->
+    <div v-if="!isOnline" class="alert alert-warning mb-3" role="alert">
+      <i class="bi bi-wifi-off me-2"></i>
+      <strong>Offline-Modus</strong> - Änderungen werden automatisch synchronisiert sobald die Verbindung wiederhergestellt ist.
+    </div>
+
+    <div v-else-if="shoppingStore.hasPendingMutations || shoppingStore.isSyncing" class="alert alert-info mb-3" role="alert">
+      <span class="spinner-border spinner-border-sm me-2"></span>
+      <strong>Synchronisiere...</strong>
+    </div>
 
     <!-- Suchleiste mit Autocomplete -->
     <div class="search-container mb-4">

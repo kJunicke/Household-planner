@@ -22,7 +22,7 @@
 
 ### Shopping-Liste Features
 - ✅ **Priorisierung** - Items nach Wichtigkeit sortieren/markieren (15.11.2025)
-- **Offline-Modus** - Shopping-Liste offline nutzbar (mit Sync beim Reconnect)
+- ✅ **Offline-Modus** - Shopping-Liste offline nutzbar (mit Sync beim Reconnect) (16.11.2025)
 
 ---
 
@@ -43,6 +43,14 @@
 **Migrations:** Konsolidiert am 26.10.2025 (29 → 4 Migrations)
 
 **Letzte größere Features:**
+- Shopping-Liste Offline-Modus - 16.11.2025
+  - Offline-First Architektur mit localStorage Cache
+  - Optimistic Updates (UI reagiert sofort)
+  - Mutation Queue für Offline-Operationen
+  - Auto-Sync bei Reconnect mit Exponential Backoff Retry
+  - Temp ID Blocking (Updates nur für existierende Items)
+  - Offline/Sync Status Banner in UI
+  - Network Status Detection (useNetworkStatus composable)
 - Shopping-Liste Priorisierung - 15.11.2025
   - `is_priority` Boolean-Flag in DB
   - Stern-Button zum Markieren/Demarkieren
