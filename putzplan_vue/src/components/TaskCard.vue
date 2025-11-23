@@ -827,45 +827,4 @@ const handleCompleteProject = async () => {
 .add-subtask-section {
      margin-top: var(--spacing-sm);
 }
-
-/* Mobile: Smaller spacing and buttons */
-@media (max-width: 480px) {
-     .footer-layout {
-          gap: 0.25rem;
-     }
-
-     .footer-actions-row {
-          gap: 0.25rem;
-     }
-
-     .icon-btn {
-          padding: 0.25rem;
-     }
-
-     .icon-btn svg {
-          width: 12px;
-          height: 12px;
-     }
-
-     .combined-button-group .btn {
-          font-size: 0.65rem;
-          padding: 0.3rem 0.4rem;
-          white-space: nowrap;
-     }
-
-     .combined-modifier {
-          padding: 0.3rem 0.35rem;
-     }
-
-     .combined-modifier svg {
-          width: 12px;
-          height: 12px;
-     }
-
-     .assignment-badge {
-          width: 24px;
-          height: 24px;
-          font-size: 0.5625rem;
-     }
-}
 </style>

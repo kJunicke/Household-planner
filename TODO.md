@@ -43,6 +43,11 @@
 **Migrations:** Konsolidiert am 26.10.2025 (29 → 4 Migrations)
 
 **Letzte größere Features:**
+- Universell Responsive Design ohne Media Queries - 23.11.2025
+  - Mobile Media Queries komplett entfernt für einheitliches Design
+  - Touch-optimierte Button-Größen auf allen Viewports (padding: 0.75rem vertikal)
+  - Keine separaten Cases für verschiedene Viewports mehr
+  - Konsistentes Look & Feel von Mobile bis Desktop
 - TaskCard Typography & Spacing Update - 23.11.2025
   - Vergrößerte Schriftgrößen für bessere Lesbarkeit (Titel: 1rem, Info: 0.875rem)
   - Größere Buttons (0.875rem) und Icons (16px)
