@@ -592,7 +592,7 @@ const handleCompleteProject = async () => {
 
 .btn-sm {
      font-size: 0.875rem;
-     padding: 0.5rem 0.75rem;
+     padding: 0.75rem 1rem;
      font-weight: 500;
 }
 
@@ -611,7 +611,7 @@ const handleCompleteProject = async () => {
 }
 
 .combined-modifier {
-     padding: 0.5rem 0.75rem;
+     padding: 0.75rem 0.875rem;
      border-radius: 0 var(--radius-md) var(--radius-md) 0;
      border-left: 2px solid rgba(255, 255, 255, 0.3);
      display: flex;
