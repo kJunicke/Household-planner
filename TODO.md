@@ -43,6 +43,12 @@
 **Migrations:** Konsolidiert am 26.10.2025 (29 → 4 Migrations)
 
 **Letzte größere Features:**
+- TaskCard Typography & Spacing Update - 23.11.2025
+  - Vergrößerte Schriftgrößen für bessere Lesbarkeit (Titel: 1rem, Info: 0.875rem)
+  - Größere Buttons (0.875rem) und Icons (16px)
+  - Mehr Padding in Card-Body und Footer (var(--spacing-md))
+  - Assignment Badge vergrößert (32px)
+  - Bessere Touch-Targets für Mobile
 - Mobile Layout Optimierung & Modal Refactoring - 23.11.2025
   - **Neue Modals**: TaskEditModal, TaskCreateModal (statt inline Forms)
   - **SubtaskItem Layout**: 3-Zeilen Struktur wie TaskCard (Assignment Badge, Edit/Delete Icons, Sauber-Button)

@@ -504,11 +504,11 @@ const handleCompleteProject = async () => {
 }
 
 .task-title {
-     font-size: 0.875rem;
+     font-size: 1rem;
      font-weight: 600;
      color: var(--color-text-primary);
      margin-bottom: var(--spacing-sm);
-     line-height: 1.3;
+     line-height: 1.4;
      word-wrap: break-word;
      overflow-wrap: break-word;
 }
@@ -522,27 +522,27 @@ const handleCompleteProject = async () => {
 .task-info {
      display: flex;
      align-items: center;
-     font-size: 0.75rem;
+     font-size: 0.875rem;
 }
 
 .info-label {
      color: var(--color-text-secondary);
-     margin-right: 0.375rem;
+     margin-right: 0.5rem;
      font-weight: 500;
 }
 
 .info-value {
      color: var(--color-text-primary);
-     font-weight: 500;
+     font-weight: 600;
 }
 
 .effort-badge {
      display: inline-block;
      background: var(--bs-primary);
      color: white;
-     padding: 0.125rem 0.4rem;
+     padding: 0.25rem 0.5rem;
      border-radius: var(--radius-sm);
-     font-size: 0.75rem;
+     font-size: 0.875rem;
      font-weight: 600;
 }
 
@@ -550,9 +550,9 @@ const handleCompleteProject = async () => {
      display: inline-block;
      background: var(--color-primary);
      color: white;
-     padding: 0.125rem 0.5rem;
+     padding: 0.25rem 0.625rem;
      border-radius: var(--radius-sm);
-     font-size: 0.625rem;
+     font-size: 0.75rem;
      font-weight: 500;
      text-transform: uppercase;
      letter-spacing: 0.3px;
@@ -586,13 +586,14 @@ const handleCompleteProject = async () => {
 .card-footer {
      background: transparent;
      border-top: 1px solid var(--color-border);
-     padding: var(--spacing-sm);
+     padding: var(--spacing-md);
      margin-top: auto; /* Pusht Footer nach unten */
 }
 
 .btn-sm {
-     font-size: 0.75rem;
-     padding: 0.375rem 0.625rem;
+     font-size: 0.875rem;
+     padding: 0.5rem 0.75rem;
+     font-weight: 500;
 }
 
 /* Combined Button Group Styling */
@@ -610,7 +611,7 @@ const handleCompleteProject = async () => {
 }
 
 .combined-modifier {
-     padding: 0.5rem 0.625rem;
+     padding: 0.5rem 0.75rem;
      border-radius: 0 var(--radius-md) var(--radius-md) 0;
      border-left: 2px solid rgba(255, 255, 255, 0.3);
      display: flex;
@@ -631,7 +632,7 @@ const handleCompleteProject = async () => {
      background: transparent;
      border: 1px solid var(--color-border);
      border-radius: var(--radius-sm);
-     padding: 0.25rem;
+     padding: 0.375rem;
      cursor: pointer;
      display: flex;
      align-items: center;
@@ -642,8 +643,8 @@ const handleCompleteProject = async () => {
 }
 
 .icon-btn svg {
-     width: 14px;
-     height: 14px;
+     width: 16px;
+     height: 16px;
 }
 
 .icon-btn:hover {
@@ -661,7 +662,7 @@ const handleCompleteProject = async () => {
 
 .card-body {
      position: relative;
-     padding: var(--spacing-sm);
+     padding: var(--spacing-md);
      flex: 1; /* Nimmt verfügbaren Platz ein */
      display: flex;
      flex-direction: column;
@@ -671,14 +672,14 @@ const handleCompleteProject = async () => {
 .footer-layout {
      display: flex;
      flex-direction: column;
-     gap: 0.375rem;
+     gap: 0.5rem;
 }
 
 /* Row 1: Action Icons */
 .footer-actions-row {
      display: flex;
      align-items: center;
-     gap: 0.25rem;
+     gap: 0.375rem;
      justify-content: flex-start;
 }
 
@@ -690,13 +691,13 @@ const handleCompleteProject = async () => {
 
 /* Assignment Badge */
 .assignment-badge {
-     width: 28px;
-     height: 28px;
+     width: 32px;
+     height: 32px;
      border-radius: 50%;
      display: flex;
      align-items: center;
      justify-content: center;
-     font-size: 0.625rem;
+     font-size: 0.75rem;
      font-weight: 600;
      cursor: pointer;
      transition: all var(--transition-base);
@@ -736,16 +737,16 @@ const handleCompleteProject = async () => {
 }
 
 .subtasks-header {
-     font-size: 0.75rem;
+     font-size: 0.875rem;
      font-weight: 600;
      color: var(--color-text-primary);
      cursor: pointer;
-     padding: 0.25rem 0.375rem;
+     padding: 0.375rem 0.5rem;
      border-radius: var(--radius-sm);
      transition: background var(--transition-base);
      display: flex;
      align-items: center;
-     gap: 0.25rem;
+     gap: 0.375rem;
      flex: 1;
 }
 
@@ -754,14 +755,14 @@ const handleCompleteProject = async () => {
 }
 
 .reset-subtasks-btn {
-     padding: 0.125rem 0.375rem;
-     font-size: 0.875rem;
+     padding: 0.25rem 0.5rem;
+     font-size: 1rem;
      line-height: 1;
      flex-shrink: 0;
 }
 
 .toggle-icon {
-     font-size: 0.625rem;
+     font-size: 0.75rem;
      color: var(--color-text-secondary);
 }
 
