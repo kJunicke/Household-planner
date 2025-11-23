@@ -149,7 +149,7 @@ const currentMemberColor = computed(() => {
 
     <!-- Navigation Tabs - Full width at bottom of header -->
     <nav class="nav-tabs-container">
-      <div class="container-fluid">
+      <div class="container-fluid p-0">
         <div class="nav-tabs-wrapper">
           <router-link to="/" class="nav-tab" :class="{ active: route.path === '/' }">
             <i class="bi bi-list-check"></i> Putzen
@@ -166,6 +166,9 @@ const currentMemberColor = computed(() => {
         </div>
       </div>
     </nav>
+
+    <!-- Secondary Navigation for Category Tabs (only on Cleaning view) -->
+    <slot name="secondary-nav"></slot>
   </header>
 </template>
 

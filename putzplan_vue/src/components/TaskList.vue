@@ -64,10 +64,10 @@ const completedProjects = computed(() => {
 <template>
     <div class="container-fluid">
         <!-- Regular Tasks -->
-        <div v-if="filteredTasks.length > 0" class="row">
+        <div v-if="filteredTasks.length > 0" class="row task-grid">
             <div v-for="task in filteredTasks"
             :key="task.task_id"
-            class="col-12 col-md-6 col-lg-3 mb-3">
+            class="col-6 col-md-4 col-lg-3 col-xl-2 task-grid-item">
                 <TaskCard :task="task" />
             </div>
         </div>
@@ -75,10 +75,10 @@ const completedProjects = computed(() => {
         <!-- Completed Projects Section (only in completed view) -->
         <div v-if="filter === 'completed' && completedProjects.length > 0" class="completed-projects-section">
             <h6 class="section-title">Abgeschlossene Projekte</h6>
-            <div class="row">
+            <div class="row task-grid">
                 <div v-for="project in completedProjects"
                 :key="project.task_id"
-                class="col-12 col-md-6 col-lg-3 mb-3">
+                class="col-6 col-md-4 col-lg-3 col-xl-2 task-grid-item">
                     <TaskCard :task="project" />
                 </div>
             </div>
@@ -87,6 +87,15 @@ const completedProjects = computed(() => {
 </template>
 
 <style scoped>
+.task-grid {
+    --bs-gutter-x: 0.5rem;
+    --bs-gutter-y: 0.5rem;
+}
+
+.task-grid-item {
+    margin-bottom: 0;
+}
+
 .completed-projects-section {
     margin-top: 2rem;
     padding-top: 2rem;
@@ -94,10 +103,10 @@ const completedProjects = computed(() => {
 }
 
 .section-title {
-    font-size: 1rem;
+    font-size: 0.875rem;
     font-weight: 600;
     color: var(--color-text-primary);
-    margin-bottom: 1rem;
+    margin-bottom: 0.75rem;
     text-transform: uppercase;
     letter-spacing: 0.5px;
 }

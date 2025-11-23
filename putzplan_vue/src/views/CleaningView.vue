@@ -2,6 +2,7 @@
 import { onMounted, onUnmounted, ref, computed } from "vue";
 import TaskList from '../components/TaskList.vue';
 import TaskCard from '../components/TaskCard.vue';
+import CategoryNav from '../components/CategoryNav.vue';
 import { useTaskStore } from "../stores/taskStore";
 import type { Task } from '@/types/Task';
 
@@ -44,17 +45,11 @@ const searchFilteredTasks = computed(() => {
 
 // Tab state for task categories
 type TaskCategory = 'daily' | 'recurring' | 'project' | 'completed'
-const STORAGE_KEY = 'putzplan_selected_category'
+const selectedCategory = ref<TaskCategory>('daily')
 
-// Load from localStorage or default to 'daily'
-const selectedCategory = ref<TaskCategory>(
-  (localStorage.getItem(STORAGE_KEY) as TaskCategory) || 'daily'
-)
-
-// Save to localStorage when category changes
-const selectCategory = (category: TaskCategory) => {
+// Handler for category change from CategoryNav
+const handleCategoryChange = (category: TaskCategory) => {
   selectedCategory.value = category
-  localStorage.setItem(STORAGE_KEY, category)
 }
 
 const newTask = ref({
@@ -114,11 +109,18 @@ onUnmounted(() => {
 </script>
 
 <template>
+  <!-- Secondary Navigation (rendered in Header slot) -->
+  <template v-if="false">
+    <CategoryNav @update:category="handleCategoryChange" />
+  </template>
+
   <main class="page-container">
+    <CategoryNav @update:category="handleCategoryChange" />
+
     <div class="container-fluid">
-      <div class="row mb-4">
+      <div class="row mb-3">
         <div class="col-12 text-end">
-          <button @click="toggleForm" class="btn btn-primary" :disabled="taskStore.isLoading">
+          <button @click="toggleForm" class="btn btn-primary btn-sm" :disabled="taskStore.isLoading">
             <i class="bi bi-plus"></i> Aufgabe hinzufügen
           </button>
         </div>
@@ -178,8 +180,8 @@ onUnmounted(() => {
       </section>
 
       <!-- Search Field -->
-      <div class="mb-4">
-        <div class="input-group">
+      <div class="mb-3">
+        <div class="input-group input-group-sm">
           <span class="input-group-text">
             <i class="bi bi-search"></i>
           </span>
@@ -187,7 +189,7 @@ onUnmounted(() => {
             type="text"
             v-model="searchQuery"
             class="form-control"
-            placeholder="Tasks oder Subtasks durchsuchen..."
+            placeholder="Suchen..."
           />
           <button
             v-if="searchQuery"
@@ -198,34 +200,6 @@ onUnmounted(() => {
             <i class="bi bi-x-lg"></i>
           </button>
         </div>
-      </div>
-
-      <!-- Category Tabs -->
-      <div class="task-category-tabs mb-4">
-        <button
-          @click="selectCategory('daily')"
-          :class="['btn', 'btn-sm', selectedCategory === 'daily' ? 'btn-primary' : 'btn-outline-primary']"
-        >
-          <i class="bi bi-clock"></i> Alltagsaufgaben
-        </button>
-        <button
-          @click="selectCategory('recurring')"
-          :class="['btn', 'btn-sm', selectedCategory === 'recurring' ? 'btn-primary' : 'btn-outline-primary']"
-        >
-          <i class="bi bi-arrow-repeat"></i> Putzaufgaben
-        </button>
-        <button
-          @click="selectCategory('project')"
-          :class="['btn', 'btn-sm', selectedCategory === 'project' ? 'btn-primary' : 'btn-outline-primary']"
-        >
-          <i class="bi bi-kanban"></i> Projekte
-        </button>
-        <button
-          @click="selectCategory('completed')"
-          :class="['btn', 'btn-sm', selectedCategory === 'completed' ? 'btn-primary' : 'btn-outline-primary']"
-        >
-          <i class="bi bi-check-circle"></i> Erledigt
-        </button>
       </div>
 
       <!-- Loading Skeleton (nur beim initialen Load) -->
@@ -251,10 +225,10 @@ onUnmounted(() => {
           <p>Keine Tasks gefunden für "{{ searchQuery }}"</p>
         </div>
         <div v-else class="container-fluid">
-          <div class="row">
+          <div class="row task-grid">
             <div v-for="task in searchFilteredTasks"
               :key="task.task_id"
-              class="col-12 col-md-6 col-lg-3 mb-3">
+              class="col-6 col-md-4 col-lg-3 col-xl-2 task-grid-item">
               <TaskCard :task="task" />
             </div>
           </div>
@@ -284,43 +258,16 @@ onUnmounted(() => {
 </template>
 
 <style scoped>
+.task-grid {
+  --bs-gutter-x: 0.5rem;
+  --bs-gutter-y: 0.5rem;
+}
+
+.task-grid-item {
+  margin-bottom: 0;
+}
+
 .task-section {
-  margin-bottom: var(--spacing-xl);
-}
-
-/* Category Tabs - Similar to StatsView time-period-tabs */
-.task-category-tabs {
-  display: flex;
-  gap: var(--spacing-sm);
-  flex-wrap: wrap;
-  justify-content: center;
-}
-
-.task-category-tabs .btn {
-  flex: 1;
-  min-width: 140px;
-  font-weight: 500;
-  transition: all 0.2s ease;
-}
-
-/* Mobile: smaller buttons, allow wrapping */
-@media (max-width: 576px) {
-  .task-category-tabs .btn {
-    font-size: 0.8125rem;
-    padding: 0.5rem 0.75rem;
-    min-width: 120px;
-  }
-}
-
-/* Very small mobile: stack buttons */
-@media (max-width: 400px) {
-  .task-category-tabs {
-    flex-direction: column;
-  }
-
-  .task-category-tabs .btn-sm {
-    font-size: 0.875rem;
-    padding: 0.625rem 1rem;
-  }
+  margin-bottom: var(--spacing-lg);
 }
 </style>

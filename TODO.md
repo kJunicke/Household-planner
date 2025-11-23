@@ -43,6 +43,15 @@
 **Migrations:** Konsolidiert am 26.10.2025 (29 → 4 Migrations)
 
 **Letzte größere Features:**
+- UI/UX Kompakt-Design Optimierung - 23.11.2025
+  - TaskCard kompakter (reduzierte Paddings, kleinere Fonts)
+  - Grid-Layout: 2 Spalten auf Mobile (360px)
+  - Kategorie-Navigation als 2. Leiste unter Hauptnavigation
+  - Icons + Labels (Blitz-Icon für Alltag statt Uhr)
+  - Footer zweizeilig: Oben Actions (Zuweisung/Edit/Delete), unten Sauber-Button
+  - Sauber-Button immer auf gleicher Höhe innerhalb Spalte
+  - Subtasks standardmäßig eingeklappt
+  - Deutlich weniger Leerraum, mehr Übersichtlichkeit
 - Shopping-Liste Offline-Modus - 16.11.2025
   - Offline-First Architektur mit localStorage Cache
   - Optimistic Updates (UI reagiert sofort)

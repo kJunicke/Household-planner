@@ -15,7 +15,11 @@ const showHeader = computed(() => {
 
 <template>
   <div class="app-wrapper">
-    <Header v-if="showHeader" />
+    <Header v-if="showHeader">
+      <template #secondary-nav>
+        <router-view name="secondaryNav" />
+      </template>
+    </Header>
     <router-view />
     <ToastContainer />
   </div>

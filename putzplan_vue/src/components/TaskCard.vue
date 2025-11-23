@@ -24,7 +24,7 @@ const showAssignmentModal = ref(false)
 const showSubtaskManagementModal = ref(false)
 const showProjectWorkModal = ref(false)
 const showProjectCompleteModal = ref(false)
-const subtasksExpanded = ref(true)
+const subtasksExpanded = ref(false) // Standardmäßig eingeklappt für kompakteres Design
 
 // Loading states for async operations in modals
 const isCompletingTask = ref(false)
@@ -101,17 +101,6 @@ const handleCustomCompletion = async (effortOverride: number, reason: string) =>
           })
      }
      // If failed, modal stays open so user can retry
-}
-
-const handleDirectCompletion = async () => {
-     const success = await taskStore.completeTask(props.task.task_id)
-     if (success) {
-          confetti({
-               particleCount: 100,
-               spread: 70,
-               origin: { y: 0.6 }
-          })
-     }
 }
 
 // Berechnet Tage bis Task wieder fällig ist (nur für wiederkehrende Tasks die completed sind)
@@ -271,27 +260,9 @@ const handleCompleteProject = async () => {
 </script>
 
 <template>
-     <div class="task-card h-100">
+     <div class="task-card">
           <!-- Normal Display -->
           <div v-if="!isEditing" class="card-body">
-               <!-- Action Icons (Top Right) -->
-               <div class="action-icons">
-                    <button class="icon-btn" @click="startEdit" title="Bearbeiten">
-                         <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                              <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
-                              <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
-                         </svg>
-                    </button>
-                    <button class="icon-btn icon-btn-danger" @click="handleDeleteTask" title="Löschen">
-                         <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                              <polyline points="3 6 5 6 21 6"></polyline>
-                              <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-                              <line x1="10" y1="11" x2="10" y2="17"></line>
-                              <line x1="14" y1="11" x2="14" y2="17"></line>
-                         </svg>
-                    </button>
-               </div>
-
                <h6 class="task-title">{{ props.task.title }}</h6>
                <div class="task-details">
                     <!-- Effort für normale Tasks, Gesamt-Effort für Projekte -->
@@ -446,11 +417,42 @@ const handleCompleteProject = async () => {
           </div>
           <div class="card-footer">
                <!-- Normal Mode Buttons -->
-               <div v-if="!isEditing" class="footer-content">
-                    <div class="button-group">
+               <div v-if="!isEditing" class="footer-layout">
+                    <!-- Row 1: Action Icons (Assignment, Edit, Delete) -->
+                    <div class="footer-actions-row">
+                         <!-- Assignment Badge -->
+                         <div
+                              class="assignment-badge"
+                              :class="{ 'has-assignment': props.task.assigned_to }"
+                              :style="assignedMember ? { backgroundColor: assignedMember.user_color, borderColor: assignedMember.user_color } : {}"
+                              @click="openAssignmentModal"
+                              :title="assignedMember ? assignedMember.display_name : 'Task zuweisen'"
+                         >
+                              {{ assignedInitials }}
+                         </div>
+
+                         <button class="icon-btn" @click="startEdit" title="Bearbeiten">
+                              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                   <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                                   <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                              </svg>
+                         </button>
+
+                         <button class="icon-btn icon-btn-danger" @click="handleDeleteTask" title="Löschen">
+                              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                   <polyline points="3 6 5 6 21 6"></polyline>
+                                   <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                                   <line x1="10" y1="11" x2="10" y2="17"></line>
+                                   <line x1="14" y1="11" x2="14" y2="17"></line>
+                              </svg>
+                         </button>
+                    </div>
+
+                    <!-- Row 2: Main Action Button (Sauber/Dreckig/etc) -->
+                    <div class="footer-main-action">
                          <!-- PROJECTS: Different button logic -->
                          <template v-if="isProject">
-                              <button v-if="!props.task.completed" class="btn btn-primary btn-sm flex-fill"
+                              <button v-if="!props.task.completed" class="btn btn-primary btn-sm w-100"
                                       @click="openProjectCompleteModal">
                                    Projekt abschließen
                               </button>
@@ -461,13 +463,9 @@ const handleCompleteProject = async () => {
 
                          <!-- REGULAR TASKS: Standard logic -->
                          <template v-else-if="props.task.completed">
-                              <button class="btn btn-warning btn-sm flex-fill"
+                              <button class="btn btn-warning btn-sm w-100"
                                       @click="handleMarkDirty">
                                    Dreckig
-                              </button>
-                              <button class="btn btn-outline-success btn-sm flex-fill"
-                                      @click="handleDirectCompletion">
-                                   Trotzdem geputzt
                               </button>
                          </template>
                          <div v-else class="combined-button-group">
@@ -484,17 +482,6 @@ const handleCompleteProject = async () => {
                                    </svg>
                               </button>
                          </div>
-                    </div>
-
-                    <!-- Assignment Badge -->
-                    <div
-                         class="assignment-badge"
-                         :class="{ 'has-assignment': props.task.assigned_to }"
-                         :style="assignedMember ? { backgroundColor: assignedMember.user_color, borderColor: assignedMember.user_color } : {}"
-                         @click="openAssignmentModal"
-                         :title="assignedMember ? assignedMember.display_name : 'Task zuweisen'"
-                    >
-                         {{ assignedInitials }}
                     </div>
                </div>
 
@@ -567,40 +554,46 @@ const handleCompleteProject = async () => {
 <style scoped>
 .task-card {
      border: 1px solid var(--color-border);
-     border-radius: var(--radius-lg);
+     border-radius: var(--radius-md);
      background: var(--color-background-elevated);
-     box-shadow: var(--shadow-md);
+     box-shadow: var(--shadow-sm);
      transition: all var(--transition-base);
      overflow: hidden;
+     display: flex;
+     flex-direction: column;
+     height: 100%;
 }
 
 .task-card:hover {
-     box-shadow: var(--shadow-lg);
-     transform: translateY(-2px);
+     box-shadow: var(--shadow-md);
+     transform: translateY(-1px);
 }
 
 .task-title {
-     font-size: 1.125rem;
+     font-size: 0.875rem;
      font-weight: 600;
      color: var(--color-text-primary);
-     margin-bottom: var(--spacing-md);
+     margin-bottom: var(--spacing-sm);
+     line-height: 1.3;
+     word-wrap: break-word;
+     overflow-wrap: break-word;
 }
 
 .task-details {
      display: flex;
      flex-direction: column;
-     gap: var(--spacing-xs);
+     gap: 0.25rem;
 }
 
 .task-info {
      display: flex;
      align-items: center;
-     font-size: 0.875rem;
+     font-size: 0.75rem;
 }
 
 .info-label {
      color: var(--color-text-secondary);
-     margin-right: 0.5rem;
+     margin-right: 0.375rem;
      font-weight: 500;
 }
 
@@ -613,9 +606,9 @@ const handleCompleteProject = async () => {
      display: inline-block;
      background: var(--bs-primary);
      color: white;
-     padding: 0.125rem 0.5rem;
+     padding: 0.125rem 0.4rem;
      border-radius: var(--radius-sm);
-     font-size: 0.875rem;
+     font-size: 0.75rem;
      font-weight: 600;
 }
 
@@ -623,12 +616,12 @@ const handleCompleteProject = async () => {
      display: inline-block;
      background: var(--color-primary);
      color: white;
-     padding: 0.25rem 0.75rem;
+     padding: 0.125rem 0.5rem;
      border-radius: var(--radius-sm);
-     font-size: 0.75rem;
+     font-size: 0.625rem;
      font-weight: 500;
      text-transform: uppercase;
-     letter-spacing: 0.5px;
+     letter-spacing: 0.3px;
 }
 
 .task-badge-daily {
@@ -659,18 +652,19 @@ const handleCompleteProject = async () => {
 .card-footer {
      background: transparent;
      border-top: 1px solid var(--color-border);
-     padding: var(--spacing-md);
+     padding: var(--spacing-sm);
+     margin-top: auto; /* Pusht Footer nach unten */
 }
 
 .btn-sm {
-     font-size: 0.8125rem;
-     padding: 0.5rem 0.875rem;
+     font-size: 0.75rem;
+     padding: 0.375rem 0.625rem;
 }
 
 /* Combined Button Group Styling */
 .combined-button-group {
-     display: inline-flex;
-     flex: 1;
+     display: flex;
+     width: 100%;
      border-radius: var(--radius-md);
      overflow: hidden;
 }
@@ -698,27 +692,24 @@ const handleCompleteProject = async () => {
      background: var(--bs-success-dark, #157347);
 }
 
-/* Action Icons (Top Right) */
-.action-icons {
-     position: absolute;
-     top: var(--spacing-md);
-     right: var(--spacing-md);
-     display: flex;
-     gap: var(--spacing-xs);
-     z-index: 10;
-}
-
+/* Action Icons (in Footer) */
 .icon-btn {
-     background: var(--color-background-elevated);
+     background: transparent;
      border: 1px solid var(--color-border);
-     border-radius: var(--radius-md);
-     padding: 0.375rem;
+     border-radius: var(--radius-sm);
+     padding: 0.25rem;
      cursor: pointer;
      display: flex;
      align-items: center;
      justify-content: center;
      transition: all var(--transition-base);
      color: var(--color-text-secondary);
+     flex-shrink: 0;
+}
+
+.icon-btn svg {
+     width: 14px;
+     height: 14px;
 }
 
 .icon-btn:hover {
@@ -736,32 +727,42 @@ const handleCompleteProject = async () => {
 
 .card-body {
      position: relative;
-     padding: var(--spacing-lg);
+     padding: var(--spacing-sm);
+     flex: 1; /* Nimmt verfügbaren Platz ein */
+     display: flex;
+     flex-direction: column;
 }
 
-/* Footer Layout with Assignment Badge */
-.footer-content {
+/* Footer Layout - Two Rows */
+.footer-layout {
+     display: flex;
+     flex-direction: column;
+     gap: 0.375rem;
+}
+
+/* Row 1: Action Icons */
+.footer-actions-row {
      display: flex;
      align-items: center;
-     gap: var(--spacing-md);
+     gap: 0.25rem;
+     justify-content: flex-start;
 }
 
-.button-group {
-     flex: 1;
+/* Row 2: Main Action Button */
+.footer-main-action {
      display: flex;
-     gap: var(--spacing-sm);
-     flex-wrap: wrap;
+     width: 100%;
 }
 
 /* Assignment Badge */
 .assignment-badge {
-     width: 36px;
-     height: 36px;
+     width: 28px;
+     height: 28px;
      border-radius: 50%;
      display: flex;
      align-items: center;
      justify-content: center;
-     font-size: 0.75rem;
+     font-size: 0.625rem;
      font-weight: 600;
      cursor: pointer;
      transition: all var(--transition-base);
@@ -788,29 +789,29 @@ const handleCompleteProject = async () => {
 
 /* Subtasks Section */
 .subtasks-section {
-     margin-top: var(--spacing-md);
-     padding-top: var(--spacing-md);
+     margin-top: var(--spacing-sm);
+     padding-top: var(--spacing-sm);
      border-top: 1px solid var(--color-border);
 }
 
 .subtasks-header-row {
      display: flex;
      align-items: center;
-     gap: var(--spacing-sm);
+     gap: 0.25rem;
      justify-content: space-between;
 }
 
 .subtasks-header {
-     font-size: 0.875rem;
+     font-size: 0.75rem;
      font-weight: 600;
      color: var(--color-text-primary);
      cursor: pointer;
-     padding: var(--spacing-xs) var(--spacing-sm);
+     padding: 0.25rem 0.375rem;
      border-radius: var(--radius-sm);
      transition: background var(--transition-base);
      display: flex;
      align-items: center;
-     gap: var(--spacing-xs);
+     gap: 0.25rem;
      flex: 1;
 }
 
@@ -819,56 +820,56 @@ const handleCompleteProject = async () => {
 }
 
 .reset-subtasks-btn {
-     padding: 0.25rem 0.5rem;
-     font-size: 1rem;
+     padding: 0.125rem 0.375rem;
+     font-size: 0.875rem;
      line-height: 1;
      flex-shrink: 0;
 }
 
 .toggle-icon {
-     font-size: 0.75rem;
+     font-size: 0.625rem;
      color: var(--color-text-secondary);
 }
 
 .subtasks-list {
-     margin-top: var(--spacing-sm);
+     margin-top: 0.375rem;
      display: flex;
      flex-direction: column;
-     gap: var(--spacing-md);
+     gap: var(--spacing-sm);
 }
 
 /* Subtask Groups (by points mode) */
 .subtask-group {
      display: flex;
      flex-direction: column;
-     gap: var(--spacing-xs);
+     gap: 0.25rem;
 }
 
 .subtask-group-header {
      display: flex;
      align-items: center;
      justify-content: space-between;
-     padding: 0.375rem 0.625rem;
+     padding: 0.25rem 0.375rem;
      background: var(--color-background-muted);
      border-radius: var(--radius-sm);
-     margin-bottom: var(--spacing-xs);
+     margin-bottom: 0.25rem;
 }
 
 .subtask-group-badge {
-     font-size: 0.75rem;
-     padding: 0.25rem 0.625rem;
+     font-size: 0.625rem;
+     padding: 0.125rem 0.375rem;
      border-radius: var(--radius-sm);
      font-weight: 600;
      text-transform: uppercase;
-     letter-spacing: 0.5px;
+     letter-spacing: 0.3px;
 }
 
 .subtask-group-count {
-     font-size: 0.75rem;
+     font-size: 0.625rem;
      font-weight: 600;
      color: var(--color-text-secondary);
      background: var(--color-background-elevated);
-     padding: 0.25rem 0.5rem;
+     padding: 0.125rem 0.375rem;
      border-radius: var(--radius-sm);
 }
 
@@ -889,29 +890,47 @@ const handleCompleteProject = async () => {
 
 /* Manage Subtasks Section */
 .add-subtask-section {
-     margin-top: var(--spacing-md);
+     margin-top: var(--spacing-sm);
 }
 
-/* Mobile: Ensure buttons and badge stay in one row */
+/* Mobile: Smaller spacing and buttons */
 @media (max-width: 480px) {
-     .footer-content {
-          gap: var(--spacing-sm);
+     .footer-layout {
+          gap: 0.25rem;
      }
 
-     .button-group {
-          min-width: 0; /* Allow flex items to shrink below content size */
+     .footer-actions-row {
+          gap: 0.25rem;
      }
 
-     .combined-button-group,
-     .button-group > .btn {
-          font-size: 0.75rem;
-          padding: 0.4rem 0.5rem;
+     .icon-btn {
+          padding: 0.25rem;
+     }
+
+     .icon-btn svg {
+          width: 12px;
+          height: 12px;
+     }
+
+     .combined-button-group .btn {
+          font-size: 0.65rem;
+          padding: 0.3rem 0.4rem;
+          white-space: nowrap;
+     }
+
+     .combined-modifier {
+          padding: 0.3rem 0.35rem;
+     }
+
+     .combined-modifier svg {
+          width: 12px;
+          height: 12px;
      }
 
      .assignment-badge {
-          width: 32px;
-          height: 32px;
-          font-size: 0.7rem;
+          width: 24px;
+          height: 24px;
+          font-size: 0.5625rem;
      }
 }
 </style>
