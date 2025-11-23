@@ -3,11 +3,12 @@ import { onMounted, onUnmounted, ref, computed } from "vue";
 import TaskList from '../components/TaskList.vue';
 import TaskCard from '../components/TaskCard.vue';
 import CategoryNav from '../components/CategoryNav.vue';
+import TaskCreateModal from '../components/TaskCreateModal.vue';
 import { useTaskStore } from "../stores/taskStore";
 import type { Task } from '@/types/Task';
 
 const taskStore = useTaskStore()
-const showCreateTaskForm = ref(false)
+const showCreateModal = ref(false)
 
 // Search state
 const searchQuery = ref('')
@@ -52,47 +53,27 @@ const handleCategoryChange = (category: TaskCategory) => {
   selectedCategory.value = category
 }
 
-const newTask = ref({
-  title: '',
-  effort: 1,
-  recurrence_days: 0,
-  task_type: 'recurring' as 'recurring' | 'daily' | 'one-time' | 'project'
-})
-
-const resetForm = () => {
-  newTask.value = {
-    title: '',
-    effort: 1,
-    recurrence_days: 0,
-    task_type: 'recurring' as 'recurring' | 'daily' | 'one-time' | 'project'
-  }
+const openCreateModal = () => {
+  showCreateModal.value = true
 }
 
-const toggleForm = () => {
-  showCreateTaskForm.value = !showCreateTaskForm.value
-  if(!showCreateTaskForm.value) {
-    resetForm()
-  } else {
-    // Wenn Form geöffnet wird und Suchquery existiert, in title übernehmen
-    if (searchQuery.value.trim()) {
-      newTask.value.title = searchQuery.value.trim()
-    }
-  }
+const closeCreateModal = () => {
+  showCreateModal.value = false
 }
 
-const createTask = async () => {
+const handleCreateTask = async (taskData: {
+  title: string
+  effort: 1 | 2 | 3 | 4 | 5
+  recurrence_days: number
+  task_type: 'recurring' | 'daily' | 'one-time' | 'project'
+}) => {
   try {
-    await taskStore.createTask({
-      ...newTask.value,
-      effort: newTask.value.effort as 1 | 2 | 3 | 4 | 5,
-      task_type: newTask.value.task_type
-    })
-    resetForm()
-    showCreateTaskForm.value = false
+    await taskStore.createTask(taskData)
+    showCreateModal.value = false
   } catch (error) {
     console.error('Fehler beim Erstellen:', error)
   }
- }
+}
 
 onMounted(async () => {
   // Lädt Tasks aus Supabase - WARTE bis fertig geladen
@@ -120,64 +101,11 @@ onUnmounted(() => {
     <div class="container-fluid">
       <div class="row mb-3">
         <div class="col-12 text-end">
-          <button @click="toggleForm" class="btn btn-primary btn-sm" :disabled="taskStore.isLoading">
+          <button @click="openCreateModal" class="btn btn-primary btn-sm" :disabled="taskStore.isLoading">
             <i class="bi bi-plus"></i> Aufgabe hinzufügen
           </button>
         </div>
       </div>
-
-      <section v-if="showCreateTaskForm" class="mb-4">
-        <div class="card">
-          <div class="card-body">
-            <h5 class="card-title mb-4">Neue Aufgabe erstellen</h5>
-            <form @submit.prevent="createTask">
-              <div class="mb-3">
-                <label class="form-label">Task Titel</label>
-                <input type="text" v-model="newTask.title" placeholder="z.B. Küche putzen" class="form-control" :disabled="taskStore.isLoading">
-              </div>
-              <div class="mb-3">
-                <label class="form-label">Aufwand (1-5)</label>
-                <select v-model="newTask.effort" class="form-control" :disabled="taskStore.isLoading">
-                  <option :value="1">1 - Sehr leicht</option>
-                  <option :value="2">2 - Leicht</option>
-                  <option :value="3">3 - Normal</option>
-                  <option :value="4">4 - Schwer</option>
-                  <option :value="5">5 - Sehr schwer</option>
-                </select>
-              </div>
-              <div class="mb-3">
-                <label class="form-label">Task-Typ</label>
-                <select v-model="newTask.task_type" class="form-control" :disabled="taskStore.isLoading">
-                  <option value="daily">Täglich / Allgemein (immer sichtbar)</option>
-                  <option value="recurring">Wiederkehrend (zeitbasiert)</option>
-                  <option value="one-time">Einmalig</option>
-                  <option value="project">Projekt (langfristig)</option>
-                </select>
-              </div>
-              <div class="mb-3" v-if="newTask.task_type === 'recurring'">
-                <label class="form-label">Tage bis zum nächsten Putzen</label>
-                <input type="number" v-model="newTask.recurrence_days" placeholder="3" class="form-control" :disabled="taskStore.isLoading">
-              </div>
-              <div v-if="newTask.task_type === 'project'" class="mb-3">
-                <p class="text-muted small">
-                  <i class="bi bi-info-circle"></i>
-                  Projekte sind langfristige Aufgaben ohne Wiederholung. Es wird automatisch ein "Am Projekt arbeiten" Subtask erstellt.
-                </p>
-              </div>
-              <div class="d-flex gap-2">
-                <button type="submit" class="btn btn-success" :disabled="taskStore.isLoading">
-                  <span v-if="!taskStore.isLoading">Aufgabe erstellen</span>
-                  <span v-else>
-                    <span class="spinner-border spinner-border-sm me-2"></span>
-                    Erstellt...
-                  </span>
-                </button>
-                <button type="button" @click="toggleForm" class="btn btn-secondary" :disabled="taskStore.isLoading">Abbrechen</button>
-              </div>
-            </form>
-          </div>
-        </div>
-      </section>
 
       <!-- Search Field -->
       <div class="mb-3">
@@ -254,6 +182,15 @@ onUnmounted(() => {
         </section>
       </template>
     </div>
+
+    <!-- Task Create Modal -->
+    <TaskCreateModal
+      v-if="showCreateModal"
+      :initialTitle="searchQuery.trim()"
+      :isLoading="taskStore.isLoading"
+      @close="closeCreateModal"
+      @create="handleCreateTask"
+    />
   </main>
 </template>
 

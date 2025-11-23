@@ -443,13 +443,14 @@ const handlePointsModeChange = (subtaskId: string, mode: 'checklist' | 'deduct' 
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 0.5rem 0.75rem;
+  padding: 0.5rem 0.5rem;
   border: 2px solid var(--color-border);
   border-radius: var(--radius-md);
   cursor: pointer;
   transition: all var(--transition-base);
   background: var(--color-background);
-  min-width: 70px;
+  flex: 1;
+  min-width: 0;
 }
 
 .mode-option-compact:hover {
@@ -474,10 +475,14 @@ const handlePointsModeChange = (subtaskId: string, mode: 'checklist' | 'deduct' 
 }
 
 .mode-option-compact .mode-text {
-  font-size: 0.7rem;
+  font-size: 0.65rem;
   font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.5px;
+  letter-spacing: 0.3px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
 }
 
 /* Subtask Mode Selector (for Existing Subtasks) */

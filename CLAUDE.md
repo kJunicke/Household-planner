@@ -106,9 +106,9 @@ putzplan_vue/
 - **Kein Event-Chain**: Nicht "props down, events up" bei zentralem Store
 
 ### UI Patterns
-- **Inline Forms**: Für einfache Create-Forms (≤4 Felder)
-- **Vue Modals**: Teleport + v-if für komplexe Forms
+- **Vue Modals**: Teleport + v-if für alle Forms (TaskCreateModal, TaskEditModal, TaskCompletionModal etc.)
 - **Nicht Bootstrap Modals**: Vue 3 Kompatibilitätsprobleme
+- **Modal Pattern**: Zentralisierte Utility-Styles in `utilities.css` (flexbox, scrollable body)
 
 ### CSS Architecture
 - **Design System**: CSS Variables in `base.css` (Farben, Spacing, Shadows, Border-Radius, Transitions)

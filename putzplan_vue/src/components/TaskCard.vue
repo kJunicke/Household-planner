@@ -9,6 +9,7 @@ import SubtaskManagementModal from './SubtaskManagementModal.vue'
 import SubtaskItem from './SubtaskItem.vue'
 import ProjectWorkModal from './ProjectWorkModal.vue'
 import ProjectCompleteModal from './ProjectCompleteModal.vue'
+import TaskEditModal from './TaskEditModal.vue'
 import confetti from 'canvas-confetti'
 
 interface Props {
@@ -18,7 +19,7 @@ interface Props {
 const props = defineProps<Props>()
 const taskStore = useTaskStore()
 const householdStore = useHouseholdStore()
-const isEditing = ref(false)
+const showEditModal = ref(false)
 const showCompletionModal = ref(false)
 const showAssignmentModal = ref(false)
 const showSubtaskManagementModal = ref(false)
@@ -31,28 +32,17 @@ const isCompletingTask = ref(false)
 const isCompletingProject = ref(false)
 const isLoggingWork = ref(false)
 
-const editForm = ref({
-     ...props.task
-})
-
-const startEdit = () => {
-     editForm.value = {...props.task}
-     isEditing.value = true
+const openEditModal = () => {
+     showEditModal.value = true
 }
 
-const saveEdit = async () => {
-     // Validierung: Wenn task_type !== 'recurring', setze recurrence_days = 0
-     const updates = { ...editForm.value }
-     if (updates.task_type !== 'recurring') {
-          updates.recurrence_days = 0
-     }
+const closeEditModal = () => {
+     showEditModal.value = false
+}
 
+const handleEditConfirm = async (updates: Partial<Task>) => {
      await taskStore.updateTask(props.task.task_id, updates)
-     isEditing.value = false
-}
-
-const cancelEdit = () => {
-     isEditing.value = false
+     showEditModal.value = false
 }
 
 const handleDeleteTask = async () => {
@@ -262,7 +252,7 @@ const handleCompleteProject = async () => {
 <template>
      <div class="task-card">
           <!-- Normal Display -->
-          <div v-if="!isEditing" class="card-body">
+          <div class="card-body">
                <h6 class="task-title">{{ props.task.title }}</h6>
                <div class="task-details">
                     <!-- Effort für normale Tasks, Gesamt-Effort für Projekte -->
@@ -355,8 +345,8 @@ const handleCompleteProject = async () => {
                     </div>
                </div>
 
-               <!-- MANAGE SUBTASKS BUTTON (nur für Parent Tasks) -->
-               <div v-if="!props.task.parent_task_id" class="add-subtask-section">
+               <!-- MANAGE SUBTASKS BUTTON (nur für Parent Tasks und nur wenn ausgeklappt) -->
+               <div v-if="!props.task.parent_task_id && subtasksExpanded" class="add-subtask-section">
                     <button
                          class="btn btn-sm btn-outline-primary w-100"
                          @click="openSubtaskManagementModal"
@@ -365,59 +355,9 @@ const handleCompleteProject = async () => {
                     </button>
                </div>
           </div>
-
-          <!-- Edit Form -->
-          <div v-else class="card-body">
-               <form @submit.prevent="saveEdit">
-                    <div class="mb-3">
-                         <label for="title" class="form-label">Titel</label>
-                         <input
-                              type="text"
-                              class="form-control"
-                              id="title"
-                              v-model="editForm.title"
-                              required>
-                    </div>
-
-                    <div class="mb-3">
-                         <label for="task-type" class="form-label">Typ</label>
-                         <select
-                              class="form-select"
-                              id="task-type"
-                              v-model="editForm.task_type"
-                              required>
-                              <option value="recurring">Zeitbasiert</option>
-                              <option value="daily">Täglich</option>
-                              <option value="one-time">Einmalig</option>
-                         </select>
-                    </div>
-
-                    <div class="mb-3">
-                         <label for="effort" class="form-label">Aufwand</label>
-                         <input
-                              type="number"
-                              class="form-control"
-                              id="effort"
-                              v-model.number="editForm.effort"
-                              min="1"
-                              required>
-                    </div>
-
-                    <div v-if="editForm.task_type === 'recurring'" class="mb-3">
-                         <label for="recurrence" class="form-label">Wiederholung (Tage)</label>
-                         <input
-                              type="number"
-                              class="form-control"
-                              id="recurrence"
-                              v-model.number="editForm.recurrence_days"
-                              min="1"
-                              required>
-                    </div>
-               </form>
-          </div>
           <div class="card-footer">
-               <!-- Normal Mode Buttons -->
-               <div v-if="!isEditing" class="footer-layout">
+               <!-- Footer Buttons -->
+               <div class="footer-layout">
                     <!-- Row 1: Action Icons (Assignment, Edit, Delete) -->
                     <div class="footer-actions-row">
                          <!-- Assignment Badge -->
@@ -431,7 +371,7 @@ const handleCompleteProject = async () => {
                               {{ assignedInitials }}
                          </div>
 
-                         <button class="icon-btn" @click="startEdit" title="Bearbeiten">
+                         <button class="icon-btn" @click="openEditModal" title="Bearbeiten">
                               <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
                                    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
@@ -484,20 +424,6 @@ const handleCompleteProject = async () => {
                          </div>
                     </div>
                </div>
-
-               <!-- Edit Mode Buttons -->
-               <div v-else class="d-flex gap-2">
-                    <button type="submit"
-                            class="btn btn-primary btn-sm flex-fill"
-                            @click="saveEdit">
-                         Speichern
-                    </button>
-                    <button type="button"
-                            class="btn btn-secondary btn-sm flex-fill"
-                            @click="cancelEdit">
-                         Abbrechen
-                    </button>
-               </div>
           </div>
 
           <!-- Task Completion Modal -->
@@ -546,6 +472,14 @@ const handleCompleteProject = async () => {
                :isLoading="isCompletingProject"
                @close="closeProjectCompleteModal"
                @confirm="handleCompleteProject"
+          />
+
+          <!-- Task Edit Modal -->
+          <TaskEditModal
+               v-if="showEditModal"
+               :task="props.task"
+               @close="closeEditModal"
+               @confirm="handleEditConfirm"
           />
      </div>
 

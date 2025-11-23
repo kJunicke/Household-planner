@@ -174,52 +174,8 @@ const handleProjectWork = async (effort: number, note: string) => {
         <span v-if="task.subtask_points_mode !== 'checklist'" class="subtask-effort">{{ task.effort }}</span>
       </div>
 
-      <!-- Zeile 2: Alle Action Buttons -->
+      <!-- Zeile 2: Action Icons Row (wie bei TaskCard) -->
       <div class="subtask-actions-row">
-        <!-- SPECIAL: "Am Projekt arbeiten" subtask always opens ProjectWorkModal -->
-        <button
-          v-if="isProjectWorkSubtask"
-          class="subtask-btn subtask-btn-project"
-          @click="openProjectWorkModal"
-          title="Arbeit dokumentieren"
-        >
-          ✏️ Arbeit dokumentieren
-        </button>
-
-        <!-- REGULAR SUBTASKS: Standard completion logic -->
-        <template v-else>
-          <button
-            class="subtask-btn subtask-btn-success"
-            @click="handleCompleteTask"
-            title="Sauber"
-            v-if="!task.completed"
-          >
-            ✓ Sauber
-          </button>
-          <button
-            v-if="!task.completed && task.subtask_points_mode !== 'checklist'"
-            class="subtask-btn subtask-btn-success"
-            @click="openCompletionModal"
-            title="Mehr Aufwand"
-          >
-            ↑
-          </button>
-        </template>
-        <button
-          class="subtask-btn"
-          @click="startEdit"
-          title="Bearbeiten"
-        >
-          ✏️
-        </button>
-        <button
-          class="subtask-btn subtask-btn-danger"
-          @click="handleDeleteTask"
-          title="Löschen"
-        >
-          🗑️
-        </button>
-
         <!-- Assignment Badge Mini -->
         <div
           class="assignment-badge-mini"
@@ -230,6 +186,66 @@ const handleProjectWork = async (effort: number, note: string) => {
         >
           {{ assignedInitials }}
         </div>
+
+        <button
+          class="subtask-btn"
+          @click="startEdit"
+          title="Bearbeiten"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+            <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+          </svg>
+        </button>
+        <button
+          class="subtask-btn subtask-btn-danger"
+          @click="handleDeleteTask"
+          title="Löschen"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="3 6 5 6 21 6"></polyline>
+            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+            <line x1="10" y1="11" x2="10" y2="17"></line>
+            <line x1="14" y1="11" x2="14" y2="17"></line>
+          </svg>
+        </button>
+      </div>
+
+      <!-- Zeile 3: Main Action Button (wie bei TaskCard) -->
+      <div class="subtask-main-action">
+        <!-- SPECIAL: "Am Projekt arbeiten" subtask always opens ProjectWorkModal -->
+        <button
+          v-if="isProjectWorkSubtask"
+          class="btn btn-primary btn-sm w-100"
+          @click="openProjectWorkModal"
+          title="Arbeit dokumentieren"
+        >
+          ✏️ Arbeit dokumentieren
+        </button>
+
+        <!-- REGULAR SUBTASKS: Standard completion logic -->
+        <template v-else-if="!task.completed">
+          <div class="combined-button-group">
+            <button
+              class="btn btn-success btn-sm combined-main"
+              @click="handleCompleteTask"
+              title="Sauber"
+            >
+              ✓
+            </button>
+            <button
+              v-if="task.subtask_points_mode !== 'checklist'"
+              class="btn btn-success btn-sm combined-modifier"
+              @click="openCompletionModal"
+              title="Aufwand anpassen"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="17 11 12 6 7 11"></polyline>
+                <polyline points="17 18 12 13 7 18"></polyline>
+              </svg>
+            </button>
+          </div>
+        </template>
       </div>
     </div>
 
@@ -289,7 +305,7 @@ const handleProjectWork = async (effort: number, note: string) => {
   text-decoration: line-through;
 }
 
-/* 2-Zeilen Wrapper */
+/* 3-Zeilen Wrapper (wie TaskCard) */
 .subtask-wrapper {
   display: flex;
   flex-direction: column;
@@ -324,60 +340,118 @@ const handleProjectWork = async (effort: number, note: string) => {
   flex-shrink: 0;
 }
 
-/* Zeile 2: Action Buttons Row */
+/* Zeile 2: Action Icons Row (wie TaskCard footer-actions-row) */
 .subtask-actions-row {
   display: flex;
   align-items: center;
-  gap: var(--spacing-xs);
-  flex-wrap: wrap;
+  gap: 0.25rem;
+  justify-content: flex-start;
 }
 
 .subtask-btn {
-  background: var(--color-background-elevated);
+  background: transparent;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-sm);
-  padding: 0.25rem 0.5rem;
+  padding: 0.25rem;
   cursor: pointer;
-  font-size: 0.75rem;
-  transition: all var(--transition-base);
   display: flex;
   align-items: center;
   justify-content: center;
+  transition: all var(--transition-base);
+  color: var(--color-text-secondary);
+  flex-shrink: 0;
+}
+
+.subtask-btn svg {
+  width: 14px;
+  height: 14px;
 }
 
 .subtask-btn:hover {
   background: var(--color-background-muted);
+  color: var(--color-text-primary);
   border-color: var(--color-primary);
   transform: scale(1.05);
-}
-
-.subtask-btn-success {
-  background: var(--bs-success);
-  color: white;
-  border-color: var(--bs-success);
-}
-
-.subtask-btn-success:hover {
-  background: var(--bs-success-dark, #157347);
-  border-color: var(--bs-success-dark, #157347);
-}
-
-.subtask-btn-project {
-  background: var(--bs-primary);
-  color: white;
-  border-color: var(--bs-primary);
-  font-weight: 500;
-}
-
-.subtask-btn-project:hover {
-  background: var(--bs-primary-dark, #0b5ed7);
-  border-color: var(--bs-primary-dark, #0b5ed7);
 }
 
 .subtask-btn-danger:hover {
   background: var(--bs-danger);
   color: white;
   border-color: var(--bs-danger);
+}
+
+/* Zeile 3: Main Action Button (wie TaskCard footer-main-action) */
+.subtask-main-action {
+  display: flex;
+  width: 100%;
+}
+
+.btn {
+  font-size: 0.75rem;
+  padding: 0.375rem 0.625rem;
+  border: none;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: all var(--transition-base);
+  font-weight: 500;
+}
+
+.btn-sm {
+  font-size: 0.75rem;
+  padding: 0.375rem 0.625rem;
+}
+
+.btn-primary {
+  background: var(--bs-primary);
+  color: white;
+}
+
+.btn-primary:hover {
+  background: var(--bs-primary-dark, #0b5ed7);
+}
+
+.btn-success {
+  background: var(--bs-success);
+  color: white;
+}
+
+.btn-success:hover {
+  background: var(--bs-success-dark, #157347);
+}
+
+.w-100 {
+  width: 100%;
+}
+
+/* Combined Button Group (wie TaskCard) */
+.combined-button-group {
+  display: flex;
+  width: 100%;
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+
+.combined-main {
+  flex: 1;
+  border-radius: var(--radius-md) 0 0 var(--radius-md);
+  border-right: none;
+}
+
+.combined-modifier {
+  padding: 0.5rem 0.625rem;
+  border-radius: 0 var(--radius-md) var(--radius-md) 0;
+  border-left: 2px solid rgba(255, 255, 255, 0.3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.combined-modifier svg {
+  display: block;
+}
+
+.combined-modifier:hover {
+  background: var(--bs-success-dark, #157347);
 }
 
 .assignment-badge-mini {
@@ -425,16 +499,39 @@ const handleProjectWork = async (effort: number, note: string) => {
   flex: 0 0 60px;
 }
 
-/* Mobile */
+/* Mobile (wie TaskCard) */
 @media (max-width: 480px) {
   .subtask-item {
     gap: 0.375rem;
     padding: 0.375rem 0.5rem;
   }
 
+  .subtask-actions-row {
+    gap: 0.25rem;
+  }
+
   .subtask-btn {
-    padding: 0.2rem 0.4rem;
-    font-size: 0.7rem;
+    padding: 0.25rem;
+  }
+
+  .subtask-btn svg {
+    width: 12px;
+    height: 12px;
+  }
+
+  .combined-button-group .btn {
+    font-size: 0.65rem;
+    padding: 0.3rem 0.4rem;
+    white-space: nowrap;
+  }
+
+  .combined-modifier {
+    padding: 0.3rem 0.35rem;
+  }
+
+  .combined-modifier svg {
+    width: 12px;
+    height: 12px;
   }
 
   .assignment-badge-mini {

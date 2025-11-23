@@ -43,6 +43,14 @@
 **Migrations:** Konsolidiert am 26.10.2025 (29 → 4 Migrations)
 
 **Letzte größere Features:**
+- Mobile Layout Optimierung & Modal Refactoring - 23.11.2025
+  - **Neue Modals**: TaskEditModal, TaskCreateModal (statt inline Forms)
+  - **SubtaskItem Layout**: 3-Zeilen Struktur wie TaskCard (Assignment Badge, Edit/Delete Icons, Sauber-Button)
+  - **Subtasks verwalten Button**: Nur bei ausgeklappten Subtasks sichtbar
+  - **Modal Mobile-Fix**: Flexbox Layout mit scrollbarem Body (utilities.css)
+  - **Kompakte Buttons**: Subtask "Sauber" nur ✓ (ohne Text)
+  - **Punktemodus-Buttons**: Responsive mit flex: 1 für Mobile (360px)
+  - Alle Features auf Mobile (360x740) mit Playwright getestet
 - UI/UX Kompakt-Design Optimierung - 23.11.2025
   - TaskCard kompakter (reduzierte Paddings, kleinere Fonts)
   - Grid-Layout: 2 Spalten auf Mobile (360px)

@@ -98,7 +98,8 @@
   max-width: 500px;
   width: 100%;
   max-height: 90vh;
-  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
 }
 
 .modal-header {
@@ -107,6 +108,7 @@
   justify-content: space-between;
   padding: 1.25rem;
   border-bottom: 1px solid var(--color-border);
+  flex-shrink: 0;
 }
 
 .modal-title {
@@ -118,6 +120,8 @@
 
 .modal-body {
   padding: 1.25rem;
+  overflow-y: auto;
+  flex: 1 1 auto;
 }
 
 .modal-body p {
@@ -131,6 +135,7 @@
   justify-content: flex-end;
   padding: 1rem 1.25rem;
   border-top: 1px solid var(--color-border);
+  flex-shrink: 0;
 }
 
 .btn-close {

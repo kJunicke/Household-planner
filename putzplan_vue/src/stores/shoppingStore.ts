@@ -93,10 +93,8 @@ export const useShoppingStore = defineStore('shopping', () => {
     return items.value
       .filter(item => item.purchased)
       .sort((a, b) => {
-        // Sort by last_purchased_at descending (newest first)
-        if (!a.last_purchased_at) return 1
-        if (!b.last_purchased_at) return -1
-        return new Date(b.last_purchased_at).getTime() - new Date(a.last_purchased_at).getTime()
+        // Sort by times_purchased descending (most purchased first)
+        return b.times_purchased - a.times_purchased
       })
   })
 
