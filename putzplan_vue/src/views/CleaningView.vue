@@ -152,13 +152,9 @@ onUnmounted(() => {
           <i class="bi bi-search"></i>
           <p>Keine Tasks gefunden für "{{ searchQuery }}"</p>
         </div>
-        <div v-else class="container-fluid">
-          <div class="row task-grid">
-            <div v-for="task in searchFilteredTasks"
-              :key="task.task_id"
-              class="col-6 col-md-4 col-lg-3 col-xl-2 task-grid-item">
-              <TaskCard :task="task" />
-            </div>
+        <div v-else class="task-list-container">
+          <div class="task-list">
+            <TaskCard v-for="task in searchFilteredTasks" :key="task.task_id" :task="task" />
           </div>
         </div>
       </section>
@@ -195,13 +191,15 @@ onUnmounted(() => {
 </template>
 
 <style scoped>
-.task-grid {
-  --bs-gutter-x: 0.5rem;
-  --bs-gutter-y: 0.5rem;
+.task-list-container {
+  width: 100%;
 }
 
-.task-grid-item {
-  margin-bottom: 0;
+.task-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  width: 100%;
 }
 
 .task-section {

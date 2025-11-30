@@ -62,38 +62,32 @@ const completedProjects = computed(() => {
 
 </script>
 <template>
-    <div class="container-fluid">
+    <div class="task-list-container">
         <!-- Regular Tasks -->
-        <div v-if="filteredTasks.length > 0" class="row task-grid">
-            <div v-for="task in filteredTasks"
-            :key="task.task_id"
-            class="col-6 col-md-4 col-lg-3 col-xl-2 task-grid-item">
-                <TaskCard :task="task" />
-            </div>
+        <div v-if="filteredTasks.length > 0" class="task-list">
+            <TaskCard v-for="task in filteredTasks" :key="task.task_id" :task="task" />
         </div>
 
         <!-- Completed Projects Section (only in completed view) -->
         <div v-if="filter === 'completed' && completedProjects.length > 0" class="completed-projects-section">
             <h6 class="section-title">Abgeschlossene Projekte</h6>
-            <div class="row task-grid">
-                <div v-for="project in completedProjects"
-                :key="project.task_id"
-                class="col-6 col-md-4 col-lg-3 col-xl-2 task-grid-item">
-                    <TaskCard :task="project" />
-                </div>
+            <div class="task-list">
+                <TaskCard v-for="project in completedProjects" :key="project.task_id" :task="project" />
             </div>
         </div>
     </div>
 </template>
 
 <style scoped>
-.task-grid {
-    --bs-gutter-x: 0.5rem;
-    --bs-gutter-y: 0.5rem;
+.task-list-container {
+    width: 100%;
 }
 
-.task-grid-item {
-    margin-bottom: 0;
+.task-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    width: 100%;
 }
 
 .completed-projects-section {
