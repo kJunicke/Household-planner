@@ -57,6 +57,8 @@ putzplan_vue/
 
 ### Views & Routes
 - `/` - **CleaningView** - Task-Liste mit Sub-Tabs (Alltagsaufgaben / Putzaufgaben / Erledigt)
+  - **FAB-Buttons**: Expanding Search + Create Task (unten rechts, thumb-freundlich)
+  - **Cross-Tab Search**: Intelligente Suche über alle Kategorien mit Relevanz-Sortierung
 - `/history` - **HistoryView** - Chronologischer Verlauf aller Completions
 - `/stats` - **StatsView** - Gamification-Statistiken (Tortendiagramm mit Aufgabenverteilung)
 - `/shopping` - **ShoppingView** - Einkaufsliste mit Autocomplete und Purchase-Tracking
@@ -137,6 +139,11 @@ putzplan_vue/
 - **Vue Modals**: Teleport + v-if für alle Forms (TaskCreateModal, TaskEditModal, TaskCompletionModal etc.)
 - **Nicht Bootstrap Modals**: Vue 3 Kompatibilitätsprobleme
 - **Modal Pattern**: Zentralisierte Utility-Styles in `utilities.css` (flexbox, scrollable body)
+- **FAB Pattern** (CleaningView):
+  - Floating Action Buttons unten rechts (Material Design Standard)
+  - Search FAB: Expandiert zu Suchleiste (250px, smooth animation)
+  - Create FAB: Öffnet Task-Modal
+  - Thumb-freundliche Position für Mobile UX
 
 ### CSS Architecture
 - **Design System**: CSS Variables in `base.css` (Farben, Spacing, Shadows, Border-Radius, Transitions)

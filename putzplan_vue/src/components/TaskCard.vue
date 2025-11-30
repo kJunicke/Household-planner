@@ -273,19 +273,9 @@ const handleCompleteProject = async () => {
 <template>
      <div class="task-card" :class="{ 'has-assignment': props.task.assigned_to }" :style="assignmentGlowStyle">
           <!-- Main Horizontal Layout -->
-          <div class="task-card-main">
-               <!-- Left: Expand Icon + Title + Badges -->
+          <div class="task-card-main" @click="!props.task.parent_task_id && subtasks.length > 0 ? toggleSubtasks() : null" :style="{ cursor: !props.task.parent_task_id && subtasks.length > 0 ? 'pointer' : 'default' }">
+               <!-- Left: Title + Badges -->
                <div class="task-left">
-                    <!-- Expand Icon (nur wenn Subtasks vorhanden) -->
-                    <button
-                         v-if="!props.task.parent_task_id && subtasks.length > 0"
-                         class="expand-btn"
-                         @click="toggleSubtasks"
-                         :title="subtasksExpanded ? 'Subtasks einklappen' : 'Subtasks ausklappen'"
-                    >
-                         {{ subtasksExpanded ? '▼' : '▶' }}
-                    </button>
-
                     <div class="task-info-block">
                          <h6 class="task-title">{{ props.task.title }}</h6>
                          <div class="task-meta">
@@ -317,12 +307,22 @@ const handleCompleteProject = async () => {
                               <span v-if="daysUntilDue !== null" class="meta-badge due-badge">
                                    {{ daysUntilDue }}d
                               </span>
+
+                              <!-- Expand Icon (klein, ausgegraut, unten rechts) -->
+                              <button
+                                   v-if="!props.task.parent_task_id && subtasks.length > 0"
+                                   class="expand-indicator"
+                                   @click.stop="toggleSubtasks"
+                                   :title="subtasksExpanded ? 'Subtasks einklappen' : 'Subtasks ausklappen'"
+                              >
+                                   {{ subtasksExpanded ? '▲' : '▼' }}
+                              </button>
                          </div>
                     </div>
                </div>
 
                <!-- Right: Edit Icon + Action Buttons -->
-               <div class="task-right">
+               <div class="task-right" @click.stop>
                     <button class="icon-btn edit-btn" @click="openEditModal" title="Bearbeiten">
                          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                               <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
@@ -543,25 +543,25 @@ const handleCompleteProject = async () => {
      min-width: 0;
 }
 
-.expand-btn {
+.expand-indicator {
      background: transparent;
      border: none;
      color: var(--color-text-secondary);
-     font-size: 0.75rem;
+     opacity: 0.5;
+     font-size: 0.625rem;
      cursor: pointer;
-     padding: 0.25rem;
-     display: flex;
+     padding: 0.125rem 0.25rem;
+     display: inline-flex;
      align-items: center;
      justify-content: center;
-     width: 24px;
-     height: 24px;
      flex-shrink: 0;
      transition: all var(--transition-base);
+     border-radius: var(--radius-sm);
 }
 
-.expand-btn:hover {
-     color: var(--color-primary);
-     transform: scale(1.15);
+.expand-indicator:hover {
+     opacity: 0.8;
+     background: var(--color-background-muted);
 }
 
 .task-info-block {

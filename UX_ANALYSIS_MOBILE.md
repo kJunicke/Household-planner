@@ -36,6 +36,8 @@
 - Haushalt-Info, Code, Mitglieder → Settings-Modal/Drawer
 - Logout → User-Menu (Tap auf Avatar)
 
+Abgeschlossen 
+
 ---
 
 ### 2. **Doppelte Navigation ist verwirrend** 🔄
@@ -85,7 +87,7 @@ Option B: Bottom Navigation (Standard auf Mobile)
 /* Subtasks/Effort inline statt gestackt: */
 [Title]        Aufwand: 1  ▶ Subtasks (0/3)
 ```
-
+Abgeschlossen
 ---
 
 ### 4. **Button-Überflutung auf Cards** 🎛️
@@ -121,7 +123,7 @@ Swipe Left →
 
 Tap Card → Expand für Edit/Assign
 ```
-
+Abgeschlossen aber keine Swipe actions
 ---
 
 ### 5. **Subtasks-Accordion: Schlechte Affordance** 🔽
