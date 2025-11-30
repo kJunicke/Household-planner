@@ -1,10 +1,8 @@
 <script setup lang="ts">
 import type { Task } from '@/types/Task'
 import { useTaskStore } from '@/stores/taskStore'
-import { useHouseholdStore } from '@/stores/householdStore'
 import { ref, computed } from "vue";
 import TaskCompletionModal from './TaskCompletionModal.vue'
-import TaskAssignmentModal from './TaskAssignmentModal.vue'
 import ProjectWorkModal from './ProjectWorkModal.vue'
 import confetti from 'canvas-confetti'
 
@@ -14,10 +12,8 @@ interface Props {
 
 const props = defineProps<Props>()
 const taskStore = useTaskStore()
-const householdStore = useHouseholdStore()
 const isEditing = ref(false)
 const showCompletionModal = ref(false)
-const showAssignmentModal = ref(false)
 const showProjectWorkModal = ref(false)
 
 const editForm = ref({
@@ -43,10 +39,6 @@ const saveEdit = async () => {
 
 const cancelEdit = () => {
   isEditing.value = false
-}
-
-const handleDeleteTask = async () => {
-  await taskStore.deleteTask(props.task.task_id)
 }
 
 const handleCompleteTask = async () => {
@@ -80,34 +72,6 @@ const handleCustomCompletion = async (effortOverride: number, reason: string) =>
   }
 }
 
-// Assignment Badge
-const assignedMember = computed(() => {
-  if (!props.task.assigned_to) return null
-  return householdStore.householdMembers.find(m => m.user_id === props.task.assigned_to)
-})
-
-const assignedInitials = computed(() => {
-  if (!assignedMember.value) return '?'
-  return assignedMember.value.display_name
-    .split(' ')
-    .map(n => n[0])
-    .join('')
-    .substring(0, 2)
-    .toUpperCase()
-})
-
-const openAssignmentModal = () => {
-  showAssignmentModal.value = true
-}
-
-const closeAssignmentModal = () => {
-  showAssignmentModal.value = false
-}
-
-const handleAssignmentConfirm = async (userId: string | null, permanent: boolean) => {
-  await taskStore.assignTask(props.task.task_id, userId, permanent)
-  showAssignmentModal.value = false
-}
 
 // Check if this is the "Am Projekt arbeiten" default subtask
 const isProjectWorkSubtask = computed(() => props.task.title === 'Am Projekt arbeiten')
@@ -166,68 +130,41 @@ const handleProjectWork = async (effort: number, note: string) => {
       <button class="btn btn-sm btn-secondary" @click="cancelEdit">✕</button>
     </div>
 
-    <!-- Normal Display (2 Zeilen Layout) -->
+    <!-- Normal Display (Horizontal Layout wie TaskCard) -->
     <div v-else class="subtask-wrapper">
-      <!-- Zeile 1: Titel (+ Effort nur bei non-checklist) -->
-      <div class="subtask-header">
+      <!-- Left: Title + Effort Badge -->
+      <div class="subtask-left">
         <span class="subtask-title">{{ task.title }}</span>
-        <span v-if="task.subtask_points_mode !== 'checklist'" class="subtask-effort">{{ task.effort }}</span>
+        <span v-if="task.subtask_points_mode !== 'checklist'" class="subtask-effort-badge">
+          {{ task.effort }} Pkt
+        </span>
       </div>
 
-      <!-- Zeile 2: Action Icons Row (wie bei TaskCard) -->
-      <div class="subtask-actions-row">
-        <!-- Assignment Badge Mini -->
-        <div
-          class="assignment-badge-mini"
-          :class="{ 'has-assignment': task.assigned_to }"
-          :style="assignedMember ? { backgroundColor: assignedMember.user_color, borderColor: assignedMember.user_color } : {}"
-          @click="openAssignmentModal"
-          :title="assignedMember ? assignedMember.display_name : 'Zuweisen'"
-        >
-          {{ assignedInitials }}
-        </div>
-
-        <button
-          class="subtask-btn"
-          @click="startEdit"
-          title="Bearbeiten"
-        >
+      <!-- Right: Edit + Action Buttons -->
+      <div class="subtask-right">
+        <button class="subtask-edit-btn" @click="startEdit" title="Bearbeiten">
           <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
             <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
           </svg>
         </button>
-        <button
-          class="subtask-btn subtask-btn-danger"
-          @click="handleDeleteTask"
-          title="Löschen"
-        >
-          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <polyline points="3 6 5 6 21 6"></polyline>
-            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-            <line x1="10" y1="11" x2="10" y2="17"></line>
-            <line x1="14" y1="11" x2="14" y2="17"></line>
-          </svg>
-        </button>
-      </div>
 
-      <!-- Zeile 3: Main Action Button (wie bei TaskCard) -->
-      <div class="subtask-main-action">
-        <!-- SPECIAL: "Am Projekt arbeiten" subtask always opens ProjectWorkModal -->
-        <button
-          v-if="isProjectWorkSubtask"
-          class="btn btn-primary btn-sm w-100"
-          @click="openProjectWorkModal"
-          title="Arbeit dokumentieren"
-        >
-          ✏️ Arbeit dokumentieren
-        </button>
+        <!-- Main Action Button (wie bei TaskCard) -->
+        <div class="subtask-action-btn-wrapper">
+          <!-- SPECIAL: "Am Projekt arbeiten" subtask always opens ProjectWorkModal -->
+          <button
+            v-if="isProjectWorkSubtask"
+            class="btn btn-primary btn-sm subtask-action-btn"
+            @click="openProjectWorkModal"
+            title="Arbeit dokumentieren"
+          >
+            Dokumentieren
+          </button>
 
-        <!-- REGULAR SUBTASKS: Standard completion logic -->
-        <template v-else-if="!task.completed">
-          <div class="combined-button-group">
+          <!-- REGULAR SUBTASKS: Standard completion logic -->
+          <template v-else-if="!task.completed">
             <button
-              class="btn btn-success btn-sm combined-main"
+              class="btn btn-success btn-sm subtask-action-btn"
               @click="handleCompleteTask"
               title="Sauber"
             >
@@ -235,17 +172,17 @@ const handleProjectWork = async (effort: number, note: string) => {
             </button>
             <button
               v-if="task.subtask_points_mode !== 'checklist'"
-              class="btn btn-success btn-sm combined-modifier"
+              class="btn btn-success btn-sm subtask-action-btn-modifier"
               @click="openCompletionModal"
               title="Aufwand anpassen"
             >
-              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
                 <polyline points="17 11 12 6 7 11"></polyline>
                 <polyline points="17 18 12 13 7 18"></polyline>
               </svg>
             </button>
-          </div>
-        </template>
+          </template>
+        </div>
       </div>
     </div>
 
@@ -257,16 +194,6 @@ const handleProjectWork = async (effort: number, note: string) => {
       :isLoading="false"
       @close="closeCompletionModal"
       @confirm="handleCustomCompletion"
-    />
-
-    <!-- Task Assignment Modal -->
-    <TaskAssignmentModal
-      v-if="showAssignmentModal"
-      :currentAssignedTo="task.assigned_to"
-      :currentPermanent="task.assignment_permanent"
-      :householdMembers="householdStore.householdMembers"
-      @close="closeAssignmentModal"
-      @confirm="handleAssignmentConfirm"
     />
 
     <!-- Project Work Modal -->
@@ -281,20 +208,19 @@ const handleProjectWork = async (effort: number, note: string) => {
 </template>
 
 <style scoped>
+/* Horizontal Layout wie TaskCard, aber kompakter */
 .subtask-item {
   display: flex;
-  flex-direction: column;
-  gap: var(--spacing-sm);
-  padding: var(--spacing-sm) var(--spacing-md);
-  background: var(--color-background);
+  background: var(--color-background-elevated);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
   transition: all var(--transition-base);
+  overflow: hidden;
 }
 
 .subtask-item:hover {
-  background: var(--color-background-muted);
   border-color: var(--color-primary);
+  box-shadow: var(--shadow-sm);
 }
 
 .subtask-item.completed {
@@ -305,50 +231,57 @@ const handleProjectWork = async (effort: number, note: string) => {
   text-decoration: line-through;
 }
 
-/* 3-Zeilen Wrapper (wie TaskCard) */
+/* Horizontal Wrapper */
 .subtask-wrapper {
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacing-sm);
-  width: 100%;
-}
-
-/* Zeile 1: Titel + Effort */
-.subtask-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: var(--spacing-sm);
+  width: 100%;
+  padding: 0.5rem 0.75rem;
+  gap: 0.75rem;
+}
+
+/* Left: Title + Effort Badge */
+.subtask-left {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  flex: 1;
+  min-width: 0;
 }
 
 .subtask-title {
-  flex: 1;
   font-size: 0.875rem;
   color: var(--color-text-primary);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+  line-height: 1.3;
+  flex: 1;
+  min-width: 0;
 }
 
-.subtask-effort {
-  font-size: 0.75rem;
-  color: var(--color-text-secondary);
-  font-weight: 600;
-  background: var(--color-background-elevated);
-  padding: 0.125rem 0.5rem;
+.subtask-effort-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.125rem 0.375rem;
   border-radius: var(--radius-sm);
+  font-size: 0.625rem;
+  font-weight: 600;
+  background: var(--bs-primary);
+  color: white;
+  white-space: nowrap;
   flex-shrink: 0;
 }
 
-/* Zeile 2: Action Icons Row (wie TaskCard footer-actions-row) */
-.subtask-actions-row {
+/* Right: Edit + Action Buttons */
+.subtask-right {
   display: flex;
   align-items: center;
-  gap: 0.25rem;
-  justify-content: flex-start;
+  gap: 0.375rem;
+  flex-shrink: 0;
 }
 
-.subtask-btn {
+.subtask-edit-btn {
   background: transparent;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-sm);
@@ -362,43 +295,49 @@ const handleProjectWork = async (effort: number, note: string) => {
   flex-shrink: 0;
 }
 
-.subtask-btn svg {
+.subtask-edit-btn svg {
   width: 14px;
   height: 14px;
 }
 
-.subtask-btn:hover {
+.subtask-edit-btn:hover {
   background: var(--color-background-muted);
-  color: var(--color-text-primary);
+  color: var(--color-primary);
   border-color: var(--color-primary);
   transform: scale(1.05);
 }
 
-.subtask-btn-danger:hover {
-  background: var(--bs-danger);
-  color: white;
-  border-color: var(--bs-danger);
-}
-
-/* Zeile 3: Main Action Button (wie TaskCard footer-main-action) */
-.subtask-main-action {
+.subtask-action-btn-wrapper {
   display: flex;
-  width: 100%;
+  gap: 0.25rem;
 }
 
-.btn {
+.subtask-action-btn {
   font-size: 0.75rem;
   padding: 0.375rem 0.625rem;
+  font-weight: 500;
   border: none;
   border-radius: var(--radius-md);
   cursor: pointer;
   transition: all var(--transition-base);
-  font-weight: 500;
+  white-space: nowrap;
 }
 
-.btn-sm {
+.subtask-action-btn-modifier {
+  padding: 0.375rem 0.5rem;
   font-size: 0.75rem;
-  padding: 0.375rem 0.625rem;
+  font-weight: 500;
+  border: none;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: all var(--transition-base);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.subtask-action-btn-modifier svg {
+  display: block;
 }
 
 .btn-primary {
@@ -407,7 +346,7 @@ const handleProjectWork = async (effort: number, note: string) => {
 }
 
 .btn-primary:hover {
-  background: var(--bs-primary-dark, #0b5ed7);
+  opacity: 0.9;
 }
 
 .btn-success {
@@ -416,69 +355,7 @@ const handleProjectWork = async (effort: number, note: string) => {
 }
 
 .btn-success:hover {
-  background: var(--bs-success-dark, #157347);
-}
-
-.w-100 {
-  width: 100%;
-}
-
-/* Combined Button Group (wie TaskCard) */
-.combined-button-group {
-  display: flex;
-  width: 100%;
-  border-radius: var(--radius-md);
-  overflow: hidden;
-}
-
-.combined-main {
-  flex: 1;
-  border-radius: var(--radius-md) 0 0 var(--radius-md);
-  border-right: none;
-}
-
-.combined-modifier {
-  padding: 0.5rem 0.625rem;
-  border-radius: 0 var(--radius-md) var(--radius-md) 0;
-  border-left: 2px solid rgba(255, 255, 255, 0.3);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.combined-modifier svg {
-  display: block;
-}
-
-.combined-modifier:hover {
-  background: var(--bs-success-dark, #157347);
-}
-
-.assignment-badge-mini {
-  width: 24px;
-  height: 24px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 0.65rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all var(--transition-base);
-  flex-shrink: 0;
-  border: 2px dashed var(--color-border);
-  background: var(--color-background);
-  color: var(--color-text-secondary);
-}
-
-.assignment-badge-mini.has-assignment {
-  color: white;
-  border-style: solid;
-}
-
-.assignment-badge-mini:hover {
-  transform: scale(1.15);
-  border-color: var(--color-primary);
+  opacity: 0.9;
 }
 
 /* Edit Mode */
@@ -487,6 +364,7 @@ const handleProjectWork = async (effort: number, note: string) => {
   gap: var(--spacing-xs);
   flex: 1;
   align-items: center;
+  padding: 0.5rem 0.75rem;
 }
 
 .subtask-edit .form-control {
@@ -499,45 +377,58 @@ const handleProjectWork = async (effort: number, note: string) => {
   flex: 0 0 60px;
 }
 
-/* Mobile (wie TaskCard) */
-@media (max-width: 480px) {
-  .subtask-item {
-    gap: 0.375rem;
-    padding: 0.375rem 0.5rem;
+.subtask-edit .btn {
+  font-size: 0.75rem;
+  padding: 0.375rem 0.625rem;
+  border: none;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: all var(--transition-base);
+  font-weight: 500;
+}
+
+.btn-secondary {
+  background: var(--bs-secondary);
+  color: white;
+}
+
+/* Mobile Responsive */
+@media (max-width: 640px) {
+  .subtask-wrapper {
+    padding: 0.4rem 0.625rem;
+    gap: 0.625rem;
   }
 
-  .subtask-actions-row {
-    gap: 0.25rem;
+  .subtask-title {
+    font-size: 0.8125rem;
   }
 
-  .subtask-btn {
+  .subtask-effort-badge {
+    font-size: 0.5625rem;
+    padding: 0.1rem 0.3rem;
+  }
+
+  .subtask-action-btn {
+    font-size: 0.6875rem;
+    padding: 0.3rem 0.5rem;
+  }
+
+  .subtask-action-btn-modifier {
+    padding: 0.3rem 0.4rem;
+  }
+
+  .subtask-action-btn-modifier svg {
+    width: 12px;
+    height: 12px;
+  }
+
+  .subtask-edit-btn {
     padding: 0.25rem;
   }
 
-  .subtask-btn svg {
+  .subtask-edit-btn svg {
     width: 12px;
     height: 12px;
-  }
-
-  .combined-button-group .btn {
-    font-size: 0.65rem;
-    padding: 0.3rem 0.4rem;
-    white-space: nowrap;
-  }
-
-  .combined-modifier {
-    padding: 0.3rem 0.35rem;
-  }
-
-  .combined-modifier svg {
-    width: 12px;
-    height: 12px;
-  }
-
-  .assignment-badge-mini {
-    width: 20px;
-    height: 20px;
-    font-size: 0.6rem;
   }
 }
 </style>

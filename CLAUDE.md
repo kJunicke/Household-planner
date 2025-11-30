@@ -57,6 +57,8 @@ putzplan_vue/
 
 ### Views & Routes
 - `/` - **CleaningView** - Task-Liste mit Sub-Tabs (Alltagsaufgaben / Putzaufgaben / Erledigt)
+  - **FAB-Buttons**: Expanding Search + Create Task (unten rechts, thumb-freundlich)
+  - **Cross-Tab Search**: Intelligente Suche über alle Kategorien mit Relevanz-Sortierung
 - `/history` - **HistoryView** - Chronologischer Verlauf aller Completions
 - `/stats` - **StatsView** - Gamification-Statistiken (Tortendiagramm mit Aufgabenverteilung)
 - `/shopping` - **ShoppingView** - Einkaufsliste mit Autocomplete und Purchase-Tracking
@@ -74,7 +76,11 @@ putzplan_vue/
   - Hat `display_name` (Email-Prefix als Fallback beim Join/Create)
   - Keine redundante `member_id` mehr (wurde entfernt für einfacheres Datenmodell)
 - `tasks` - PK: `task_id` (Task-Templates mit `recurrence_days`, `last_completed_at`, `task_type`)
-  - `task_type` - Enum: `'recurring'` (zeitbasiert), `'daily'` (immer sichtbar), `'one-time'` (einmalig), `'project'` (langfristig)
+  - `task_type` - Enum mit Subtask-Verhalten:
+    - `'recurring'`: Zeitbasiert, **alle Subtask-Modi erlaubt** (checklist/deduct/bonus)
+    - `'daily'`: Immer sichtbar, **nur 'bonus' Subtasks** (eigenständige Belohnungen)
+    - `'one-time'`: Einmalig, **alle Subtask-Modi erlaubt**
+    - `'project'`: Langfristig, **nur 'checklist' + 'bonus'** (kein deduct)
 - `task_completions` - PK: `completion_id` (Append-only Historie, **Single Source of Truth**)
   - `user_id` referenziert direkt `auth.users.id`
 - `shopping_items` - PK: `shopping_item_id` (Einkaufsliste mit Purchase-Tracking)
@@ -93,6 +99,30 @@ putzplan_vue/
   - **Calendar Days Logic**: Verwendet `CURRENT_DATE - DATE(last_completed_at)` für ganze Tage (nicht 24h-Perioden)
   - Beispiel: Task completed am 18.10. um 14:00 → Reset am 19.10. um 3:00 (1 ganzer Tag vergangen)
 
+### Subtask Points Modes (Task-Type-abhängig)
+
+**Available Modes by Task Type:**
+- **Daily Tasks (`task_type: 'daily'`)**: Nur `bonus` erlaubt
+  - Reason: Daily tasks werden nie completed → Subtasks nie resettet → nur Bonus verhindert Doppelpunkte
+- **Projects (`task_type: 'project'`)**: Nur `checklist` + `bonus` erlaubt (kein `deduct`)
+  - Reason: Projects haben "Am Projekt arbeiten" Subtask mit custom Effort-Logging
+- **Recurring/One-time**: Alle Modi erlaubt (`checklist`, `deduct`, `bonus`)
+
+**Mode Descriptions:**
+- `'checklist'`: 0 Punkte (nur Tracking, Fortschritts-Anzeige)
+- `'deduct'`: Aufwand wird von Parent-Effort abgezogen (Parent - Deduct = finale Punkte)
+- `'bonus'`: Volle Punkte zusätzlich zum Parent (eigenständige Belohnung)
+
+**Business Logic (Daily Tasks):**
+1. Daily task completed → `tasks.completed` bleibt `false` (Edge Function)
+2. `task_completions` wird trotzdem geschrieben (History-Tracking)
+3. Subtasks werden NICHT resettet (kein Parent-Complete-Trigger)
+4. Lösung: Nur Bonus-Subtasks → User versteht "Extra-Belohnung", kein Doppelpunkt-Problem
+
+**UI Behavior:**
+- SubtaskManagementModal: Bei Daily kein Modus-Selector (auto-select bonus)
+- TaskCard: Bei Daily keine Gruppierung (flache Liste, alle Subtasks = Bonus)
+
 ## 📚 Entwicklungsprinzipien
 
 ### YAGNI (You Aren't Gonna Need It) - ESSENTIELL
@@ -109,6 +139,11 @@ putzplan_vue/
 - **Vue Modals**: Teleport + v-if für alle Forms (TaskCreateModal, TaskEditModal, TaskCompletionModal etc.)
 - **Nicht Bootstrap Modals**: Vue 3 Kompatibilitätsprobleme
 - **Modal Pattern**: Zentralisierte Utility-Styles in `utilities.css` (flexbox, scrollable body)
+- **FAB Pattern** (CleaningView):
+  - Floating Action Buttons unten rechts (Material Design Standard)
+  - Search FAB: Expandiert zu Suchleiste (250px, smooth animation)
+  - Create FAB: Öffnet Task-Modal
+  - Thumb-freundliche Position für Mobile UX
 
 ### CSS Architecture
 - **Design System**: CSS Variables in `base.css` (Farben, Spacing, Shadows, Border-Radius, Transitions)

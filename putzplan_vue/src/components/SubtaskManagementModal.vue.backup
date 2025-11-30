@@ -16,24 +16,19 @@ interface Emits {
 const props = defineProps<Props>()
 const emit = defineEmits<Emits>()
 
-// Check if parent is a project or daily task
+// Check if parent is a project
 const isProject = computed(() => props.parentTask.task_type === 'project')
-const isDailyTask = computed(() => props.parentTask.task_type === 'daily')
 
 // Add Subtask Form
 const newSubtaskTitle = ref('')
 const newSubtaskEffort = ref<1 | 2 | 3 | 4 | 5>(1)
-const newSubtaskPointsMode = ref<'checklist' | 'deduct' | 'bonus'>('bonus') // Default: bonus (für Daily + Projects)
+const newSubtaskPointsMode = ref<'checklist' | 'deduct' | 'bonus'>('checklist')
 
-// Available modes (filtered for projects and daily tasks)
+// Available modes (filtered for projects)
 const availableModes = computed(() => {
   if (isProject.value) {
     // Projects: only checklist and bonus allowed
     return ['checklist', 'bonus'] as const
-  }
-  if (isDailyTask.value) {
-    // Daily tasks: only bonus allowed (subtasks are always extra rewards)
-    return ['bonus'] as const
   }
   // Regular tasks: all modes allowed
   return ['checklist', 'deduct', 'bonus'] as const
@@ -71,7 +66,7 @@ const handleAddSubtask = () => {
   // Reset form
   newSubtaskTitle.value = ''
   newSubtaskEffort.value = 1
-  newSubtaskPointsMode.value = 'bonus' // Reset to default (bonus für Daily/Projects)
+  newSubtaskPointsMode.value = 'checklist' // Reset to default
 }
 
 const handleClose = () => {
@@ -93,12 +88,10 @@ const handlePointsModeChange = (subtaskId: string, mode: 'checklist' | 'deduct' 
         </div>
 
         <div class="modal-body">
-          <!-- INFO BANNER (für Projekte + Daily Tasks) -->
-          <div v-if="isProject" class="info-banner">
-            <span>💡 Projekt-Unteraufgaben: Nur <strong>Checkliste</strong> und <strong>Bonus</strong> verfügbar</span>
-          </div>
-          <div v-else-if="isDailyTask" class="info-banner daily-banner">
-            <span>💡 Unteraufgaben für <strong>Alltagsaufgaben</strong> geben sofort <strong>Bonus-Punkte</strong> beim Abhaken</span>
+          <!-- PROJECT INFO (nur bei Projekten) -->
+          <div v-if="isProject" class="project-info-banner">
+            <i class="bi bi-info-circle"></i>
+            <span>Projekt-Unteraufgaben: Nur <strong>Checkliste</strong> und <strong>Bonus</strong> verfügbar</span>
           </div>
 
           <!-- SECTION 1: Add New Subtask -->
@@ -112,8 +105,8 @@ const handlePointsModeChange = (subtaskId: string, mode: 'checklist' | 'deduct' 
                 placeholder="Name der Unteraufgabe"
                 @keyup.enter="handleAddSubtask"
               />
-              <!-- Points Mode Selector (nur wenn mehr als 1 Option) -->
-              <div v-if="availableModes.length > 1" class="form-row">
+              <!-- Points Mode Selector (zuerst, da es die Aufwand-Anzeige steuert) -->
+              <div class="form-row">
                 <label class="form-label-inline">Punktemodus:</label>
                 <div class="points-mode-selector">
                   <label
@@ -134,9 +127,9 @@ const handlePointsModeChange = (subtaskId: string, mode: 'checklist' | 'deduct' 
                 </div>
               </div>
 
-              <!-- Effort Selector (immer anzeigen bei Daily, da nur Bonus) -->
-              <div class="form-column">
-                <label class="form-label-block">Aufwand:</label>
+              <!-- Effort Selector (nur bei non-checklist) -->
+              <div v-if="newSubtaskPointsMode !== 'checklist'" class="form-row">
+                <label class="form-label-inline">Aufwand:</label>
                 <div class="effort-selector">
                   <label
                     v-for="effort in [1, 2, 3, 4, 5]"
@@ -176,10 +169,10 @@ const handlePointsModeChange = (subtaskId: string, mode: 'checklist' | 'deduct' 
                 :class="{ completed: subtask.completed }"
               >
                 <span class="subtask-title">{{ subtask.title }}</span>
-                <span class="subtask-effort">{{ subtask.effort }}</span>
+                <span v-if="subtask.subtask_points_mode !== 'checklist'" class="subtask-effort">{{ subtask.effort }}</span>
 
-                <!-- Points Mode Selector für existierende Subtasks (nur wenn nicht Daily) -->
-                <div v-if="!isDailyTask" class="subtask-mode-selector">
+                <!-- Points Mode Selector für existierende Subtasks -->
+                <div class="subtask-mode-selector">
                   <button
                     v-for="mode in ['checklist', 'deduct', 'bonus'] as const"
                     :key="mode"
@@ -207,8 +200,8 @@ const handlePointsModeChange = (subtaskId: string, mode: 'checklist' | 'deduct' 
 </template>
 
 <style scoped>
-/* Info Banner */
-.info-banner {
+/* Project Info Banner */
+.project-info-banner {
   display: flex;
   align-items: center;
   gap: 0.5rem;
@@ -221,10 +214,9 @@ const handlePointsModeChange = (subtaskId: string, mode: 'checklist' | 'deduct' 
   margin-bottom: 1rem;
 }
 
-.info-banner.daily-banner {
-  background: var(--bs-success-bg-subtle, #d1e7dd);
-  border-color: var(--bs-success-border-subtle, #a3cfbb);
-  color: var(--bs-success-text, #0a3622);
+.project-info-banner i {
+  font-size: 1rem;
+  flex-shrink: 0;
 }
 
 /* Section Styling */
@@ -402,33 +394,18 @@ const handlePointsModeChange = (subtaskId: string, mode: 'checklist' | 'deduct' 
   margin: 0;
 }
 
-/* Form Column Layout (für Effort Selector) */
-.form-column {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-}
-
-.form-label-block {
-  font-size: 0.875rem;
-  font-weight: 600;
-  color: var(--color-text-primary);
-  margin: 0;
-}
-
 /* Effort Selector */
 .effort-selector {
   display: flex;
   gap: 0.5rem;
-  width: 100%;
+  flex: 1;
 }
 
 .effort-option {
   display: flex;
   align-items: center;
   justify-content: center;
-  flex: 1;
-  min-width: 0;
+  width: 40px;
   height: 40px;
   border: 2px solid var(--color-border);
   border-radius: var(--radius-md);

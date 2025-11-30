@@ -45,6 +45,21 @@ const handleEditConfirm = async (updates: Partial<Task>) => {
      showEditModal.value = false
 }
 
+const handleEditDelete = () => {
+     showEditModal.value = false
+     handleDeleteTask()
+}
+
+const handleEditAssign = () => {
+     showEditModal.value = false
+     openAssignmentModal()
+}
+
+const handleEditManageSubtasks = () => {
+     showEditModal.value = false
+     openSubtaskManagementModal()
+}
+
 const handleDeleteTask = async () => {
      try {
           await taskStore.deleteTask(props.task.task_id)
@@ -125,14 +140,20 @@ const assignedMember = computed(() => {
      return householdStore.householdMembers.find(m => m.user_id === props.task.assigned_to)
 })
 
-const assignedInitials = computed(() => {
-     if (!assignedMember.value) return '?'
-     return assignedMember.value.display_name
-          .split(' ')
-          .map(n => n[0])
-          .join('')
-          .substring(0, 2)
-          .toUpperCase()
+// Assignment Glow - Subtiler Farbschimmer für zugewiesene Tasks
+const assignmentGlowStyle = computed(() => {
+     if (!assignedMember.value) return {}
+
+     // Hexadezimal zu RGB konvertieren für opacity
+     const hex = assignedMember.value.user_color
+     const r = parseInt(hex.slice(1, 3), 16)
+     const g = parseInt(hex.slice(3, 5), 16)
+     const b = parseInt(hex.slice(5, 7), 16)
+
+     return {
+          backgroundColor: `rgba(${r}, ${g}, ${b}, 0.08)`,
+          borderColor: `rgba(${r}, ${g}, ${b}, 0.3)`
+     }
 })
 
 const openAssignmentModal = () => {
@@ -250,170 +271,90 @@ const handleCompleteProject = async () => {
 </script>
 
 <template>
-     <div class="task-card">
-          <!-- Normal Display -->
-          <div class="card-body">
-               <h6 class="task-title">{{ props.task.title }}</h6>
-               <div class="task-details">
-                    <!-- Effort für normale Tasks, Gesamt-Effort für Projekte -->
-                    <div v-if="!isProject" class="task-info">
-                         <span class="info-label">Aufwand:</span>
-                         <span class="info-value">{{ props.task.effort }}</span>
-                    </div>
-                    <div v-else class="task-info">
-                         <span class="info-label">Gesamt-Effort:</span>
-                         <span class="info-value effort-badge">{{ projectEffort }}</span>
-                    </div>
+     <div class="task-card" :class="{ 'has-assignment': props.task.assigned_to }" :style="assignmentGlowStyle">
+          <!-- Main Horizontal Layout -->
+          <div class="task-card-main" @click="!props.task.parent_task_id && subtasks.length > 0 ? toggleSubtasks() : null" :style="{ cursor: !props.task.parent_task_id && subtasks.length > 0 ? 'pointer' : 'default' }">
+               <!-- Left: Title + Badges -->
+               <div class="task-left">
+                    <div class="task-info-block">
+                         <h6 class="task-title">{{ props.task.title }}</h6>
+                         <div class="task-meta">
+                              <!-- Effort Badge -->
+                              <span v-if="!isProject" class="meta-badge effort-badge">
+                                   {{ props.task.effort }} Pkt
+                              </span>
+                              <span v-else class="meta-badge effort-badge">
+                                   {{ projectEffort }} Pkt
+                              </span>
 
-                    <!-- Task Type Badge -->
-                    <div v-if="props.task.task_type === 'one-time'" class="task-badge task-badge-one-time">
-                         Einmalig
-                    </div>
-                    <div v-if="props.task.task_type === 'project'" class="task-badge task-badge-project">
-                         Projekt
-                    </div>
+                              <!-- Task Type Badge -->
+                              <span v-if="props.task.task_type === 'one-time'" class="meta-badge type-badge-one-time">
+                                   Einmalig
+                              </span>
+                              <span v-if="props.task.task_type === 'project'" class="meta-badge type-badge-project">
+                                   Projekt
+                              </span>
+                              <span v-if="props.task.task_type === 'daily'" class="meta-badge type-badge-daily">
+                                   Täglich
+                              </span>
 
-                    <!-- Für wiederkehrende Tasks -->
-                    <div v-if="props.task.task_type === 'recurring' && props.task.recurrence_days > 0" class="task-info">
-                         <span class="info-label">Wiederholung:</span>
-                         <span class="info-value">alle {{ props.task.recurrence_days }} Tage</span>
-                    </div>
+                              <!-- Subtasks Count -->
+                              <span v-if="!props.task.parent_task_id && subtasks.length > 0" class="meta-badge subtasks-badge">
+                                   {{ completedSubtasksCount }}/{{ subtasks.length }}
+                              </span>
 
-                    <!-- Fälligkeitsdatum für dreckige, wiederkehrende Tasks -->
-                    <div v-if="daysUntilDue !== null" class="task-info">
-                         <span class="info-label">Fällig in:</span>
-                         <span class="info-value">{{ daysUntilDue }} {{ daysUntilDue === 1 ? 'Tag' : 'Tagen' }}</span>
-                    </div>
-               </div>
+                              <!-- Due Date (wenn vorhanden) -->
+                              <span v-if="daysUntilDue !== null" class="meta-badge due-badge">
+                                   {{ daysUntilDue }}d
+                              </span>
 
-               <!-- SUBTASKS SECTION (nur für Parent Tasks) - Gruppiert nach Punktemodus -->
-               <div v-if="!props.task.parent_task_id && subtasks.length > 0" class="subtasks-section">
-                    <div class="subtasks-header-row">
-                         <div class="subtasks-header" @click="toggleSubtasks">
-                              <span class="toggle-icon">{{ subtasksExpanded ? '▼' : '▶' }}</span>
-                              Subtasks ({{ completedSubtasksCount }}/{{ subtasks.length }})
-                         </div>
-                         <button
-                              v-if="completedSubtasksCount > 0"
-                              class="btn btn-sm btn-outline-secondary reset-subtasks-btn"
-                              @click="handleResetSubtasks"
-                              title="Alle Subtasks zurücksetzen"
-                         >
-                              ↺
-                         </button>
-                    </div>
-
-                    <div v-show="subtasksExpanded" class="subtasks-list">
-                         <!-- Checkliste Gruppe -->
-                         <div v-if="subtasksByMode.checklist.length > 0" class="subtask-group">
-                              <div class="subtask-group-header">
-                                   <span class="subtask-group-badge badge-checklist">✓ Checkliste</span>
-                                   <span class="subtask-group-count">{{ subtasksByMode.checklist.length }}</span>
-                              </div>
-                              <SubtaskItem
-                                   v-for="subtask in subtasksByMode.checklist"
-                                   :key="subtask.task_id"
-                                   :task="subtask"
-                              />
-                         </div>
-
-                         <!-- Abziehen Gruppe -->
-                         <div v-if="subtasksByMode.deduct.length > 0" class="subtask-group">
-                              <div class="subtask-group-header">
-                                   <span class="subtask-group-badge badge-deduct">− Abziehen</span>
-                                   <span class="subtask-group-count">{{ subtasksByMode.deduct.length }}</span>
-                              </div>
-                              <SubtaskItem
-                                   v-for="subtask in subtasksByMode.deduct"
-                                   :key="subtask.task_id"
-                                   :task="subtask"
-                              />
-                         </div>
-
-                         <!-- Bonus Gruppe -->
-                         <div v-if="subtasksByMode.bonus.length > 0" class="subtask-group">
-                              <div class="subtask-group-header">
-                                   <span class="subtask-group-badge badge-bonus">+ Bonus</span>
-                                   <span class="subtask-group-count">{{ subtasksByMode.bonus.length }}</span>
-                              </div>
-                              <SubtaskItem
-                                   v-for="subtask in subtasksByMode.bonus"
-                                   :key="subtask.task_id"
-                                   :task="subtask"
-                              />
+                              <!-- Expand Icon (klein, ausgegraut, unten rechts) -->
+                              <button
+                                   v-if="!props.task.parent_task_id && subtasks.length > 0"
+                                   class="expand-indicator"
+                                   @click.stop="toggleSubtasks"
+                                   :title="subtasksExpanded ? 'Subtasks einklappen' : 'Subtasks ausklappen'"
+                              >
+                                   {{ subtasksExpanded ? '▲' : '▼' }}
+                              </button>
                          </div>
                     </div>
                </div>
 
-               <!-- MANAGE SUBTASKS BUTTON (nur für Parent Tasks und nur wenn ausgeklappt) -->
-               <div v-if="!props.task.parent_task_id && subtasksExpanded" class="add-subtask-section">
-                    <button
-                         class="btn btn-sm btn-outline-primary w-100"
-                         @click="openSubtaskManagementModal"
-                    >
-                         ⚙ Subtasks verwalten
+               <!-- Right: Edit Icon + Action Buttons -->
+               <div class="task-right" @click.stop>
+                    <button class="icon-btn edit-btn" @click="openEditModal" title="Bearbeiten">
+                         <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                              <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                              <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                         </svg>
                     </button>
-               </div>
-          </div>
-          <div class="card-footer">
-               <!-- Footer Buttons -->
-               <div class="footer-layout">
-                    <!-- Row 1: Action Icons (Assignment, Edit, Delete) -->
-                    <div class="footer-actions-row">
-                         <!-- Assignment Badge -->
-                         <div
-                              class="assignment-badge"
-                              :class="{ 'has-assignment': props.task.assigned_to }"
-                              :style="assignedMember ? { backgroundColor: assignedMember.user_color, borderColor: assignedMember.user_color } : {}"
-                              @click="openAssignmentModal"
-                              :title="assignedMember ? assignedMember.display_name : 'Task zuweisen'"
-                         >
-                              {{ assignedInitials }}
+
+                    <!-- PROJECTS: Different button logic -->
+                    <template v-if="isProject">
+                         <button v-if="!props.task.completed" class="btn btn-primary btn-sm action-btn"
+                                 @click="openProjectCompleteModal">
+                              Abschließen
+                         </button>
+                         <div v-else class="completed-badge">
+                              ✓
                          </div>
+                    </template>
 
-                         <button class="icon-btn" @click="openEditModal" title="Bearbeiten">
-                              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                   <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
-                                   <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
-                              </svg>
+                    <!-- REGULAR TASKS: Standard logic -->
+                    <template v-else-if="props.task.completed">
+                         <button class="btn btn-warning btn-sm action-btn"
+                                 @click="handleMarkDirty">
+                              Dreckig
                          </button>
-
-                         <button class="icon-btn icon-btn-danger" @click="handleDeleteTask" title="Löschen">
-                              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                   <polyline points="3 6 5 6 21 6"></polyline>
-                                   <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-                                   <line x1="10" y1="11" x2="10" y2="17"></line>
-                                   <line x1="14" y1="11" x2="14" y2="17"></line>
-                              </svg>
-                         </button>
-                    </div>
-
-                    <!-- Row 2: Main Action Button (Sauber/Dreckig/etc) -->
-                    <div class="footer-main-action">
-                         <!-- PROJECTS: Different button logic -->
-                         <template v-if="isProject">
-                              <button v-if="!props.task.completed" class="btn btn-primary btn-sm w-100"
-                                      @click="openProjectCompleteModal">
-                                   Projekt abschließen
-                              </button>
-                              <div v-else class="project-completed-badge">
-                                   ✓ Abgeschlossen
-                              </div>
-                         </template>
-
-                         <!-- REGULAR TASKS: Standard logic -->
-                         <template v-else-if="props.task.completed">
-                              <button class="btn btn-warning btn-sm w-100"
-                                      @click="handleMarkDirty">
-                                   Dreckig
-                              </button>
-                         </template>
-                         <div v-else class="combined-button-group">
-                              <button class="btn btn-success btn-sm combined-main"
+                    </template>
+                    <template v-else>
+                         <div class="action-buttons">
+                              <button class="btn btn-success btn-sm action-btn"
                                       @click="handleCompleteTask">
                                    Sauber
                               </button>
-                              <button class="btn btn-success btn-sm combined-modifier"
+                              <button class="btn btn-success btn-sm action-btn-modifier"
                                       @click="openCompletionModal"
                                       title="Aufwand anpassen">
                                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
@@ -422,7 +363,80 @@ const handleCompleteProject = async () => {
                                    </svg>
                               </button>
                          </div>
-                    </div>
+                    </template>
+               </div>
+          </div>
+
+          <!-- SUBTASKS SECTION (nur für Parent Tasks, eingeklappt) -->
+          <div v-if="!props.task.parent_task_id && subtasks.length > 0 && subtasksExpanded" class="subtasks-section">
+               <div class="subtasks-header-row">
+                    <button
+                         v-if="completedSubtasksCount > 0"
+                         class="btn btn-sm btn-outline-secondary reset-subtasks-btn"
+                         @click="handleResetSubtasks"
+                         title="Alle Subtasks zurücksetzen"
+                    >
+                         ↺ Reset
+                    </button>
+                    <button
+                         class="btn btn-sm btn-outline-primary manage-subtasks-btn"
+                         @click="openSubtaskManagementModal"
+                    >
+                         ⚙ Verwalten
+                    </button>
+               </div>
+
+               <div class="subtasks-list">
+                         <!-- DAILY TASKS: Flache Liste (alle sind Bonus) -->
+                         <template v-if="props.task.task_type === 'daily'">
+                              <SubtaskItem
+                                   v-for="subtask in subtasks"
+                                   :key="subtask.task_id"
+                                   :task="subtask"
+                              />
+                         </template>
+
+                         <!-- REGULAR/RECURRING/PROJECTS: Gruppiert nach Modus -->
+                         <template v-else>
+                              <!-- Checkliste Gruppe -->
+                              <div v-if="subtasksByMode.checklist.length > 0" class="subtask-group">
+                                   <div class="subtask-group-header">
+                                        <span class="subtask-group-badge badge-checklist">✓ Checkliste</span>
+                                        <span class="subtask-group-count">{{ subtasksByMode.checklist.length }}</span>
+                                   </div>
+                                   <SubtaskItem
+                                        v-for="subtask in subtasksByMode.checklist"
+                                        :key="subtask.task_id"
+                                        :task="subtask"
+                                   />
+                              </div>
+
+                              <!-- Abziehen Gruppe -->
+                              <div v-if="subtasksByMode.deduct.length > 0" class="subtask-group">
+                                   <div class="subtask-group-header">
+                                        <span class="subtask-group-badge badge-deduct">− Abziehen</span>
+                                        <span class="subtask-group-count">{{ subtasksByMode.deduct.length }}</span>
+                                   </div>
+                                   <SubtaskItem
+                                        v-for="subtask in subtasksByMode.deduct"
+                                        :key="subtask.task_id"
+                                        :task="subtask"
+                                   />
+                              </div>
+
+                              <!-- Bonus Gruppe -->
+                              <div v-if="subtasksByMode.bonus.length > 0" class="subtask-group">
+                                   <div class="subtask-group-header">
+                                        <span class="subtask-group-badge badge-bonus">+ Bonus</span>
+                                        <span class="subtask-group-count">{{ subtasksByMode.bonus.length }}</span>
+                                   </div>
+                                   <SubtaskItem
+                                        v-for="subtask in subtasksByMode.bonus"
+                                        :key="subtask.task_id"
+                                        :task="subtask"
+                                   />
+                              </div>
+                         </template>
                </div>
           </div>
 
@@ -480,12 +494,16 @@ const handleCompleteProject = async () => {
                :task="props.task"
                @close="closeEditModal"
                @confirm="handleEditConfirm"
+               @delete="handleEditDelete"
+               @assign="handleEditAssign"
+               @manage-subtasks="handleEditManageSubtasks"
           />
      </div>
 
 </template>
 
 <style scoped>
+/* Horizontal List Layout */
 .task-card {
      border: 1px solid var(--color-border);
      border-radius: var(--radius-md);
@@ -495,140 +513,132 @@ const handleCompleteProject = async () => {
      overflow: hidden;
      display: flex;
      flex-direction: column;
-     height: 100%;
+     width: 100%;
 }
 
 .task-card:hover {
      box-shadow: var(--shadow-md);
-     transform: translateY(-1px);
+     border-color: var(--color-primary);
+}
+
+.task-card.has-assignment {
+     border-width: 2px;
+}
+
+/* Main Horizontal Layout */
+.task-card-main {
+     display: flex;
+     align-items: center;
+     justify-content: space-between;
+     padding: 0.75rem 1rem;
+     gap: 1rem;
+}
+
+/* Left Side: Expand + Title + Badges */
+.task-left {
+     display: flex;
+     align-items: center;
+     gap: 0.5rem;
+     flex: 1;
+     min-width: 0;
+}
+
+.expand-indicator {
+     background: transparent;
+     border: none;
+     color: var(--color-text-secondary);
+     opacity: 0.5;
+     font-size: 0.625rem;
+     cursor: pointer;
+     padding: 0.125rem 0.25rem;
+     display: inline-flex;
+     align-items: center;
+     justify-content: center;
+     flex-shrink: 0;
+     transition: all var(--transition-base);
+     border-radius: var(--radius-sm);
+}
+
+.expand-indicator:hover {
+     opacity: 0.8;
+     background: var(--color-background-muted);
+}
+
+.task-info-block {
+     display: flex;
+     flex-direction: column;
+     gap: 0.25rem;
+     flex: 1;
+     min-width: 0;
 }
 
 .task-title {
-     font-size: 1rem;
+     font-size: 0.9375rem;
      font-weight: 600;
      color: var(--color-text-primary);
-     margin-bottom: var(--spacing-sm);
-     line-height: 1.4;
+     margin: 0;
+     line-height: 1.3;
      word-wrap: break-word;
      overflow-wrap: break-word;
 }
 
-.task-details {
-     display: flex;
-     flex-direction: column;
-     gap: 0.25rem;
-}
-
-.task-info {
+.task-meta {
      display: flex;
      align-items: center;
-     font-size: 0.875rem;
+     gap: 0.375rem;
+     flex-wrap: wrap;
 }
 
-.info-label {
-     color: var(--color-text-secondary);
-     margin-right: 0.5rem;
-     font-weight: 500;
-}
-
-.info-value {
-     color: var(--color-text-primary);
+.meta-badge {
+     display: inline-flex;
+     align-items: center;
+     padding: 0.125rem 0.5rem;
+     border-radius: var(--radius-sm);
+     font-size: 0.6875rem;
      font-weight: 600;
+     white-space: nowrap;
 }
 
 .effort-badge {
-     display: inline-block;
      background: var(--bs-primary);
      color: white;
-     padding: 0.25rem 0.5rem;
-     border-radius: var(--radius-sm);
-     font-size: 0.875rem;
-     font-weight: 600;
 }
 
-.task-badge {
-     display: inline-block;
-     background: var(--color-primary);
-     color: white;
-     padding: 0.25rem 0.625rem;
-     border-radius: var(--radius-sm);
-     font-size: 0.75rem;
-     font-weight: 500;
-     text-transform: uppercase;
-     letter-spacing: 0.3px;
-}
-
-.task-badge-daily {
-     background: var(--bs-info);
-}
-
-.task-badge-one-time {
+.type-badge-one-time {
      background: var(--bs-secondary);
-}
-
-.task-badge-project {
-     background: var(--bs-primary);
-}
-
-.project-completed-badge {
-     display: flex;
-     align-items: center;
-     justify-content: center;
-     padding: 0.5rem 1rem;
-     background: var(--bs-success);
      color: white;
-     border-radius: var(--radius-md);
-     font-size: 0.875rem;
-     font-weight: 600;
-     flex: 1;
 }
 
-.card-footer {
-     background: transparent;
-     border-top: 1px solid var(--color-border);
-     padding: var(--spacing-md);
-     margin-top: auto; /* Pusht Footer nach unten */
+.type-badge-project {
+     background: var(--bs-info);
+     color: white;
 }
 
-.btn-sm {
-     font-size: 0.875rem;
-     padding: 0.75rem 1rem;
-     font-weight: 500;
+.type-badge-daily {
+     background: var(--bs-warning);
+     color: white;
 }
 
-/* Combined Button Group Styling */
-.combined-button-group {
-     display: flex;
-     width: 100%;
-     border-radius: var(--radius-md);
-     overflow: hidden;
+.subtasks-badge {
+     background: var(--color-background-muted);
+     color: var(--color-text-secondary);
+     border: 1px solid var(--color-border);
 }
 
-.combined-main {
-     flex: 1;
-     border-radius: var(--radius-md) 0 0 var(--radius-md);
-     border-right: none;
+.due-badge {
+     background: var(--color-warning-light);
+     color: white;
 }
 
-.combined-modifier {
-     padding: 0.75rem 0.875rem;
-     border-radius: 0 var(--radius-md) var(--radius-md) 0;
-     border-left: 2px solid rgba(255, 255, 255, 0.3);
+/* Right Side: Edit Icon + Action Buttons */
+.task-right {
      display: flex;
      align-items: center;
-     justify-content: center;
+     gap: 0.5rem;
+     flex-shrink: 0;
 }
 
-.combined-modifier svg {
-     display: block;
-}
-
-.combined-modifier:hover {
-     background: var(--bs-success-dark, #157347);
-}
-
-/* Action Icons (in Footer) */
-.icon-btn {
+.edit-btn {
      background: transparent;
      border: 1px solid var(--color-border);
      border-radius: var(--radius-sm);
@@ -642,135 +652,96 @@ const handleCompleteProject = async () => {
      flex-shrink: 0;
 }
 
-.icon-btn svg {
+.edit-btn svg {
      width: 16px;
      height: 16px;
 }
 
-.icon-btn:hover {
+.edit-btn:hover {
      background: var(--color-background-muted);
-     color: var(--color-text-primary);
+     color: var(--color-primary);
      border-color: var(--color-primary);
      transform: scale(1.05);
 }
 
-.icon-btn-danger:hover {
-     background: var(--bs-danger);
-     color: white;
-     border-color: var(--bs-danger);
-}
-
-.card-body {
-     position: relative;
-     padding: var(--spacing-md);
-     flex: 1; /* Nimmt verfügbaren Platz ein */
+.action-buttons {
      display: flex;
-     flex-direction: column;
+     gap: 0.25rem;
 }
 
-/* Footer Layout - Two Rows */
-.footer-layout {
-     display: flex;
-     flex-direction: column;
-     gap: 0.5rem;
+.action-btn {
+     font-size: 0.8125rem;
+     padding: 0.5rem 1rem;
+     font-weight: 500;
+     border: none;
+     border-radius: var(--radius-md);
+     cursor: pointer;
+     transition: all var(--transition-base);
+     white-space: nowrap;
 }
 
-/* Row 1: Action Icons */
-.footer-actions-row {
-     display: flex;
-     align-items: center;
-     gap: 0.375rem;
-     justify-content: flex-start;
-}
-
-/* Row 2: Main Action Button */
-.footer-main-action {
-     display: flex;
-     width: 100%;
-}
-
-/* Assignment Badge */
-.assignment-badge {
-     width: 32px;
-     height: 32px;
-     border-radius: 50%;
+.action-btn-modifier {
+     padding: 0.5rem 0.625rem;
+     font-size: 0.8125rem;
+     font-weight: 500;
+     border: none;
+     border-radius: var(--radius-md);
+     cursor: pointer;
+     transition: all var(--transition-base);
      display: flex;
      align-items: center;
      justify-content: center;
-     font-size: 0.75rem;
-     font-weight: 600;
-     cursor: pointer;
-     transition: all var(--transition-base);
-     flex-shrink: 0;
-     border: 2px dashed var(--color-border);
-     background: var(--color-background);
-     color: var(--color-text-secondary);
 }
 
-.assignment-badge.has-assignment {
+.action-btn-modifier svg {
+     display: block;
+}
+
+.btn-success:hover,
+.action-btn-modifier:hover {
+     opacity: 0.9;
+     transform: scale(1.02);
+}
+
+.completed-badge {
+     display: flex;
+     align-items: center;
+     justify-content: center;
+     padding: 0.5rem 1rem;
+     background: var(--bs-success);
      color: white;
-     border-style: solid;
+     border-radius: var(--radius-md);
+     font-size: 0.875rem;
+     font-weight: 600;
 }
 
-.assignment-badge:hover {
-     transform: scale(1.1);
-     border-color: var(--color-primary);
-}
-
-.assignment-badge.has-assignment:hover {
-     background: var(--color-primary-light);
-     border-color: var(--color-primary-light);
-}
-
-/* Subtasks Section */
+/* Subtasks Section - Eingeklappte Liste mit Einrückung */
 .subtasks-section {
-     margin-top: var(--spacing-sm);
-     padding-top: var(--spacing-sm);
      border-top: 1px solid var(--color-border);
+     background: var(--color-background);
+     padding: 0.75rem 1rem;
+     padding-left: 3rem; /* Einrückung für Subtasks */
 }
 
 .subtasks-header-row {
      display: flex;
      align-items: center;
-     gap: 0.25rem;
-     justify-content: space-between;
+     gap: 0.5rem;
+     margin-bottom: 0.75rem;
 }
 
-.subtasks-header {
-     font-size: 0.875rem;
-     font-weight: 600;
-     color: var(--color-text-primary);
-     cursor: pointer;
-     padding: 0.375rem 0.5rem;
-     border-radius: var(--radius-sm);
-     transition: background var(--transition-base);
-     display: flex;
-     align-items: center;
-     gap: 0.375rem;
-     flex: 1;
-}
-
-.subtasks-header:hover {
-     background: var(--color-background-muted);
-}
-
-.reset-subtasks-btn {
-     padding: 0.25rem 0.5rem;
-     font-size: 1rem;
-     line-height: 1;
+.reset-subtasks-btn,
+.manage-subtasks-btn {
+     padding: 0.25rem 0.625rem;
+     font-size: 0.75rem;
+     line-height: 1.4;
      flex-shrink: 0;
 }
 
-.toggle-icon {
-     font-size: 0.75rem;
-     color: var(--color-text-secondary);
-}
-
 .subtasks-list {
-     margin-top: 0.375rem;
      display: flex;
      flex-direction: column;
-     gap: var(--spacing-sm);
+     gap: 0.5rem;
 }
 
 /* Subtask Groups (by points mode) */
@@ -823,8 +794,42 @@ const handleCompleteProject = async () => {
      color: white;
 }
 
-/* Manage Subtasks Section */
-.add-subtask-section {
-     margin-top: var(--spacing-sm);
+/* Mobile Responsive */
+@media (max-width: 640px) {
+     .task-card-main {
+          padding: 0.625rem 0.75rem;
+          gap: 0.75rem;
+     }
+
+     .task-title {
+          font-size: 0.875rem;
+     }
+
+     .meta-badge {
+          font-size: 0.625rem;
+          padding: 0.1rem 0.375rem;
+     }
+
+     .action-btn {
+          font-size: 0.75rem;
+          padding: 0.4rem 0.75rem;
+     }
+
+     .action-btn-modifier {
+          padding: 0.4rem 0.5rem;
+     }
+
+     .edit-btn {
+          padding: 0.3rem;
+     }
+
+     .edit-btn svg {
+          width: 14px;
+          height: 14px;
+     }
+
+     .subtasks-section {
+          padding-left: 2rem;
+     }
 }
 </style>

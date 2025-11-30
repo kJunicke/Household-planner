@@ -9,6 +9,9 @@ interface Props {
 interface Emits {
   (e: 'close'): void
   (e: 'confirm', updates: Partial<Task>): void
+  (e: 'delete'): void
+  (e: 'assign'): void
+  (e: 'manage-subtasks'): void
 }
 
 const props = defineProps<Props>()
@@ -105,16 +108,37 @@ const handleClose = () => {
         </div>
 
         <div class="modal-footer">
-          <button class="btn btn-secondary" @click="handleClose">
-            Abbrechen
-          </button>
-          <button
-            class="btn btn-primary"
-            :disabled="!canConfirm"
-            @click="handleConfirm"
-          >
-            Speichern
-          </button>
+          <!-- Zusätzliche Actions links -->
+          <div class="footer-actions-left">
+            <button class="btn btn-outline-danger" @click="emit('delete')" title="Aufgabe löschen">
+              🗑️ Löschen
+            </button>
+            <button class="btn btn-outline-secondary" @click="emit('assign')" title="Aufgabe zuweisen">
+              👤 Zuweisen
+            </button>
+            <button
+              v-if="!task.parent_task_id"
+              class="btn btn-outline-primary"
+              @click="emit('manage-subtasks')"
+              title="Subtasks verwalten"
+            >
+              ⚙ Subtasks
+            </button>
+          </div>
+
+          <!-- Primary Actions rechts -->
+          <div class="footer-actions-right">
+            <button class="btn btn-secondary" @click="handleClose">
+              Abbrechen
+            </button>
+            <button
+              class="btn btn-primary"
+              :disabled="!canConfirm"
+              @click="handleConfirm"
+            >
+              Speichern
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -151,5 +175,39 @@ const handleClose = () => {
   outline: none;
   border-color: var(--color-primary);
   box-shadow: 0 0 0 3px rgba(13, 110, 253, 0.15);
+}
+
+/* Footer Layout */
+.modal-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.footer-actions-left {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.footer-actions-right {
+  display: flex;
+  gap: 0.5rem;
+  margin-left: auto;
+}
+
+@media (max-width: 640px) {
+  .footer-actions-left,
+  .footer-actions-right {
+    width: 100%;
+    justify-content: stretch;
+  }
+
+  .footer-actions-left .btn,
+  .footer-actions-right .btn {
+    flex: 1;
+  }
 }
 </style>
