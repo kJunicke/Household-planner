@@ -114,16 +114,49 @@ const handleCreateTask = async (taskData: {
   }
 }
 
+// Track keyboard visibility for PWA (VisualViewport API)
+const keyboardHeight = ref(0)
+
+const updateFABPosition = () => {
+  if (!window.visualViewport) return
+
+  const viewport = window.visualViewport
+  const windowHeight = window.innerHeight
+  const viewportHeight = viewport.height
+
+  // Calculate keyboard height (difference between window and visual viewport)
+  const newKeyboardHeight = windowHeight - viewportHeight
+
+  // Only update if keyboard height changed significantly (> 100px = keyboard visible)
+  if (newKeyboardHeight > 100) {
+    keyboardHeight.value = newKeyboardHeight
+  } else {
+    keyboardHeight.value = 0
+  }
+}
+
 onMounted(async () => {
   // Lädt Tasks aus Supabase - WARTE bis fertig geladen
   await taskStore.loadTasks()
   // Startet Realtime Subscriptions für Live-Updates (erst NACH initialem Load)
   taskStore.subscribeToTasks()
+
+  // Setup VisualViewport listener for keyboard detection (PWA support)
+  if (window.visualViewport) {
+    window.visualViewport.addEventListener('resize', updateFABPosition)
+    window.visualViewport.addEventListener('scroll', updateFABPosition)
+  }
 })
 
 onUnmounted(() => {
   // Cleanup: Beendet Realtime Subscriptions
   taskStore.unsubscribeFromTasks()
+
+  // Cleanup VisualViewport listeners
+  if (window.visualViewport) {
+    window.visualViewport.removeEventListener('resize', updateFABPosition)
+    window.visualViewport.removeEventListener('scroll', updateFABPosition)
+  }
 })
 
 </script>
@@ -192,7 +225,11 @@ onUnmounted(() => {
     </div>
 
     <!-- Floating Action Buttons -->
-    <div class="fab-group" :class="{ 'fab-group-expanded': isSearchExpanded }">
+    <div
+      class="fab-group"
+      :class="{ 'fab-group-expanded': isSearchExpanded }"
+      :style="keyboardHeight > 0 ? { bottom: `${keyboardHeight + 24}px` } : {}"
+    >
       <!-- Expanding Search Bar -->
       <div v-if="isSearchExpanded" class="search-fab-expanded">
         <input
@@ -262,22 +299,13 @@ onUnmounted(() => {
 /* Floating Action Buttons */
 .fab-group {
   position: fixed;
-  bottom: max(24px, env(safe-area-inset-bottom, 24px));
-  right: max(24px, env(safe-area-inset-right, 24px));
+  bottom: 24px;
+  right: 24px;
   display: flex;
   align-items: center;
   gap: 12px;
   z-index: 1000;
-  transition: all 0.3s ease;
-}
-
-/* On mobile, use viewport units to stay visible above keyboard */
-@supports (height: 100dvh) {
-  @media (max-width: 768px) {
-    .fab-group {
-      bottom: max(24px, calc(100dvh - 100vh + 24px));
-    }
-  }
+  transition: bottom 0.2s ease, right 0.3s ease;
 }
 
 .fab {
