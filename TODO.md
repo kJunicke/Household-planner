@@ -6,25 +6,13 @@
 
 ## 🎯 High Priority
 
----
-
 ### Gamification System
 - **User Stats** - XP, Level, Streaks pro Haushalt
 - **Ranglisten** - Mitglieder nach XP sortiert anzeigen
 
 ### Code Quality
-- ✅ **Toast Notifications** - Zentralisiertes Error & Success Feedback (Bootstrap 5 + Pinia)
-- ✅ **Loading States** - Skeleton Screens, Button Disabled States, Race Condition Fixes (06.11.2025)
 - **Form Validation** - Input-Validierung für alle Forms
 - **Lokale Supabase Dev** - `supabase start` Setup für lokales Testing
-
----
-
-## 📋 Medium Priority
-
-### Shopping-Liste Features
-- ✅ **Priorisierung** - Items nach Wichtigkeit sortieren/markieren (15.11.2025)
-- ✅ **Offline-Modus** - Shopping-Liste offline nutzbar (mit Sync beim Reconnect) (16.11.2025)
 
 ---
 
@@ -45,6 +33,14 @@
 **Migrations:** Konsolidiert am 26.10.2025 (29 → 4 Migrations)
 
 **Letzte größere Features:**
+- ✅ Chip-Navigation mit Swipe-Gesten - 30.11.2025
+  - Kompakte Chip-Navigation (~40px statt 60px, ~33% Platzersparnis)
+  - Scrollbare Chip-Leiste (Material Design Pattern)
+  - Swipe-Gesten: Links/Rechts swipen zum Tab-Wechsel
+  - Versteckte Scrollbar für cleanes Design
+  - 1-Click Tab-Wechsel (besser als Dropdown)
+  - Touch-optimiert mit iOS smooth scrolling
+  - Alle 4 Tabs horizontal scrollbar
 - ✅ Header Komprimierung + Settings Sidebar - 30.11.2025
   - Header von ~35% auf ~15% Viewport reduziert (250px → 120px)
   - SettingsSidebar Component mit Slide-in Animation

@@ -1,8 +1,15 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, onMounted, onUnmounted } from 'vue'
 
 type TaskCategory = 'daily' | 'recurring' | 'project' | 'completed'
 const STORAGE_KEY = 'putzplan_selected_category'
+
+const categories: { value: TaskCategory; icon: string; label: string }[] = [
+  { value: 'daily', icon: 'bi-lightning-fill', label: 'Alltag' },
+  { value: 'recurring', icon: 'bi-arrow-repeat', label: 'Putzen' },
+  { value: 'project', icon: 'bi-kanban', label: 'Projekte' },
+  { value: 'completed', icon: 'bi-check-circle', label: 'Erledigt' }
+]
 
 // Load from localStorage or default to 'daily'
 const selectedCategory = ref<TaskCategory>(
@@ -21,43 +28,70 @@ const selectCategory = (category: TaskCategory) => {
   emit('update:category', category)
 }
 
+// Swipe gesture handling
+let touchStartX = 0
+let touchEndX = 0
+const chipContainer = ref<HTMLElement | null>(null)
+
+const handleTouchStart = (e: TouchEvent) => {
+  touchStartX = e.changedTouches[0].screenX
+}
+
+const handleTouchEnd = (e: TouchEvent) => {
+  touchEndX = e.changedTouches[0].screenX
+  handleSwipeGesture()
+}
+
+const handleSwipeGesture = () => {
+  const swipeThreshold = 50 // Minimum distance for swipe
+  const diff = touchStartX - touchEndX
+
+  if (Math.abs(diff) < swipeThreshold) return
+
+  const currentIndex = categories.findIndex(c => c.value === selectedCategory.value)
+
+  if (diff > 0 && currentIndex < categories.length - 1) {
+    // Swipe left → next category
+    selectCategory(categories[currentIndex + 1].value)
+  } else if (diff < 0 && currentIndex > 0) {
+    // Swipe right → previous category
+    selectCategory(categories[currentIndex - 1].value)
+  }
+}
+
+onMounted(() => {
+  if (chipContainer.value) {
+    chipContainer.value.addEventListener('touchstart', handleTouchStart)
+    chipContainer.value.addEventListener('touchend', handleTouchEnd)
+  }
+})
+
+onUnmounted(() => {
+  if (chipContainer.value) {
+    chipContainer.value.removeEventListener('touchstart', handleTouchStart)
+    chipContainer.value.removeEventListener('touchend', handleTouchEnd)
+  }
+})
+
 // Emit initial value
 emit('update:category', selectedCategory.value)
 </script>
 
 <template>
   <nav class="category-nav-container">
-    <div class="container-fluid p-0">
-      <div class="category-nav-wrapper">
-        <button
-          @click="selectCategory('daily')"
-          :class="['category-tab', selectedCategory === 'daily' && 'active']"
-        >
-          <i class="bi bi-lightning-fill"></i>
-          <span class="tab-label">Alltag</span>
-        </button>
-        <button
-          @click="selectCategory('recurring')"
-          :class="['category-tab', selectedCategory === 'recurring' && 'active']"
-        >
-          <i class="bi bi-arrow-repeat"></i>
-          <span class="tab-label">Putzen</span>
-        </button>
-        <button
-          @click="selectCategory('project')"
-          :class="['category-tab', selectedCategory === 'project' && 'active']"
-        >
-          <i class="bi bi-kanban"></i>
-          <span class="tab-label">Projekte</span>
-        </button>
-        <button
-          @click="selectCategory('completed')"
-          :class="['category-tab', selectedCategory === 'completed' && 'active']"
-        >
-          <i class="bi bi-check-circle"></i>
-          <span class="tab-label">Erledigt</span>
-        </button>
-      </div>
+    <div
+      ref="chipContainer"
+      class="chip-container"
+    >
+      <button
+        v-for="cat in categories"
+        :key="cat.value"
+        @click="selectCategory(cat.value)"
+        :class="['chip', selectedCategory === cat.value && 'active']"
+      >
+        <i :class="cat.icon"></i>
+        <span>{{ cat.label }}</span>
+      </button>
     </div>
   </nav>
 </template>
@@ -66,61 +100,56 @@ emit('update:category', selectedCategory.value)
 .category-nav-container {
   background: var(--color-background);
   border-bottom: 1px solid var(--color-border);
+  padding: 8px 0;
 }
 
-.category-nav-wrapper {
+.chip-container {
   display: flex;
-  gap: 0;
+  gap: 8px;
+  padding: 0 16px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none; /* Firefox */
+  -webkit-overflow-scrolling: touch; /* iOS smooth scrolling */
 }
 
-.category-tab {
-  flex: 1;
-  padding: 0.375rem 0.5rem;
-  background: transparent;
-  border: none;
-  border-bottom: 2px solid transparent;
-  color: var(--color-text-secondary);
-  font-weight: 500;
-  transition: all 0.2s ease;
+/* Hide scrollbar in Webkit browsers */
+.chip-container::-webkit-scrollbar {
+  display: none;
+}
+
+.chip {
   display: flex;
-  flex-direction: column;
   align-items: center;
-  justify-content: center;
-  gap: 0.25rem;
+  gap: 6px;
+  padding: 6px 14px;
+  background: var(--color-background-elevated);
+  border: 1px solid var(--color-border);
+  border-radius: 16px;
+  color: var(--color-text-secondary);
+  font-size: 0.875rem;
+  font-weight: 500;
+  white-space: nowrap;
   cursor: pointer;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
 }
 
-.category-tab:hover {
-  background: var(--color-background-muted);
+.chip:hover {
+  border-color: var(--color-primary);
   color: var(--color-text-primary);
 }
 
-.category-tab.active {
-  color: var(--color-primary);
-  border-bottom-color: var(--color-primary);
+.chip.active {
+  background: var(--color-primary);
+  border-color: var(--color-primary);
+  color: white;
   font-weight: 600;
-  background: var(--color-background-elevated);
 }
 
-.category-tab i {
-  font-size: 1.25rem;
-}
-
-.tab-label {
-  font-size: 0.625rem;
-  text-transform: uppercase;
-  letter-spacing: 0.3px;
-  line-height: 1;
-}
-
-/* Very small screens: smaller icons */
-@media (max-width: 360px) {
-  .category-tab i {
-    font-size: 1.125rem;
-  }
-
-  .tab-label {
-    font-size: 0.5625rem;
-  }
+.chip i {
+  font-size: 1rem;
 }
 </style>
