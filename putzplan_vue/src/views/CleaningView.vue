@@ -12,12 +12,12 @@ const showCreateModal = ref(false)
 
 // Search state
 const searchQuery = ref('')
-const isSearchExpanded = ref(false)
+const showSearchOverlay = ref(false)
 
 // Cross-tab search results (only when search is active)
 const crossTabSearchResults = computed(() => {
   const query = searchQuery.value.trim().toLowerCase()
-  if (!query || !isSearchExpanded.value) return null
+  if (!query) return null
 
   interface SearchResult {
     task: Task
@@ -86,18 +86,18 @@ const closeCreateModal = () => {
   showCreateModal.value = false
 }
 
-const toggleSearch = () => {
-  isSearchExpanded.value = !isSearchExpanded.value
-  if (isSearchExpanded.value) {
-    // Focus input nach Vue render cycle
-    setTimeout(() => {
-      const input = document.querySelector('.search-fab-input') as HTMLInputElement
-      input?.focus()
-    }, 100)
-  } else {
-    // Clear search when closing
-    searchQuery.value = ''
-  }
+const openSearchOverlay = () => {
+  showSearchOverlay.value = true
+  // Focus input nach Vue render cycle
+  setTimeout(() => {
+    const input = document.querySelector('.search-overlay-input') as HTMLInputElement
+    input?.focus()
+  }, 100)
+}
+
+const closeSearchOverlay = () => {
+  showSearchOverlay.value = false
+  searchQuery.value = ''
 }
 
 const handleCreateTask = async (taskData: {
@@ -114,49 +114,16 @@ const handleCreateTask = async (taskData: {
   }
 }
 
-// Track keyboard visibility for PWA (VisualViewport API)
-const keyboardHeight = ref(0)
-
-const updateFABPosition = () => {
-  if (!window.visualViewport) return
-
-  const viewport = window.visualViewport
-  const windowHeight = window.innerHeight
-  const viewportHeight = viewport.height
-
-  // Calculate keyboard height (difference between window and visual viewport)
-  const newKeyboardHeight = windowHeight - viewportHeight
-
-  // Only update if keyboard height changed significantly (> 100px = keyboard visible)
-  if (newKeyboardHeight > 100) {
-    keyboardHeight.value = newKeyboardHeight
-  } else {
-    keyboardHeight.value = 0
-  }
-}
-
 onMounted(async () => {
   // Lädt Tasks aus Supabase - WARTE bis fertig geladen
   await taskStore.loadTasks()
   // Startet Realtime Subscriptions für Live-Updates (erst NACH initialem Load)
   taskStore.subscribeToTasks()
-
-  // Setup VisualViewport listener for keyboard detection (PWA support)
-  if (window.visualViewport) {
-    window.visualViewport.addEventListener('resize', updateFABPosition)
-    window.visualViewport.addEventListener('scroll', updateFABPosition)
-  }
 })
 
 onUnmounted(() => {
   // Cleanup: Beendet Realtime Subscriptions
   taskStore.unsubscribeFromTasks()
-
-  // Cleanup VisualViewport listeners
-  if (window.visualViewport) {
-    window.visualViewport.removeEventListener('resize', updateFABPosition)
-    window.visualViewport.removeEventListener('scroll', updateFABPosition)
-  }
 })
 
 </script>
@@ -186,76 +153,33 @@ onUnmounted(() => {
         </div>
       </div>
 
-      <!-- Cross-Tab Search Results (when search is active) -->
-      <template v-if="crossTabSearchResults && crossTabSearchResults.length > 0">
-        <div
-          v-for="result in crossTabSearchResults"
-          :key="result.task.task_id"
-          class="search-result-item"
-        >
-          <div class="search-result-category">{{ result.categoryLabel }}</div>
-          <TaskCard :task="result.task" />
-        </div>
-      </template>
+      <!-- Task Lists by Category -->
+      <section v-if="selectedCategory === 'daily'" class="task-section">
+        <TaskList filter="daily-todo" />
+      </section>
 
-      <!-- Empty Search State -->
-      <div v-else-if="crossTabSearchResults && crossTabSearchResults.length === 0" class="empty-state">
-        <i class="bi bi-search"></i>
-        <p>Keine Tasks gefunden für "{{ searchQuery }}"</p>
-      </div>
+      <section v-if="selectedCategory === 'recurring'" class="task-section">
+        <TaskList filter="recurring-todo" />
+      </section>
 
-      <!-- Normal Tab View (when no search) -->
-      <template v-else>
-        <section v-if="selectedCategory === 'daily'" class="task-section">
-          <TaskList filter="daily-todo" />
-        </section>
+      <section v-if="selectedCategory === 'project'" class="task-section">
+        <TaskList filter="project-todo" />
+      </section>
 
-        <section v-if="selectedCategory === 'recurring'" class="task-section">
-          <TaskList filter="recurring-todo" />
-        </section>
-
-        <section v-if="selectedCategory === 'project'" class="task-section">
-          <TaskList filter="project-todo" />
-        </section>
-
-        <section v-if="selectedCategory === 'completed'" class="task-section">
-          <TaskList filter="completed" />
-        </section>
-      </template>
+      <section v-if="selectedCategory === 'completed'" class="task-section">
+        <TaskList filter="completed" />
+      </section>
     </div>
 
     <!-- Floating Action Buttons -->
-    <div
-      class="fab-group"
-      :class="{ 'fab-group-expanded': isSearchExpanded }"
-      :style="keyboardHeight > 0 ? { bottom: `${keyboardHeight + 24}px` } : {}"
-    >
-      <!-- Expanding Search Bar -->
-      <div v-if="isSearchExpanded" class="search-fab-expanded">
-        <input
-          type="text"
-          v-model="searchQuery"
-          class="search-fab-input"
-          placeholder="Suchen..."
-          @keyup.esc="toggleSearch"
-        />
-        <button
-          v-if="searchQuery"
-          @click="searchQuery = ''"
-          class="search-clear-btn"
-          aria-label="Eingabe löschen"
-        >
-          <i class="bi bi-x-lg"></i>
-        </button>
-      </div>
-
+    <div class="fab-group">
       <!-- Search FAB -->
       <button
         class="fab fab-search"
-        @click="toggleSearch"
-        :aria-label="isSearchExpanded ? 'Suche schließen' : 'Suchen'"
+        @click="openSearchOverlay"
+        aria-label="Suchen"
       >
-        <i :class="isSearchExpanded ? 'bi bi-x-lg' : 'bi bi-search'"></i>
+        <i class="bi bi-search"></i>
       </button>
 
       <!-- Create FAB -->
@@ -267,6 +191,68 @@ onUnmounted(() => {
       >
         <i class="bi bi-plus"></i>
       </button>
+    </div>
+
+    <!-- Search Overlay -->
+    <div v-if="showSearchOverlay" class="search-overlay">
+      <div class="search-overlay-backdrop" @click="closeSearchOverlay"></div>
+      <div class="search-overlay-content">
+        <!-- Search Header -->
+        <div class="search-overlay-header">
+          <div class="search-overlay-input-wrapper">
+            <i class="bi bi-search"></i>
+            <input
+              type="text"
+              v-model="searchQuery"
+              class="search-overlay-input"
+              placeholder="Suchen..."
+              @keyup.esc="closeSearchOverlay"
+            />
+            <button
+              v-if="searchQuery"
+              @click="searchQuery = ''"
+              class="search-clear-btn"
+              aria-label="Eingabe löschen"
+            >
+              <i class="bi bi-x-lg"></i>
+            </button>
+          </div>
+          <button
+            @click="closeSearchOverlay"
+            class="search-overlay-close"
+            aria-label="Suche schließen"
+          >
+            <i class="bi bi-x-lg"></i>
+          </button>
+        </div>
+
+        <!-- Search Results -->
+        <div class="search-overlay-body">
+          <!-- Cross-Tab Search Results -->
+          <template v-if="crossTabSearchResults && crossTabSearchResults.length > 0">
+            <div
+              v-for="result in crossTabSearchResults"
+              :key="result.task.task_id"
+              class="search-result-item"
+            >
+              <div class="search-result-category">{{ result.categoryLabel }}</div>
+              <TaskCard :task="result.task" />
+            </div>
+          </template>
+
+          <!-- Empty Search State -->
+          <div v-else-if="crossTabSearchResults && crossTabSearchResults.length === 0" class="empty-state">
+            <i class="bi bi-search"></i>
+            <p>Keine Tasks gefunden für "{{ searchQuery }}"</p>
+          </div>
+
+          <!-- Initial State (no search query) -->
+          <div v-else class="search-overlay-initial">
+            <i class="bi bi-search"></i>
+            <p>Suche über alle Tasks...</p>
+          </div>
+        </div>
+      </div>
     </div>
 
     <!-- Task Create Modal -->
@@ -343,40 +329,91 @@ onUnmounted(() => {
   background: var(--bs-secondary);
 }
 
-/* Expanding Search Bar */
-.search-fab-expanded {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  background: white;
-  border-radius: 28px;
-  padding: 0 16px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-  height: 56px;
-  animation: expandSearch 0.3s ease-out;
-  max-width: calc(100vw - 180px);
-  flex: 1;
-  min-width: 0; /* Allow flex shrinking */
+/* Search Overlay */
+.search-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 2000;
+  animation: fadeIn 0.2s ease-out;
 }
 
-@keyframes expandSearch {
+@keyframes fadeIn {
   from {
-    max-width: 0;
     opacity: 0;
   }
   to {
-    max-width: 250px;
     opacity: 1;
   }
 }
 
-.search-fab-input {
+.search-overlay-backdrop {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 1;
+}
+
+.search-overlay-content {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  background: var(--color-background);
+  display: flex;
+  flex-direction: column;
+  animation: slideUp 0.3s ease-out;
+  z-index: 2;
+}
+
+@keyframes slideUp {
+  from {
+    transform: translateY(20px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.search-overlay-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px;
+  background: var(--color-background-elevated);
+  border-bottom: 1px solid var(--color-border);
+  flex-shrink: 0;
+}
+
+.search-overlay-input-wrapper {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: var(--color-background);
+  border: 1px solid var(--color-border);
+  border-radius: 24px;
+  padding: 12px 16px;
+}
+
+.search-overlay-input-wrapper i {
+  color: var(--bs-secondary);
+  font-size: 1.25rem;
+}
+
+.search-overlay-input {
   flex: 1;
   border: none;
   outline: none;
   font-size: 1rem;
   background: transparent;
-  min-width: 150px;
+  color: var(--color-text-primary);
 }
 
 .search-clear-btn {
@@ -397,6 +434,50 @@ onUnmounted(() => {
 
 .search-clear-btn:hover {
   color: var(--bs-danger);
+}
+
+.search-overlay-close {
+  background: none;
+  border: none;
+  color: var(--color-text-secondary);
+  font-size: 1.5rem;
+  cursor: pointer;
+  padding: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.2s ease;
+  width: 40px;
+  height: 40px;
+  flex-shrink: 0;
+}
+
+.search-overlay-close:hover {
+  color: var(--color-text-primary);
+}
+
+.search-overlay-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px;
+}
+
+.search-overlay-initial {
+  text-align: center;
+  padding: 4rem 2rem;
+  color: var(--color-text-secondary);
+}
+
+.search-overlay-initial i {
+  font-size: 4rem;
+  margin-bottom: 1rem;
+  opacity: 0.3;
+  display: block;
+}
+
+.search-overlay-initial p {
+  font-size: 1.125rem;
+  margin: 0;
 }
 
 /* Search Result Items */
