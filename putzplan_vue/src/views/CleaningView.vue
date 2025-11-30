@@ -262,13 +262,22 @@ onUnmounted(() => {
 /* Floating Action Buttons */
 .fab-group {
   position: fixed;
-  bottom: 24px;
-  right: 24px;
+  bottom: max(24px, env(safe-area-inset-bottom, 24px));
+  right: max(24px, env(safe-area-inset-right, 24px));
   display: flex;
   align-items: center;
   gap: 12px;
   z-index: 1000;
   transition: all 0.3s ease;
+}
+
+/* On mobile, use viewport units to stay visible above keyboard */
+@supports (height: 100dvh) {
+  @media (max-width: 768px) {
+    .fab-group {
+      bottom: max(24px, calc(100dvh - 100vh + 24px));
+    }
+  }
 }
 
 .fab {
@@ -318,15 +327,17 @@ onUnmounted(() => {
   height: 56px;
   animation: expandSearch 0.3s ease-out;
   max-width: calc(100vw - 180px);
+  flex: 1;
+  min-width: 0; /* Allow flex shrinking */
 }
 
 @keyframes expandSearch {
   from {
-    width: 0;
+    max-width: 0;
     opacity: 0;
   }
   to {
-    width: 250px;
+    max-width: 250px;
     opacity: 1;
   }
 }
