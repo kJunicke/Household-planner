@@ -45,6 +45,14 @@
 **Migrations:** Konsolidiert am 26.10.2025 (29 → 4 Migrations)
 
 **Letzte größere Features:**
+- ✅ Header Komprimierung + Settings Sidebar - 30.11.2025
+  - Header von ~35% auf ~15% Viewport reduziert (250px → 120px)
+  - SettingsSidebar Component mit Slide-in Animation
+  - Haushalt-Info, Mitglieder, Profil-Edit in Sidebar verschoben
+  - Hamburger-Menü (☰) statt Zahnrad-Icon
+  - Backdrop Overlay mit Blur-Effekt
+  - ESC-Key Support zum Schließen
+  - 4-5 Tasks statt 2-3 Tasks auf Mobile Screen sichtbar
 - ✅ Daily Tasks Bonus-only Subtasks - 30.11.2025
   - SubtaskManagementModal: isDailyTask check, nur Bonus-Modus erlaubt
   - Daily-Banner (grün) mit Erklärung für User
