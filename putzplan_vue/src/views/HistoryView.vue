@@ -173,9 +173,6 @@ onUnmounted(() => {
             'background': `linear-gradient(to right, ${completion.household_members.user_color}15 0%, var(--color-background-elevated) 100%)`
           }"
         >
-          <div class="completion-icon">
-            <i class="bi bi-check-circle-fill text-success"></i>
-          </div>
           <div class="completion-details">
             <div class="task-title">
               {{ completion.tasks?.title || 'Unbekannte Aufgabe' }}
@@ -195,7 +192,7 @@ onUnmounted(() => {
               </span>
               <span class="completion-points">
                 <i class="bi bi-star-fill"></i>
-                {{ getCompletionPoints(completion) }} Punkte
+                {{ getCompletionPoints(completion) }} Pkt
               </span>
             </div>
             <div v-if="completion.effort_override !== null" class="effort-override-note">
@@ -226,7 +223,7 @@ onUnmounted(() => {
       <div v-if="showDeleteModal" class="modal-overlay" @click="closeDeleteModal">
         <div class="modal-content" @click.stop>
           <div class="modal-header">
-            <h5 class="modal-title">Eintrag löschen</h5>
+            <h3 class="modal-title">Eintrag löschen</h3>
             <button @click="closeDeleteModal" class="btn-close" aria-label="Schließen">
               <i class="bi bi-x-lg"></i>
             </button>
@@ -257,7 +254,7 @@ onUnmounted(() => {
       <div v-if="showDeleteAllModal" class="modal-overlay" @click="closeDeleteAllModal">
         <div class="modal-content" @click.stop>
           <div class="modal-header">
-            <h5 class="modal-title">Gesamten Verlauf löschen</h5>
+            <h3 class="modal-title">Gesamten Verlauf löschen</h3>
             <button @click="closeDeleteAllModal" class="btn-close" aria-label="Schließen">
               <i class="bi bi-x-lg"></i>
             </button>
@@ -294,13 +291,13 @@ onUnmounted(() => {
 .completions-list {
   display: flex;
   flex-direction: column;
-  gap: 0.75rem;
+  gap: 0.5rem;
 }
 
 .completion-item {
   display: flex;
-  gap: 1rem;
-  padding: 1rem;
+  gap: 0.75rem;
+  padding: 0.75rem;
   background: var(--color-background-elevated);
   border-left: 3px solid var(--user-color, var(--color-border));
   border-top: 1px solid var(--color-border);
@@ -315,17 +312,11 @@ onUnmounted(() => {
   box-shadow: var(--shadow-sm);
 }
 
-.completion-icon {
-  display: flex;
-  align-items: center;
-  font-size: 1.5rem;
-}
-
 .completion-details {
   flex: 1;
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
+  gap: 0.375rem;
 }
 
 .task-title {
@@ -334,7 +325,7 @@ onUnmounted(() => {
   color: var(--color-text-primary);
   display: flex;
   flex-direction: column;
-  gap: 0.375rem;
+  gap: 0.25rem;
 }
 
 .subtask-badge {
@@ -351,8 +342,8 @@ onUnmounted(() => {
 .completion-meta {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.75rem;
-  font-size: 0.875rem;
+  gap: 0.5rem;
+  font-size: 0.8125rem;
   color: var(--color-text-secondary);
 }
 
@@ -367,7 +358,7 @@ onUnmounted(() => {
 .member-name i,
 .completion-date i,
 .completion-points i {
-  font-size: 0.875rem;
+  font-size: 0.75rem;
 }
 
 .completion-points {

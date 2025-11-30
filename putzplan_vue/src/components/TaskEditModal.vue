@@ -50,7 +50,7 @@ const handleClose = () => {
     <div class="modal-backdrop" @click="handleClose">
       <div class="modal-content" @click.stop>
         <div class="modal-header">
-          <h5 class="modal-title">Aufgabe bearbeiten</h5>
+          <h3 class="modal-title">Aufgabe bearbeiten</h3>
           <button class="btn-close" @click="handleClose" aria-label="Schließen">×</button>
         </div>
 

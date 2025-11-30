@@ -6,6 +6,8 @@
 
 ## 🎯 High Priority
 
+Verbessern der User Experience. Die Schritte dafür sind in UX_Analysis_Mobile.md klarifiziert.
+
 ### Gamification System
 - **User Stats** - XP, Level, Streaks pro Haushalt
 - **Ranglisten** - Mitglieder nach XP sortiert anzeigen
@@ -33,6 +35,12 @@
 **Migrations:** Konsolidiert am 26.10.2025 (29 → 4 Migrations)
 
 **Letzte größere Features:**
+- ✅ Vollständige Typography-Vereinheitlichung - 30.11.2025
+  - Typography-Overrides aus utilities.css entfernt
+  - Semantisch korrekte HTML-Heading-Hierarchie (h1 → h2 → h3 → h4)
+  - 100% konsistente Typography app-weit (Single Source of Truth: base.css)
+  - Usage Guidelines in base.css dokumentiert
+  - Bessere Accessibility & SEO durch korrekte Heading-Struktur
 - ✅ Chip-Navigation mit Swipe-Gesten - 30.11.2025
   - Kompakte Chip-Navigation (~40px statt 60px, ~33% Platzersparnis)
   - Scrollbare Chip-Leiste (Material Design Pattern)

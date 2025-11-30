@@ -35,7 +35,7 @@ const handleLogin = async () => {
       <div class="auth-wrapper">
         <div class="auth-card">
           <div class="card-body">
-            <h2 class="auth-title">Login</h2>
+            <h1 class="auth-title">Login</h1>
             <p class="auth-subtitle">Willkommen zurück! Melde dich an, um fortzufahren.</p>
 
             <!-- Error Alert -->

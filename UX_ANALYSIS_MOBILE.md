@@ -61,7 +61,7 @@ Option A: Tabs in Header statt 2 Nav-Bars
 Option B: Bottom Navigation (Standard auf Mobile)
 [🏠 Alltag] [🧹 Putzen] [📊 Stats] [🛒 Einkauf]
 ```
-
+Abgeschlossen
 ---
 
 ### 3. **TaskCards: Verschwendeter Whitespace** 📦
@@ -173,7 +173,7 @@ Abgeschlossen aber keine Swipe actions
   z-index: 100;
 }
 ```
-
+Abgeschlossen
 ---
 
 ### 7. **Search Bar: Visuell zu dominant** 🔍
@@ -193,7 +193,7 @@ Abgeschlossen aber keine Swipe actions
 [🔍] statt [🔍 Suchen...............]
 Tap → Expand zu Full-width Input
 ```
-
+Abgeschlossen
 ---
 
 ### 8. **History View: Overwhelming Scroll** 📜

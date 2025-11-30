@@ -378,21 +378,16 @@ const barChartOptions = {
 .stats-view {
   min-height: 100vh;
   background: var(--color-background);
-  padding: 2rem 0;
+  padding: 1rem 0;
 }
 
-.page-title {
-  font-size: 2rem;
-  font-weight: 700;
-  color: var(--color-text-primary);
-  margin: 0;
-}
+/* Use global .page-title from base.css - no override needed */
 
 .time-period-tabs {
   display: flex;
-  gap: 0.75rem;
+  gap: 0.5rem;
   flex-wrap: nowrap;
-  padding: 1rem;
+  padding: 0.75rem;
   background: var(--color-background-elevated);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-sm);
@@ -425,8 +420,8 @@ const barChartOptions = {
 
 .chart-container {
   position: relative;
-  height: 420px;
-  padding: 1.5rem;
+  height: 360px;
+  padding: 1rem;
 }
 
 /* Card Styling für Charts */
@@ -442,6 +437,6 @@ const barChartOptions = {
 }
 
 .card-body {
-  padding: 1rem;
+  padding: 0.75rem;
 }
 </style>

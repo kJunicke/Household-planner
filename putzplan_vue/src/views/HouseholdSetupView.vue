@@ -86,12 +86,12 @@ const joinHousehold = async () => {
     <div class="auth-wrapper" style="max-width: 540px;">
       <div class="auth-card">
         <div class="card-body">
-          <h2 class="auth-title">Haushalt einrichten</h2>
+          <h1 class="auth-title">Haushalt einrichten</h1>
           <p class="auth-subtitle">Erstelle einen neuen Haushalt oder trete einem bestehenden bei.</p>
 
           <!-- Create Household Form -->
           <section class="setup-section">
-            <h4 class="section-title">Neuen Haushalt erstellen</h4>
+            <h3 class="section-title">Neuen Haushalt erstellen</h3>
             <form @submit.prevent="createHousehold" class="auth-form">
               <div class="form-group">
                 <label class="form-label">Haushalts-Name</label>
@@ -120,7 +120,7 @@ const joinHousehold = async () => {
 
           <!-- Join Household Form -->
           <section class="setup-section">
-            <h4 class="section-title">Haushalt beitreten</h4>
+            <h3 class="section-title">Haushalt beitreten</h3>
             <form @submit.prevent="joinHousehold" class="auth-form">
               <div class="form-group">
                 <label class="form-label">Einladungs-Code</label>

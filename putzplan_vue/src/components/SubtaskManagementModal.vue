@@ -88,7 +88,7 @@ const handlePointsModeChange = (subtaskId: string, mode: 'checklist' | 'deduct' 
     <div class="modal-backdrop" @click="handleClose">
       <div class="modal-content" @click.stop>
         <div class="modal-header">
-          <h5 class="modal-title">{{ parentTask.title }} - Unteraufgabe hinzufügen</h5>
+          <h3 class="modal-title">{{ parentTask.title }} - Unteraufgabe hinzufügen</h3>
           <button class="btn-close" @click="handleClose" aria-label="Schließen">×</button>
         </div>
 
@@ -103,7 +103,7 @@ const handlePointsModeChange = (subtaskId: string, mode: 'checklist' | 'deduct' 
 
           <!-- SECTION 1: Add New Subtask -->
           <div class="section">
-            <h6 class="section-title">Neue Unteraufgabe</h6>
+            <h4 class="section-title">Neue Unteraufgabe</h4>
             <div class="add-subtask-form">
               <input
                 type="text"
@@ -167,7 +167,7 @@ const handlePointsModeChange = (subtaskId: string, mode: 'checklist' | 'deduct' 
 
           <!-- SECTION 2: Existing Subtasks -->
           <div v-if="existingSubtasks.length > 0" class="section">
-            <h6 class="section-title">Bestehende Unteraufgaben ({{ existingSubtasks.length }})</h6>
+            <h4 class="section-title">Bestehende Unteraufgaben ({{ existingSubtasks.length }})</h4>
             <div class="subtasks-list">
               <div
                 v-for="subtask in existingSubtasks"

@@ -125,9 +125,9 @@ onUnmounted(() => {
 <template>
   <div class="page-container">
     <div class="container-fluid">
-      <div class="section-title">
+      <h2 class="page-title">
         <i class="bi bi-cart3"></i> Einkaufsliste
-      </div>
+      </h2>
 
     <!-- Offline/Sync Status Banner -->
     <div v-if="!isOnline" class="alert alert-warning mb-3" role="alert">
@@ -191,9 +191,9 @@ onUnmounted(() => {
 
     <!-- Liste 1: Zu kaufen (unpurchased) -->
     <div v-else class="shopping-section mb-4">
-      <h5 class="shopping-list-title">
+      <h3 class="shopping-list-title">
         <i class="bi bi-cart-dash"></i> Zu kaufen ({{ shoppingStore.unpurchasedItems.length }})
-      </h5>
+      </h3>
 
       <div v-if="shoppingStore.unpurchasedItems.length === 0" class="empty-state">
         <i class="bi bi-check-circle"></i>
@@ -242,9 +242,9 @@ onUnmounted(() => {
 
     <!-- Liste 2: Gekauft (purchased) -->
     <div class="shopping-section">
-      <h5 class="shopping-list-title">
+      <h3 class="shopping-list-title">
         <i class="bi bi-check-circle"></i> Gekauft ({{ shoppingStore.purchasedItems.length }})
-      </h5>
+      </h3>
 
       <div v-if="shoppingStore.purchasedItems.length === 0" class="empty-state">
         <i class="bi bi-cart-x"></i>
@@ -337,9 +337,6 @@ onUnmounted(() => {
 }
 
 .shopping-list-title {
-  font-size: 1.125rem;
-  font-weight: 600;
-  color: var(--color-text-primary);
   margin-bottom: var(--spacing-md);
   display: flex;
   align-items: center;

@@ -92,7 +92,7 @@ const completedProjects = computed(() => {
 
         <!-- Completed Projects Section (only in completed view) -->
         <div v-if="filter === 'completed' && completedProjects.length > 0" class="completed-projects-section">
-            <h6 class="section-title">Abgeschlossene Projekte</h6>
+            <h3 class="section-title">Abgeschlossene Projekte</h3>
             <div class="task-list">
                 <TaskCard v-for="project in completedProjects" :key="project.task_id" :task="project" />
             </div>

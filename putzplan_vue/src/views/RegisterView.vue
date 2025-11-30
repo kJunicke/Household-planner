@@ -31,7 +31,7 @@ const handleRegister = async () => {
       <div class="auth-wrapper">
         <div class="auth-card">
           <div class="card-body">
-            <h2 class="auth-title">Registrierung</h2>
+            <h1 class="auth-title">Registrierung</h1>
             <p class="auth-subtitle">Erstelle einen Account, um loszulegen.</p>
 
             <!-- Error Alert -->

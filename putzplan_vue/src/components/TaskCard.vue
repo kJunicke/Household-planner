@@ -277,7 +277,7 @@ const handleCompleteProject = async () => {
                <!-- Left: Title + Badges -->
                <div class="task-left">
                     <div class="task-info-block">
-                         <h6 class="task-title">{{ props.task.title }}</h6>
+                         <h4 class="task-title">{{ props.task.title }}</h4>
                          <div class="task-meta">
                               <!-- Effort Badge -->
                               <span v-if="!isProject" class="meta-badge effort-badge">
