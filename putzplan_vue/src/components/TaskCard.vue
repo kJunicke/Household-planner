@@ -286,7 +286,7 @@ const handleCompleteProject = async () => {
                     </div>
                </div>
 
-               <!-- SUBTASKS SECTION (nur für Parent Tasks) - Gruppiert nach Punktemodus -->
+               <!-- SUBTASKS SECTION (nur für Parent Tasks) -->
                <div v-if="!props.task.parent_task_id && subtasks.length > 0" class="subtasks-section">
                     <div class="subtasks-header-row">
                          <div class="subtasks-header" @click="toggleSubtasks">
@@ -304,44 +304,56 @@ const handleCompleteProject = async () => {
                     </div>
 
                     <div v-show="subtasksExpanded" class="subtasks-list">
-                         <!-- Checkliste Gruppe -->
-                         <div v-if="subtasksByMode.checklist.length > 0" class="subtask-group">
-                              <div class="subtask-group-header">
-                                   <span class="subtask-group-badge badge-checklist">✓ Checkliste</span>
-                                   <span class="subtask-group-count">{{ subtasksByMode.checklist.length }}</span>
-                              </div>
+                         <!-- DAILY TASKS: Flache Liste (alle sind Bonus) -->
+                         <template v-if="props.task.task_type === 'daily'">
                               <SubtaskItem
-                                   v-for="subtask in subtasksByMode.checklist"
+                                   v-for="subtask in subtasks"
                                    :key="subtask.task_id"
                                    :task="subtask"
                               />
-                         </div>
+                         </template>
 
-                         <!-- Abziehen Gruppe -->
-                         <div v-if="subtasksByMode.deduct.length > 0" class="subtask-group">
-                              <div class="subtask-group-header">
-                                   <span class="subtask-group-badge badge-deduct">− Abziehen</span>
-                                   <span class="subtask-group-count">{{ subtasksByMode.deduct.length }}</span>
+                         <!-- REGULAR/RECURRING/PROJECTS: Gruppiert nach Modus -->
+                         <template v-else>
+                              <!-- Checkliste Gruppe -->
+                              <div v-if="subtasksByMode.checklist.length > 0" class="subtask-group">
+                                   <div class="subtask-group-header">
+                                        <span class="subtask-group-badge badge-checklist">✓ Checkliste</span>
+                                        <span class="subtask-group-count">{{ subtasksByMode.checklist.length }}</span>
+                                   </div>
+                                   <SubtaskItem
+                                        v-for="subtask in subtasksByMode.checklist"
+                                        :key="subtask.task_id"
+                                        :task="subtask"
+                                   />
                               </div>
-                              <SubtaskItem
-                                   v-for="subtask in subtasksByMode.deduct"
-                                   :key="subtask.task_id"
-                                   :task="subtask"
-                              />
-                         </div>
 
-                         <!-- Bonus Gruppe -->
-                         <div v-if="subtasksByMode.bonus.length > 0" class="subtask-group">
-                              <div class="subtask-group-header">
-                                   <span class="subtask-group-badge badge-bonus">+ Bonus</span>
-                                   <span class="subtask-group-count">{{ subtasksByMode.bonus.length }}</span>
+                              <!-- Abziehen Gruppe -->
+                              <div v-if="subtasksByMode.deduct.length > 0" class="subtask-group">
+                                   <div class="subtask-group-header">
+                                        <span class="subtask-group-badge badge-deduct">− Abziehen</span>
+                                        <span class="subtask-group-count">{{ subtasksByMode.deduct.length }}</span>
+                                   </div>
+                                   <SubtaskItem
+                                        v-for="subtask in subtasksByMode.deduct"
+                                        :key="subtask.task_id"
+                                        :task="subtask"
+                                   />
                               </div>
-                              <SubtaskItem
-                                   v-for="subtask in subtasksByMode.bonus"
-                                   :key="subtask.task_id"
-                                   :task="subtask"
-                              />
-                         </div>
+
+                              <!-- Bonus Gruppe -->
+                              <div v-if="subtasksByMode.bonus.length > 0" class="subtask-group">
+                                   <div class="subtask-group-header">
+                                        <span class="subtask-group-badge badge-bonus">+ Bonus</span>
+                                        <span class="subtask-group-count">{{ subtasksByMode.bonus.length }}</span>
+                                   </div>
+                                   <SubtaskItem
+                                        v-for="subtask in subtasksByMode.bonus"
+                                        :key="subtask.task_id"
+                                        :task="subtask"
+                                   />
+                              </div>
+                         </template>
                     </div>
                </div>
 

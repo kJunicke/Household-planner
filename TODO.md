@@ -6,6 +6,8 @@
 
 ## 🎯 High Priority
 
+---
+
 ### Gamification System
 - **User Stats** - XP, Level, Streaks pro Haushalt
 - **Ranglisten** - Mitglieder nach XP sortiert anzeigen
@@ -43,6 +45,15 @@
 **Migrations:** Konsolidiert am 26.10.2025 (29 → 4 Migrations)
 
 **Letzte größere Features:**
+- ✅ Daily Tasks Bonus-only Subtasks - 30.11.2025
+  - SubtaskManagementModal: isDailyTask check, nur Bonus-Modus erlaubt
+  - Daily-Banner (grün) mit Erklärung für User
+  - Kein Punktemodus-Selector bei Daily (auto-select bonus)
+  - TaskCard: Flache Subtask-Liste ohne Gruppierung
+  - Effort-Badge in Action-Row verschoben (4 Icons statt 3)
+  - Subtask-Titel umbrechen bei langer Länge
+  - Edge Function: Validation für Daily-Subtasks
+  - Dokumentation in CLAUDE.md aktualisiert
 - Universell Responsive Design ohne Media Queries - 23.11.2025
   - Mobile Media Queries komplett entfernt für einheitliches Design
   - Touch-optimierte Button-Größen auf allen Viewports (padding: 0.75rem vertikal)

@@ -168,13 +168,12 @@ const handleProjectWork = async (effort: number, note: string) => {
 
     <!-- Normal Display (2 Zeilen Layout) -->
     <div v-else class="subtask-wrapper">
-      <!-- Zeile 1: Titel (+ Effort nur bei non-checklist) -->
+      <!-- Zeile 1: Titel (volle Breite) -->
       <div class="subtask-header">
         <span class="subtask-title">{{ task.title }}</span>
-        <span v-if="task.subtask_points_mode !== 'checklist'" class="subtask-effort">{{ task.effort }}</span>
       </div>
 
-      <!-- Zeile 2: Action Icons Row (wie bei TaskCard) -->
+      <!-- Zeile 2: Action Icons Row (4 Icons: Assignment, Edit, Delete, Effort) -->
       <div class="subtask-actions-row">
         <!-- Assignment Badge Mini -->
         <div
@@ -209,6 +208,11 @@ const handleProjectWork = async (effort: number, note: string) => {
             <line x1="14" y1="11" x2="14" y2="17"></line>
           </svg>
         </button>
+
+        <!-- Effort Badge (nur bei non-checklist) -->
+        <div v-if="task.subtask_points_mode !== 'checklist'" class="subtask-effort-inline" :title="`Aufwand: ${task.effort}`">
+          {{ task.effort }}
+        </div>
       </div>
 
       <!-- Zeile 3: Main Action Button (wie bei TaskCard) -->
@@ -313,30 +317,36 @@ const handleProjectWork = async (effort: number, note: string) => {
   width: 100%;
 }
 
-/* Zeile 1: Titel + Effort */
+/* Zeile 1: Titel (volle Breite) */
 .subtask-header {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--spacing-sm);
+  width: 100%;
 }
 
 .subtask-title {
   flex: 1;
+  min-width: 0;
   font-size: 0.875rem;
   color: var(--color-text-primary);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+  line-height: 1.4;
 }
 
-.subtask-effort {
+/* Effort Badge (inline in Action Row) */
+.subtask-effort-inline {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 24px;
+  height: 24px;
   font-size: 0.75rem;
   color: var(--color-text-secondary);
   font-weight: 600;
   background: var(--color-background-elevated);
   padding: 0.125rem 0.5rem;
   border-radius: var(--radius-sm);
+  border: 1px solid var(--color-border);
   flex-shrink: 0;
 }
 

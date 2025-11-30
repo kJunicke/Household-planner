@@ -83,7 +83,29 @@ Deno.serve(async (req) => {
       )
     }
 
-    // 6. Handle CHECKLIST-MODE SUBTASKS: Award 0 points when completed individually
+    // 6. Fetch Parent Task Type wenn Subtask (für Daily-Validation)
+    let parentTaskType: string | null = null
+    if (taskDetails.parent_task_id !== null) {
+      const { data: parentTask } = await supabase
+        .from('tasks')
+        .select('task_type')
+        .eq('task_id', taskDetails.parent_task_id)
+        .single()
+
+      parentTaskType = parentTask?.task_type || null
+
+      // Validation für Daily-Subtasks (sollten immer bonus sein)
+      if (parentTaskType === 'daily' && taskDetails.subtask_points_mode !== 'bonus') {
+        console.warn(
+          `[Daily Task Validation] Subtask should be bonus mode!`,
+          `Task: ${taskId}, Mode: ${taskDetails.subtask_points_mode}, Parent Type: ${parentTaskType}`
+        )
+        // Optional: Force bonus behavior oder Error werfen für strikte Validation
+        // return new Response(JSON.stringify({ error: 'Daily task subtasks must be bonus mode' }), ...)
+      }
+    }
+
+    // 7. Handle CHECKLIST-MODE SUBTASKS: Award 0 points when completed individually
     // Checklist subtasks only matter for parent tracking, NOT for individual points
     if (taskDetails.parent_task_id !== null && taskDetails.subtask_points_mode === 'checklist') {
       // Force 0 points for checklist subtasks (unless user explicitly overrides)
