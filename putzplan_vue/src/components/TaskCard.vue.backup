@@ -170,14 +170,7 @@ const handleAssignmentConfirm = async (userId: string | null, permanent: boolean
 }
 
 // SUBTASKS
-const subtasks = computed(() => {
-     const allSubtasks = taskStore.getSubtasks(props.task.task_id)
-     // Filter out "Am Projekt arbeiten" subtask for UI display (still exists in DB for completion tracking)
-     if (isProject.value) {
-          return allSubtasks.filter(s => s.title !== 'Am Projekt arbeiten')
-     }
-     return allSubtasks
-})
+const subtasks = computed(() => taskStore.getSubtasks(props.task.task_id))
 const completedSubtasksCount = computed(() => subtasks.value.filter((s: Task) => s.completed).length)
 
 // Gruppiere Subtasks nach ihrem individuellen Punktemodus
@@ -229,36 +222,19 @@ const handleResetSubtasks = async () => {
 const isProject = computed(() => props.task.task_type === 'project')
 const projectEffort = computed(() => isProject.value ? taskStore.getProjectEffort(props.task.task_id) : 0)
 
-// Get "Am Projekt arbeiten" subtask ID for project work documentation
-const projectWorkSubtaskId = computed(() => {
-     if (!isProject.value) return null
-     const allSubtasks = taskStore.getSubtasks(props.task.task_id)
-     const workSubtask = allSubtasks.find(s => s.title === 'Am Projekt arbeiten')
-     return workSubtask?.task_id || null
-})
-
-const openProjectWorkModal = () => {
-     showProjectWorkModal.value = true
-}
-
 const closeProjectWorkModal = () => {
      showProjectWorkModal.value = false
 }
 
 const handleProjectWork = async (effort: number, note: string) => {
-     if (!projectWorkSubtaskId.value) {
-          console.error('Project work subtask not found')
-          return
-     }
-
      isLoggingWork.value = true
-     // Complete the "Am Projekt arbeiten" subtask with custom effort and note
-     const success = await taskStore.completeTask(projectWorkSubtaskId.value, effort, note)
+     // Complete the subtask with custom effort and note
+     const success = await taskStore.completeTask(props.task.task_id, effort, note)
      isLoggingWork.value = false
 
      if (success) {
           // Immediately reset the subtask so it's always available
-          await taskStore.markAsDirty(projectWorkSubtaskId.value)
+          await taskStore.markAsDirty(props.task.task_id)
           showProjectWorkModal.value = false
           confetti({
                particleCount: 100,
@@ -267,6 +243,10 @@ const handleProjectWork = async (effort: number, note: string) => {
           })
      }
      // If failed, modal stays open so user can retry
+}
+
+const openProjectCompleteModal = () => {
+     showProjectCompleteModal.value = true
 }
 
 const closeProjectCompleteModal = () => {
@@ -350,11 +330,11 @@ const handleCompleteProject = async () => {
                          </svg>
                     </button>
 
-                    <!-- PROJECTS: Dokumentieren button instead of Abschließen -->
+                    <!-- PROJECTS: Different button logic -->
                     <template v-if="isProject">
                          <button v-if="!props.task.completed" class="btn btn-primary btn-sm action-btn"
-                                 @click="openProjectWorkModal">
-                              Dokumentieren
+                                 @click="openProjectCompleteModal">
+                              Abschließen
                          </button>
                          <div v-else class="completed-badge">
                               ✓
@@ -493,7 +473,7 @@ const handleCompleteProject = async () => {
           <!-- Project Work Modal -->
           <ProjectWorkModal
                v-if="showProjectWorkModal"
-               :projectTitle="props.task.title"
+               :projectTitle="props.task.parent_task_id ? taskStore.tasks.find(t => t.task_id === props.task.parent_task_id)?.title || 'Projekt' : 'Projekt'"
                :isLoading="isLoggingWork"
                @close="closeProjectWorkModal"
                @confirm="handleProjectWork"

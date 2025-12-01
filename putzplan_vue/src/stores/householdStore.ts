@@ -1,14 +1,25 @@
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import { defineStore } from 'pinia'
 import { supabase } from '@/lib/supabase'
 import type { Household, HouseholdMember } from '@/types/households'
 import { useAuthStore } from './authStore'
 import { useToastStore } from './toastStore'
 
+interface CompletionWithEffort {
+  user_id: string
+  task_id: string
+  completed_at: string
+  effort_override: number | null
+  tasks?: {
+    effort: number
+  }
+}
+
 export const useHouseholdStore = defineStore('household', () => {
     // State
     const currentHousehold = ref<Household | null>(null)
     const householdMembers = ref<HouseholdMember[]>([])
+    const weeklyCompletions = ref<CompletionWithEffort[]>([])
 
     // Actions
     const loadUserHousehold = async () => {
@@ -144,6 +155,94 @@ export const useHouseholdStore = defineStore('household', () => {
         const member = householdMembers.value.find(m => m.user_id === authStore.user!.id)
         return member?.display_name || 'Unbekannt'
     }
+
+    // Lade wöchentliche Completions für Stats
+    const loadWeeklyCompletions = async () => {
+        if (!currentHousehold.value) return
+
+        const weekAgo = new Date()
+        weekAgo.setDate(weekAgo.getDate() - 7)
+
+        // Lade Completions mit Tasks (für effort)
+        const { data, error } = await supabase
+            .from('task_completions')
+            .select(`
+                user_id,
+                task_id,
+                completed_at,
+                effort_override,
+                tasks (effort)
+            `)
+            .gte('completed_at', weekAgo.toISOString())
+
+        if (error) {
+            console.error('Error loading weekly completions:', error)
+            return
+        }
+
+        weeklyCompletions.value = (data || []) as CompletionWithEffort[]
+    }
+
+    // Berechne wöchentliche Punkte pro User
+    const weeklyPointsByUser = computed(() => {
+        const pointsMap = new Map<string, number>()
+
+        weeklyCompletions.value.forEach((completion: CompletionWithEffort) => {
+            // Priorisiere effort_override, dann task.effort, Fallback 1
+            const taskEffort = completion.tasks?.effort ?? 1
+            const effort = completion.effort_override ?? taskEffort
+            const current = pointsMap.get(completion.user_id) || 0
+            pointsMap.set(completion.user_id, current + effort)
+        })
+
+        return pointsMap
+    })
+
+    // Aktuelle User-Punkte diese Woche
+    const currentUserWeeklyPoints = computed(() => {
+        const authStore = useAuthStore()
+        if (!authStore.user) return 0
+        return weeklyPointsByUser.value.get(authStore.user.id) || 0
+    })
+
+    // Wöchentliche Rangliste
+    const weeklyRanking = computed(() => {
+        const authStore = useAuthStore()
+        if (!authStore.user) return null
+
+        const points = weeklyPointsByUser.value
+
+        // Erstelle sortierte Rangliste
+        const ranking = Array.from(points.entries())
+            .map(([userId, pts]) => {
+                const member = householdMembers.value.find(m => m.user_id === userId)
+                return {
+                    userId,
+                    name: member?.display_name || 'Unbekannt',
+                    color: member?.user_color || '#4A90E2',
+                    points: pts,
+                    isCurrentUser: userId === authStore.user!.id
+                }
+            })
+            .sort((a, b) => b.points - a.points) // Sortiere nach Punkten (absteigend)
+
+        if (ranking.length === 0) return null
+
+        // Finde eigene Position
+        const currentUserIndex = ranking.findIndex(r => r.isCurrentUser)
+        const currentUserRank = currentUserIndex + 1 // 1-basiert
+
+        const leader = ranking[0]
+        const isLeader = currentUserIndex === 0
+
+        return {
+            leader,
+            currentUser: currentUserIndex >= 0 ? ranking[currentUserIndex] : null,
+            currentUserRank,
+            isLeader,
+            totalUsers: ranking.length
+        }
+    })
 
     const createHousehold = async (name: string) => {
         const authStore = useAuthStore()
@@ -291,6 +390,9 @@ export const useHouseholdStore = defineStore('household', () => {
         getCurrentMemberDisplayName,
         createHousehold,
         joinHousehold,
-        leaveHousehold
+        leaveHousehold,
+        loadWeeklyCompletions,
+        currentUserWeeklyPoints,
+        weeklyRanking
     }
 })

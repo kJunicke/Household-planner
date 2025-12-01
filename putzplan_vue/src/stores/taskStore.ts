@@ -136,6 +136,11 @@ export const useTaskStore = defineStore('tasks', () => {
 
         // Reload tasks vom Backend (Source of Truth, kein optimistic update)
         await loadTasks()
+
+        // Reload weekly completions for header stats
+        const householdStore = useHouseholdStore()
+        await householdStore.loadWeeklyCompletions()
+
         toastStore.showToast('Aufgabe abgeschlossen', 'success', 3000)
         return true
     }

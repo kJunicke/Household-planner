@@ -8,11 +8,17 @@
 
 **WICHTIG**: `npm run dev` läuft bereits
 
-### Test Account (Playwright E2E Tests)
+### Test Accounts (Playwright E2E Tests)
+**Account 1:**
 Email: test@example.com
 Passwort: test123456
 Haushalt: Test-Haushalt
 Invite Code: FD1EB9CE
+
+**Account 2:**
+Email: test2@example.com
+Passwort: test123456
+Haushalt: Test-Haushalt (beigetreten via FD1EB9CE)
 
 ### MCP Server Setup
 

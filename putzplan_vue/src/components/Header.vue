@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { useAuthStore } from '../stores/authStore'
 import { useHouseholdStore } from '../stores/householdStore'
@@ -15,6 +15,10 @@ const currentMemberColor = computed(() => {
   const member = householdStore.householdMembers.find(m => m.user_id === authStore.user?.id)
   return member?.user_color || '#4A90E2'
 })
+
+onMounted(async () => {
+  await householdStore.loadWeeklyCompletions()
+})
 </script>
 
 <template>
@@ -22,6 +26,36 @@ const currentMemberColor = computed(() => {
     <!-- Compact Header Bar -->
     <div class="header-bar">
       <h1 class="page-title">Putzplan</h1>
+
+      <!-- Weekly Points Display -->
+      <div v-if="householdStore.weeklyRanking" class="points-display">
+        <!-- 1. Platz (Leader) -->
+        <div class="rank-item">
+          <span class="rank-position">1.</span>
+          <span
+            class="rank-color-dot"
+            :style="{ backgroundColor: householdStore.weeklyRanking.leader.color }"
+          ></span>
+          <span class="rank-name" :class="{ 'current-user': householdStore.weeklyRanking.isLeader }">
+            {{ householdStore.weeklyRanking.leader.name }}
+          </span>
+          <span class="rank-points">{{ householdStore.weeklyRanking.leader.points }}</span>
+        </div>
+
+        <!-- Eigener Platz (falls nicht Leader) -->
+        <div v-if="!householdStore.weeklyRanking.isLeader && householdStore.weeklyRanking.currentUser" class="rank-item">
+          <span class="rank-position">{{ householdStore.weeklyRanking.currentUserRank }}.</span>
+          <span
+            class="rank-color-dot"
+            :style="{ backgroundColor: householdStore.weeklyRanking.currentUser.color }"
+          ></span>
+          <span class="rank-name current-user">
+            {{ householdStore.weeklyRanking.currentUser.name }}
+          </span>
+          <span class="rank-points">{{ householdStore.weeklyRanking.currentUser.points }}</span>
+        </div>
+      </div>
+
       <div class="header-actions">
         <button
           class="user-avatar"
@@ -82,6 +116,7 @@ const currentMemberColor = computed(() => {
   justify-content: space-between;
   padding: 0.75rem 1rem;
   border-bottom: 1px solid var(--color-border);
+  gap: 0.75rem;
 }
 
 .page-title {
@@ -89,6 +124,57 @@ const currentMemberColor = computed(() => {
   font-weight: 700;
   color: var(--color-text-primary);
   margin: 0;
+  white-space: nowrap;
+}
+
+/* Weekly Points Display */
+.points-display {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-shrink: 1;
+  min-width: 0;
+}
+
+.rank-item {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 0.75rem;
+}
+
+.rank-position {
+  font-weight: 700;
+  color: var(--color-text-secondary);
+  font-size: 0.7rem;
+}
+
+.rank-color-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  flex-shrink: 0;
+}
+
+.rank-name {
+  font-weight: 600;
+  color: var(--color-text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 4rem;
+}
+
+.rank-name.current-user {
+  color: var(--color-primary);
+  font-weight: 700;
+}
+
+.rank-points {
+  font-weight: 700;
+  color: var(--color-text-primary);
+  white-space: nowrap;
 }
 
 .header-actions {
