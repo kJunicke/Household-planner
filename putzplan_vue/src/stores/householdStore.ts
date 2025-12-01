@@ -10,9 +10,9 @@ interface CompletionWithEffort {
   task_id: string
   completed_at: string
   effort_override: number | null
-  tasks?: {
+  tasks: {
     effort: number
-  }
+  } | null
 }
 
 export const useHouseholdStore = defineStore('household', () => {
@@ -180,7 +180,11 @@ export const useHouseholdStore = defineStore('household', () => {
             return
         }
 
-        weeklyCompletions.value = (data || []) as CompletionWithEffort[]
+        // Supabase gibt tasks als Array zurück, wir nehmen das erste Element
+        weeklyCompletions.value = (data || []).map(item => ({
+            ...item,
+            tasks: Array.isArray(item.tasks) ? item.tasks[0] || null : item.tasks
+        }))
     }
 
     // Berechne wöchentliche Punkte pro User
