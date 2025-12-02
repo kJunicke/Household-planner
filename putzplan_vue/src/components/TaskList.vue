@@ -39,6 +39,31 @@ const filteredTasks = computed(() => {
       task.parent_task_id === null && // Nur Parent Tasks
       task.task_type !== 'project' // Projekte werden separat angezeigt
     )
+
+    // Sortiere nach Fälligkeit (dringendste zuerst)
+    tasks.sort((a, b) => {
+      // Helper: Berechne verbleibende Tage bis Fälligkeit
+      const getDaysUntilDue = (task: Task): number => {
+        // One-time tasks haben keine Fälligkeit → ganz unten
+        if (task.task_type === 'one-time') return Infinity
+
+        // Recurring tasks ohne recurrence_days → ganz unten
+        if (task.task_type !== 'recurring' || !task.recurrence_days || !task.last_completed_at) {
+          return Infinity
+        }
+
+        const lastCompleted = new Date(task.last_completed_at)
+        const today = new Date()
+        const lastCompletedDate = new Date(lastCompleted.getFullYear(), lastCompleted.getMonth(), lastCompleted.getDate())
+        const todayDate = new Date(today.getFullYear(), today.getMonth(), today.getDate())
+
+        const daysPassed = Math.floor((todayDate.getTime() - lastCompletedDate.getTime()) / (1000 * 60 * 60 * 24))
+        return task.recurrence_days - daysPassed
+      }
+
+      // Sortiere nach verbleibenden Tagen (aufsteigend - nächste Fälligkeit zuerst)
+      return getDaysUntilDue(a) - getDaysUntilDue(b)
+    })
   } else if (props.filter === 'daily-todo') {
     // Tägliche Tasks (nicht completed) + einmalige Tasks
     tasks = taskStore.tasks.filter((task: Task) =>
@@ -53,6 +78,27 @@ const filteredTasks = computed(() => {
       task.parent_task_id === null && // Nur Parent Tasks
       task.task_type === 'recurring'
     )
+
+    // Sortiere nach Dringlichkeit (dringendste zuerst)
+    tasks.sort((a, b) => {
+      // Tasks ohne last_completed_at (noch nie gemacht) → ganz oben
+      if (!a.last_completed_at && !b.last_completed_at) return 0
+      if (!a.last_completed_at) return -1
+      if (!b.last_completed_at) return 1
+
+      // Berechne Tage überfällig für beide Tasks
+      const getDaysOverdue = (task: Task): number => {
+        if (!task.last_completed_at) return Infinity
+        const lastCompleted = new Date(task.last_completed_at)
+        const today = new Date()
+        const lastCompletedDate = new Date(lastCompleted.getFullYear(), lastCompleted.getMonth(), lastCompleted.getDate())
+        const todayDate = new Date(today.getFullYear(), today.getMonth(), today.getDate())
+        return Math.floor((todayDate.getTime() - lastCompletedDate.getTime()) / (1000 * 60 * 60 * 24))
+      }
+
+      // Sortiere nach Tagen überfällig (absteigend - mehr Tage = höhere Priorität)
+      return getDaysOverdue(b) - getDaysOverdue(a)
+    })
   } else if (props.filter === 'project-todo') {
     // Projekte (nicht completed)
     tasks = taskStore.tasks.filter((task: Task) =>

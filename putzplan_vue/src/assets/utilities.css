@@ -185,7 +185,7 @@
 .page-container {
   min-height: 100vh;
   background: var(--color-background);
-  padding-bottom: var(--spacing-xl);
+  padding-bottom: calc(64px + 48px + var(--spacing-xl) + env(safe-area-inset-bottom));
 }
 
 /* ============================================

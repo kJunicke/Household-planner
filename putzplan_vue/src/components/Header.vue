@@ -1,11 +1,9 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
-import { useRoute } from 'vue-router'
 import { useAuthStore } from '../stores/authStore'
 import { useHouseholdStore } from '../stores/householdStore'
 import SettingsSidebar from './SettingsSidebar.vue'
 
-const route = useRoute()
 const authStore = useAuthStore()
 const householdStore = useHouseholdStore()
 
@@ -73,27 +71,6 @@ onMounted(async () => {
       </div>
     </div>
 
-    <!-- Navigation Tabs -->
-    <nav class="nav-tabs-container">
-      <div class="nav-tabs-wrapper">
-        <router-link to="/" class="nav-tab" :class="{ active: route.path === '/' }">
-          <i class="bi bi-list-check"></i> Putzen
-        </router-link>
-        <router-link to="/history" class="nav-tab" :class="{ active: route.path === '/history' }">
-          <i class="bi bi-clock-history"></i> Verlauf
-        </router-link>
-        <router-link to="/stats" class="nav-tab" :class="{ active: route.path === '/stats' }">
-          <i class="bi bi-pie-chart"></i> Stats
-        </router-link>
-        <router-link to="/shopping" class="nav-tab" :class="{ active: route.path === '/shopping' }">
-          <i class="bi bi-cart3"></i> Einkauf
-        </router-link>
-      </div>
-    </nav>
-
-    <!-- Secondary Navigation for Category Tabs (only on Cleaning view) -->
-    <slot name="secondary-nav"></slot>
-
     <!-- Settings Sidebar -->
     <SettingsSidebar v-model:open="sidebarOpen" />
   </header>
@@ -115,7 +92,6 @@ onMounted(async () => {
   align-items: center;
   justify-content: space-between;
   padding: 0.75rem 1rem;
-  border-bottom: 1px solid var(--color-border);
   gap: 0.75rem;
 }
 
@@ -217,51 +193,6 @@ onMounted(async () => {
   color: var(--color-text-primary);
 }
 
-/* Navigation Tabs */
-.nav-tabs-container {
-  background: var(--color-background-elevated);
-}
-
-.nav-tabs-wrapper {
-  display: flex;
-  gap: 0;
-  border-bottom: 2px solid var(--color-border);
-}
-
-.nav-tab {
-  flex: 1;
-  padding: 0.75rem 0.5rem;
-  background: var(--color-background);
-  border: none;
-  border-bottom: 3px solid transparent;
-  color: var(--color-text-secondary);
-  text-decoration: none;
-  font-weight: 500;
-  font-size: 0.875rem;
-  transition: all 0.2s ease;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.5rem;
-  text-align: center;
-}
-
-.nav-tab i {
-  font-size: 1rem;
-}
-
-.nav-tab:hover {
-  background: var(--color-background-elevated);
-  color: var(--color-text-primary);
-}
-
-.nav-tab.active {
-  background: white;
-  color: var(--color-primary);
-  border-bottom-color: var(--color-primary);
-  font-weight: 600;
-}
-
 /* Desktop: slightly larger */
 @media (min-width: 768px) {
   .header-bar {
@@ -270,15 +201,6 @@ onMounted(async () => {
 
   .page-title {
     font-size: 1.5rem;
-  }
-
-  .nav-tab {
-    padding: 0.875rem 1rem;
-    font-size: 0.9375rem;
-  }
-
-  .nav-tab i {
-    font-size: 1.1rem;
   }
 }
 </style>

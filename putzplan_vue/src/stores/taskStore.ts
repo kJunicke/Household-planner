@@ -166,6 +166,32 @@ export const useTaskStore = defineStore('tasks', () => {
         return true
     }
 
+    // SKIP - Task zeitlich verschieben ohne Punkte zu vergeben
+    // Setzt last_completed_at auf jetzt (für Cron-Job Berechnung)
+    // OHNE task_completions Entry (keine Punkte, keine Historie)
+    // completed bleibt FALSE (Task bleibt dirty, nur zeitlich verschoben)
+    const skipTask = async (taskId: string) => {
+        const toastStore = useToastStore()
+
+        const { error } = await supabase
+            .from('tasks')
+            .update({
+                last_completed_at: new Date().toISOString()
+            })
+            .eq('task_id', taskId)
+
+        if (error) {
+            console.error('Error skipping task:', error)
+            toastStore.showToast('Fehler beim Verschieben der Aufgabe', 'error')
+            return false
+        }
+
+        toastStore.showToast('Task verschoben', 'success')
+        // Reload tasks vom Backend (Source of Truth)
+        await loadTasks()
+        return true
+    }
+
     // CREATE - Neue Task erstellen
     // completed, last_completed_at, assigned_to, assignment_permanent, parent_task_id, order_index sind optional - Database setzt Defaults
     // task_type defaults to 'recurring' if not provided (for backwards compatibility)
@@ -659,6 +685,7 @@ export const useTaskStore = defineStore('tasks', () => {
         toggleTask,
         completeTask,
         markAsDirty,
+        skipTask,
         createTask,
         updateTask,
         deleteTask,

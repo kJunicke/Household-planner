@@ -285,7 +285,7 @@ onUnmounted(() => {
 /* Floating Action Buttons */
 .fab-group {
   position: fixed;
-  bottom: 24px;
+  bottom: calc(64px + 48px + 16px + env(safe-area-inset-bottom));
   right: 24px;
   display: flex;
   align-items: center;

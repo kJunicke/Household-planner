@@ -12,6 +12,7 @@ interface Emits {
   (e: 'delete'): void
   (e: 'assign'): void
   (e: 'manage-subtasks'): void
+  (e: 'skip'): void
 }
 
 const props = defineProps<Props>()
@@ -110,19 +111,22 @@ const handleClose = () => {
         <div class="modal-footer">
           <!-- Zusätzliche Actions links -->
           <div class="footer-actions-left">
-            <button class="btn btn-outline-danger" @click="emit('delete')" title="Aufgabe löschen">
-              🗑️ Löschen
+            <button class="btn btn-outline-warning btn-compact" @click="emit('skip')" title="Als erledigt markieren ohne Punkte">
+              ⏭️
             </button>
-            <button class="btn btn-outline-secondary" @click="emit('assign')" title="Aufgabe zuweisen">
-              👤 Zuweisen
+            <button class="btn btn-outline-secondary btn-compact" @click="emit('assign')" title="Aufgabe zuweisen">
+              👤
             </button>
             <button
               v-if="!task.parent_task_id"
-              class="btn btn-outline-primary"
+              class="btn btn-outline-primary btn-compact"
               @click="emit('manage-subtasks')"
               title="Subtasks verwalten"
             >
-              ⚙ Subtasks
+              ⚙
+            </button>
+            <button class="btn btn-outline-danger btn-compact" @click="emit('delete')" title="Aufgabe löschen">
+              🗑️
             </button>
           </div>
 
@@ -196,6 +200,13 @@ const handleClose = () => {
   display: flex;
   gap: 0.5rem;
   margin-left: auto;
+}
+
+/* Kompakte Button-Variante für Action-Icons */
+.btn-compact {
+  padding: 0.5rem 0.75rem;
+  font-size: 1.125rem;
+  min-width: 44px;
 }
 
 @media (max-width: 640px) {

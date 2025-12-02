@@ -60,6 +60,11 @@ const handleEditManageSubtasks = () => {
      openSubtaskManagementModal()
 }
 
+const handleEditSkip = async () => {
+     showEditModal.value = false
+     await taskStore.skipTask(props.task.task_id)
+}
+
 const handleDeleteTask = async () => {
      try {
           await taskStore.deleteTask(props.task.task_id)
@@ -132,6 +137,78 @@ const daysUntilDue = computed(() => {
      const daysRemaining = props.task.recurrence_days - daysPassed
 
      return daysRemaining
+})
+
+// Berechnet wie viele Tage ein Task bereits überfällig ist (nur für recurring dirty tasks)
+const daysOverdue = computed(() => {
+     // Nur für wiederkehrende Tasks die NICHT completed sind
+     if (props.task.task_type !== 'recurring' || props.task.completed) {
+          return null
+     }
+
+     // Task wurde noch nie gemacht
+     if (!props.task.last_completed_at) {
+          return 'Noch nie gemacht'
+     }
+
+     const lastCompleted = new Date(props.task.last_completed_at)
+     const today = new Date()
+
+     // Calendar days: Nur Datum vergleichen, keine Uhrzeit
+     const lastCompletedDate = new Date(lastCompleted.getFullYear(), lastCompleted.getMonth(), lastCompleted.getDate())
+     const todayDate = new Date(today.getFullYear(), today.getMonth(), today.getDate())
+
+     // Berechne vergangene Tage
+     const daysPassed = Math.floor((todayDate.getTime() - lastCompletedDate.getTime()) / (1000 * 60 * 60 * 24))
+
+     return `${daysPassed} ${daysPassed === 1 ? 'Tag' : 'Tage'} überfällig`
+})
+
+// Berechnet Fälligkeits- oder Completion-Info für completed tasks
+const dueInDays = computed(() => {
+     // Nur für completed tasks
+     if (!props.task.completed || !props.task.last_completed_at) {
+          return null
+     }
+
+     const lastCompleted = new Date(props.task.last_completed_at)
+
+     // ONE-TIME TASKS: Zeige Completion-Datum
+     if (props.task.task_type === 'one-time') {
+          const dateStr = lastCompleted.toLocaleDateString('de-DE', {
+               day: '2-digit',
+               month: '2-digit',
+               year: 'numeric'
+          })
+          return `Erledigt am ${dateStr}`
+     }
+
+     // RECURRING TASKS: Zeige wann wieder fällig
+     if (props.task.task_type === 'recurring' && props.task.recurrence_days > 0) {
+          const today = new Date()
+
+          // Calendar days: Nur Datum vergleichen, keine Uhrzeit
+          const lastCompletedDate = new Date(lastCompleted.getFullYear(), lastCompleted.getMonth(), lastCompleted.getDate())
+          const todayDate = new Date(today.getFullYear(), today.getMonth(), today.getDate())
+
+          // Berechne vergangene Tage seit letzter Completion
+          const daysPassed = Math.floor((todayDate.getTime() - lastCompletedDate.getTime()) / (1000 * 60 * 60 * 24))
+
+          // Verbleibende Tage bis zum Reset
+          const daysRemaining = props.task.recurrence_days - daysPassed
+
+          if (daysRemaining < 0) {
+               return 'Überfällig' // Sollte nicht vorkommen (completed sollte false sein), aber Fallback
+          } else if (daysRemaining === 0) {
+               return 'Heute fällig'
+          } else if (daysRemaining === 1) {
+               return 'Morgen fällig'
+          } else {
+               return `Fällig in ${daysRemaining} Tagen`
+          }
+     }
+
+     return null
 })
 
 // Assignment Badge - Zeigt Initialen und Namen des zugewiesenen Members
@@ -323,11 +400,6 @@ const handleCompleteProject = async () => {
                                    {{ completedSubtasksCount }}/{{ subtasks.length }}
                               </span>
 
-                              <!-- Due Date (wenn vorhanden) -->
-                              <span v-if="daysUntilDue !== null" class="meta-badge due-badge">
-                                   {{ daysUntilDue }}d
-                              </span>
-
                               <!-- Expand Icon (klein, ausgegraut, unten rechts) -->
                               <button
                                    v-if="!props.task.parent_task_id && subtasks.length > 0"
@@ -337,6 +409,17 @@ const handleCompleteProject = async () => {
                               >
                                    {{ subtasksExpanded ? '▲' : '▼' }}
                               </button>
+
+                              <!-- Due Date (wenn vorhanden) -->
+                              <span v-if="daysUntilDue !== null" class="meta-badge due-badge">
+                                   {{ daysUntilDue }}d
+                              </span>
+
+                              <!-- Overdue indicator (only for recurring dirty tasks) -->
+                              <span v-if="daysOverdue" class="overdue-text">{{ daysOverdue }}</span>
+
+                              <!-- Due in X days (only for recurring completed tasks) -->
+                              <span v-if="dueInDays" class="overdue-text">{{ dueInDays }}</span>
                          </div>
                     </div>
                </div>
@@ -517,6 +600,7 @@ const handleCompleteProject = async () => {
                @delete="handleEditDelete"
                @assign="handleEditAssign"
                @manage-subtasks="handleEditManageSubtasks"
+               @skip="handleEditSkip"
           />
      </div>
 
@@ -600,6 +684,13 @@ const handleCompleteProject = async () => {
      line-height: 1.3;
      word-wrap: break-word;
      overflow-wrap: break-word;
+}
+
+.overdue-text {
+     font-size: 0.75rem;
+     color: var(--color-text-muted);
+     margin-top: 0.125rem;
+     line-height: 1.2;
 }
 
 .task-meta {

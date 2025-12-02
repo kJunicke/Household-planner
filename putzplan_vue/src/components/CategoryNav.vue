@@ -98,9 +98,16 @@ emit('update:category', selectedCategory.value)
 
 <style scoped>
 .category-nav-container {
-  background: var(--color-background);
-  border-bottom: 1px solid var(--color-border);
+  position: fixed;
+  bottom: 64px;
+  left: 0;
+  right: 0;
+  background: var(--color-background-elevated);
+  border-top: 1px solid var(--color-border);
   padding: 8px 0;
+  z-index: 850;
+  box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.05);
+  padding-bottom: env(safe-area-inset-bottom);
 }
 
 .chip-container {

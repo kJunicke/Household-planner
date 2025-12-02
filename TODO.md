@@ -6,7 +6,27 @@
 
 ## 🎯 High Priority
 
-Verbessern der User Experience. Die Schritte dafür sind in UX_Analysis_Mobile.md klarifiziert.
+### UX Improvements
+- ✅ **Bottom Navigation** - ABGESCHLOSSEN (02.12.2025)
+  - FAB-Positionierung über Bottom Nav + CategoryNav
+  - iOS Safari safe-area-inset-bottom Support
+  - Material Design Bottom Nav Pattern
+- ✅ **Task-Dringlichkeitsanzeige** - ABGESCHLOSSEN (02.12.2025)
+  - "X Tage überfällig" / "Noch nie gemacht" im Putzen-View
+  - Sortierung nach Dringlichkeit (dringendste zuerst)
+  - "Fällig in X Tagen" / "Erledigt am [Datum]" im Erledigt-View
+  - Sortierung nach Fälligkeit (nächste zuerst)
+- ✅ **Skip-Funktion** - ABGESCHLOSSEN (02.12.2025)
+  - ⏭️ Button im TaskEditModal
+  - Task zeitlich verschieben ohne Punkte zu vergeben
+
+### Task Management
+- **"Meine Aufgaben" View** - Extra Tab für zugewiesene Tasks (Option 1)
+  - CategoryNav erweitern um 5. Tab: "Meine Aufgaben"
+  - Neuer Filter in TaskList: `filter="assigned-todo"`
+  - Store-Computed: `taskStore.assignedTasks` (filtert nach `assigned_to = current_user_id`)
+  - Pattern: Standard in Asana "My Tasks", Todoist "Assigned to me"
+  - Vorteil: Klare User-Erwartung, nutzt bereits vorhandenes Assignment-Feature
 
 ### Gamification System
 - **User Stats** - XP, Level, Streaks pro Haushalt
@@ -14,8 +34,6 @@ Verbessern der User Experience. Die Schritte dafür sind in UX_Analysis_Mobile.m
 
 ### Code Quality
 - **Form Validation** - Input-Validierung für alle Forms
-- **Lokale Supabase Dev** - `supabase start` Setup für lokales Testing
-
 ---
 
 ## 💡 Backlog (Future Ideas)
@@ -35,6 +53,21 @@ Verbessern der User Experience. Die Schritte dafür sind in UX_Analysis_Mobile.m
 **Migrations:** Konsolidiert am 26.10.2025 (29 → 4 Migrations)
 
 **Letzte größere Features:**
+- ✅ Task-Dringlichkeitsanzeige & Skip-Funktion - 02.12.2025
+  - Overdue-Anzeige: "X Tage überfällig" / "Noch nie gemacht" im Putzen-View
+  - Sortierung nach Dringlichkeit (dringendste Tasks zuerst)
+  - Skip-Funktion: ⏭️ Button setzt last_completed_at ohne Punkte zu vergeben
+  - Erledigt-View: "Fällig in X Tagen" für recurring Tasks, "Erledigt am [Datum]" für one-time Tasks
+  - Sortierung nach Fälligkeit (nächste Fälligkeit zuerst)
+  - Graue dezente Textzeile in task-meta (0.75rem)
+- ✅ Bottom Navigation für Mobile UX - 02.12.2025
+  - Fixed Bottom Navigation mit 4 Tabs (Putzen, Verlauf, Stats, Einkauf)
+  - Material Design Pattern mit Active State Indicator
+  - Header vereinfacht (Navigation Tabs entfernt, ~50% kompakter)
+  - CategoryNav über Bottom Nav positioniert
+  - FABs über CategoryNav + Bottom Nav (WhatsApp-Style)
+  - iOS Safe-area-inset Support
+  - Z-Index Hierarchie optimiert
 - ✅ Vollständige Typography-Vereinheitlichung - 30.11.2025
   - Typography-Overrides aus utilities.css entfernt
   - Semantisch korrekte HTML-Heading-Hierarchie (h1 → h2 → h3 → h4)

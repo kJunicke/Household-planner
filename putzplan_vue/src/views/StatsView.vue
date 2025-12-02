@@ -307,7 +307,7 @@ const barChartOptions = {
 </script>
 
 <template>
-  <div class="stats-view">
+  <div class="page-container">
     <div class="container mt-4">
       <h2 class="page-title mb-4">Statistiken</h2>
 
@@ -375,12 +375,6 @@ const barChartOptions = {
 </template>
 
 <style scoped>
-.stats-view {
-  min-height: 100vh;
-  background: var(--color-background);
-  padding: 1rem 0;
-}
-
 /* Use global .page-title from base.css - no override needed */
 
 .time-period-tabs {
