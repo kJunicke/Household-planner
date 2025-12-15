@@ -86,8 +86,8 @@ export const useTaskStore = defineStore('tasks', () => {
 
     // COMPLETE - Task als erledigt markieren (via Edge Function)
     // Edge Function schreibt in task_completions Historie UND setzt tasks.completed = TRUE + last_completed_at
-    // Optional: effortOverride und overrideReason für Sonderfälle (z.B. unerwarteter Mehraufwand)
-    const completeTask = async (taskId: string, effortOverride?: number, overrideReason?: string) => {
+    // Optional: effortOverride und completionNote für Sonderfälle (z.B. unerwarteter Mehraufwand)
+    const completeTask = async (taskId: string, effortOverride?: number, completionNote?: string) => {
         const authStore = useAuthStore()
         const toastStore = useToastStore()
 
@@ -97,23 +97,20 @@ export const useTaskStore = defineStore('tasks', () => {
             return false
         }
 
-        // Validierung: Wenn effortOverride gesetzt, muss auch overrideReason vorhanden sein
-        if (effortOverride !== undefined && !overrideReason?.trim()) {
-            console.error('Cannot complete task: effort_override requires override_reason')
-            toastStore.showToast('Aufwandsüberschreibung benötigt eine Begründung', 'error')
-            return false
-        }
-
         // Call Edge Function (replaces direct DB access + trigger logic)
+        // effortOverride and completionNote are both optional and independent
         const payload: {
             taskId: string
             effortOverride?: number
-            overrideReason?: string
+            completionNote?: string
         } = { taskId }
 
-        if (effortOverride !== undefined && overrideReason) {
+        if (effortOverride !== undefined) {
             payload.effortOverride = effortOverride
-            payload.overrideReason = overrideReason
+        }
+
+        if (completionNote?.trim()) {
+            payload.completionNote = completionNote
         }
 
         const { data, error } = await supabase.functions.invoke('complete-task', {
@@ -468,7 +465,7 @@ export const useTaskStore = defineStore('tasks', () => {
                 user_id,
                 task_id,
                 effort_override,
-                override_reason,
+                completion_note,
                 tasks!inner (
                     title
                 )
@@ -487,16 +484,16 @@ export const useTaskStore = defineStore('tasks', () => {
         const enriched = data.map(completion => {
             const taskData = Array.isArray(completion.tasks) ? completion.tasks[0] : completion.tasks
             const completionData = completion as typeof completion & {
-                effort_override?: number | null
-                override_reason?: string | null
+                effort_override: number
+                completion_note?: string | null
             }
             return {
                 completion_id: completion.completion_id,
                 completed_at: completion.completed_at,
                 user_id: completion.user_id, // WICHTIG: user_id für Stats-Berechnung
                 task_id: completion.task_id, // WICHTIG: task_id für Effort-Lookup
-                effort_override: completionData.effort_override || null,
-                override_reason: completionData.override_reason || null,
+                effort_override: completionData.effort_override, // UNIFIED: ALWAYS set (Single Source of Truth)
+                completion_note: completionData.completion_note || null,
                 tasks: {
                     title: (taskData as { title: string } | null)?.title || 'Unbekannte Aufgabe'
                 },
@@ -663,16 +660,11 @@ export const useTaskStore = defineStore('tasks', () => {
         const subtaskIds = subtasks.map(s => s.task_id)
 
         // Sum up effort from all completions of project subtasks
+        // UNIFIED SOLUTION: Use effort_override (ALWAYS set, Single Source of Truth)
         return completions.value
             .filter(c => subtaskIds.includes(c.task_id))
             .reduce((total, completion) => {
-                // Find the subtask to get its effort value
-                const subtask = tasks.value.find(t => t.task_id === completion.task_id)
-                if (!subtask) return total
-
-                // Use effort_override if present, otherwise use subtask's default effort
-                const effort = completion.effort_override ?? subtask.effort
-                return total + effort
+                return total + completion.effort_override
             }, 0)
     }
 

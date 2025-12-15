@@ -6,7 +6,7 @@ import { createClient } from 'jsr:@supabase/supabase-js@2'
 interface CompleteTaskRequest {
   taskId: string
   effortOverride?: number
-  overrideReason?: string
+  completionNote?: string
 }
 
 // CORS headers for all responses
@@ -26,7 +26,7 @@ Deno.serve(async (req) => {
 
   try {
     // 1. Parse request body
-    const { taskId, effortOverride, overrideReason }: CompleteTaskRequest = await req.json()
+    const { taskId, effortOverride, completionNote }: CompleteTaskRequest = await req.json()
 
     // 2. Validate input
     if (!taskId) {
@@ -36,13 +36,8 @@ Deno.serve(async (req) => {
       )
     }
 
-    // Validate: If effortOverride set, overrideReason must be provided
-    if (effortOverride !== undefined && !overrideReason?.trim()) {
-      return new Response(
-        JSON.stringify({ error: 'effort_override requires override_reason' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      )
-    }
+    // Note: effortOverride and completionNote are both optional and independent
+    // User can set custom effort WITHOUT a note, or add a note WITHOUT changing effort
 
     // 3. Create authenticated Supabase client (uses user's JWT from Authorization header)
     const authHeader = req.headers.get('Authorization')
@@ -113,8 +108,8 @@ Deno.serve(async (req) => {
         const completionData = {
           task_id: taskId,
           user_id: user.id,
-          effort_override: 0,
-          override_reason: 'Checklist-Subtask (nur Tracking, keine Punkte)'
+          effort_override: 0,  // ALWAYS set (0 points for checklist subtasks)
+          completion_note: completionNote || null  // Optional user note
         }
 
         const { error: completionError } = await supabase
@@ -152,7 +147,6 @@ Deno.serve(async (req) => {
 
     // 7. Calculate final effort based on SUBTASK-level subtask_points_mode (only for PARENT tasks with NO effortOverride)
     let finalEffort = taskDetails.effort // Default: use task's base effort
-    let autoReason: string | undefined = undefined
 
     // Only apply subtask points logic if:
     // - This is a PARENT task (parent_task_id === null)
@@ -170,19 +164,13 @@ Deno.serve(async (req) => {
       } else if (subtasks && subtasks.length > 0) {
         // Group completed subtasks by their individual points mode
         const completedSubtasks = subtasks.filter(s => s.completed)
-
-        const checklistSubtasks = completedSubtasks.filter(s => s.subtask_points_mode === 'checklist')
         const deductSubtasks = completedSubtasks.filter(s => s.subtask_points_mode === 'deduct')
-        const bonusSubtasks = completedSubtasks.filter(s => s.subtask_points_mode === 'bonus')
-
-        const checklistCount = checklistSubtasks.length
-        const deductSum = deductSubtasks.reduce((sum, s) => sum + s.effort, 0)
-        const bonusCount = bonusSubtasks.length
 
         // Calculate final effort
         // Formula: parentEffort - deductSum
         // Bonus subtasks award points when completed individually, NOT at parent completion
         // Checklist subtasks count 0 (tracking only)
+        const deductSum = deductSubtasks.reduce((sum, s) => sum + s.effort, 0)
         finalEffort = taskDetails.effort - deductSum
 
         // VALIDATION: Prevent negative points
@@ -201,37 +189,27 @@ Deno.serve(async (req) => {
           )
         }
 
-        // Build auto-reason for tracking
-        const reasonParts: string[] = []
-        if (checklistCount > 0) reasonParts.push(`${checklistCount} Checkliste`)
-        if (deductSum > 0) reasonParts.push(`${deductSum} abgezogen`)
-        if (bonusCount > 0) reasonParts.push(`${bonusCount} Bonus (bereits belohnt)`)
-
-        if (reasonParts.length > 0) {
-          autoReason = `Subtasks: ${reasonParts.join(', ')} → ${finalEffort} Punkte`
-        }
+        // Note: autoReason was removed in Unified Effort System
+        // effort_override is now ALWAYS set, making auto-generated reasons obsolete
+        // Users can add optional completion_note if they want to document their work
       }
     }
 
     // 8. INSERT task_completion (RLS checks: task belongs to user's household + user_id matches auth)
+    // UNIFIED SOLUTION: effort_override is ALWAYS set (Single Source of Truth for historical points)
+    // This prevents historical data from changing when task.effort is modified later
+    const finalEffortValue = effortOverride !== undefined ? effortOverride : finalEffort
+
     const completionData: {
       task_id: string
       user_id: string
-      effort_override?: number
-      override_reason?: string
+      effort_override: number  // ALWAYS set (even for standard completions)
+      completion_note: string | null  // Optional user note (independent of effort changes)
     } = {
       task_id: taskId,
-      user_id: user.id
-    }
-
-    // User override takes precedence over auto-calculation
-    if (effortOverride !== undefined && overrideReason) {
-      completionData.effort_override = effortOverride
-      completionData.override_reason = overrideReason
-    } else if (finalEffort !== taskDetails.effort && autoReason) {
-      // Auto-calculated effort (from subtask_points_mode)
-      completionData.effort_override = finalEffort
-      completionData.override_reason = autoReason
+      user_id: user.id,
+      effort_override: finalEffortValue,  // ← ALWAYS set for historical integrity
+      completion_note: completionNote || null  // User can add optional note
     }
 
     const { error: completionError } = await supabase

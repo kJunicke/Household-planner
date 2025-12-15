@@ -2,6 +2,8 @@
 
 **Putzplan** - Gamifizierte Shared-Household Task-App mit Vue 3 + Supabase
 
+**📋 Bug-Datenbank**: Siehe [`BUG-PATTERNS.md`](BUG-PATTERNS.md) für dokumentierte Bugs und deren Lösungen. Bei neuen Bugs bitte dort eintragen!
+
 ## 🛠️ Development Workflow
 
 **Arbeitsverzeichnis**: `putzplan_vue/`
@@ -45,6 +47,7 @@ npm run build
 - **Pinia** für State Management (direkte Nutzung in Components)
 - **Supabase** als Backend & Source of Truth (Auth, DB, Realtime)
 - **Bootstrap 5** für UI (außer Modals)
+- **Kein Docker**: Natives Setup ohne Container (npx supabase für CLI)
 
 ### Projektstruktur
 ```

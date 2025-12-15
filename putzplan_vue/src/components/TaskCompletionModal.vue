@@ -9,24 +9,25 @@ interface Props {
 
 interface Emits {
   (e: 'close'): void
-  (e: 'confirm', effortOverride: number, reason: string): void
+  (e: 'confirm', effortOverride: number, note: string): void
 }
 
 const props = defineProps<Props>()
 const emit = defineEmits<Emits>()
 
 const selectedEffort = ref<number | null>(null)
-const reason = ref('')
+const note = ref('')
 
 const effortOptions = [1, 2, 3, 4, 5]
 
 const canConfirm = computed(() => {
-  return selectedEffort.value !== null && reason.value.trim().length > 0
+  // Effort selection is required, note is optional
+  return selectedEffort.value !== null
 })
 
 const handleConfirm = () => {
   if (canConfirm.value && selectedEffort.value !== null && !props.isLoading) {
-    emit('confirm', selectedEffort.value, reason.value.trim())
+    emit('confirm', selectedEffort.value, note.value.trim())
   }
 }
 
@@ -65,17 +66,16 @@ const handleClose = () => {
             </div>
           </div>
 
-          <div class="reason-input">
-            <label for="reason" class="form-label">
-              Warum war der Aufwand anders? *
+          <div class="note-input">
+            <label for="note" class="form-label">
+              Notiz (optional)
             </label>
             <textarea
-              id="reason"
-              v-model="reason"
+              id="note"
+              v-model="note"
               class="form-control"
               rows="3"
               placeholder="z.B. War sehr dreckig, Pfannen eingebrannt und Kühlschrank noch ausgewischt"
-              required
             ></textarea>
           </div>
         </div>
@@ -167,7 +167,7 @@ const handleClose = () => {
   box-shadow: 0 0 0 3px rgba(13, 110, 253, 0.25);
 }
 
-.reason-input {
+.note-input {
   margin-bottom: 1rem;
 }
 

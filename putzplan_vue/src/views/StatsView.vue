@@ -4,7 +4,6 @@ import { Pie, Bar } from 'vue-chartjs'
 import { Chart as ChartJS, Title, Tooltip, Legend, ArcElement, BarElement, CategoryScale, LinearScale } from 'chart.js'
 import { useHouseholdStore } from '../stores/householdStore'
 import { useTaskStore } from '../stores/taskStore'
-import type { Task } from '@/types/Task'
 
 ChartJS.register(Title, Tooltip, Legend, ArcElement, BarElement, CategoryScale, LinearScale)
 
@@ -19,8 +18,8 @@ interface CompletionWithDetails {
   completed_at: string
   user_id: string
   task_id: string
-  effort_override: number | null
-  override_reason: string | null
+  effort_override: number // ALWAYS set: Single Source of Truth for historical points
+  completion_note: string | null
   tasks: {
     title: string
   }
@@ -85,9 +84,9 @@ const effortByUser = computed(() => {
   const effortMap = new Map<string, number>()
 
   completions.forEach(completion => {
-    const task = taskStore.tasks.find((t: Task) => t.task_id === completion.task_id)
-    // Priorisiere effort_override (Mehraufwand), sonst Standard-Effort
-    const effort = completion.effort_override ?? task?.effort ?? 1
+    // UNIFIED SOLUTION: Always use effort_override (Single Source of Truth)
+    // effort_override is ALWAYS set (even for standard completions) to preserve historical data
+    const effort = completion.effort_override
 
     const currentEffort = effortMap.get(completion.user_id) || 0
     effortMap.set(completion.user_id, currentEffort + effort)

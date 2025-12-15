@@ -10,8 +10,8 @@ const householdStore = useHouseholdStore()
 interface CompletionWithDetails {
   completion_id: string
   completed_at: string
-  effort_override: number | null
-  override_reason: string | null
+  effort_override: number // ALWAYS set: Historical effort value (Single Source of Truth)
+  completion_note: string | null
   task_id: string // Für Subtask-Lookup
   tasks: {
     title: string
@@ -106,15 +106,10 @@ const getTaskInfo = (completion: CompletionWithDetails) => {
 }
 
 // Helper: Calculate points for completion
+// UNIFIED SOLUTION: Always use effort_override (Single Source of Truth for historical points)
+// effort_override is ALWAYS set (even for standard completions) to preserve historical data
 const getCompletionPoints = (completion: CompletionWithDetails): number => {
-  // If effort_override is set, use that
-  if (completion.effort_override !== null) {
-    return completion.effort_override
-  }
-
-  // Otherwise, use task's effort
-  const task = taskStore.tasks.find((t: Task) => t.task_id === completion.task_id)
-  return task?.effort || 0
+  return completion.effort_override
 }
 
 // Close dropdown when clicking outside
@@ -195,13 +190,13 @@ onUnmounted(() => {
                 {{ getCompletionPoints(completion) }} Pkt
               </span>
             </div>
-            <div v-if="completion.effort_override !== null" class="effort-override-note">
-              <div class="override-badge">
-                <i class="bi bi-exclamation-circle"></i>
-                Aufwand: {{ completion.effort_override }}
+            <div v-if="completion.completion_note" class="completion-note-display">
+              <div class="note-badge">
+                <i class="bi bi-sticky"></i>
+                Notiz
               </div>
-              <div class="override-reason">
-                {{ completion.override_reason }}
+              <div class="note-content">
+                {{ completion.completion_note }}
               </div>
             </div>
           </div>
@@ -388,29 +383,29 @@ onUnmounted(() => {
   align-items: center;
 }
 
-.effort-override-note {
+.completion-note-display {
   margin-top: 0.75rem;
   padding: 0.75rem;
-  background: var(--color-warning-light, #fff3cd);
-  border-left: 3px solid var(--color-warning, #ffc107);
+  background: var(--bs-info-bg, #cfe2ff);
+  border-left: 3px solid var(--bs-info);
   border-radius: var(--radius-sm);
 }
 
-.override-badge {
+.note-badge {
   display: flex;
   align-items: center;
   gap: 0.375rem;
   font-size: 0.8125rem;
   font-weight: 600;
-  color: var(--color-warning-dark, #856404);
+  color: var(--bs-info);
   margin-bottom: 0.375rem;
 }
 
-.override-badge i {
+.note-badge i {
   font-size: 1rem;
 }
 
-.override-reason {
+.note-content {
   font-size: 0.875rem;
   color: var(--color-text-primary);
   line-height: 1.4;
