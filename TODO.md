@@ -53,6 +53,10 @@
 **Migrations:** Konsolidiert am 26.10.2025 (29 → 4 Migrations)
 
 **Letzte größere Features:**
+- ✅ Fix: Deduct-Subtask Overflow Bug - 22.12.2025
+  - Edge Function `complete-task` blockierte Parent-Task wenn Deduct-Sum > Parent-Effort
+  - Jetzt graceful: `Math.max(0, parentEffort - deductSum)` statt 400 Error
+  - Warnung wird geloggt für Debugging
 - ✅ Haushalt-Notizen Feature - 22.12.2025
   - 5. Tab "Notizen" in Bottom Navigation
   - Alle Haushaltsmitglieder können Notizen erstellen, bearbeiten, löschen

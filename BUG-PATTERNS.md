@@ -114,6 +114,48 @@ npx supabase functions deploy complete-task
 
 ---
 
+## 🐛 Bug #3: Deduct-Subtask Overflow blockiert Parent-Task-Completion (22.12.2025)
+
+### Problem
+Wenn die Summe der abgeschlossenen Deduct-Subtasks größer war als der Parent-Task-Effort, konnte der Parent-Task nicht mehr abgeschlossen werden. Die Edge Function gab einen 400-Error zurück.
+
+### Root Cause
+Die Edge Function hatte eine strenge Validation, die negative Punkte komplett blockierte:
+```typescript
+// VORHER: Blockierte den Task komplett
+if (finalEffort < 0) {
+  return new Response(
+    JSON.stringify({ error: 'Nicht genug Punkte!' }),
+    { status: 400, ... }
+  )
+}
+```
+
+### Symptome
+- Console-Error: `FunctionsHttpError: Edge Function returned a non-2xx status code`
+- POST zu `complete-task` gibt 400 Bad Request
+- Parent-Task mit abgeschlossenen Deduct-Subtasks kann nicht completed werden
+- Problem tritt bei recurring Tasks (nicht daily) auf
+
+### Lösung
+Graceful Handling statt Blocking:
+```typescript
+// NACHHER: Gibt minimum 0 Punkte statt zu blocken
+finalEffort = Math.max(0, taskDetails.effort - deductSum)
+
+// Warnung wird geloggt für Debugging
+if (taskDetails.effort - deductSum < 0) {
+  console.warn(`[Deduct Overflow] Parent effort exceeded...`)
+}
+```
+
+### Prävention
+- Bei Subtask-Erstellung könnte Frontend validieren, dass Deduct-Sum ≤ Parent-Effort
+- Edge Function sollte graceful sein und Edge Cases behandeln statt zu blocken
+- User bekommt 0 Punkte für Parent wenn Deducts übersteigen (mathematisch korrekt)
+
+---
+
 ## 📝 Template für neue Bug-Einträge
 
 ```markdown

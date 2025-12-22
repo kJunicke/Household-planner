@@ -167,25 +167,17 @@ Deno.serve(async (req) => {
         const deductSubtasks = completedSubtasks.filter(s => s.subtask_points_mode === 'deduct')
 
         // Calculate final effort
-        // Formula: parentEffort - deductSum
+        // Formula: parentEffort - deductSum (minimum 0)
         // Bonus subtasks award points when completed individually, NOT at parent completion
         // Checklist subtasks count 0 (tracking only)
         const deductSum = deductSubtasks.reduce((sum, s) => sum + s.effort, 0)
-        finalEffort = taskDetails.effort - deductSum
+        finalEffort = Math.max(0, taskDetails.effort - deductSum)
 
-        // VALIDATION: Prevent negative points
-        if (finalEffort < 0) {
-          return new Response(
-            JSON.stringify({
-              error: 'Nicht genug Punkte!',
-              message: `Abziehen-Subtasks (${deductSum} Punkte) übersteigen Parent-Aufwand (${taskDetails.effort} Punkte). Bitte passe die Subtask-Aufwände oder den Parent-Aufwand an.`,
-              details: {
-                parentEffort: taskDetails.effort,
-                deductSum,
-                resultingEffort: finalEffort
-              }
-            }),
-            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        // Log warning if deduct sum exceeds parent effort (configuration issue)
+        if (taskDetails.effort - deductSum < 0) {
+          console.warn(
+            `[Deduct Overflow] Parent effort (${taskDetails.effort}) exceeded by deduct subtasks (${deductSum}).`,
+            `Task: ${taskId}, awarding 0 points for parent.`
           )
         }
 
