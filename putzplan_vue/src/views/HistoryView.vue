@@ -26,6 +26,7 @@ const showDeleteModal = ref(false)
 const completionToDelete = ref<CompletionWithDetails | null>(null)
 const showDeleteAllModal = ref(false)
 const showOptionsDropdown = ref(false)
+const isLoading = ref(true)
 
 // Reactive completions from store (updated via Realtime)
 const completions = computed(() => {
@@ -120,8 +121,18 @@ const handleClickOutside = (event: MouseEvent) => {
   }
 }
 
-onMounted(() => {
+onMounted(async () => {
   document.addEventListener('click', handleClickOutside)
+
+  // Load tasks and completions on mount (needed when navigating directly to /history or on page reload)
+  try {
+    await Promise.all([
+      taskStore.loadTasks(),
+      taskStore.fetchCompletions()
+    ])
+  } finally {
+    isLoading.value = false
+  }
 })
 
 onUnmounted(() => {
@@ -153,7 +164,14 @@ onUnmounted(() => {
         </div>
       </div>
 
-      <div v-if="completions.length === 0" class="empty-state">
+      <div v-if="isLoading" class="empty-state">
+        <div class="spinner-border text-primary" role="status">
+          <span class="visually-hidden">Laden...</span>
+        </div>
+        <p>Lade Verlauf...</p>
+      </div>
+
+      <div v-else-if="completions.length === 0" class="empty-state">
         <i class="bi bi-clock-history"></i>
         <p>Noch keine erledigten Tasks</p>
       </div>

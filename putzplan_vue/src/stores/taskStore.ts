@@ -506,6 +506,10 @@ export const useTaskStore = defineStore('tasks', () => {
         })
 
         console.log('Fetched completions:', enriched)
+
+        // Store completions in state (for HistoryView reactive access)
+        completions.value = enriched as TaskCompletion[]
+
         return enriched
     }
 
