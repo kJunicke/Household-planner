@@ -71,6 +71,7 @@ putzplan_vue/
 - `/history` - **HistoryView** - Chronologischer Verlauf aller Completions
 - `/stats` - **StatsView** - Gamification-Statistiken (Tortendiagramm mit Aufgabenverteilung)
 - `/shopping` - **ShoppingView** - Einkaufsliste mit Autocomplete und Purchase-Tracking
+- `/notes` - **NotesView** - Haushalt-Notizen (alle Mitglieder können erstellen/bearbeiten/löschen)
 - `/login` - LoginView
 - `/register` - RegisterView
 - `/household-setup` - HouseholdSetupView
@@ -96,6 +97,10 @@ putzplan_vue/
   - `times_purchased` - Counter für Kaufhäufigkeit
   - `last_purchased_at`, `last_purchased_by` - Tracking von letztem Einkauf
   - `purchased` - Boolean für aktuellen Status (gekauft/nicht gekauft)
+- `notes` - PK: `note_id` (Haushalt-Notizen)
+  - `content` - Textinhalt der Notiz
+  - `created_by` - User der die Notiz erstellt hat
+  - `created_at`, `updated_at` - Timestamps
 
 **Task Recurrence & Business Logic:**
 - Frontend: `completeTask()` ruft Edge Function auf, `markAsDirty()` setzt nur tasks.completed

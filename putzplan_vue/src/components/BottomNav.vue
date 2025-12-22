@@ -7,7 +7,8 @@ const navItems = [
   { path: '/', icon: 'bi-list-check', label: 'Putzen' },
   { path: '/history', icon: 'bi-clock-history', label: 'Verlauf' },
   { path: '/stats', icon: 'bi-pie-chart', label: 'Stats' },
-  { path: '/shopping', icon: 'bi-cart3', label: 'Einkauf' }
+  { path: '/shopping', icon: 'bi-cart3', label: 'Einkauf' },
+  { path: '/notes', icon: 'bi-sticky', label: 'Notizen' }
 ]
 </script>
 

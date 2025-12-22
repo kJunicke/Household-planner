@@ -53,6 +53,12 @@
 **Migrations:** Konsolidiert am 26.10.2025 (29 → 4 Migrations)
 
 **Letzte größere Features:**
+- ✅ Haushalt-Notizen Feature - 22.12.2025
+  - 5. Tab "Notizen" in Bottom Navigation
+  - Alle Haushaltsmitglieder können Notizen erstellen, bearbeiten, löschen
+  - Autor + Datum werden angezeigt, "(bearbeitet)" Tag bei Änderungen
+  - Realtime-Sync zwischen allen Mitgliedern
+  - Lösch-Bestätigungsmodal
 - ✅ Task-Dringlichkeitsanzeige & Skip-Funktion - 02.12.2025
   - Overdue-Anzeige: "X Tage überfällig" / "Noch nie gemacht" im Putzen-View
   - Sortierung nach Dringlichkeit (dringendste Tasks zuerst)
