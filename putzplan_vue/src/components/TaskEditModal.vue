@@ -112,10 +112,10 @@ const handleClose = () => {
           <!-- Zusätzliche Actions links -->
           <div class="footer-actions-left">
             <button class="btn btn-outline-warning btn-compact" @click="emit('skip')" title="Als erledigt markieren ohne Punkte">
-              ⏭️
+              <i class="bi bi-skip-forward"></i>
             </button>
             <button class="btn btn-outline-secondary btn-compact" @click="emit('assign')" title="Aufgabe zuweisen">
-              👤
+              <i class="bi bi-person"></i>
             </button>
             <button
               v-if="!task.parent_task_id"
@@ -123,10 +123,10 @@ const handleClose = () => {
               @click="emit('manage-subtasks')"
               title="Subtasks verwalten"
             >
-              ⚙
+              <i class="bi bi-list-nested"></i>
             </button>
             <button class="btn btn-outline-danger btn-compact" @click="emit('delete')" title="Aufgabe löschen">
-              🗑️
+              <i class="bi bi-trash"></i>
             </button>
           </div>
 

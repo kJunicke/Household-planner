@@ -143,10 +143,7 @@ const handleProjectWork = async (effort: number, note: string) => {
       <!-- Right: Edit + Action Buttons -->
       <div class="subtask-right">
         <button class="subtask-edit-btn" @click="startEdit" title="Bearbeiten">
-          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
-            <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
-          </svg>
+          <i class="bi bi-pencil"></i>
         </button>
 
         <!-- Main Action Button (wie bei TaskCard) -->
@@ -176,10 +173,7 @@ const handleProjectWork = async (effort: number, note: string) => {
               @click="openCompletionModal"
               title="Aufwand anpassen"
             >
-              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                <polyline points="17 11 12 6 7 11"></polyline>
-                <polyline points="17 18 12 13 7 18"></polyline>
-              </svg>
+              <i class="bi bi-chevron-double-up"></i>
             </button>
           </template>
         </div>
@@ -295,9 +289,8 @@ const handleProjectWork = async (effort: number, note: string) => {
   flex-shrink: 0;
 }
 
-.subtask-edit-btn svg {
-  width: 14px;
-  height: 14px;
+.subtask-edit-btn i {
+  font-size: 0.75rem;
 }
 
 .subtask-edit-btn:hover {
@@ -336,8 +329,8 @@ const handleProjectWork = async (effort: number, note: string) => {
   justify-content: center;
 }
 
-.subtask-action-btn-modifier svg {
-  display: block;
+.subtask-action-btn-modifier i {
+  font-size: 0.75rem;
 }
 
 .btn-primary {
@@ -417,18 +410,16 @@ const handleProjectWork = async (effort: number, note: string) => {
     padding: 0.3rem 0.4rem;
   }
 
-  .subtask-action-btn-modifier svg {
-    width: 12px;
-    height: 12px;
+  .subtask-action-btn-modifier i {
+    font-size: 0.6875rem;
   }
 
   .subtask-edit-btn {
     padding: 0.25rem;
   }
 
-  .subtask-edit-btn svg {
-    width: 12px;
-    height: 12px;
+  .subtask-edit-btn i {
+    font-size: 0.6875rem;
   }
 }
 </style>

@@ -165,7 +165,7 @@ watch(() => props.open, (isOpen) => {
               </div>
             </div>
             <button @click="startEditingName" class="btn btn-outline-primary btn-sm w-100">
-              <i class="bi bi-pencil-fill"></i> Profil bearbeiten
+              <i class="bi bi-pencil"></i> Profil bearbeiten
             </button>
           </div>
 

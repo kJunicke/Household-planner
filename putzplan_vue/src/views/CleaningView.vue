@@ -1,8 +1,7 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted, ref, computed } from "vue";
-import TaskList from '../components/TaskList.vue';
 import TaskCard from '../components/TaskCard.vue';
-import CategoryNav from '../components/CategoryNav.vue';
+import CategoryNav, { type TaskCategory } from '../components/CategoryNav.vue';
 import TaskCreateModal from '../components/TaskCreateModal.vue';
 import { useTaskStore } from "../stores/taskStore";
 import type { Task } from '@/types/Task';
@@ -69,14 +68,128 @@ const crossTabSearchResults = computed(() => {
   return results
 })
 
-// Tab state for task categories
-type TaskCategory = 'daily' | 'recurring' | 'project' | 'completed'
-const selectedCategory = ref<TaskCategory>('daily')
+// Multi-select categories (array instead of single)
+const selectedCategories = ref<TaskCategory[]>(['daily', 'recurring', 'project', 'completed'])
 
 // Handler for category change from CategoryNav
-const handleCategoryChange = (category: TaskCategory) => {
-  selectedCategory.value = category
+const handleCategoriesChange = (categories: TaskCategory[]) => {
+  selectedCategories.value = categories
 }
+
+// Category configuration
+const categoryConfig: Record<TaskCategory, { label: string; icon: string }> = {
+  daily: { label: 'Tägliche Aufgaben', icon: 'bi-lightning-fill' },
+  recurring: { label: 'Putzaufgaben', icon: 'bi-arrow-repeat' },
+  project: { label: 'Projekte', icon: 'bi-kanban' },
+  completed: { label: 'Erledigt', icon: 'bi-check-circle' }
+}
+
+// Helper functions for task filtering and sorting (copied from TaskList logic)
+const getDaysOverdue = (task: Task): number => {
+  if (!task.last_completed_at) return Infinity
+  const lastCompleted = new Date(task.last_completed_at)
+  const today = new Date()
+  const lastCompletedDate = new Date(lastCompleted.getFullYear(), lastCompleted.getMonth(), lastCompleted.getDate())
+  const todayDate = new Date(today.getFullYear(), today.getMonth(), today.getDate())
+  return Math.floor((todayDate.getTime() - lastCompletedDate.getTime()) / (1000 * 60 * 60 * 24))
+}
+
+const getDaysUntilDue = (task: Task): number => {
+  if (task.task_type === 'one-time') return Infinity
+  if (task.task_type !== 'recurring' || !task.recurrence_days || !task.last_completed_at) {
+    return Infinity
+  }
+  const daysPassed = getDaysOverdue(task)
+  return task.recurrence_days - daysPassed
+}
+
+// Get tasks for a specific category
+const getTasksForCategory = (category: TaskCategory): Task[] => {
+  let tasks: Task[] = []
+
+  if (category === 'completed') {
+    // Completed tasks (non-projects)
+    tasks = taskStore.tasks.filter((task: Task) =>
+      task.completed &&
+      task.parent_task_id === null &&
+      task.task_type !== 'project'
+    )
+    // Sort by days until due (ascending)
+    tasks.sort((a, b) => getDaysUntilDue(a) - getDaysUntilDue(b))
+
+    // Add completed projects at the end
+    const completedProjects = taskStore.tasks.filter((task: Task) =>
+      task.completed &&
+      task.parent_task_id === null &&
+      task.task_type === 'project'
+    ).sort((a, b) => {
+      if (!a.last_completed_at || !b.last_completed_at) return 0
+      return new Date(b.last_completed_at).getTime() - new Date(a.last_completed_at).getTime()
+    })
+    tasks = [...tasks, ...completedProjects]
+
+  } else if (category === 'daily') {
+    // Daily + one-time tasks (not completed)
+    tasks = taskStore.tasks.filter((task: Task) =>
+      !task.completed &&
+      task.parent_task_id === null &&
+      (task.task_type === 'daily' || task.task_type === 'one-time')
+    )
+
+  } else if (category === 'recurring') {
+    // Recurring tasks (not completed)
+    tasks = taskStore.tasks.filter((task: Task) =>
+      !task.completed &&
+      task.parent_task_id === null &&
+      task.task_type === 'recurring'
+    )
+    // Sort by urgency (most overdue first)
+    tasks.sort((a, b) => {
+      if (!a.last_completed_at && !b.last_completed_at) return 0
+      if (!a.last_completed_at) return -1
+      if (!b.last_completed_at) return 1
+      return getDaysOverdue(b) - getDaysOverdue(a)
+    })
+
+  } else if (category === 'project') {
+    // Projects (not completed)
+    tasks = taskStore.tasks.filter((task: Task) =>
+      !task.completed &&
+      task.parent_task_id === null &&
+      task.task_type === 'project'
+    )
+  }
+
+  return tasks
+}
+
+// Grouped tasks computed property
+interface TaskGroup {
+  category: TaskCategory
+  label: string
+  icon: string
+  tasks: Task[]
+}
+
+const groupedTasks = computed((): TaskGroup[] => {
+  const order: TaskCategory[] = ['daily', 'recurring', 'project', 'completed']
+  const groups: TaskGroup[] = []
+
+  for (const cat of order) {
+    if (selectedCategories.value.includes(cat)) {
+      const tasks = getTasksForCategory(cat)
+      if (tasks.length > 0) {
+        groups.push({
+          category: cat,
+          ...categoryConfig[cat],
+          tasks
+        })
+      }
+    }
+  }
+
+  return groups
+})
 
 const openCreateModal = () => {
   showCreateModal.value = true
@@ -129,13 +242,8 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <!-- Secondary Navigation (rendered in Header slot) -->
-  <template v-if="false">
-    <CategoryNav @update:category="handleCategoryChange" />
-  </template>
-
   <main class="page-container">
-    <CategoryNav @update:category="handleCategoryChange" />
+    <CategoryNav @update:categories="handleCategoriesChange" />
 
     <div class="container-fluid">
       <!-- Loading Skeleton (nur beim initialen Load) -->
@@ -153,21 +261,30 @@ onUnmounted(() => {
         </div>
       </div>
 
-      <!-- Task Lists by Category -->
-      <section v-if="selectedCategory === 'daily'" class="task-section">
-        <TaskList filter="daily-todo" />
-      </section>
+      <!-- Empty State when no active categories have tasks -->
+      <div v-else-if="groupedTasks.length === 0" class="empty-state">
+        <i class="bi bi-check-circle"></i>
+        <p>Keine Aufgaben in den ausgewählten Kategorien</p>
+      </div>
 
-      <section v-if="selectedCategory === 'recurring'" class="task-section">
-        <TaskList filter="recurring-todo" />
-      </section>
-
-      <section v-if="selectedCategory === 'project'" class="task-section">
-        <TaskList filter="project-todo" />
-      </section>
-
-      <section v-if="selectedCategory === 'completed'" class="task-section">
-        <TaskList filter="completed" />
+      <!-- Grouped Task Sections -->
+      <section
+        v-for="group in groupedTasks"
+        :key="group.category"
+        class="task-section"
+      >
+        <div class="category-header">
+          <i :class="group.icon"></i>
+          <span class="category-label">{{ group.label }}</span>
+          <span class="task-count">{{ group.tasks.length }}</span>
+        </div>
+        <div class="task-list">
+          <TaskCard
+            v-for="task in group.tasks"
+            :key="task.task_id"
+            :task="task"
+          />
+        </div>
       </section>
     </div>
 
@@ -279,13 +396,64 @@ onUnmounted(() => {
 }
 
 .task-section {
-  margin-bottom: var(--spacing-lg);
+  margin-bottom: var(--spacing-xl);
+}
+
+/* Category Headers */
+.category-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.75rem;
+  color: var(--color-text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 0.75rem 0;
+  margin-bottom: 0.5rem;
+  border-bottom: 1px solid var(--color-border);
+  font-weight: 600;
+}
+
+.category-header i {
+  font-size: 0.875rem;
+  color: var(--color-primary);
+}
+
+.category-label {
+  flex: 1;
+}
+
+.task-count {
+  background: var(--color-background-muted, #f1f5f9);
+  padding: 0.125rem 0.5rem;
+  border-radius: var(--radius-sm);
+  font-size: 0.6875rem;
+  color: var(--color-text-secondary);
+}
+
+/* Empty State */
+.empty-state {
+  text-align: center;
+  padding: 4rem 2rem;
+  color: var(--color-text-secondary);
+}
+
+.empty-state i {
+  font-size: 4rem;
+  margin-bottom: 1rem;
+  opacity: 0.3;
+  display: block;
+}
+
+.empty-state p {
+  font-size: 1.125rem;
+  margin: 0;
 }
 
 /* Floating Action Buttons */
 .fab-group {
   position: fixed;
-  bottom: calc(64px + 48px + 16px + env(safe-area-inset-bottom));
+  bottom: calc(64px + 16px + env(safe-area-inset-bottom));
   right: 24px;
   display: flex;
   align-items: center;

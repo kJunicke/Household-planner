@@ -140,15 +140,16 @@ const daysUntilDue = computed(() => {
 })
 
 // Berechnet wie viele Tage ein Task bereits überfällig ist (nur für recurring dirty tasks)
-const daysOverdue = computed(() => {
+// Returns numeric value for color calculation
+const daysOverdueNumeric = computed((): number | null => {
      // Nur für wiederkehrende Tasks die NICHT completed sind
      if (props.task.task_type !== 'recurring' || props.task.completed) {
           return null
      }
 
-     // Task wurde noch nie gemacht
+     // Task wurde noch nie gemacht = max urgency
      if (!props.task.last_completed_at) {
-          return 'Noch nie gemacht'
+          return 14
      }
 
      const lastCompleted = new Date(props.task.last_completed_at)
@@ -159,9 +160,40 @@ const daysOverdue = computed(() => {
      const todayDate = new Date(today.getFullYear(), today.getMonth(), today.getDate())
 
      // Berechne vergangene Tage
-     const daysPassed = Math.floor((todayDate.getTime() - lastCompletedDate.getTime()) / (1000 * 60 * 60 * 24))
+     return Math.floor((todayDate.getTime() - lastCompletedDate.getTime()) / (1000 * 60 * 60 * 24))
+})
 
-     return `${daysPassed} ${daysPassed === 1 ? 'Tag' : 'Tage'} überfällig`
+// Text für Überfälligkeit
+const daysOverdue = computed(() => {
+     if (daysOverdueNumeric.value === null) return null
+
+     if (!props.task.last_completed_at) {
+          return 'Noch nie gemacht'
+     }
+
+     const days = daysOverdueNumeric.value
+     return `${days} ${days === 1 ? 'Tag' : 'Tage'} überfällig`
+})
+
+// Farbgradient für Überfälligkeit: 0 Tage = neutral, 14+ Tage = full red
+const overdueColorStyle = computed(() => {
+     if (daysOverdueNumeric.value === null) return null
+
+     const days = daysOverdueNumeric.value
+     // Linear interpolation: 0 days = 0%, 14 days = 100%
+     const intensity = Math.min(days / 14, 1)
+
+     // Color gradient from light red to strong red
+     // alpha: 0.1 to 0.5
+     const alpha = 0.1 + (intensity * 0.4)
+     const borderAlpha = 0.3 + (intensity * 0.7)
+
+     return {
+          backgroundColor: `rgba(239, 68, 68, ${alpha})`,
+          borderLeft: `3px solid rgba(239, 68, 68, ${borderAlpha})`,
+          paddingLeft: '0.375rem',
+          borderRadius: 'var(--radius-sm)'
+     }
 })
 
 // Berechnet Fälligkeits- oder Completion-Info für completed tasks
@@ -415,8 +447,10 @@ const handleCompleteProject = async () => {
                                    {{ daysUntilDue }}d
                               </span>
 
-                              <!-- Overdue indicator (only for recurring dirty tasks) -->
-                              <span v-if="daysOverdue" class="overdue-text">{{ daysOverdue }}</span>
+                              <!-- Overdue indicator with color gradient (only for recurring dirty tasks) -->
+                              <span v-if="daysOverdue" class="overdue-badge" :style="overdueColorStyle">
+                                   {{ daysOverdueNumeric }}d
+                              </span>
 
                               <!-- Due in X days (only for recurring completed tasks) -->
                               <span v-if="dueInDays" class="overdue-text">{{ dueInDays }}</span>
@@ -427,10 +461,7 @@ const handleCompleteProject = async () => {
                <!-- Right: Edit Icon + Action Buttons -->
                <div class="task-right" @click.stop.prevent>
                     <button class="icon-btn edit-btn" @click.stop.prevent="openEditModal" title="Bearbeiten">
-                         <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                              <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
-                              <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
-                         </svg>
+                         <i class="bi bi-pencil"></i>
                     </button>
 
                     <!-- PROJECTS: Dokumentieren button instead of Abschließen -->
@@ -460,10 +491,7 @@ const handleCompleteProject = async () => {
                               <button class="btn btn-success btn-sm action-btn-modifier"
                                       @click="openCompletionModal"
                                       title="Aufwand anpassen">
-                                   <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                                        <polyline points="17 11 12 6 7 11"></polyline>
-                                        <polyline points="17 18 12 13 7 18"></polyline>
-                                   </svg>
+                                   <i class="bi bi-chevron-double-up"></i>
                               </button>
                          </div>
                     </template>
@@ -693,6 +721,19 @@ const handleCompleteProject = async () => {
      line-height: 1.2;
 }
 
+/* Overdue Badge with color gradient */
+.overdue-badge {
+     display: inline-flex;
+     align-items: center;
+     justify-content: center;
+     padding: 0.125rem 0.5rem;
+     font-size: 0.6875rem;
+     font-weight: 700;
+     color: #991b1b;
+     min-width: 28px;
+     transition: all var(--transition-base);
+}
+
 .task-meta {
      display: flex;
      align-items: center;
@@ -763,9 +804,8 @@ const handleCompleteProject = async () => {
      flex-shrink: 0;
 }
 
-.edit-btn svg {
-     width: 16px;
-     height: 16px;
+.edit-btn i {
+     font-size: 0.875rem;
 }
 
 .edit-btn:hover {
@@ -804,8 +844,8 @@ const handleCompleteProject = async () => {
      justify-content: center;
 }
 
-.action-btn-modifier svg {
-     display: block;
+.action-btn-modifier i {
+     font-size: 0.875rem;
 }
 
 .btn-success:hover,
@@ -934,9 +974,8 @@ const handleCompleteProject = async () => {
           padding: 0.3rem;
      }
 
-     .edit-btn svg {
-          width: 14px;
-          height: 14px;
+     .edit-btn i {
+          font-size: 0.75rem;
      }
 
      .subtasks-section {

@@ -7,6 +7,11 @@
 ## 🎯 High Priority
 
 ### UX Improvements
+- ✅ **CleaningView UX Redesign** - ABGESCHLOSSEN (22.12.2025)
+  - Multi-Select Filter-Bubbles oben (statt Single-Select Tabs unten)
+  - Gruppierte Aufgaben-Anzeige mit Kategorie-Headers
+  - Überfälligkeits-Farbgradient (0-14 Tage = weiß bis rot)
+  - Einheitliche Bootstrap Icons in der gesamten App
 - ✅ **Bottom Navigation** - ABGESCHLOSSEN (02.12.2025)
   - FAB-Positionierung über Bottom Nav + CategoryNav
   - iOS Safari safe-area-inset-bottom Support
@@ -53,6 +58,12 @@
 **Migrations:** Konsolidiert am 26.10.2025 (29 → 4 Migrations)
 
 **Letzte größere Features:**
+- ✅ CleaningView UX Redesign - 22.12.2025
+  - Multi-Select Filter-Bubbles oben statt Single-Select Tabs unten
+  - Gruppierte Aufgaben-Anzeige mit Kategorie-Headers (wie Search-View)
+  - Überfälligkeits-Farbgradient für recurring Tasks (0-14 Tage linear)
+  - Einheitliche Bootstrap Icons: Emojis/SVGs durch bi-* ersetzt
+  - 6 Dateien aktualisiert: CategoryNav, CleaningView, TaskCard, TaskEditModal, SubtaskItem, SettingsSidebar
 - ✅ Fix: Deduct-Subtask Overflow Bug - 22.12.2025
   - Edge Function `complete-task` blockierte Parent-Task wenn Deduct-Sum > Parent-Effort
   - Jetzt graceful: `Math.max(0, parentEffort - deductSum)` statt 400 Error
