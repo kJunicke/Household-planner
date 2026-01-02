@@ -196,13 +196,13 @@ onUnmounted(() => {
       <div v-if="showDeleteModal" class="modal-overlay" @click="closeDeleteModal">
         <div class="modal-content" @click.stop>
           <div class="modal-header">
-            <h3 class="modal-title">Notiz loeschen</h3>
-            <button @click="closeDeleteModal" class="btn-close" aria-label="Schliessen">
+            <h3 class="modal-title">Notiz löschen</h3>
+            <button @click="closeDeleteModal" class="btn-close" aria-label="Schließen">
               <i class="bi bi-x-lg"></i>
             </button>
           </div>
           <div class="modal-body">
-            <p>Moechtest du diese Notiz wirklich loeschen?</p>
+            <p>Möchtest du diese Notiz wirklich löschen?</p>
             <p class="text-muted note-preview">
               "{{ noteToDelete?.content?.substring(0, 100) }}{{ (noteToDelete?.content?.length || 0) > 100 ? '...' : '' }}"
             </p>
@@ -212,7 +212,7 @@ onUnmounted(() => {
               Abbrechen
             </button>
             <button @click="confirmDelete" class="btn btn-danger">
-              <i class="bi bi-trash"></i> Loeschen
+              <i class="bi bi-trash"></i> Löschen
             </button>
           </div>
         </div>

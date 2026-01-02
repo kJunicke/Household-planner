@@ -166,7 +166,7 @@ export const useNotesStore = defineStore('notes', () => {
 
     } catch (error) {
       console.error('Error deleting note:', error)
-      toastStore.showToast('Fehler beim Loeschen der Notiz', 'error')
+      toastStore.showToast('Fehler beim Löschen der Notiz', 'error')
       return false
     }
   }
