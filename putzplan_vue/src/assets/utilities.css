@@ -135,13 +135,15 @@
 .btn-close {
   background: none;
   border: none;
-  font-size: 1.25rem;
+  font-size: var(--font-xl);
   line-height: 1;
   color: var(--color-text-secondary);
   cursor: pointer;
-  padding: 0.25rem;
-  width: auto;
-  height: auto;
+  padding: 0;
+  width: var(--touch-target-min);
+  height: var(--touch-target-min);
+  min-width: var(--touch-target-min);
+  min-height: var(--touch-target-min);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -226,4 +228,36 @@
    ============================================ */
 .form-group {
   margin-bottom: var(--spacing-lg);
+}
+
+/* ============================================
+   ICON BUTTON UTILITIES
+   Touch-friendly (48px Minimum - Android Standard)
+   ============================================ */
+.btn-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  transition: all var(--transition-base);
+  flex-shrink: 0;
+  padding: 0;
+  width: var(--touch-target-min);
+  height: var(--touch-target-min);
+  min-width: var(--touch-target-min);
+  min-height: var(--touch-target-min);
+}
+
+.btn-icon:hover {
+  background: var(--color-background);
+  color: var(--color-primary);
+  border-color: var(--color-primary);
+}
+
+.btn-icon i {
+  font-size: var(--font-lg);
 }

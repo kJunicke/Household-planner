@@ -138,7 +138,14 @@ export const useTaskStore = defineStore('tasks', () => {
         const householdStore = useHouseholdStore()
         await householdStore.loadWeeklyCompletions()
 
-        toastStore.showToast('Aufgabe abgeschlossen', 'success', 3000)
+        // Show warning if subtask reset failed (prevents silent data corruption)
+        if (data.warning) {
+            console.warn('Edge function warning:', data.warning)
+            // Use 'info' type since 'warning' doesn't exist yet
+            toastStore.showToast(`⚠️ ${data.warning}`, 'info', 5000)
+        } else {
+            toastStore.showToast('Aufgabe abgeschlossen', 'success', 3000)
+        }
         return true
     }
 

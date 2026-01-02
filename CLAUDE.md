@@ -160,7 +160,10 @@ putzplan_vue/
   - Thumb-freundliche Position für Mobile UX
 
 ### CSS Architecture
-- **Design System**: CSS Variables in `base.css` (Farben, Spacing, Shadows, Border-Radius, Transitions)
+- **Design System**: CSS Variables in `base.css`:
+  - Farben, Spacing, Shadows, Border-Radius, Transitions
+  - **Font Sizes**: `--font-xs` bis `--font-xl` (10px-18px)
+  - **Touch Targets**: `--touch-target-min: 48px` (Android Standard)
 - **Bootstrap Overrides**: Zentrale Button/Card/Form-Styles in `base.css`
 - **Utility Classes**: Wiederverwendbare Patterns in `utilities.css`:
   - Auth-Container Pattern (Login/Register/HouseholdSetup)
@@ -169,7 +172,9 @@ putzplan_vue/
   - Section-Title Pattern
   - Empty-State Pattern
   - Form-Group Utility
+  - **Icon Button Utility** (`.btn-icon`) - 48px quadratische Touch-Buttons
 - **Component Styles**: Nur component-spezifische Styles in `<style scoped>`
+- **Mobile-First Touch Targets**: Alle interaktiven Buttons min. 48x48px für Touch-Freundlichkeit
 
 ### Database Migrations (Supabase CLI)
 

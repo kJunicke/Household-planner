@@ -467,8 +467,9 @@ const handleCompleteProject = async () => {
                     <!-- PROJECTS: Dokumentieren button instead of Abschließen -->
                     <template v-if="isProject">
                          <button v-if="!props.task.completed" class="btn btn-primary btn-sm action-btn"
-                                 @click="openProjectWorkModal">
-                              Dokumentieren
+                                 @click="openProjectWorkModal"
+                                 title="Dokumentieren">
+                              <i class="bi bi-pencil-square"></i>
                          </button>
                          <div v-else class="completed-badge">
                               ✓
@@ -478,15 +479,17 @@ const handleCompleteProject = async () => {
                     <!-- REGULAR TASKS: Standard logic -->
                     <template v-else-if="props.task.completed">
                          <button class="btn btn-warning btn-sm action-btn"
-                                 @click="handleMarkDirty">
-                              Dreckig
+                                 @click="handleMarkDirty"
+                                 title="Dreckig markieren">
+                              <i class="bi bi-arrow-counterclockwise"></i>
                          </button>
                     </template>
                     <template v-else>
                          <div class="action-buttons">
                               <button class="btn btn-success btn-sm action-btn"
-                                      @click="handleCompleteTask">
-                                   Sauber
+                                      @click="handleCompleteTask"
+                                      title="Sauber markieren">
+                                   <i class="bi bi-check-lg"></i>
                               </button>
                               <button class="btn btn-success btn-sm action-btn-modifier"
                                       @click="openCompletionModal"
@@ -662,8 +665,9 @@ const handleCompleteProject = async () => {
      display: flex;
      align-items: center;
      justify-content: space-between;
-     padding: 0.75rem 1rem;
-     gap: 1rem;
+     padding: var(--spacing-md);
+     gap: var(--spacing-md);
+     min-height: calc(var(--touch-target-min) + var(--spacing-md));
 }
 
 /* Left Side: Expand + Title + Badges */
@@ -680,9 +684,13 @@ const handleCompleteProject = async () => {
      border: none;
      color: var(--color-text-secondary);
      opacity: 0.5;
-     font-size: 0.625rem;
+     font-size: var(--font-sm);
      cursor: pointer;
-     padding: 0.125rem 0.25rem;
+     padding: 0;
+     width: var(--touch-target-min);
+     height: var(--touch-target-min);
+     min-width: var(--touch-target-min);
+     min-height: var(--touch-target-min);
      display: inline-flex;
      align-items: center;
      justify-content: center;
@@ -794,7 +802,11 @@ const handleCompleteProject = async () => {
      background: transparent;
      border: 1px solid var(--color-border);
      border-radius: var(--radius-sm);
-     padding: 0.375rem;
+     padding: 0;
+     width: var(--touch-target-min);
+     height: var(--touch-target-min);
+     min-width: var(--touch-target-min);
+     min-height: var(--touch-target-min);
      cursor: pointer;
      display: flex;
      align-items: center;
@@ -805,7 +817,7 @@ const handleCompleteProject = async () => {
 }
 
 .edit-btn i {
-     font-size: 0.875rem;
+     font-size: var(--font-lg);
 }
 
 .edit-btn:hover {
@@ -821,20 +833,30 @@ const handleCompleteProject = async () => {
 }
 
 .action-btn {
-     font-size: 0.8125rem;
-     padding: 0.5rem 1rem;
-     font-weight: 500;
+     width: var(--touch-target-min);
+     height: var(--touch-target-min);
+     min-width: var(--touch-target-min);
+     min-height: var(--touch-target-min);
+     padding: 0;
      border: none;
      border-radius: var(--radius-md);
      cursor: pointer;
      transition: all var(--transition-base);
-     white-space: nowrap;
+     display: flex;
+     align-items: center;
+     justify-content: center;
+}
+
+.action-btn i {
+     font-size: var(--font-xl);
 }
 
 .action-btn-modifier {
-     padding: 0.5rem 0.625rem;
-     font-size: 0.8125rem;
-     font-weight: 500;
+     width: var(--touch-target-min);
+     height: var(--touch-target-min);
+     min-width: var(--touch-target-min);
+     min-height: var(--touch-target-min);
+     padding: 0;
      border: none;
      border-radius: var(--radius-md);
      cursor: pointer;
@@ -845,7 +867,7 @@ const handleCompleteProject = async () => {
 }
 
 .action-btn-modifier i {
-     font-size: 0.875rem;
+     font-size: var(--font-xl);
 }
 
 .btn-success:hover,
@@ -959,23 +981,6 @@ const handleCompleteProject = async () => {
      .meta-badge {
           font-size: 0.625rem;
           padding: 0.1rem 0.375rem;
-     }
-
-     .action-btn {
-          font-size: 0.75rem;
-          padding: 0.4rem 0.75rem;
-     }
-
-     .action-btn-modifier {
-          padding: 0.4rem 0.5rem;
-     }
-
-     .edit-btn {
-          padding: 0.3rem;
-     }
-
-     .edit-btn i {
-          font-size: 0.75rem;
      }
 
      .subtasks-section {

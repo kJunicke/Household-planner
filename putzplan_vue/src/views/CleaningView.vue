@@ -27,6 +27,16 @@ const crossTabSearchResults = computed(() => {
 
   const results: SearchResult[] = []
 
+  // Build subtask map ONCE for O(1) lookups (was O(n²) before)
+  const subtasksByParent = new Map<string, Task[]>()
+  for (const task of taskStore.tasks) {
+    if (task.parent_task_id) {
+      const existing = subtasksByParent.get(task.parent_task_id) || []
+      existing.push(task)
+      subtasksByParent.set(task.parent_task_id, existing)
+    }
+  }
+
   // Helper: Calculate relevance score
   const getRelevance = (task: Task): number => {
     const title = task.title.toLowerCase()
@@ -34,8 +44,8 @@ const crossTabSearchResults = computed(() => {
     if (title.startsWith(query)) return 80 // Starts with query
     if (title.includes(query)) return 60 // Contains query
 
-    // Check subtasks
-    const subtasks = taskStore.tasks.filter((t: Task) => t.parent_task_id === task.task_id)
+    // Check subtasks (O(1) lookup via Map)
+    const subtasks = subtasksByParent.get(task.task_id) || []
     const subtaskMatch = subtasks.some((st: Task) => st.title.toLowerCase().includes(query))
     if (subtaskMatch) return 40 // Subtask match
 

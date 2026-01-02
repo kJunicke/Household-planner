@@ -55,6 +55,30 @@ const modeDescriptions = {
   }
 }
 
+// DEDUCT OVERFLOW VALIDATION
+// Calculate current total deduct effort from existing subtasks
+const currentDeductSum = computed(() => {
+  return props.existingSubtasks
+    .filter(s => s.subtask_points_mode === 'deduct')
+    .reduce((sum, s) => sum + s.effort, 0)
+})
+
+// Calculate remaining deduct budget
+const remainingDeductBudget = computed(() => {
+  return props.parentTask.effort - currentDeductSum.value
+})
+
+// Check if current deduct sum already exceeds parent effort (config error)
+const isDeductOverflow = computed(() => {
+  return currentDeductSum.value > props.parentTask.effort
+})
+
+// Check if adding this new subtask as deduct would cause overflow
+const wouldCauseDeductOverflow = computed(() => {
+  if (newSubtaskPointsMode.value !== 'deduct') return false
+  return (currentDeductSum.value + newSubtaskEffort.value) > props.parentTask.effort
+})
+
 const canAddSubtask = computed(() => {
   return newSubtaskTitle.value.trim().length > 0
 })
@@ -99,6 +123,14 @@ const handlePointsModeChange = (subtaskId: string, mode: 'checklist' | 'deduct' 
           </div>
           <div v-else-if="isDailyTask" class="info-banner daily-banner">
             <span>💡 Unteraufgaben für <strong>Alltagsaufgaben</strong> geben sofort <strong>Bonus-Punkte</strong> beim Abhaken</span>
+          </div>
+
+          <!-- DEDUCT OVERFLOW WARNING -->
+          <div v-if="isDeductOverflow" class="warning-banner">
+            <span>⚠️ <strong>Deduct-Überlauf!</strong> Abzieh-Unteraufgaben ({{ currentDeductSum }}) übersteigen Hauptaufwand ({{ parentTask.effort }}). Parent-Task gibt 0 Punkte!</span>
+          </div>
+          <div v-else-if="wouldCauseDeductOverflow" class="warning-banner">
+            <span>⚠️ Diese Unteraufgabe würde das Deduct-Budget überschreiten. Verbleibend: <strong>{{ remainingDeductBudget }}</strong> Punkte</span>
           </div>
 
           <!-- SECTION 1: Add New Subtask -->
@@ -225,6 +257,20 @@ const handlePointsModeChange = (subtaskId: string, mode: 'checklist' | 'deduct' 
   background: var(--bs-success-bg-subtle, #d1e7dd);
   border-color: var(--bs-success-border-subtle, #a3cfbb);
   color: var(--bs-success-text, #0a3622);
+}
+
+/* Warning Banner (Deduct Overflow) */
+.warning-banner {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem 1rem;
+  background: var(--bs-warning-bg-subtle, #fff3cd);
+  border: 1px solid var(--bs-warning-border-subtle, #ffda6a);
+  border-radius: var(--radius-md);
+  color: var(--bs-warning-text, #664d03);
+  font-size: 0.875rem;
+  margin-bottom: 1rem;
 }
 
 /* Section Styling */
@@ -466,7 +512,8 @@ const handlePointsModeChange = (subtaskId: string, mode: 'checklist' | 'deduct' 
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 0.5rem 0.5rem;
+  padding: var(--spacing-xs);
+  min-height: var(--touch-target-min);
   border: 2px solid var(--color-border);
   border-radius: var(--radius-md);
   cursor: pointer;
@@ -498,7 +545,7 @@ const handlePointsModeChange = (subtaskId: string, mode: 'checklist' | 'deduct' 
 }
 
 .mode-option-compact .mode-text {
-  font-size: 0.65rem;
+  font-size: var(--font-sm);
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.3px;
@@ -511,13 +558,15 @@ const handlePointsModeChange = (subtaskId: string, mode: 'checklist' | 'deduct' 
 /* Subtask Mode Selector (for Existing Subtasks) */
 .subtask-mode-selector {
   display: flex;
-  gap: 0.25rem;
+  gap: var(--spacing-xs);
   margin-left: auto;
 }
 
 .mode-btn {
-  width: 28px;
-  height: 28px;
+  width: var(--touch-target-min);
+  height: var(--touch-target-min);
+  min-width: var(--touch-target-min);
+  min-height: var(--touch-target-min);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -527,7 +576,7 @@ const handlePointsModeChange = (subtaskId: string, mode: 'checklist' | 'deduct' 
   color: var(--color-text-secondary);
   cursor: pointer;
   transition: all var(--transition-base);
-  font-size: 0.875rem;
+  font-size: var(--font-lg);
   font-weight: 700;
 }
 

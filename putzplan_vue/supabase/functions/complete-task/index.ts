@@ -254,6 +254,7 @@ Deno.serve(async (req) => {
 
     // 10. Reset all subtasks to uncompleted (für saubere Punkteberechnung bei erneutem Putzen)
     // Wenn eine Parent Task completed wird, starten alle Subtasks "fresh"
+    let subtaskResetWarning: string | null = null
     if (taskDetails.parent_task_id === null) {
       const { error: subtaskResetError } = await supabase
         .from('tasks')
@@ -262,14 +263,18 @@ Deno.serve(async (req) => {
 
       if (subtaskResetError) {
         console.error('Error resetting subtasks:', subtaskResetError)
-        // Don't fail entire request - parent task completion was successful
-        // Subtask reset is best-effort to avoid UX disruption
+        // Include warning in response - frontend should handle this
+        // Future completions may have incorrect point calculations!
+        subtaskResetWarning = 'Subtasks konnten nicht zurückgesetzt werden. Nächste Completion könnte falsche Punkte berechnen.'
       }
     }
 
-    // 11. Success!
+    // 11. Success (with optional warning)
     return new Response(
-      JSON.stringify({ success: true }),
+      JSON.stringify({
+        success: true,
+        warning: subtaskResetWarning  // null if no issues, string if subtask reset failed
+      }),
       { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )
 
