@@ -478,11 +478,25 @@ const handleCompleteProject = async () => {
 
                     <!-- REGULAR TASKS: Standard logic -->
                     <template v-else-if="props.task.completed">
-                         <button class="btn btn-warning btn-sm action-btn"
-                                 @click="handleMarkDirty"
-                                 title="Dreckig markieren">
-                              <i class="bi bi-arrow-counterclockwise"></i>
-                         </button>
+                         <div class="action-buttons">
+                              <!-- Trotzdem geputzt: Quick + Modal-Option -->
+                              <button class="btn btn-success btn-sm action-btn"
+                                      @click="handleCompleteTask"
+                                      title="Trotzdem geputzt">
+                                   <i class="bi bi-check-lg"></i>
+                              </button>
+                              <button class="btn btn-success btn-sm action-btn-modifier"
+                                      @click="openCompletionModal"
+                                      title="Aufwand anpassen">
+                                   <i class="bi bi-chevron-double-up"></i>
+                              </button>
+                              <!-- Dreckig markieren -->
+                              <button class="btn btn-warning btn-sm action-btn"
+                                      @click="handleMarkDirty"
+                                      title="Dreckig markieren">
+                                   <i class="bi bi-arrow-counterclockwise"></i>
+                              </button>
+                         </div>
                     </template>
                     <template v-else>
                          <div class="action-buttons">
