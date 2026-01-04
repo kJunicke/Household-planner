@@ -1,6 +1,6 @@
 import { ref, computed } from 'vue'
 import { defineStore } from 'pinia'
-import type { Task, TaskCompletion } from '@/types/Task'
+import type { Task, TaskCompletion, EnrichedCompletion } from '@/types/Task'
 import { supabase } from '@/lib/supabase'
 import { useHouseholdStore } from './householdStore'
 import { useAuthStore } from './authStore'
@@ -10,7 +10,9 @@ import type { RealtimeChannel } from '@supabase/supabase-js'
 export const useTaskStore = defineStore('tasks', () => {
     // State - wie ref() in Komponenten
     const tasks = ref<Task[]>([])
-    const completions = ref<TaskCompletion[]>([])
+    // Completions: Kann TaskCompletion (von loadTasks) oder EnrichedCompletion (von fetchCompletions) sein
+    // EnrichedCompletion enthält zusätzlich tasks.title, isDeleted, household_members
+    const completions = ref<(TaskCompletion | EnrichedCompletion)[]>([])
     const isLoading = ref(false)
 
     // Realtime subscription channel (wird in subscribe() initialisiert)
@@ -40,10 +42,12 @@ export const useTaskStore = defineStore('tasks', () => {
         isLoading.value = true
 
         try {
+            // Nur aktive Tasks laden (deleted_at IS NULL = nicht soft-deleted)
             const { data: tasksData, error: tasksError } = await supabase
                 .from('tasks')
                 .select('*')
                 .eq('household_id', householdStore.currentHousehold.household_id)
+                .is('deleted_at', null)
 
             if (tasksError) throw tasksError
 
@@ -286,14 +290,15 @@ export const useTaskStore = defineStore('tasks', () => {
         return true
     }
 
-    // DELETE - Task löschen
+    // DELETE - Task löschen (SOFT DELETE)
+    // Setzt deleted_at statt echtem DELETE → Completions bleiben erhalten
     const deleteTask = async (taskId: string) => {
         const toastStore = useToastStore()
         isLoading.value = true
 
         const { error } = await supabase
             .from('tasks')
-            .delete()
+            .update({ deleted_at: new Date().toISOString() })
             .eq('task_id', taskId)
 
         isLoading.value = false
@@ -304,7 +309,7 @@ export const useTaskStore = defineStore('tasks', () => {
             return false
         }
 
-        // Lokalen State aktualisieren
+        // Lokalen State aktualisieren (Task aus UI entfernen)
         tasks.value = tasks.value.filter(t => t.task_id !== taskId)
         toastStore.showToast('Aufgabe gelöscht', 'success', 3000)
         return true
@@ -450,7 +455,7 @@ export const useTaskStore = defineStore('tasks', () => {
 
     // FETCH COMPLETIONS - Hole Task-Completions mit JOIN für History-View
     // Lädt alle completions des aktuellen Households mit Task- und Member-Namen
-    // JETZT EINFACHER: Direkter JOIN über user_id (keine Frontend-Matching mehr nötig!)
+    // HINWEIS: Gelöschte Tasks haben task_id = NULL (ON DELETE SET NULL)
     const fetchCompletions = async () => {
         const householdStore = useHouseholdStore()
         const toastStore = useToastStore()
@@ -460,10 +465,12 @@ export const useTaskStore = defineStore('tasks', () => {
             return []
         }
 
+        // Hole alle user_ids im aktuellen Household für Filterung
+        const householdUserIds = householdStore.householdMembers.map(m => m.user_id)
+
         // JOIN task_completions → tasks (via task_id)
-        // Filtern auf aktuellen Household über tasks.household_id
-        // NOTE: Kein direkter JOIN zu household_members möglich (keine FK-Relation)
-        // → Frontend matched display_name via user_id (householdMembers sind schon geladen)
+        // Mit Soft Delete bleiben Tasks erhalten → JOIN funktioniert immer
+        // Filterung über user_id für Household-Zugehörigkeit
         const { data, error } = await supabase
             .from('task_completions')
             .select(`
@@ -473,11 +480,13 @@ export const useTaskStore = defineStore('tasks', () => {
                 task_id,
                 effort_override,
                 completion_note,
-                tasks!inner (
-                    title
+                tasks (
+                    title,
+                    household_id,
+                    deleted_at
                 )
             `)
-            .eq('tasks.household_id', householdStore.currentHousehold.household_id)
+            .in('user_id', householdUserIds)
             .order('completed_at', { ascending: false })
 
         if (error) {
@@ -486,14 +495,25 @@ export const useTaskStore = defineStore('tasks', () => {
             return []
         }
 
+        // Filtere auf aktuellen Household
+        const filteredData = data.filter(completion => {
+            const taskData = Array.isArray(completion.tasks) ? completion.tasks[0] : completion.tasks
+            return taskData?.household_id === householdStore.currentHousehold?.household_id
+        })
+
         // Enriche mit display_name via Frontend-Matching
         // user_id → householdMembers (bereits im Store geladen)
-        const enriched = data.map(completion => {
+        const enriched = filteredData.map(completion => {
             const taskData = Array.isArray(completion.tasks) ? completion.tasks[0] : completion.tasks
             const completionData = completion as typeof completion & {
                 effort_override: number
                 completion_note?: string | null
             }
+
+            // Task-Titel: Bei Soft-Deleted Tasks ist deleted_at gesetzt
+            const isDeleted = (taskData as { deleted_at: string | null } | null)?.deleted_at !== null
+            const taskTitle = (taskData as { title: string } | null)?.title || 'Unbekannte Aufgabe'
+
             return {
                 completion_id: completion.completion_id,
                 completed_at: completion.completed_at,
@@ -501,8 +521,9 @@ export const useTaskStore = defineStore('tasks', () => {
                 task_id: completion.task_id, // WICHTIG: task_id für Effort-Lookup
                 effort_override: completionData.effort_override, // UNIFIED: ALWAYS set (Single Source of Truth)
                 completion_note: completionData.completion_note || null,
+                isDeleted, // NEU: Flag für gelöschte Tasks (UI kann Badge anzeigen)
                 tasks: {
-                    title: (taskData as { title: string } | null)?.title || 'Unbekannte Aufgabe'
+                    title: taskTitle
                 },
                 household_members: {
                     display_name: householdStore.householdMembers.find(
@@ -515,7 +536,7 @@ export const useTaskStore = defineStore('tasks', () => {
         console.log('Fetched completions:', enriched)
 
         // Store completions in state (for HistoryView reactive access)
-        completions.value = enriched as TaskCompletion[]
+        completions.value = enriched as EnrichedCompletion[]
 
         return enriched
     }

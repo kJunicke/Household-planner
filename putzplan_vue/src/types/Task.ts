@@ -37,9 +37,21 @@ export interface Task {
 
 export interface TaskCompletion {
   completion_id: string
-  task_id: string
+  task_id: string // Referenz zur Task (Soft Delete: Task bleibt immer erhalten)
   user_id: string
   completed_at: string // ISO timestamp from Supabase
   effort_override: number // ALWAYS set: Final effort value at completion (0-5) - Single Source of Truth for historical points
   completion_note: string | null // Optional user note (can explain effort adjustment or just document extra work)
+}
+
+// Extended type for completions with JOINed data (used in HistoryView)
+// fetchCompletions() enriches TaskCompletion with task and member info
+export interface EnrichedCompletion extends TaskCompletion {
+  isDeleted: boolean // Soft Delete: Task wurde gelöscht aber Daten bleiben erhalten
+  tasks: {
+    title: string
+  }
+  household_members: {
+    display_name: string
+  }
 }

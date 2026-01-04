@@ -86,6 +86,10 @@ putzplan_vue/
   - Hat `display_name` (Email-Prefix als Fallback beim Join/Create)
   - Keine redundante `member_id` mehr (wurde entfernt für einfacheres Datenmodell)
 - `tasks` - PK: `task_id` (Task-Templates mit `recurrence_days`, `last_completed_at`, `task_type`)
+  - **Soft Delete**: `deleted_at` Column (NULL = aktiv, Timestamp = gelöscht)
+    - Gelöschte Tasks bleiben für Historie erhalten (Task-Namen sichtbar in HistoryView)
+    - `loadTasks()` filtert mit `.is('deleted_at', null)`
+    - `deleteTask()` setzt `deleted_at` statt echtem DELETE
   - `task_type` - Enum mit Subtask-Verhalten:
     - `'recurring'`: Zeitbasiert, **alle Subtask-Modi erlaubt** (checklist/deduct/bonus)
     - `'daily'`: Immer sichtbar, **nur 'bonus' Subtasks** (eigenständige Belohnungen)
@@ -189,6 +193,7 @@ supabase/migrations/
 ├── 20251026000001_rls_policies.sql         # RLS Policies (documented)
 ├── 20251026000002_realtime.sql             # Realtime config
 ├── 20251026000003_cron_jobs.sql            # Recurring tasks cron
+├── 20260103202609_soft_delete_tasks.sql    # Soft Delete (deleted_at Column)
 └── archive/                                 # Old migrations (reference)
 ```
 

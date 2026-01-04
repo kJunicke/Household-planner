@@ -58,6 +58,11 @@
 **Migrations:** Konsolidiert am 26.10.2025 (29 → 4 Migrations)
 
 **Letzte größere Features:**
+- ✅ Soft Delete für Tasks - 04.01.2026
+  - `deleted_at` Column statt echtem DELETE
+  - Task-Namen bleiben in HistoryView sichtbar (auch nach Löschen)
+  - "Gelöscht" Badge zeigt gelöschte Tasks in Historie
+  - EnrichedCompletion Type für JOINed History-Daten
 - ✅ CleaningView UX Redesign - 22.12.2025
   - Multi-Select Filter-Bubbles oben statt Single-Select Tabs unten
   - Gruppierte Aufgaben-Anzeige mit Kategorie-Headers (wie Search-View)

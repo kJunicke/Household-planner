@@ -2,20 +2,13 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useTaskStore } from '../stores/taskStore'
 import { useHouseholdStore } from '../stores/householdStore'
-import type { Task } from '@/types/Task'
+import type { Task, EnrichedCompletion } from '@/types/Task'
 
 const taskStore = useTaskStore()
 const householdStore = useHouseholdStore()
 
-interface CompletionWithDetails {
-  completion_id: string
-  completed_at: string
-  effort_override: number // ALWAYS set: Historical effort value (Single Source of Truth)
-  completion_note: string | null
-  task_id: string // Für Subtask-Lookup
-  tasks: {
-    title: string
-  }
+// Extended type with user_color (added in computed)
+interface CompletionWithDetails extends EnrichedCompletion {
   household_members: {
     display_name: string
     user_color: string
@@ -29,18 +22,22 @@ const showOptionsDropdown = ref(false)
 const isLoading = ref(true)
 
 // Reactive completions from store (updated via Realtime)
-const completions = computed(() => {
-  // Enriche mit display_name und user_color via Frontend-Matching
+// Mit Soft Delete: Task-Namen sind immer verfügbar, isDeleted Flag zeigt gelöschte Tasks
+// fetchCompletions() liefert EnrichedCompletion mit tasks.title und isDeleted
+const completions = computed((): CompletionWithDetails[] => {
   return taskStore.completions.map(completion => {
     const member = householdStore.householdMembers.find(m => m.user_id === completion.user_id)
+    // Cast zu EnrichedCompletion (kommt aus fetchCompletions)
+    const enriched = completion as EnrichedCompletion
+
     return {
-      ...completion,
+      ...enriched,
+      // Fallback falls nicht enriched (z.B. von Realtime)
+      isDeleted: enriched.isDeleted ?? false,
+      tasks: enriched.tasks ?? { title: 'Unbekannte Aufgabe' },
       household_members: {
-        display_name: member?.display_name || 'Unbekannt',
+        display_name: enriched.household_members?.display_name || member?.display_name || 'Unbekannt',
         user_color: member?.user_color || '#6c757d'
-      },
-      tasks: {
-        title: taskStore.tasks.find(t => t.task_id === completion.task_id)?.title || 'Unbekannte Aufgabe'
       }
     }
   }).sort((a, b) => new Date(b.completed_at).getTime() - new Date(a.completed_at).getTime())
@@ -88,7 +85,17 @@ const confirmDeleteAll = async () => {
 }
 
 // Helper: Check if task is a subtask and get parent task info
+// Bei gelöschten Tasks (isDeleted) können wir keine Subtask-Info mehr abrufen
+// da der Task nicht mehr in tasks.value (nur aktive Tasks) geladen ist
 const getTaskInfo = (completion: CompletionWithDetails) => {
+  // Gelöschte Tasks: Subtask-Info nicht verfügbar (Task nicht in aktiver Liste)
+  if (completion.isDeleted) {
+    return {
+      isSubtask: false,
+      parentTaskTitle: null
+    }
+  }
+
   const task = taskStore.tasks.find((t: Task) => t.task_id === completion.task_id)
   const isSubtask = task?.parent_task_id !== null
 
@@ -189,6 +196,10 @@ onUnmounted(() => {
           <div class="completion-details">
             <div class="task-title">
               {{ completion.tasks?.title || 'Unbekannte Aufgabe' }}
+              <!-- Gelöscht Badge (Soft Delete) -->
+              <span v-if="completion.isDeleted" class="deleted-badge">
+                Gelöscht
+              </span>
               <!-- Subtask Badge -->
               <span v-if="getTaskInfo(completion).isSubtask" class="subtask-badge">
                 Subtask von: {{ getTaskInfo(completion).parentTaskTitle }}
@@ -350,6 +361,17 @@ onUnmounted(() => {
   padding: 0.125rem 0.5rem;
   border-radius: var(--radius-sm);
   border: 1px solid var(--bs-info);
+}
+
+.deleted-badge {
+  display: inline-block;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--bs-secondary);
+  background: var(--bs-secondary-bg, #e9ecef);
+  padding: 0.125rem 0.5rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--bs-secondary);
 }
 
 .completion-meta {
