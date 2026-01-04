@@ -31,6 +31,7 @@ const subtasksExpanded = ref(false) // Standardmäßig eingeklappt für kompakte
 const isCompletingTask = ref(false)
 const isCompletingProject = ref(false)
 const isLoggingWork = ref(false)
+const isQuickCompleting = ref(false)
 
 const openEditModal = () => {
      showEditModal.value = true
@@ -75,7 +76,9 @@ const handleDeleteTask = async () => {
 }
 
 const handleCompleteTask = async () => {
+     isQuickCompleting.value = true
      const success = await taskStore.completeTask(props.task.task_id)
+     isQuickCompleting.value = false
      if (success) {
           confetti({
                particleCount: 100,
@@ -482,8 +485,10 @@ const handleCompleteProject = async () => {
                               <!-- Trotzdem geputzt: Quick + Modal-Option -->
                               <button class="btn btn-success btn-sm action-btn"
                                       @click="handleCompleteTask"
+                                      :disabled="isQuickCompleting"
                                       title="Trotzdem geputzt">
-                                   <i class="bi bi-check-lg"></i>
+                                   <i v-if="isQuickCompleting" class="bi bi-arrow-repeat spinning"></i>
+                                   <i v-else class="bi bi-check-lg"></i>
                               </button>
                               <button class="btn btn-success btn-sm action-btn-modifier"
                                       @click="openCompletionModal"
@@ -502,8 +507,10 @@ const handleCompleteProject = async () => {
                          <div class="action-buttons">
                               <button class="btn btn-success btn-sm action-btn"
                                       @click="handleCompleteTask"
+                                      :disabled="isQuickCompleting"
                                       title="Sauber markieren">
-                                   <i class="bi bi-check-lg"></i>
+                                   <i v-if="isQuickCompleting" class="bi bi-arrow-repeat spinning"></i>
+                                   <i v-else class="bi bi-check-lg"></i>
                               </button>
                               <button class="btn btn-success btn-sm action-btn-modifier"
                                       @click="openCompletionModal"
@@ -888,6 +895,26 @@ const handleCompleteProject = async () => {
 .action-btn-modifier:hover {
      opacity: 0.9;
      transform: scale(1.02);
+}
+
+/* Loading state for buttons */
+.action-btn:disabled {
+     opacity: 0.7;
+     cursor: not-allowed;
+     transform: none;
+}
+
+.spinning {
+     animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+     from {
+          transform: rotate(0deg);
+     }
+     to {
+          transform: rotate(360deg);
+     }
 }
 
 .completed-badge {

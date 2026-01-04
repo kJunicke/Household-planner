@@ -15,6 +15,7 @@ const taskStore = useTaskStore()
 const isEditing = ref(false)
 const showCompletionModal = ref(false)
 const showProjectWorkModal = ref(false)
+const isQuickCompleting = ref(false)
 
 const editForm = ref({
   title: props.task.title,
@@ -42,7 +43,9 @@ const cancelEdit = () => {
 }
 
 const handleCompleteTask = async () => {
+  isQuickCompleting.value = true
   const success = await taskStore.completeTask(props.task.task_id)
+  isQuickCompleting.value = false
   if (success) {
     confetti({
       particleCount: 50,
@@ -163,9 +166,11 @@ const handleProjectWork = async (effort: number, note: string) => {
             <button
               class="btn btn-success btn-sm subtask-action-btn"
               @click="handleCompleteTask"
+              :disabled="isQuickCompleting"
               title="Sauber markieren"
             >
-              <i class="bi bi-check-lg"></i>
+              <i v-if="isQuickCompleting" class="bi bi-arrow-repeat spinning"></i>
+              <i v-else class="bi bi-check-lg"></i>
             </button>
             <button
               v-if="task.subtask_points_mode !== 'checklist'"
@@ -364,6 +369,25 @@ const handleProjectWork = async (effort: number, note: string) => {
 
 .btn-success:hover {
   opacity: 0.9;
+}
+
+/* Loading state */
+.subtask-action-btn:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+.spinning {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 /* Edit Mode */
