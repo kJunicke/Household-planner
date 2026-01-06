@@ -63,6 +63,7 @@
   - Task-Namen bleiben in HistoryView sichtbar (auch nach Löschen)
   - "Gelöscht" Badge zeigt gelöschte Tasks in Historie
   - EnrichedCompletion Type für JOINed History-Daten
+  - Fix: Race Condition in loadTasks() - überschrieb enriched Completions mit Rohdaten (06.01.2026)
 - ✅ CleaningView UX Redesign - 22.12.2025
   - Multi-Select Filter-Bubbles oben statt Single-Select Tabs unten
   - Gruppierte Aufgaben-Anzeige mit Kategorie-Headers (wie Search-View)

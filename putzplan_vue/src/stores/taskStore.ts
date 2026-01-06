@@ -51,16 +51,10 @@ export const useTaskStore = defineStore('tasks', () => {
 
             if (tasksError) throw tasksError
 
-            const { data: completionsData, error: completionsError } = await supabase
-                .from('task_completions')
-                .select('*')
-
-            if (completionsError) throw completionsError
-
             tasks.value = tasksData || []
-            completions.value = completionsData || []
             console.log('Loaded tasks:', tasks.value)
-            console.log('Loaded completions:', completions.value)
+            // Completions werden NICHT hier geladen - fetchCompletions() ist dafür zuständig
+            // (mit JOIN zu tasks für Task-Namen in der Historie)
         } catch (error) {
             console.error('Error loading tasks:', error)
             toastStore.showToast('Fehler beim Laden der Aufgaben', 'error')
