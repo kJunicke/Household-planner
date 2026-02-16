@@ -11,6 +11,7 @@ interface Emits {
   (e: 'close'): void
   (e: 'createSubtask', subtaskData: { title: string; effort: 1 | 2 | 3 | 4 | 5; subtask_points_mode: 'checklist' | 'deduct' | 'bonus' }): void
   (e: 'updateSubtaskPointsMode', subtaskId: string, mode: 'checklist' | 'deduct' | 'bonus'): void
+  (e: 'deleteSubtask', subtaskId: string): void
 }
 
 const props = defineProps<Props>()
@@ -104,6 +105,11 @@ const handleClose = () => {
 
 const handlePointsModeChange = (subtaskId: string, mode: 'checklist' | 'deduct' | 'bonus') => {
   emit('updateSubtaskPointsMode', subtaskId, mode)
+}
+
+const handleDeleteSubtask = (subtaskId: string) => {
+  if (!confirm('Unteraufgabe wirklich löschen?')) return
+  emit('deleteSubtask', subtaskId)
 }
 </script>
 
@@ -223,6 +229,14 @@ const handlePointsModeChange = (subtaskId: string, mode: 'checklist' | 'deduct' 
                     {{ modeDescriptions[mode].title.substring(0, 1) }}
                   </button>
                 </div>
+
+                <button
+                  class="delete-subtask-btn"
+                  @click="handleDeleteSubtask(subtask.task_id)"
+                  title="Unteraufgabe löschen"
+                >
+                  <i class="bi bi-trash"></i>
+                </button>
               </div>
             </div>
           </div>
@@ -588,6 +602,30 @@ const handlePointsModeChange = (subtaskId: string, mode: 'checklist' | 'deduct' 
 .mode-btn.active {
   border-color: var(--color-primary);
   background: var(--color-primary);
+  color: white;
+}
+
+/* Delete Subtask Button */
+.delete-subtask-btn {
+  width: var(--touch-target-min);
+  height: var(--touch-target-min);
+  min-width: var(--touch-target-min);
+  min-height: var(--touch-target-min);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-background);
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  transition: all var(--transition-base);
+  flex-shrink: 0;
+}
+
+.delete-subtask-btn:hover {
+  border-color: var(--bs-danger);
+  background: var(--bs-danger);
   color: white;
 }
 

@@ -333,6 +333,10 @@ const handleUpdateSubtaskPointsMode = async (subtaskId: string, mode: 'checklist
      })
 }
 
+const handleDeleteSubtask = async (subtaskId: string) => {
+     await taskStore.deleteTask(subtaskId)
+}
+
 const handleResetSubtasks = async () => {
      await taskStore.resetSubtasks(props.task.task_id)
 }
@@ -623,6 +627,7 @@ const handleCompleteProject = async () => {
                @close="closeSubtaskManagementModal"
                @createSubtask="handleCreateSubtask"
                @updateSubtaskPointsMode="handleUpdateSubtaskPointsMode"
+               @deleteSubtask="handleDeleteSubtask"
           />
 
           <!-- Project Work Modal -->
