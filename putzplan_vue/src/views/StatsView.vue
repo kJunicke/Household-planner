@@ -310,6 +310,15 @@ const barChartOptions = {
     <div class="container mt-4">
       <h2 class="page-title mb-4">Statistiken</h2>
 
+      <!-- Loading State -->
+      <div v-if="isLoading" class="empty-state">
+        <div class="spinner-border text-primary" role="status">
+          <span class="visually-hidden">Laden...</span>
+        </div>
+        <p>Lade Statistiken...</p>
+      </div>
+
+      <template v-else>
       <!-- Zeitraum-Tabs -->
       <div class="time-period-tabs mb-4">
         <button
@@ -369,6 +378,7 @@ const barChartOptions = {
           </div>
         </div>
       </div>
+      </template>
     </div>
   </div>
 </template>
