@@ -145,6 +145,8 @@ const getTasksForCategory = (category: TaskCategory): Task[] => {
       task.parent_task_id === null &&
       (task.task_type === 'daily' || task.task_type === 'one-time')
     )
+    // Alphabetisch sortieren (stabile Reihenfolge)
+    tasks.sort((a, b) => a.title.localeCompare(b.title, 'de'))
 
   } else if (category === 'recurring') {
     // Recurring tasks (not completed)

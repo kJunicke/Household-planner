@@ -71,6 +71,9 @@ const filteredTasks = computed(() => {
       task.parent_task_id === null && // Nur Parent Tasks
       (task.task_type === 'daily' || task.task_type === 'one-time')
     )
+
+    // Alphabetisch sortieren (stabile Reihenfolge, springt nicht nach Completion)
+    tasks.sort((a, b) => a.title.localeCompare(b.title, 'de'))
   } else if (props.filter === 'recurring-todo') {
     // Wiederkehrende Tasks (nicht completed)
     tasks = taskStore.tasks.filter((task: Task) =>
