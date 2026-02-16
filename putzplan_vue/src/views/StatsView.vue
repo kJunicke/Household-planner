@@ -1,17 +1,20 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
-import { Pie, Bar } from 'vue-chartjs'
-import { Chart as ChartJS, Title, Tooltip, Legend, ArcElement, BarElement, CategoryScale, LinearScale } from 'chart.js'
+import { Pie, Bar, Line } from 'vue-chartjs'
+import { Chart as ChartJS, Title, Tooltip, Legend, ArcElement, BarElement, LineElement, PointElement, CategoryScale, LinearScale } from 'chart.js'
 import { useHouseholdStore } from '../stores/householdStore'
 import { useTaskStore } from '../stores/taskStore'
 
-ChartJS.register(Title, Tooltip, Legend, ArcElement, BarElement, CategoryScale, LinearScale)
+ChartJS.register(Title, Tooltip, Legend, ArcElement, BarElement, LineElement, PointElement, CategoryScale, LinearScale)
 
 const householdStore = useHouseholdStore()
 const taskStore = useTaskStore()
 
 type TimePeriod = 'all' | 'week' | 'month' | 'year'
 const selectedPeriod = ref<TimePeriod>('all')
+
+type TrendAggregation = 'weekly' | 'monthly'
+const trendAggregation = ref<TrendAggregation>('weekly')
 
 interface CompletionWithDetails {
   completion_id: string
@@ -69,6 +72,27 @@ const hexToRgba = (hex: string, alpha: number = 1) => {
   const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex)
   if (!result) return `rgba(79, 70, 229, ${alpha})` // Fallback to primary color
   return `rgba(${parseInt(result[1], 16)}, ${parseInt(result[2], 16)}, ${parseInt(result[3], 16)}, ${alpha})`
+}
+
+// ISO 8601 Wochennummer berechnen
+const getISOWeekAndYear = (date: Date): { week: number; year: number } => {
+  const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()))
+  const dayNum = d.getUTCDay() || 7
+  d.setUTCDate(d.getUTCDate() + 4 - dayNum)
+  const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1))
+  const week = Math.ceil((((d.getTime() - yearStart.getTime()) / 86400000) + 1) / 7)
+  return { week, year: d.getUTCFullYear() }
+}
+
+// Montag einer ISO-Woche berechnen (für Lücken-Füllung)
+const getDateFromISOWeek = (week: number, year: number): Date => {
+  const jan4 = new Date(Date.UTC(year, 0, 4))
+  const dayOfWeek = jan4.getUTCDay() || 7
+  const mondayWeek1 = new Date(jan4)
+  mondayWeek1.setUTCDate(jan4.getUTCDate() - dayOfWeek + 1)
+  const result = new Date(mondayWeek1)
+  result.setUTCDate(mondayWeek1.getUTCDate() + (week - 1) * 7)
+  return result
 }
 
 // Berechne Effort pro User basierend auf gefilterten Completions
@@ -165,6 +189,145 @@ const barChartData = computed(() => {
       borderRadius: 8
     }]
   }
+})
+
+// Line Chart Data - Verlaufsgrafik
+const lineChartData = computed(() => {
+  const completions = allCompletions.value
+  const members = householdStore.householdMembers
+
+  if (!completions.length || !members.length) {
+    return null
+  }
+
+  const isWeekly = trendAggregation.value === 'weekly'
+
+  const getBucketKey = (dateStr: string): string => {
+    const date = new Date(dateStr)
+    if (isWeekly) {
+      const { week, year } = getISOWeekAndYear(date)
+      return `${year}-W${String(week).padStart(2, '0')}`
+    } else {
+      return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
+    }
+  }
+
+  const getBucketLabel = (key: string): string => {
+    if (isWeekly) {
+      const week = parseInt(key.split('-W')[1], 10)
+      return `KW ${week}`
+    } else {
+      const [year, month] = key.split('-')
+      const monthNames = ['Jan', 'Feb', 'Mär', 'Apr', 'Mai', 'Jun',
+                           'Jul', 'Aug', 'Sep', 'Okt', 'Nov', 'Dez']
+      return `${monthNames[parseInt(month, 10) - 1]} ${year}`
+    }
+  }
+
+  // Punkte pro User pro Bucket aggregieren
+  const bucketMap = new Map<string, Map<string, number>>()
+  completions.forEach(completion => {
+    const key = getBucketKey(completion.completed_at)
+    if (!bucketMap.has(key)) {
+      bucketMap.set(key, new Map())
+    }
+    const userMap = bucketMap.get(key)!
+    const current = userMap.get(completion.user_id) || 0
+    userMap.set(completion.user_id, current + completion.effort_override)
+  })
+
+  const sortedKeys = Array.from(bucketMap.keys()).sort()
+
+  // Lücken füllen (leere Wochen/Monate = 0)
+  const allKeys: string[] = []
+  if (sortedKeys.length > 0) {
+    if (isWeekly) {
+      const firstWeekStr = sortedKeys[0].split('-W')[1]
+      const firstYear = parseInt(sortedKeys[0].split('-W')[0], 10)
+      const lastWeekStr = sortedKeys[sortedKeys.length - 1].split('-W')[1]
+      const lastYear = parseInt(sortedKeys[sortedKeys.length - 1].split('-W')[0], 10)
+
+      const firstDate = getDateFromISOWeek(parseInt(firstWeekStr, 10), firstYear)
+      const lastDate = getDateFromISOWeek(parseInt(lastWeekStr, 10), lastYear)
+
+      const current = new Date(firstDate)
+      while (current <= lastDate) {
+        const { week, year } = getISOWeekAndYear(current)
+        const key = `${year}-W${String(week).padStart(2, '0')}`
+        if (!allKeys.includes(key)) {
+          allKeys.push(key)
+        }
+        current.setDate(current.getDate() + 7)
+      }
+    } else {
+      const [firstYear, firstMonth] = sortedKeys[0].split('-').map(Number)
+      const [lastYear, lastMonth] = sortedKeys[sortedKeys.length - 1].split('-').map(Number)
+
+      let y = firstYear
+      let m = firstMonth
+      while (y < lastYear || (y === lastYear && m <= lastMonth)) {
+        allKeys.push(`${y}-${String(m).padStart(2, '0')}`)
+        m++
+        if (m > 12) { m = 1; y++ }
+      }
+    }
+  }
+
+  const labels = allKeys.map(getBucketLabel)
+
+  // Ein Dataset pro Mitglied
+  const datasets: Array<{
+    label: string
+    data: number[]
+    borderColor: string
+    backgroundColor: string
+    borderWidth: number
+    pointRadius: number
+    pointHoverRadius: number
+    pointBackgroundColor: string
+    tension: number
+    fill: boolean
+    borderDash?: number[]
+  }> = members.map(member => ({
+    label: member.display_name || 'Unbekannt',
+    data: allKeys.map(key => {
+      const userMap = bucketMap.get(key)
+      return userMap?.get(member.user_id) || 0
+    }),
+    borderColor: member.user_color,
+    backgroundColor: hexToRgba(member.user_color, 0.1),
+    borderWidth: 2,
+    pointRadius: 3,
+    pointHoverRadius: 6,
+    pointBackgroundColor: member.user_color,
+    tension: 0.3,
+    fill: false
+  }))
+
+  // Gesamt-Linie (gestrichelt)
+  const gesamtData = allKeys.map(key => {
+    const userMap = bucketMap.get(key)
+    if (!userMap) return 0
+    let total = 0
+    userMap.forEach(val => { total += val })
+    return total
+  })
+
+  datasets.push({
+    label: 'Gesamt',
+    data: gesamtData,
+    borderColor: '#1e293b',
+    backgroundColor: hexToRgba('#1e293b', 0.05),
+    borderWidth: 2.5,
+    pointRadius: 3,
+    pointHoverRadius: 6,
+    pointBackgroundColor: '#1e293b',
+    tension: 0.3,
+    fill: false,
+    borderDash: [6, 3]
+  })
+
+  return { labels, datasets }
 })
 
 const pieChartOptions = {
@@ -303,6 +466,102 @@ const barChartOptions = {
     }
   }
 }
+
+const lineChartOptions = computed(() => ({
+  responsive: true,
+  maintainAspectRatio: false,
+  interaction: {
+    mode: 'index' as const,
+    intersect: false
+  },
+  plugins: {
+    legend: {
+      position: 'bottom' as const,
+      labels: {
+        padding: 12,
+        font: {
+          family: 'Inter, system-ui, sans-serif',
+          size: 12,
+          weight: 500 as const
+        },
+        color: '#1e293b',
+        usePointStyle: true,
+        pointStyle: 'circle'
+      }
+    },
+    title: {
+      display: true,
+      text: trendAggregation.value === 'weekly' ? 'Punkteverlauf (Wochen)' : 'Punkteverlauf (Monate)',
+      font: {
+        family: 'Inter, system-ui, sans-serif',
+        size: 16,
+        weight: 600 as const
+      },
+      color: '#1e293b',
+      padding: {
+        bottom: 16
+      }
+    },
+    tooltip: {
+      backgroundColor: '#1e293b',
+      padding: 12,
+      cornerRadius: 8,
+      titleFont: {
+        family: 'Inter, system-ui, sans-serif',
+        size: 13,
+        weight: 600 as const
+      },
+      bodyFont: {
+        family: 'Inter, system-ui, sans-serif',
+        size: 13
+      },
+      callbacks: {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        label: function(context: any) {
+          const label = context.dataset.label || ''
+          const value = context.parsed.y || 0
+          return ` ${label}: ${value} Punkte`
+        }
+      }
+    }
+  },
+  scales: {
+    x: {
+      grid: {
+        display: false
+      },
+      ticks: {
+        font: {
+          family: 'Inter, system-ui, sans-serif',
+          size: 11
+        },
+        color: '#64748b',
+        maxRotation: 45,
+        autoSkip: true,
+        maxTicksLimit: 12
+      }
+    },
+    y: {
+      beginAtZero: true,
+      grid: {
+        color: '#e2e8f0',
+        lineWidth: 1
+      },
+      border: {
+        display: false
+      },
+      ticks: {
+        stepSize: 1,
+        font: {
+          family: 'Inter, system-ui, sans-serif',
+          size: 12
+        },
+        color: '#64748b',
+        padding: 8
+      }
+    }
+  }
+}))
 </script>
 
 <template>
@@ -377,6 +636,35 @@ const barChartOptions = {
             </div>
           </div>
         </div>
+
+        <!-- Line Chart - Verlaufsgrafik -->
+        <div class="col-12">
+          <div class="card shadow-sm">
+            <div class="card-body p-4">
+              <div class="trend-toggle mb-3">
+                <button
+                  @click="trendAggregation = 'weekly'"
+                  :class="['btn', 'btn-sm', trendAggregation === 'weekly' ? 'btn-primary' : 'btn-outline-primary']"
+                >
+                  Pro Woche
+                </button>
+                <button
+                  @click="trendAggregation = 'monthly'"
+                  :class="['btn', 'btn-sm', trendAggregation === 'monthly' ? 'btn-primary' : 'btn-outline-primary']"
+                >
+                  Pro Monat
+                </button>
+              </div>
+              <div v-if="lineChartData" class="chart-container chart-container--trend">
+                <Line :data="lineChartData" :options="lineChartOptions" />
+              </div>
+              <div v-else class="text-center text-muted py-5">
+                <i class="bi bi-graph-up fs-1 d-block mb-3"></i>
+                <p>Noch keine Verlaufsdaten verfügbar</p>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
       </template>
     </div>
@@ -441,5 +729,30 @@ const barChartOptions = {
 
 .card-body {
   padding: 0.75rem;
+}
+
+.trend-toggle {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.trend-toggle .btn {
+  flex: 0 1 auto;
+  min-width: 100px;
+}
+
+.chart-container--trend {
+  height: 400px;
+}
+
+@media (max-width: 480px) {
+  .chart-container--trend {
+    height: 300px;
+  }
+
+  .trend-toggle .btn-sm {
+    font-size: 0.75rem;
+    padding: 0.4rem 0.6rem;
+  }
 }
 </style>

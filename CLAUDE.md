@@ -69,7 +69,7 @@ putzplan_vue/
   - **FAB-Buttons**: Expanding Search + Create Task (unten rechts, thumb-freundlich)
   - **Cross-Tab Search**: Intelligente Suche über alle Kategorien mit Relevanz-Sortierung
 - `/history` - **HistoryView** - Chronologischer Verlauf aller Completions
-- `/stats` - **StatsView** - Gamification-Statistiken (Tortendiagramm mit Aufgabenverteilung)
+- `/stats` - **StatsView** - Gamification-Statistiken (Balken-/Tortendiagramm + Verlaufsgrafik mit Wochen-/Monatsansicht)
 - `/shopping` - **ShoppingView** - Einkaufsliste mit Autocomplete und Purchase-Tracking
 - `/notes` - **NotesView** - Haushalt-Notizen (alle Mitglieder können erstellen/bearbeiten/löschen)
 - `/login` - LoginView

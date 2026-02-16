@@ -58,6 +58,13 @@
 **Migrations:** Konsolidiert am 26.10.2025 (29 → 4 Migrations)
 
 **Letzte größere Features:**
+- ✅ Verlaufsgrafik (Trend Line Chart) in StatsView - 16.02.2026
+  - Line Chart mit Chart.js: Punkteverlauf über die Zeit
+  - Toggle Wochen/Monats-Aggregation (KW X / Monat Jahr)
+  - Eine Linie pro WG-Mitglied (user_color) + gestrichelte Gesamt-Linie
+  - Tooltip bei Hover/Touch zeigt alle Werte am Zeitpunkt
+  - Lücken-Füllung (leere Wochen/Monate = 0, durchgehende Linie)
+  - Mobile-optimiert (300px Höhe, autoSkip bei vielen Labels)
 - ✅ Soft Delete für Tasks - 04.01.2026
   - `deleted_at` Column statt echtem DELETE
   - Task-Namen bleiben in HistoryView sichtbar (auch nach Löschen)
