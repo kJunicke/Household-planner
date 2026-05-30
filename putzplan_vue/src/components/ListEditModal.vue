@@ -28,7 +28,7 @@ const handleDelete = () => {
 <template>
   <Teleport to="body">
     <div class="modal-overlay" @click.self="emit('close')">
-      <div class="modal-container">
+      <div class="modal-content" @click.stop>
         <div class="modal-header">
           <h5 class="modal-title">Liste bearbeiten</h5>
           <button class="btn-close" @click="emit('close')"></button>

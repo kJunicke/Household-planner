@@ -69,10 +69,11 @@ export const useSettlementStore = defineStore('settlement', () => {
         const ptsB = pointsByUser.value.get(b) ?? 0
         const grossDiff = ptsA - ptsB
 
-        // Settled: A compensated B (reduces A's advantage); B compensated A (increases A's advantage)
-        const settledAtoB = settledByPair.value.get(`${a}__${b}`) ?? 0
+        // B settling TO A reduces B's debt (decreases A's advantage)
+        // A settling TO B is unusual but also reduces the imbalance
         const settledBtoA = settledByPair.value.get(`${b}__${a}`) ?? 0
-        const netBalance = grossDiff - settledAtoB + settledBtoA
+        const settledAtoB = settledByPair.value.get(`${a}__${b}`) ?? 0
+        const netBalance = grossDiff - settledBtoA + settledAtoB
 
         if (netBalance !== 0) {
           result.push({ userAId: a, userBId: b, balance: netBalance })

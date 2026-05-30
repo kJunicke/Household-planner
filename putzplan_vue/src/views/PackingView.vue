@@ -234,7 +234,7 @@ onUnmounted(() => {
   <!-- Neue Liste erstellen Modal -->
   <Teleport to="body">
     <div v-if="showCreateListModal" class="modal-overlay" @click.self="showCreateListModal = false; newListName = ''">
-      <div class="modal-container">
+      <div class="modal-content" @click.stop>
         <div class="modal-header">
           <h5 class="modal-title">Neue Packliste</h5>
           <button class="btn-close" @click="showCreateListModal = false; newListName = ''"></button>
@@ -263,7 +263,7 @@ onUnmounted(() => {
   <!-- Reset-Bestätigung Modal -->
   <Teleport to="body">
     <div v-if="showResetConfirm" class="modal-overlay" @click.self="showResetConfirm = false">
-      <div class="modal-container">
+      <div class="modal-content" @click.stop>
         <div class="modal-header">
           <h5 class="modal-title">Alle zurücksetzen?</h5>
           <button class="btn-close" @click="showResetConfirm = false"></button>

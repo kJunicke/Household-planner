@@ -82,7 +82,7 @@ export const useShoppingStore = defineStore('shopping', () => {
   // ============================================================================
 
   const currentListItems = computed(() => {
-    if (!currentListId.value) return items.value
+    if (!currentListId.value) return []
     return items.value.filter(item => item.list_id === currentListId.value)
   })
 

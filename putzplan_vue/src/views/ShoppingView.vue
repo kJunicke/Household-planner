@@ -367,7 +367,7 @@ onUnmounted(() => {
   <!-- Neue Liste erstellen Modal -->
   <Teleport to="body">
     <div v-if="showCreateListModal" class="modal-overlay" @click.self="showCreateListModal = false; newListName = ''">
-      <div class="modal-container">
+      <div class="modal-content" @click.stop>
         <div class="modal-header">
           <h5 class="modal-title">Neue Einkaufsliste</h5>
           <button class="btn-close" @click="showCreateListModal = false; newListName = ''"></button>

@@ -78,7 +78,7 @@ const getMemberName = (userId: string) => {
 <template>
   <Teleport to="body">
     <div class="modal-overlay" @click.self="emit('close')">
-      <div class="modal-container settlement-modal">
+      <div class="modal-content settlement-modal" @click.stop>
         <div class="modal-header">
           <h5 class="modal-title">Neuer Ausgleich</h5>
           <button class="btn-close" @click="emit('close')"></button>

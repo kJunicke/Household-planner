@@ -56,8 +56,13 @@ export const usePackingStore = defineStore('packing', () => {
 
       lists.value = data || []
 
-      if (lists.value.length > 0 && !currentListId.value) {
-        currentListId.value = lists.value[0].list_id
+      if (lists.value.length > 0) {
+        const currentExists = currentListId.value && lists.value.some(l => l.list_id === currentListId.value)
+        if (!currentExists) {
+          currentListId.value = lists.value[0].list_id
+        }
+      } else {
+        currentListId.value = null
       }
     } catch (error) {
       console.error('Error loading packing lists:', error)
@@ -304,6 +309,10 @@ export const usePackingStore = defineStore('packing', () => {
           if (payload.eventType === 'DELETE') {
             const deleted = payload.old as PackingList
             lists.value = lists.value.filter(l => l.list_id !== deleted.list_id)
+            items.value = items.value.filter(i => i.list_id !== deleted.list_id)
+            if (currentListId.value === deleted.list_id) {
+              currentListId.value = lists.value[0]?.list_id ?? null
+            }
           }
         }
       )
