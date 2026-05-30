@@ -6,7 +6,7 @@ const route = useRoute()
 const navItems = [
   { path: '/', icon: 'bi-list-check', label: 'Putzen' },
   { path: '/history', icon: 'bi-clock-history', label: 'Verlauf' },
-  { path: '/stats', icon: 'bi-pie-chart', label: 'Stats' },
+  { path: '/uebersicht', icon: 'bi-pie-chart', label: 'Übersicht' },
   { path: '/listen', icon: 'bi-cart3', label: 'Listen' },
   { path: '/notes', icon: 'bi-sticky', label: 'Notizen' }
 ]
