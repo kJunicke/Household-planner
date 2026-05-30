@@ -21,9 +21,13 @@ const router = createRouter({
       component: () => import('../views/StatsView.vue')
     },
     {
+      path: '/listen',
+      name: 'listen',
+      component: () => import('../views/ListsView.vue')
+    },
+    {
       path: '/shopping',
-      name: 'shopping',
-      component: () => import('../views/ShoppingView.vue')
+      redirect: '/listen'
     },
     {
       path: '/notes',
