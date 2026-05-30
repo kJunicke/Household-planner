@@ -1,6 +1,7 @@
 import { ref, computed, watch } from 'vue'
 import { defineStore } from 'pinia'
 import type { ShoppingItem } from '@/types/ShoppingItem'
+import type { ShoppingList } from '@/types/ShoppingList'
 import type { PendingMutation } from '@/types/PendingMutation'
 import { supabase } from '@/lib/supabase'
 import { useHouseholdStore } from './householdStore'
@@ -16,12 +17,15 @@ const MAX_RETRIES = 5
 export const useShoppingStore = defineStore('shopping', () => {
   // State
   const items = ref<ShoppingItem[]>([])
+  const lists = ref<ShoppingList[]>([])
+  const currentListId = ref<string | null>(null)
   const isLoading = ref(false)
   const mutationQueue = ref<PendingMutation[]>([])
   const isSyncing = ref(false)
 
-  // Realtime subscription channel
+  // Realtime subscription channels
   let realtimeChannel: RealtimeChannel | null = null
+  let realtimeListsChannel: RealtimeChannel | null = null
 
   // ============================================================================
   // localStorage Helpers
@@ -77,25 +81,25 @@ export const useShoppingStore = defineStore('shopping', () => {
   // Getters (computed)
   // ============================================================================
 
+  const currentListItems = computed(() => {
+    if (!currentListId.value) return items.value
+    return items.value.filter(item => item.list_id === currentListId.value)
+  })
+
   const unpurchasedItems = computed(() => {
-    return items.value
+    return currentListItems.value
       .filter(item => !item.purchased)
       .sort((a, b) => {
-        // Priority items first
         if (a.is_priority && !b.is_priority) return -1
         if (!a.is_priority && b.is_priority) return 1
-        // Then sort alphabetically
         return a.name.localeCompare(b.name)
       })
   })
 
   const purchasedItems = computed(() => {
-    return items.value
+    return currentListItems.value
       .filter(item => item.purchased)
-      .sort((a, b) => {
-        // Sort by times_purchased descending (most purchased first)
-        return b.times_purchased - a.times_purchased
-      })
+      .sort((a, b) => b.times_purchased - a.times_purchased)
   })
 
   const hasPendingMutations = computed(() => mutationQueue.value.length > 0)
@@ -104,9 +108,7 @@ export const useShoppingStore = defineStore('shopping', () => {
   // Mutation Queue Helpers
   // ============================================================================
 
-  const isTemporaryId = (id: string): boolean => {
-    return id.startsWith('temp_')
-  }
+  const isTemporaryId = (id: string): boolean => id.startsWith('temp_')
 
   const addToQueue = (mutation: Omit<PendingMutation, 'queueId' | 'timestamp' | 'retries'>) => {
     const queueItem: PendingMutation = {
@@ -127,15 +129,14 @@ export const useShoppingStore = defineStore('shopping', () => {
   // Offline-Aware Mutations (with Optimistic Updates)
   // ============================================================================
 
-  const createItemOptimistic = (name: string): ShoppingItem => {
+  const createItemOptimistic = (name: string, listId: string): ShoppingItem => {
     const householdStore = useHouseholdStore()
-
-    // Generate temporary ID
     const tempId = `temp_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
 
     const newItem: ShoppingItem = {
       shopping_item_id: tempId,
       household_id: householdStore.currentHousehold!.household_id,
+      list_id: listId,
       name: name.trim(),
       purchased: false,
       is_priority: false,
@@ -145,7 +146,6 @@ export const useShoppingStore = defineStore('shopping', () => {
       created_at: new Date().toISOString()
     }
 
-    // Optimistic update
     items.value.push(newItem)
     return newItem
   }
@@ -174,7 +174,8 @@ export const useShoppingStore = defineStore('shopping', () => {
           .from('shopping_items')
           .insert({
             name: mutation.payload.name!,
-            household_id: householdStore.currentHousehold!.household_id
+            household_id: householdStore.currentHousehold!.household_id,
+            list_id: mutation.payload.listId!
           })
 
         if (error) throw error
@@ -208,9 +209,7 @@ export const useShoppingStore = defineStore('shopping', () => {
   }
 
   const syncMutations = async () => {
-    if (isSyncing.value || mutationQueue.value.length === 0) {
-      return
-    }
+    if (isSyncing.value || mutationQueue.value.length === 0) return
 
     console.log('🔄 Starting sync of', mutationQueue.value.length, 'mutations...')
     isSyncing.value = true
@@ -219,7 +218,6 @@ export const useShoppingStore = defineStore('shopping', () => {
     const failedMutations: PendingMutation[] = []
 
     for (const mutation of mutationQueue.value) {
-      // Exponential backoff check
       if (mutation.retries >= MAX_RETRIES) {
         console.warn('⚠️ Max retries reached for mutation:', mutation)
         failedMutations.push(mutation)
@@ -245,23 +243,151 @@ export const useShoppingStore = defineStore('shopping', () => {
       toastStore.showToast('Einkaufsliste synchronisiert', 'success', 2000)
     }
 
-    // Reload items from server after sync
     if (mutationQueue.value.length === 0) {
       await loadItems()
     }
   }
 
   // ============================================================================
-  // Actions
+  // List Actions
+  // ============================================================================
+
+  const loadLists = async () => {
+    const householdStore = useHouseholdStore()
+    const toastStore = useToastStore()
+
+    if (!householdStore.currentHousehold) return
+
+    try {
+      const { data, error } = await supabase
+        .from('shopping_lists')
+        .select('*')
+        .eq('household_id', householdStore.currentHousehold.household_id)
+        .order('sort_order', { ascending: true })
+        .order('created_at', { ascending: true })
+
+      if (error) throw error
+
+      lists.value = data || []
+
+      // Select first list by default if none selected or current doesn't exist
+      if (lists.value.length > 0) {
+        const currentExists = currentListId.value && lists.value.some(l => l.list_id === currentListId.value)
+        if (!currentExists) {
+          currentListId.value = lists.value[0].list_id
+        }
+      } else {
+        currentListId.value = null
+      }
+
+    } catch (error) {
+      console.error('Error loading shopping lists:', error)
+      toastStore.showToast('Fehler beim Laden der Listen', 'error')
+    }
+  }
+
+  const createList = async (name: string) => {
+    const householdStore = useHouseholdStore()
+    const authStore = useAuthStore()
+    const toastStore = useToastStore()
+
+    if (!householdStore.currentHousehold || !authStore.user) return null
+
+    const trimmedName = name.trim()
+    if (!trimmedName) return null
+
+    try {
+      const { data, error } = await supabase
+        .from('shopping_lists')
+        .insert({
+          household_id: householdStore.currentHousehold.household_id,
+          name: trimmedName,
+          sort_order: lists.value.length,
+          created_by: authStore.user.id
+        })
+        .select()
+        .single()
+
+      if (error) throw error
+
+      lists.value.push(data)
+      currentListId.value = data.list_id
+      return data
+
+    } catch (error) {
+      console.error('Error creating shopping list:', error)
+      toastStore.showToast('Fehler beim Erstellen der Liste', 'error')
+      return null
+    }
+  }
+
+  const renameList = async (listId: string, name: string) => {
+    const toastStore = useToastStore()
+    const trimmedName = name.trim()
+    if (!trimmedName) return false
+
+    try {
+      const { error } = await supabase
+        .from('shopping_lists')
+        .update({ name: trimmedName })
+        .eq('list_id', listId)
+
+      if (error) throw error
+
+      const idx = lists.value.findIndex(l => l.list_id === listId)
+      if (idx !== -1) lists.value[idx] = { ...lists.value[idx], name: trimmedName }
+
+      return true
+
+    } catch (error) {
+      console.error('Error renaming shopping list:', error)
+      toastStore.showToast('Fehler beim Umbenennen der Liste', 'error')
+      return false
+    }
+  }
+
+  const deleteList = async (listId: string) => {
+    const toastStore = useToastStore()
+
+    if (lists.value.length <= 1) {
+      toastStore.showToast('Die letzte Liste kann nicht gelöscht werden', 'error')
+      return false
+    }
+
+    try {
+      const { error } = await supabase
+        .from('shopping_lists')
+        .delete()
+        .eq('list_id', listId)
+
+      if (error) throw error
+
+      lists.value = lists.value.filter(l => l.list_id !== listId)
+      items.value = items.value.filter(i => i.list_id !== listId)
+
+      // Switch to first remaining list
+      if (currentListId.value === listId) {
+        currentListId.value = lists.value[0]?.list_id ?? null
+      }
+
+      return true
+
+    } catch (error) {
+      console.error('Error deleting shopping list:', error)
+      toastStore.showToast('Fehler beim Löschen der Liste', 'error')
+      return false
+    }
+  }
+
+  // ============================================================================
+  // Item Actions
   // ============================================================================
 
   const loadItems = async () => {
     console.log('Loading shopping items...')
 
-    // Load from cache first (instant UI)
     loadItemsFromCache()
 
-    // Verhindere parallele Calls
     if (isLoading.value) {
       console.log('Already loading shopping items, skipping...')
       return
@@ -271,7 +397,6 @@ export const useShoppingStore = defineStore('shopping', () => {
     const toastStore = useToastStore()
 
     if (!householdStore.currentHousehold) {
-      console.warn('No current household, cannot load shopping items')
       items.value = []
       return
     }
@@ -287,19 +412,16 @@ export const useShoppingStore = defineStore('shopping', () => {
       if (error) throw error
 
       items.value = data || []
-      console.log('Loaded shopping items:', items.value)
+      console.log('Loaded shopping items:', items.value.length)
 
-      // Load queue from storage
       loadQueueFromStorage()
 
-      // Auto-sync pending mutations
       if (mutationQueue.value.length > 0) {
         await syncMutations()
       }
 
     } catch (error) {
       console.error('Error loading shopping items:', error)
-      // Don't show error if we have cached data
       if (items.value.length === 0) {
         toastStore.showToast('Fehler beim Laden der Einkaufsliste', 'error')
       }
@@ -308,33 +430,32 @@ export const useShoppingStore = defineStore('shopping', () => {
     }
   }
 
-  // CREATE - Neues Item erstellen
   const createItem = async (name: string) => {
     const householdStore = useHouseholdStore()
     const toastStore = useToastStore()
 
     if (!householdStore.currentHousehold) {
-      console.error('Cannot create item: No current household')
       toastStore.showToast('Fehler: Kein Haushalt ausgewählt', 'error')
       return null
     }
 
     if (!name.trim()) {
-      console.error('Cannot create item: Name is empty')
       toastStore.showToast('Artikel-Name darf nicht leer sein', 'error')
       return null
     }
 
-    // Optimistic update
-    const tempItem = createItemOptimistic(name)
+    if (!currentListId.value) {
+      toastStore.showToast('Bitte zuerst eine Liste auswählen', 'error')
+      return null
+    }
 
-    // Add to queue for sync
+    const tempItem = createItemOptimistic(name, currentListId.value)
+
     addToQueue({
       operation: 'create',
-      payload: { name: name.trim() }
+      payload: { name: name.trim(), listId: currentListId.value }
     })
 
-    // Try sync immediately if online
     if (navigator.onLine) {
       await syncMutations()
     } else {
@@ -344,70 +465,53 @@ export const useShoppingStore = defineStore('shopping', () => {
     return tempItem
   }
 
-  // TOGGLE PRIORITY - Item als prioritär markieren/demarkieren
   const togglePriority = async (itemId: string) => {
     const toastStore = useToastStore()
 
     const item = items.value.find(i => i.shopping_item_id === itemId)
     if (!item) {
-      console.error('Cannot toggle priority: Item not found')
       toastStore.showToast('Artikel nicht gefunden', 'error')
       return false
     }
 
-    // Skip update mutations for temporary IDs
     if (isTemporaryId(itemId)) {
       console.warn('⚠️ Cannot update item with temporary ID, waiting for sync:', itemId)
       return false
     }
 
     const newPriority = !item.is_priority
-
-    // Optimistic update
     updateItemOptimistic(itemId, { is_priority: newPriority })
 
-    // Add to queue
     addToQueue({
       operation: 'update',
-      payload: {
-        itemId,
-        updates: { is_priority: newPriority }
-      }
+      payload: { itemId, updates: { is_priority: newPriority } }
     })
 
-    // Try sync
-    if (navigator.onLine) {
-      await syncMutations()
-    }
+    if (navigator.onLine) await syncMutations()
 
     return true
   }
 
-  // MARK PURCHASED - Item als gekauft markieren
   const markPurchased = async (itemId: string) => {
     const authStore = useAuthStore()
     const toastStore = useToastStore()
 
     if (!authStore.user) {
-      console.error('Cannot mark purchased: No user logged in')
       toastStore.showToast('Fehler: Nicht angemeldet', 'error')
       return false
     }
 
     const item = items.value.find(i => i.shopping_item_id === itemId)
     if (!item) {
-      console.error('Cannot mark purchased: Item not found')
       toastStore.showToast('Artikel nicht gefunden', 'error')
       return false
     }
-    // Skip update mutations for temporary IDs
+
     if (isTemporaryId(itemId)) {
       console.warn('⚠️ Cannot update item with temporary ID, waiting for sync:', itemId)
       return false
     }
 
-
-    // Optimistic update
     const now = new Date().toISOString()
     updateItemOptimistic(itemId, {
       purchased: true,
@@ -417,7 +521,6 @@ export const useShoppingStore = defineStore('shopping', () => {
       last_purchased_by: authStore.user.id
     })
 
-    // Add to queue
     addToQueue({
       operation: 'update',
       payload: {
@@ -431,56 +534,39 @@ export const useShoppingStore = defineStore('shopping', () => {
       }
     })
 
-    // Try sync
-    if (navigator.onLine) {
-      await syncMutations()
-    }
+    if (navigator.onLine) await syncMutations()
 
     return true
   }
 
-  // MARK UNPURCHASED - Item zurück auf Todo-Liste
   const markUnpurchased = async (itemId: string) => {
-    // Skip update mutations for temporary IDs
     if (isTemporaryId(itemId)) {
       console.warn('⚠️ Cannot update item with temporary ID, waiting for sync:', itemId)
       return false
     }
 
-    // Optimistic update
     updateItemOptimistic(itemId, { purchased: false })
 
-    // Add to queue
     addToQueue({
       operation: 'update',
-      payload: {
-        itemId,
-        updates: { purchased: false }
-      }
+      payload: { itemId, updates: { purchased: false } }
     })
 
-    // Try sync
-    if (navigator.onLine) {
-      await syncMutations()
-    }
+    if (navigator.onLine) await syncMutations()
 
     return true
   }
 
-  // DELETE - Item permanent löschen
   const deleteItem = async (itemId: string) => {
     const toastStore = useToastStore()
 
-    // Optimistic update
     deleteItemOptimistic(itemId)
 
-    // Add to queue
     addToQueue({
       operation: 'delete',
       payload: { itemId }
     })
 
-    // Try sync
     if (navigator.onLine) {
       await syncMutations()
     } else {
@@ -491,7 +577,7 @@ export const useShoppingStore = defineStore('shopping', () => {
   }
 
   // ============================================================================
-  // REALTIME - Subscribe zu Änderungen an shopping_items
+  // REALTIME
   // ============================================================================
 
   const subscribeToItems = () => {
@@ -502,28 +588,19 @@ export const useShoppingStore = defineStore('shopping', () => {
       return
     }
 
-    // Alte Subscription cleanup
-    if (realtimeChannel) {
-      supabase.removeChannel(realtimeChannel)
-    }
+    if (realtimeChannel) supabase.removeChannel(realtimeChannel)
+    if (realtimeListsChannel) supabase.removeChannel(realtimeListsChannel)
 
-    console.log('🔴 Subscribing to shopping items for household:', householdStore.currentHousehold.household_id)
+    const hhId = householdStore.currentHousehold.household_id
 
-    // Neuen Channel erstellen & filtern auf household_id
     realtimeChannel = supabase
       .channel(`shopping-items-changes-${Date.now()}`)
       .on(
         'postgres_changes',
-        {
-          event: '*', // INSERT, UPDATE, DELETE
-          schema: 'public',
-          table: 'shopping_items',
-          filter: `household_id=eq.${householdStore.currentHousehold.household_id}`
-        },
+        { event: '*', schema: 'public', table: 'shopping_items', filter: `household_id=eq.${hhId}` },
         (payload) => {
           console.log('📡 Realtime shopping items event:', payload)
 
-          // INSERT - Neues Item wurde erstellt
           if (payload.eventType === 'INSERT') {
             const newItem = payload.new as ShoppingItem
             if (!items.value.find(i => i.shopping_item_id === newItem.shopping_item_id)) {
@@ -531,43 +608,62 @@ export const useShoppingStore = defineStore('shopping', () => {
             }
           }
 
-          // UPDATE - Item wurde geändert
           if (payload.eventType === 'UPDATE') {
             const updatedItem = payload.new as ShoppingItem
             const index = items.value.findIndex(i => i.shopping_item_id === updatedItem.shopping_item_id)
-            if (index !== -1) {
-              items.value[index] = updatedItem
-            }
+            if (index !== -1) items.value[index] = updatedItem
           }
 
-          // DELETE - Item wurde gelöscht
           if (payload.eventType === 'DELETE') {
             const deletedItem = payload.old as ShoppingItem
             items.value = items.value.filter(i => i.shopping_item_id !== deletedItem.shopping_item_id)
           }
         }
       )
-      .subscribe((status) => {
-        console.log('📡 Realtime subscription status:', status)
+      .subscribe()
 
-        if (status === 'SUBSCRIBED') {
-          console.log('✅ Successfully subscribed to shopping items')
-        } else if (status === 'CHANNEL_ERROR') {
-          console.error('❌ Channel subscription error')
-        } else if (status === 'TIMED_OUT') {
-          console.error('❌ Subscription timed out')
-        } else if (status === 'CLOSED') {
-          console.warn('⚠️ Channel was closed')
+    realtimeListsChannel = supabase
+      .channel(`shopping-lists-changes-${Date.now()}`)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'shopping_lists', filter: `household_id=eq.${hhId}` },
+        (payload) => {
+          console.log('📡 Realtime shopping lists event:', payload)
+
+          if (payload.eventType === 'INSERT') {
+            const newList = payload.new as ShoppingList
+            if (!lists.value.find(l => l.list_id === newList.list_id)) {
+              lists.value.push(newList)
+            }
+          }
+
+          if (payload.eventType === 'UPDATE') {
+            const updatedList = payload.new as ShoppingList
+            const index = lists.value.findIndex(l => l.list_id === updatedList.list_id)
+            if (index !== -1) lists.value[index] = updatedList
+          }
+
+          if (payload.eventType === 'DELETE') {
+            const deletedList = payload.old as ShoppingList
+            lists.value = lists.value.filter(l => l.list_id !== deletedList.list_id)
+            items.value = items.value.filter(i => i.list_id !== deletedList.list_id)
+            if (currentListId.value === deletedList.list_id) {
+              currentListId.value = lists.value[0]?.list_id ?? null
+            }
+          }
         }
-      })
+      )
+      .subscribe()
   }
 
-  // REALTIME - Unsubscribe von Änderungen
   const unsubscribeFromItems = () => {
     if (realtimeChannel) {
-      console.log('🔴 Unsubscribing from shopping items')
       supabase.removeChannel(realtimeChannel)
       realtimeChannel = null
+    }
+    if (realtimeListsChannel) {
+      supabase.removeChannel(realtimeListsChannel)
+      realtimeListsChannel = null
     }
   }
 
@@ -577,11 +673,17 @@ export const useShoppingStore = defineStore('shopping', () => {
 
   return {
     items,
+    lists,
+    currentListId,
     isLoading,
     isSyncing,
     hasPendingMutations,
     unpurchasedItems,
     purchasedItems,
+    loadLists,
+    createList,
+    renameList,
+    deleteList,
     loadItems,
     createItem,
     togglePriority,

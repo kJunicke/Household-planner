@@ -3,6 +3,7 @@ import { onMounted, onUnmounted, ref, computed, watch } from 'vue'
 import { useShoppingStore } from '@/stores/shoppingStore'
 import { useHouseholdStore } from '@/stores/householdStore'
 import { useNetworkStatus } from '@/composables/useNetworkStatus'
+import ListEditModal from '@/components/ListEditModal.vue'
 
 const shoppingStore = useShoppingStore()
 const householdStore = useHouseholdStore()
@@ -10,6 +11,12 @@ const { isOnline } = useNetworkStatus()
 
 const searchInput = ref('')
 const showSuggestions = ref(false)
+
+// List management state
+const showListEditModal = ref(false)
+const showCreateListModal = ref(false)
+const newListName = ref('')
+const editingList = ref<{ list_id: string; name: string } | null>(null)
 
 // Trigger sync when coming back online
 watch(isOnline, async (online) => {
@@ -25,31 +32,26 @@ const suggestions = computed(() => {
 
   const query = searchInput.value.toLowerCase()
 
-  // Finde alle items die den Suchbegriff enthalten
   const matchingItems = shoppingStore.items
     .filter(item => item.name.toLowerCase().includes(query))
     .map(item => item.name)
 
-  // Entferne Duplikate
-  return [...new Set(matchingItems)].slice(0, 5) // Max 5 Vorschläge
+  return [...new Set(matchingItems)].slice(0, 5)
 })
 
 const handleAddItem = async () => {
   if (!searchInput.value.trim()) return
 
-  // Prüfe ob Item schon in unpurchased list existiert
   const existingUnpurchased = shoppingStore.unpurchasedItems.find(
     item => item.name.toLowerCase() === searchInput.value.trim().toLowerCase()
   )
 
   if (existingUnpurchased) {
-    console.log('Item already in shopping list')
     searchInput.value = ''
     showSuggestions.value = false
     return
   }
 
-  // Prüfe ob Item in purchased list existiert → dann markiere als unpurchased
   const existingPurchased = shoppingStore.purchasedItems.find(
     item => item.name.toLowerCase() === searchInput.value.trim().toLowerCase()
   )
@@ -61,7 +63,6 @@ const handleAddItem = async () => {
     return
   }
 
-  // Sonst: neues Item erstellen
   await shoppingStore.createItem(searchInput.value.trim())
   searchInput.value = ''
   showSuggestions.value = false
@@ -73,15 +74,10 @@ const selectSuggestion = (suggestion: string) => {
   handleAddItem()
 }
 
-const handleInputFocus = () => {
-  showSuggestions.value = true
-}
+const handleInputFocus = () => { showSuggestions.value = true }
 
 const handleInputBlur = () => {
-  // Delay um Click auf Suggestion zu ermöglichen
-  setTimeout(() => {
-    showSuggestions.value = false
-  }, 200)
+  setTimeout(() => { showSuggestions.value = false }, 200)
 }
 
 const togglePurchased = async (itemId: string, currentlyPurchased: boolean) => {
@@ -110,10 +106,35 @@ const formatDate = (dateString: string | null) => {
   })
 }
 
+// List management
+const openEditModal = (list: { list_id: string; name: string }) => {
+  editingList.value = { ...list }
+  showListEditModal.value = true
+}
+
+const handleRenameList = async (listId: string, name: string) => {
+  await shoppingStore.renameList(listId, name)
+  showListEditModal.value = false
+  editingList.value = null
+}
+
+const handleDeleteList = async (listId: string) => {
+  await shoppingStore.deleteList(listId)
+  showListEditModal.value = false
+  editingList.value = null
+}
+
+const handleCreateList = async () => {
+  const name = newListName.value.trim()
+  if (!name) return
+  await shoppingStore.createList(name)
+  newListName.value = ''
+  showCreateListModal.value = false
+}
+
 onMounted(async () => {
-  // Lädt Items aus Supabase - WARTE bis fertig geladen
+  await shoppingStore.loadLists()
   await shoppingStore.loadItems()
-  // Startet Realtime Subscriptions für Live-Updates (erst NACH initialem Load)
   shoppingStore.subscribeToItems()
 })
 
@@ -126,175 +147,336 @@ onUnmounted(() => {
   <div class="page-container">
     <div class="container-fluid">
       <h2 class="page-title">
-        <i class="bi bi-cart3"></i> Einkaufsliste
+        <i class="bi bi-cart3"></i> Einkauf
       </h2>
 
-    <!-- Offline/Sync Status Banner -->
-    <div v-if="!isOnline" class="alert alert-warning mb-3" role="alert">
-      <i class="bi bi-wifi-off me-2"></i>
-      <strong>Offline-Modus</strong> - Änderungen werden automatisch synchronisiert sobald die Verbindung wiederhergestellt ist.
-    </div>
+      <!-- Einkaufslisten Chip-Leiste -->
+      <div class="list-chip-bar mb-3">
+        <div class="list-chip-container">
+          <button
+            v-for="list in shoppingStore.lists"
+            :key="list.list_id"
+            :class="['list-chip', shoppingStore.currentListId === list.list_id && 'active']"
+            @click="shoppingStore.currentListId = list.list_id"
+          >
+            <span>{{ list.name }}</span>
+            <button
+              class="chip-edit-btn"
+              @click.stop="openEditModal(list)"
+              :title="`'${list.name}' bearbeiten`"
+            >
+              <i class="bi bi-pencil"></i>
+            </button>
+          </button>
+          <button
+            class="list-chip add-chip"
+            @click="showCreateListModal = true"
+            title="Neue Liste erstellen"
+          >
+            <i class="bi bi-plus-lg"></i>
+          </button>
+        </div>
+      </div>
 
-    <div v-else-if="shoppingStore.hasPendingMutations || shoppingStore.isSyncing" class="alert alert-info mb-3" role="alert">
-      <span class="spinner-border spinner-border-sm me-2"></span>
-      <strong>Synchronisiere...</strong>
-    </div>
+      <!-- Offline/Sync Status Banner -->
+      <div v-if="!isOnline" class="alert alert-warning mb-3" role="alert">
+        <i class="bi bi-wifi-off me-2"></i>
+        <strong>Offline-Modus</strong> - Änderungen werden automatisch synchronisiert sobald die Verbindung wiederhergestellt ist.
+      </div>
 
-    <!-- Suchleiste mit Autocomplete -->
-    <div class="search-container mb-4">
-      <div class="input-group">
-        <input
-          v-model="searchInput"
-          type="text"
-          class="form-control"
-          placeholder="Produkt hinzufügen..."
-          @keyup.enter="handleAddItem"
-          @focus="handleInputFocus"
-          @blur="handleInputBlur"
-          :disabled="shoppingStore.isLoading"
-        />
-        <button
-          class="btn btn-primary"
-          @click="handleAddItem"
-          :disabled="!searchInput.trim() || shoppingStore.isLoading"
-        >
-          <span v-if="!shoppingStore.isLoading">
-            <i class="bi bi-plus-lg"></i> Hinzufügen
-          </span>
-          <span v-else>
-            <span class="spinner-border spinner-border-sm me-2"></span>
-            Lädt...
-          </span>
+      <div v-else-if="shoppingStore.hasPendingMutations || shoppingStore.isSyncing" class="alert alert-info mb-3" role="alert">
+        <span class="spinner-border spinner-border-sm me-2"></span>
+        <strong>Synchronisiere...</strong>
+      </div>
+
+      <!-- Keine Listen vorhanden -->
+      <div v-if="shoppingStore.lists.length === 0 && !shoppingStore.isLoading" class="empty-state">
+        <i class="bi bi-cart-x"></i>
+        <p>Noch keine Einkaufsliste vorhanden</p>
+        <button class="btn btn-primary" @click="showCreateListModal = true">
+          <i class="bi bi-plus-lg me-1"></i> Liste erstellen
         </button>
       </div>
 
-      <!-- Autocomplete Suggestions -->
-      <div v-if="showSuggestions && suggestions.length > 0" class="suggestions-dropdown">
-        <div
-          v-for="suggestion in suggestions"
-          :key="suggestion"
-          class="suggestion-item"
-          @click="selectSuggestion(suggestion)"
-        >
-          <i class="bi bi-clock-history me-2"></i>
-          {{ suggestion }}
-        </div>
-      </div>
-    </div>
-
-    <!-- Loading Skeleton (nur beim initialen Load) -->
-    <div v-if="shoppingStore.isLoading && shoppingStore.items.length === 0" class="skeleton-loading">
-      <div class="skeleton-card" style="height: 80px;"></div>
-      <div class="skeleton-card" style="height: 80px;"></div>
-      <div class="skeleton-card" style="height: 80px;"></div>
-    </div>
-
-    <!-- Liste 1: Zu kaufen (unpurchased) -->
-    <div v-else class="shopping-section mb-4">
-      <h3 class="shopping-list-title">
-        <i class="bi bi-cart-dash"></i> Zu kaufen ({{ shoppingStore.unpurchasedItems.length }})
-      </h3>
-
-      <div v-if="shoppingStore.unpurchasedItems.length === 0" class="empty-state">
-        <i class="bi bi-check-circle"></i>
-        <p>Keine Produkte auf der Liste</p>
-      </div>
-
-      <div v-else class="shopping-list">
-        <div
-          v-for="item in shoppingStore.unpurchasedItems"
-          :key="item.shopping_item_id"
-          class="shopping-item"
-          :class="{ 'priority': item.is_priority }"
-        >
-          <div class="form-check">
+      <template v-else>
+        <!-- Suchleiste mit Autocomplete -->
+        <div class="search-container mb-4">
+          <div class="input-group">
             <input
-              class="form-check-input"
-              type="checkbox"
-              :checked="item.purchased"
-              @change="togglePurchased(item.shopping_item_id, item.purchased)"
-              :id="'item-' + item.shopping_item_id"
+              v-model="searchInput"
+              type="text"
+              class="form-control"
+              placeholder="Produkt hinzufügen..."
+              @keyup.enter="handleAddItem"
+              @focus="handleInputFocus"
+              @blur="handleInputBlur"
+              :disabled="shoppingStore.isLoading || !shoppingStore.currentListId"
             />
-            <label class="form-check-label" :for="'item-' + item.shopping_item_id">
-              {{ item.name }}
-            </label>
+            <button
+              class="btn btn-primary"
+              @click="handleAddItem"
+              :disabled="!searchInput.trim() || shoppingStore.isLoading || !shoppingStore.currentListId"
+            >
+              <span v-if="!shoppingStore.isLoading">
+                <i class="bi bi-plus-lg"></i> Hinzufügen
+              </span>
+              <span v-else>
+                <span class="spinner-border spinner-border-sm me-2"></span>
+                Lädt...
+              </span>
+            </button>
           </div>
-          <div class="item-actions">
-            <button
-              class="btn btn-sm"
-              :class="item.is_priority ? 'btn-warning' : 'btn-outline-secondary'"
-              @click="shoppingStore.togglePriority(item.shopping_item_id)"
-              :title="item.is_priority ? 'Priorität entfernen' : 'Als prioritär markieren'"
+
+          <div v-if="showSuggestions && suggestions.length > 0" class="suggestions-dropdown">
+            <div
+              v-for="suggestion in suggestions"
+              :key="suggestion"
+              class="suggestion-item"
+              @click="selectSuggestion(suggestion)"
             >
-              <i class="bi bi-star-fill"></i>
-            </button>
-            <button
-              class="btn btn-sm btn-outline-danger"
-              @click="shoppingStore.deleteItem(item.shopping_item_id)"
-              title="Löschen"
-            >
-              <i class="bi bi-trash"></i>
-            </button>
+              <i class="bi bi-clock-history me-2"></i>
+              {{ suggestion }}
+            </div>
           </div>
         </div>
-      </div>
-    </div>
 
-    <!-- Liste 2: Gekauft (purchased) -->
-    <div class="shopping-section">
-      <h3 class="shopping-list-title">
-        <i class="bi bi-check-circle"></i> Gekauft ({{ shoppingStore.purchasedItems.length }})
-      </h3>
+        <!-- Loading Skeleton -->
+        <div v-if="shoppingStore.isLoading && shoppingStore.items.length === 0" class="skeleton-loading">
+          <div class="skeleton-card" style="height: 80px;"></div>
+          <div class="skeleton-card" style="height: 80px;"></div>
+          <div class="skeleton-card" style="height: 80px;"></div>
+        </div>
 
-      <div v-if="shoppingStore.purchasedItems.length === 0" class="empty-state">
-        <i class="bi bi-cart-x"></i>
-        <p>Noch nichts eingekauft</p>
-      </div>
+        <div v-else>
+          <!-- Zu kaufen -->
+          <div class="shopping-section mb-4">
+            <h3 class="shopping-list-title">
+              <i class="bi bi-cart-dash"></i> Zu kaufen ({{ shoppingStore.unpurchasedItems.length }})
+            </h3>
 
-      <div v-else class="shopping-list">
-        <div
-          v-for="item in shoppingStore.purchasedItems"
-          :key="item.shopping_item_id"
-          class="shopping-item purchased"
-        >
-          <div class="form-check">
-            <input
-              class="form-check-input"
-              type="checkbox"
-              :checked="item.purchased"
-              @change="togglePurchased(item.shopping_item_id, item.purchased)"
-              :id="'item-purchased-' + item.shopping_item_id"
-            />
-            <label class="form-check-label text-muted text-decoration-line-through" :for="'item-purchased-' + item.shopping_item_id">
-              {{ item.name }}
-            </label>
+            <div v-if="shoppingStore.unpurchasedItems.length === 0" class="empty-state">
+              <i class="bi bi-check-circle"></i>
+              <p>Keine Produkte auf der Liste</p>
+            </div>
+
+            <div v-else class="shopping-list">
+              <div
+                v-for="item in shoppingStore.unpurchasedItems"
+                :key="item.shopping_item_id"
+                class="shopping-item"
+                :class="{ 'priority': item.is_priority }"
+              >
+                <div class="form-check">
+                  <input
+                    class="form-check-input"
+                    type="checkbox"
+                    :checked="item.purchased"
+                    @change="togglePurchased(item.shopping_item_id, item.purchased)"
+                    :id="'item-' + item.shopping_item_id"
+                  />
+                  <label class="form-check-label" :for="'item-' + item.shopping_item_id">
+                    {{ item.name }}
+                  </label>
+                </div>
+                <div class="item-actions">
+                  <button
+                    class="btn btn-sm"
+                    :class="item.is_priority ? 'btn-warning' : 'btn-outline-secondary'"
+                    @click="shoppingStore.togglePriority(item.shopping_item_id)"
+                    :title="item.is_priority ? 'Priorität entfernen' : 'Als prioritär markieren'"
+                  >
+                    <i class="bi bi-star-fill"></i>
+                  </button>
+                  <button
+                    class="btn btn-sm btn-outline-danger"
+                    @click="shoppingStore.deleteItem(item.shopping_item_id)"
+                    title="Löschen"
+                  >
+                    <i class="bi bi-trash"></i>
+                  </button>
+                </div>
+              </div>
+            </div>
           </div>
-          <div class="item-info">
-            <small class="text-muted">
-              {{ item.times_purchased }}x gekauft
-              <span v-if="item.last_purchased_at">
-                · {{ formatDate(item.last_purchased_at) }}
-              </span>
-              <span v-if="item.last_purchased_by">
-                · {{ getMemberName(item.last_purchased_by) }}
-              </span>
-            </small>
-            <button
-              class="btn btn-sm btn-outline-danger ms-2"
-              @click="shoppingStore.deleteItem(item.shopping_item_id)"
-              title="Löschen"
-            >
-              <i class="bi bi-trash"></i>
-            </button>
+
+          <!-- Gekauft -->
+          <div class="shopping-section">
+            <h3 class="shopping-list-title">
+              <i class="bi bi-check-circle"></i> Gekauft ({{ shoppingStore.purchasedItems.length }})
+            </h3>
+
+            <div v-if="shoppingStore.purchasedItems.length === 0" class="empty-state">
+              <i class="bi bi-cart-x"></i>
+              <p>Noch nichts eingekauft</p>
+            </div>
+
+            <div v-else class="shopping-list">
+              <div
+                v-for="item in shoppingStore.purchasedItems"
+                :key="item.shopping_item_id"
+                class="shopping-item purchased"
+              >
+                <div class="form-check">
+                  <input
+                    class="form-check-input"
+                    type="checkbox"
+                    :checked="item.purchased"
+                    @change="togglePurchased(item.shopping_item_id, item.purchased)"
+                    :id="'item-purchased-' + item.shopping_item_id"
+                  />
+                  <label class="form-check-label text-muted text-decoration-line-through" :for="'item-purchased-' + item.shopping_item_id">
+                    {{ item.name }}
+                  </label>
+                </div>
+                <div class="item-info">
+                  <small class="text-muted">
+                    {{ item.times_purchased }}x gekauft
+                    <span v-if="item.last_purchased_at">
+                      · {{ formatDate(item.last_purchased_at) }}
+                    </span>
+                    <span v-if="item.last_purchased_by">
+                      · {{ getMemberName(item.last_purchased_by) }}
+                    </span>
+                  </small>
+                  <button
+                    class="btn btn-sm btn-outline-danger ms-2"
+                    @click="shoppingStore.deleteItem(item.shopping_item_id)"
+                    title="Löschen"
+                  >
+                    <i class="bi bi-trash"></i>
+                  </button>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
-      </div>
-    </div>
+      </template>
     </div>
   </div>
+
+  <!-- Liste bearbeiten Modal -->
+  <ListEditModal
+    v-if="showListEditModal && editingList"
+    :list="editingList"
+    :can-delete="shoppingStore.lists.length > 1"
+    @rename="handleRenameList"
+    @delete="handleDeleteList"
+    @close="showListEditModal = false; editingList = null"
+  />
+
+  <!-- Neue Liste erstellen Modal -->
+  <Teleport to="body">
+    <div v-if="showCreateListModal" class="modal-overlay" @click.self="showCreateListModal = false; newListName = ''">
+      <div class="modal-container">
+        <div class="modal-header">
+          <h5 class="modal-title">Neue Einkaufsliste</h5>
+          <button class="btn-close" @click="showCreateListModal = false; newListName = ''"></button>
+        </div>
+        <div class="modal-body">
+          <input
+            v-model="newListName"
+            type="text"
+            class="form-control"
+            placeholder="z.B. Edeka, Asia Markt, Bestellen..."
+            maxlength="100"
+            @keyup.enter="handleCreateList"
+            autofocus
+          />
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" @click="showCreateListModal = false; newListName = ''">Abbrechen</button>
+          <button class="btn btn-primary" @click="handleCreateList" :disabled="!newListName.trim()">
+            <i class="bi bi-plus-lg me-1"></i> Erstellen
+          </button>
+        </div>
+      </div>
+    </div>
+  </Teleport>
 </template>
 
 <style scoped>
+/* List Chip Bar */
+.list-chip-bar {
+  background: var(--color-background-elevated);
+  border-radius: var(--radius-lg);
+  padding: var(--spacing-sm);
+}
+
+.list-chip-container {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+  padding: 2px;
+}
+
+.list-chip-container::-webkit-scrollbar {
+  display: none;
+}
+
+.list-chip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  background: var(--color-background);
+  border: 1px solid var(--color-border);
+  border-radius: 16px;
+  color: var(--color-text-secondary);
+  font-size: 0.875rem;
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.list-chip:hover {
+  border-color: var(--color-primary);
+  color: var(--color-text-primary);
+}
+
+.list-chip.active {
+  background: var(--color-primary);
+  border-color: var(--color-primary);
+  color: white;
+  font-weight: 600;
+}
+
+.list-chip.add-chip {
+  color: var(--color-text-secondary);
+  padding: 6px 12px;
+}
+
+.list-chip.add-chip:hover {
+  background: var(--color-primary);
+  border-color: var(--color-primary);
+  color: white;
+}
+
+.chip-edit-btn {
+  background: none;
+  border: none;
+  padding: 0;
+  margin-left: 2px;
+  cursor: pointer;
+  color: inherit;
+  opacity: 0.6;
+  font-size: 0.75rem;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+}
+
+.chip-edit-btn:hover {
+  opacity: 1;
+}
+
+/* Rest */
 .search-container {
   position: relative;
 }
@@ -412,29 +594,5 @@ onUnmounted(() => {
   gap: var(--spacing-sm);
   margin-top: var(--spacing-xs);
   padding-left: 2rem;
-}
-
-/* Mobile Optimierung */
-@media (max-width: 480px) {
-  .shopping-item {
-    padding: var(--spacing-sm);
-  }
-
-  .form-check-label {
-    font-size: 0.9rem;
-  }
-
-  .item-info {
-    padding-left: 1.75rem;
-  }
-
-  .item-info small {
-    font-size: 0.75rem;
-  }
-
-  .btn-sm {
-    padding: 0.25rem 0.4rem;
-    font-size: 0.75rem;
-  }
 }
 </style>

@@ -14,6 +14,7 @@ export interface PendingMutation {
   payload: {
     itemId?: string // Für update/delete
     name?: string // Für create
+    listId?: string // Für create (shopping list)
     updates?: Record<string, unknown> // Für update (purchased, is_priority, etc.)
   }
 
