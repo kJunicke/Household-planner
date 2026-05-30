@@ -4,6 +4,7 @@
 export interface ShoppingItem {
   shopping_item_id: string
   household_id: string
+  list_id: string
   name: string
   purchased: boolean
   is_priority: boolean

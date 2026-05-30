@@ -39,6 +39,66 @@
 
 ### Code Quality
 - **Form Validation** - Input-Validierung für alle Forms
+- **Playwright CLI E2E Tests einrichten** - Automatisierte Regressionstests für kritische Flows
+  - `npm init playwright@latest` in `putzplan_vue/`
+  - Test-Accounts aus CLAUDE.md nutzen (test@example.com / test2@example.com)
+  - Kritische Flows zuerst: Login, Task-Complete, Shopping-Item hinzufügen
+  - Läuft bei jedem Build automatisch (anders als MCP, das nur manuell/explorativ ist)
+  - Vorteil: Sofortiges Feedback ob Refactoring etwas kaputt gemacht hat
+
+### 🔒 Security (Audit 16.02.2026)
+
+#### 🔴 HIGH - Sofort handeln
+- **`households` SELECT mit `USING (true)`** - Jeder eingeloggte User kann ALLE Haushalte + Invite-Codes lesen
+  - Datei: `supabase/migrations/20251026000001_rls_policies.sql:59-62`
+  - Fix: SECURITY-DEFINER-Function `find_household_by_invite_code(code)` erstellen, SELECT-Policy auf Membership beschränken
+  - Risiko: Macht 32-Bit Invite-Code-Entropie irrelevant (enumerierbar)
+- **Soft-Delete + RLS** - `deleted_at` wird in UPDATE/DELETE-Policies nicht gefiltert
+  - Datei: `supabase/migrations/20260103202609_soft_delete_tasks.sql`
+  - Fix: `WHERE deleted_at IS NULL` in UPDATE-Policies oder Trigger ergänzen
+- **Keine Length-Limits → DB-DOS möglich**
+  - `NotesView.vue:95-103` Textarea ohne `maxlength`; gleiches für `tasks.title`, `shopping_items.name`
+  - Fix: `maxlength` im UI + DB-Constraint `CHECK (length(content) <= 5000)` per Migration
+- **Kein Rate-Limiting** - Edge Function + DB-Writes ohne Limits → Stat-Spam, Brute-Force auf Invite-Codes
+  - Fix: Supabase Native Rate-Limits konfigurieren
+- **npm audit: 18 Vulnerabilities (10 high)** - Vite 7.0-7.3.1, @babel/..., ws
+  - Fix: `npm audit fix` (alle Fixes verfügbar, Dev-Server-only Risiken)
+
+#### 🟠 MEDIUM
+- **Kein `onAuthStateChange`-Listener** - Store kann veralten bei Token-Refresh/Logout aus anderem Tab
+  - Fix: `supabase.auth.onAuthStateChange()` in `authStore.initializeAuth()` registrieren
+- **Jeder Member kann Haushalt löschen** (im SQL als TODO markiert)
+  - Datei: `supabase/migrations/20251026000001_rls_policies.sql:94-101`
+  - Fix: `households.owner_id` einführen, DELETE-Policy auf Owner beschränken
+- **`task_completions` DELETE erlaubt Stat-Manipulation**
+  - Datei: `supabase/migrations/20251026000001_rls_policies.sql:258-270`
+  - Fix: DELETE entfernen oder auf neueste Completion (<5 min alt) beschränken
+- **CORS `Access-Control-Allow-Origin: '*'`** in Edge Function
+  - Datei: `supabase/functions/complete-task/index.ts:14`
+  - Fix: Origin auf GitHub-Pages-Domain + localhost whitelisten
+- **Schwache Password-Policy** - 6 Zeichen min, kein Strength-Check
+  - Datei: `src/views/RegisterView.vue:60-66`
+  - Fix: Supabase Dashboard auf min. 10 Zeichen + Komplexität, clientseitige Validierung ergänzen
+- **Email-Verification nicht erzwungen** - Dashboard-Setting prüfen ("Confirm email")
+- **30+ console.log mit sensitiven Daten** (household_id, Members, Realtime-Payloads)
+  - Fix: `esbuild.drop: ['console']` in Production-Build (vite.config.ts)
+
+#### 🟢 LOW
+- **Password-Reset-Flow fehlt** - User können Passwörter nicht selbst zurücksetzen
+  - Fix: `supabase.auth.resetPasswordForEmail()` Flow ergänzen
+- **localStorage-Cleanup bei Logout** - shoppingStore cached ohne Cleanup → Shared-Device Leak
+  - Fix: `localStorage.removeItem(...)` in `authStore.logout()`
+- **SUPABASE_ACCESS_TOKEN in .env** - liegt in Nextcloud-synced Verzeichnis (Backup-Risiko)
+  - Fix: In CI/CD-Secret-Manager halten, lokal rotieren wenn jemals exponiert
+
+#### ✅ OK / Bereits gut
+- Keine `v-html` / `eval` / `innerHTML` → XSS-sauber
+- Edge Function `complete-task` authentifiziert via `auth.getUser()` (server-verified)
+- Realtime-Channels mit `household_id`-Filter (RLS ist Schutz)
+- PWA Service Worker cached nur statische Assets, keine API-Responses
+- `.env` ist nicht committed (nur .env.example)
+- `SUPABASE_ACCESS_TOKEN` ohne `VITE_`-Prefix → nicht im Client-Bundle
+
 ---
 
 ## 💡 Backlog (Future Ideas)

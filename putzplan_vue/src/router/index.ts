@@ -16,14 +16,22 @@ const router = createRouter({
       component: () => import('../views/HistoryView.vue')
     },
     {
+      path: '/uebersicht',
+      name: 'uebersicht',
+      component: () => import('../views/UebersichtView.vue')
+    },
+    {
       path: '/stats',
-      name: 'stats',
-      component: () => import('../views/StatsView.vue')
+      redirect: '/uebersicht'
+    },
+    {
+      path: '/listen',
+      name: 'listen',
+      component: () => import('../views/ListsView.vue')
     },
     {
       path: '/shopping',
-      name: 'shopping',
-      component: () => import('../views/ShoppingView.vue')
+      redirect: '/listen'
     },
     {
       path: '/notes',

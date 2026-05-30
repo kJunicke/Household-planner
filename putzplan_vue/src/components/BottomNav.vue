@@ -6,8 +6,8 @@ const route = useRoute()
 const navItems = [
   { path: '/', icon: 'bi-list-check', label: 'Putzen' },
   { path: '/history', icon: 'bi-clock-history', label: 'Verlauf' },
-  { path: '/stats', icon: 'bi-pie-chart', label: 'Stats' },
-  { path: '/shopping', icon: 'bi-cart3', label: 'Einkauf' },
+  { path: '/uebersicht', icon: 'bi-pie-chart', label: 'Übersicht' },
+  { path: '/listen', icon: 'bi-cart3', label: 'Listen' },
   { path: '/notes', icon: 'bi-sticky', label: 'Notizen' }
 ]
 </script>
@@ -19,7 +19,7 @@ const navItems = [
       :key="item.path"
       :to="item.path"
       class="nav-item"
-      :class="{ active: route.path === item.path }"
+      :class="{ active: route.path === item.path || (item.path !== '/' && route.path.startsWith(item.path)) }"
     >
       <i :class="item.icon"></i>
       <span>{{ item.label }}</span>
