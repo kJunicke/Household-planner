@@ -4,6 +4,7 @@ import { supabase } from '@/lib/supabase'
 import type { Household, HouseholdMember } from '@/types/households'
 import { useAuthStore } from './authStore'
 import { useToastStore } from './toastStore'
+import { DEFAULT_MEMBER_COLOR, pickMemberColor } from '@/lib/memberColors'
 
 interface CompletionWithEffort {
   user_id: string
@@ -271,14 +272,16 @@ export const useHouseholdStore = defineStore('household', () => {
             throw new Error(householdError.message)
         }
 
-        // 2. Add user as member with email as fallback display_name
+        // 2. Add user as member with email as fallback display_name.
+        //    Creator is the first member → gets the first palette color.
         const displayName = authStore.user.email?.split('@')[0] || 'Unbekannt'
         const { error: memberError } = await supabase
             .from('household_members')
             .insert({
                 household_id: householdData.household_id,
                 user_id: authStore.user.id,
-                display_name: displayName
+                display_name: displayName,
+                user_color: DEFAULT_MEMBER_COLOR
             })
 
         if (memberError) {
@@ -325,14 +328,25 @@ export const useHouseholdStore = defineStore('household', () => {
             return false
         }
 
-        // 2. Add user as member with email as fallback display_name
+        // 2. Pick a color not yet used by existing members, so the new
+        //    member is visually distinct in avatars and charts.
+        const { data: existingMembers } = await supabase
+            .from('household_members')
+            .select('user_color')
+            .eq('household_id', householdData.household_id)
+        const memberColor = pickMemberColor(
+            (existingMembers || []).map(m => m.user_color)
+        )
+
+        // 3. Add user as member with email as fallback display_name
         const displayName = authStore.user.email?.split('@')[0] || 'Unbekannt'
         const { error: memberError } = await supabase
             .from('household_members')
             .insert({
                 household_id: householdData.household_id,
                 user_id: authStore.user.id,
-                display_name: displayName
+                display_name: displayName,
+                user_color: memberColor
             })
 
         if (memberError) {

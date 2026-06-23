@@ -494,10 +494,10 @@ const handleCompleteProject = async () => {
                                    <i v-if="isQuickCompleting" class="bi bi-arrow-repeat spinning"></i>
                                    <i v-else class="bi bi-check-lg"></i>
                               </button>
-                              <button class="btn btn-success btn-sm action-btn-modifier"
+                              <button class="action-btn-modifier"
                                       @click="openCompletionModal"
                                       title="Aufwand anpassen">
-                                   <i class="bi bi-chevron-double-up"></i>
+                                   <i class="bi bi-sliders"></i>
                               </button>
                               <!-- Dreckig markieren -->
                               <button class="btn btn-warning btn-sm action-btn"
@@ -516,10 +516,10 @@ const handleCompleteProject = async () => {
                                    <i v-if="isQuickCompleting" class="bi bi-arrow-repeat spinning"></i>
                                    <i v-else class="bi bi-check-lg"></i>
                               </button>
-                              <button class="btn btn-success btn-sm action-btn-modifier"
+                              <button class="action-btn-modifier"
                                       @click="openCompletionModal"
                                       title="Aufwand anpassen">
-                                   <i class="bi bi-chevron-double-up"></i>
+                                   <i class="bi bi-sliders"></i>
                               </button>
                          </div>
                     </template>
@@ -877,14 +877,18 @@ const handleCompleteProject = async () => {
      font-size: var(--font-xl);
 }
 
+/* Secondary action: "Aufwand anpassen" — visually subordinate to the
+   primary green complete button so the two are not confused. */
 .action-btn-modifier {
      width: var(--touch-target-min);
      height: var(--touch-target-min);
      min-width: var(--touch-target-min);
      min-height: var(--touch-target-min);
      padding: 0;
-     border: none;
+     border: 1.5px solid var(--color-border);
      border-radius: var(--radius-md);
+     background: var(--color-background-elevated);
+     color: var(--color-text-secondary);
      cursor: pointer;
      transition: all var(--transition-base);
      display: flex;
@@ -893,11 +897,16 @@ const handleCompleteProject = async () => {
 }
 
 .action-btn-modifier i {
-     font-size: var(--font-xl);
+     font-size: var(--font-lg);
 }
 
-.btn-success:hover,
 .action-btn-modifier:hover {
+     border-color: var(--color-primary);
+     color: var(--color-primary);
+     background: var(--color-background);
+}
+
+.btn-success:hover {
      opacity: 0.9;
      transform: scale(1.02);
 }

@@ -4,6 +4,7 @@ import { Pie, Bar, Line } from 'vue-chartjs'
 import { Chart as ChartJS, Title, Tooltip, Legend, ArcElement, BarElement, LineElement, PointElement, CategoryScale, LinearScale } from 'chart.js'
 import { useHouseholdStore } from '../stores/householdStore'
 import { useTaskStore } from '../stores/taskStore'
+import { MEMBER_COLORS } from '../lib/memberColors'
 
 ChartJS.register(Title, Tooltip, Legend, ArcElement, BarElement, LineElement, PointElement, CategoryScale, LinearScale)
 
@@ -74,6 +75,28 @@ const hexToRgba = (hex: string, alpha: number = 1) => {
   return `rgba(${parseInt(result[1], 16)}, ${parseInt(result[2], 16)}, ${parseInt(result[3], 16)}, ${alpha})`
 }
 
+// Resolve a distinct, readable color per member for charts. Uses the member's
+// chosen color, but if colors are missing or collide (e.g. legacy households
+// where everyone defaulted to the same blue) it falls back to distinct palette
+// colors by member order, so charts never render as one indistinguishable blob.
+const memberChartColors = computed<Map<string, string>>(() => {
+  const map = new Map<string, string>()
+  const used = new Set<string>()
+  householdStore.householdMembers.forEach((member, index) => {
+    let color = member.user_color
+    if (!color || used.has(color.toUpperCase())) {
+      color = MEMBER_COLORS.find(c => !used.has(c.toUpperCase()))
+        || MEMBER_COLORS[index % MEMBER_COLORS.length]
+    }
+    used.add(color.toUpperCase())
+    map.set(member.user_id, color)
+  })
+  return map
+})
+
+const colorFor = (userId: string): string =>
+  memberChartColors.value.get(userId) || MEMBER_COLORS[0]
+
 // ISO 8601 Wochennummer berechnen
 const getISOWeekAndYear = (date: Date): { week: number; year: number } => {
   const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()))
@@ -138,8 +161,8 @@ const pieChartData = computed(() => {
     const effort = effortMap.get(member.user_id) || 0
     labels.push(member.display_name || 'Unbekannt')
     data.push(effort)
-    backgroundColors.push(hexToRgba(member.user_color, 0.9))
-    borderColors.push(member.user_color)
+    backgroundColors.push(hexToRgba(colorFor(member.user_id), 0.9))
+    borderColors.push(colorFor(member.user_id))
   })
 
   return {
@@ -174,8 +197,8 @@ const barChartData = computed(() => {
     const effort = effortMap.get(member.user_id) || 0
     labels.push(member.display_name || 'Unbekannt')
     data.push(effort)
-    backgroundColors.push(hexToRgba(member.user_color, 0.85))
-    borderColors.push(member.user_color)
+    backgroundColors.push(hexToRgba(colorFor(member.user_id), 0.85))
+    borderColors.push(colorFor(member.user_id))
   })
 
   return {
@@ -294,12 +317,12 @@ const lineChartData = computed(() => {
       const userMap = bucketMap.get(key)
       return userMap?.get(member.user_id) || 0
     }),
-    borderColor: member.user_color,
-    backgroundColor: hexToRgba(member.user_color, 0.1),
+    borderColor: colorFor(member.user_id),
+    backgroundColor: hexToRgba(colorFor(member.user_id), 0.1),
     borderWidth: 2,
     pointRadius: 3,
     pointHoverRadius: 6,
-    pointBackgroundColor: member.user_color,
+    pointBackgroundColor: colorFor(member.user_id),
     tension: 0.3,
     fill: false
   }))
