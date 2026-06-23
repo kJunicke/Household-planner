@@ -129,7 +129,7 @@ const handleClose = () => {
             Abbrechen
           </button>
           <button
-            class="btn btn-success"
+            class="btn btn-primary"
             :disabled="!canConfirm || isLoading"
             @click="handleConfirm"
           >

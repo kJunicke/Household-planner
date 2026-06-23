@@ -63,12 +63,12 @@ onUnmounted(() => {
 <template>
   <div class="page-container">
     <div class="container-fluid">
-      <div class="page-header-row">
-        <h2 class="page-title">
-          <i class="bi bi-bag-check"></i> Packlisten
-        </h2>
+      <!-- Titel kommt vom Tab darüber (Einkauf/Packlisten) -->
+      <div
+        v-if="packingStore.currentListId && packingStore.packedItems.length > 0"
+        class="page-header-row"
+      >
         <button
-          v-if="packingStore.currentListId && packingStore.packedItems.length > 0"
           class="btn btn-outline-secondary btn-sm reset-btn"
           @click="showResetConfirm = true"
           title="Alle als ungepackt markieren"
@@ -286,7 +286,7 @@ onUnmounted(() => {
 .page-header-row {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-end;
   flex-wrap: wrap;
   gap: var(--spacing-sm);
   margin-bottom: var(--spacing-sm);

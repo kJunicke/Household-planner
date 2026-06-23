@@ -11,7 +11,11 @@ const categories: { value: TaskCategory; icon: string; label: string }[] = [
   { value: 'completed', icon: 'bi-check-circle', label: 'Erledigt' }
 ]
 
-// Load from localStorage or default to all categories active
+// Default: offene Aufgaben anzeigen, "Erledigt" aus — so wirkt die Leiste
+// erkennbar als Filter (gefüllte vs. Outline-Chips) statt "alles an".
+const DEFAULT_CATEGORIES: TaskCategory[] = ['daily', 'recurring', 'project']
+
+// Load from localStorage or fall back to the default selection
 const loadCategories = (): Set<TaskCategory> => {
   try {
     const stored = localStorage.getItem(STORAGE_KEY)
@@ -24,8 +28,7 @@ const loadCategories = (): Set<TaskCategory> => {
   } catch {
     // Invalid JSON, use default
   }
-  // Default: all categories active
-  return new Set<TaskCategory>(['daily', 'recurring', 'project', 'completed'])
+  return new Set<TaskCategory>(DEFAULT_CATEGORIES)
 }
 
 const selectedCategories = ref<Set<TaskCategory>>(loadCategories())

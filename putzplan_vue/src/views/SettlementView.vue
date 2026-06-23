@@ -74,10 +74,8 @@ onUnmounted(() => {
 <template>
   <div class="page-container">
     <div class="container-fluid">
+      <!-- Titel kommt vom Tab darüber (Statistiken/Ausgleich) -->
       <div class="page-header-row">
-        <h2 class="page-title">
-          <i class="bi bi-arrow-left-right"></i> Ausgleich
-        </h2>
         <button class="btn btn-primary btn-sm" @click="openCreateModal()">
           <i class="bi bi-plus-lg me-1"></i> Neu
         </button>
@@ -227,7 +225,7 @@ onUnmounted(() => {
 .page-header-row {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-end;
   margin-bottom: var(--spacing-md);
 }
 

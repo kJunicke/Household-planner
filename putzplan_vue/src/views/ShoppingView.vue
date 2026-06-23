@@ -146,9 +146,7 @@ onUnmounted(() => {
 <template>
   <div class="page-container">
     <div class="container-fluid">
-      <h2 class="page-title">
-        <i class="bi bi-cart3"></i> Einkauf
-      </h2>
+      <!-- Titel kommt vom Tab darüber (Einkauf/Packlisten) -->
 
       <!-- Einkaufslisten Chip-Leiste -->
       <div class="list-chip-bar mb-3">

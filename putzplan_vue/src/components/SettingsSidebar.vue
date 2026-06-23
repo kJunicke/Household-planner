@@ -187,7 +187,7 @@ watch(() => props.open, (isOpen) => {
             </div>
 
             <div class="d-flex gap-2">
-              <button @click="saveDisplayName" class="btn btn-success btn-sm flex-1">
+              <button @click="saveDisplayName" class="btn btn-primary btn-sm flex-1">
                 <i class="bi bi-check-lg"></i> Speichern
               </button>
               <button @click="cancelEditingName" class="btn btn-secondary btn-sm flex-1">
