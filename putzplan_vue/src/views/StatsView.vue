@@ -186,6 +186,18 @@ const pieChartData = computed(() => {
     borderColors.push(colorFor(member.user_id))
   })
 
+  // Ausgleich-Punkte als eigene Slices in der Ausgleich-Farbe (Amber) anhängen,
+  // Rand in der Member-Farbe zur Zuordnung. Eine Pie-Slice kann nicht zweifarbig
+  // sein, daher pro Member eine separate Slice statt Stapelung.
+  members.forEach((member) => {
+    const settled = settledByUser.value.get(member.user_id) || 0
+    if (settled <= 0) return
+    labels.push(`Ausgleich: ${member.display_name || 'Unbekannt'}`)
+    data.push(settled)
+    backgroundColors.push(hexToRgba(SETTLED_COLOR, 0.85))
+    borderColors.push(colorFor(member.user_id))
+  })
+
   return {
     labels,
     datasets: [{
