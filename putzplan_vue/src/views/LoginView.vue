@@ -3,6 +3,7 @@ import {useAuthStore} from "@/stores/authStore"
 import {useHouseholdStore} from "@/stores/householdStore"
 import { ref } from "vue"
 import { useRouter } from 'vue-router'
+import BrandLogo from '@/components/BrandLogo.vue'
 
 const authStore = useAuthStore()
 const householdStore = useHouseholdStore()
@@ -35,6 +36,7 @@ const handleLogin = async () => {
       <div class="auth-wrapper">
         <div class="auth-card">
           <div class="card-body">
+            <BrandLogo size="lg" class="auth-brand" />
             <h1 class="auth-title">Login</h1>
             <p class="auth-subtitle">Willkommen zurück! Melde dich an, um fortzufahren.</p>
 
@@ -87,3 +89,10 @@ const handleLogin = async () => {
       </div>
     </div>
   </template>
+
+<style scoped>
+.auth-brand {
+  justify-content: center;
+  margin-bottom: var(--spacing-md);
+}
+</style>

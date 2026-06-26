@@ -3,6 +3,7 @@ import { ref, computed, onMounted } from 'vue'
 import { useAuthStore } from '../stores/authStore'
 import { useHouseholdStore } from '../stores/householdStore'
 import SettingsSidebar from './SettingsSidebar.vue'
+import BrandLogo from './BrandLogo.vue'
 
 const authStore = useAuthStore()
 const householdStore = useHouseholdStore()
@@ -23,7 +24,7 @@ onMounted(async () => {
   <header class="app-header">
     <!-- Compact Header Bar -->
     <div class="header-bar">
-      <h1 class="page-title">Putzplan</h1>
+      <BrandLogo size="sm" />
 
       <!-- Weekly Points Display -->
       <div v-if="householdStore.weeklyRanking" class="points-display">
@@ -93,14 +94,6 @@ onMounted(async () => {
   justify-content: space-between;
   padding: 0.75rem 1rem;
   gap: 0.75rem;
-}
-
-.page-title {
-  font-size: 1.25rem;
-  font-weight: 700;
-  color: var(--color-text-primary);
-  margin: 0;
-  white-space: nowrap;
 }
 
 /* Weekly Points Display */
@@ -198,10 +191,6 @@ onMounted(async () => {
 @media (min-width: 768px) {
   .header-bar {
     padding: 1rem 1.5rem;
-  }
-
-  .page-title {
-    font-size: 1.5rem;
   }
 }
 </style>
