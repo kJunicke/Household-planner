@@ -4,6 +4,13 @@
 
 **📋 Bug-Datenbank**: Siehe [`BUG-PATTERNS.md`](BUG-PATTERNS.md) für dokumentierte Bugs und deren Lösungen. Bei neuen Bugs bitte dort eintragen!
 
+## 🔑 Credentials & Secrets
+
+**GitHub PAT**: In `.env` im Root als `GITHUB_PAT=...` gespeichert (gitignored).
+- Wird für GitHub API (PR erstellen, pushen) genutzt
+- Benötigt Fine-grained PAT: `Contents: read+write`, `Pull requests: read+write`
+- Erneuerung: github.com → Settings → Developer settings → Personal access tokens → Fine-grained
+
 ## 🛠️ Development Workflow
 
 **Arbeitsverzeichnis**: `putzplan_vue/`
@@ -65,9 +72,17 @@ putzplan_vue/
 ```
 
 ### Views & Routes
-- `/` - **CleaningView** - Task-Liste mit Sub-Tabs (Alltagsaufgaben / Putzaufgaben / Erledigt)
-  - **FAB-Buttons**: Expanding Search + Create Task (unten rechts, thumb-freundlich)
-  - **Cross-Tab Search**: Intelligente Suche über alle Kategorien mit Relevanz-Sortierung
+- `/` - **CleaningView** - Task-Liste, gefiltert über Kategorie-Chips (Alltag / Putzen / Projekte / Erledigt)
+  - **Filter-Chips**: Single-Select-Toggle. Ein Chip filtert exklusiv auf eine Kategorie;
+    erneuter Klick (oder das ✕-Badge am aktiven Chip) hebt den Filter auf → alle sichtbar.
+    Auswahl persistiert in `localStorage` (`putzplan_active_category`).
+  - **Vereinter FAB**: EIN Button (Lupe + kleines +-Badge) öffnet das Such-Overlay (suchen UND erstellen)
+  - **Cross-Tab Search**: Intelligente Suche über alle Kategorien mit Relevanz-Sortierung.
+    Bei Eingabe erscheinen zwei Aktionen: **Aufgabe erstellen** (TaskCreateModal, Titel vorbefüllt)
+    und **Quick-Aufgabe abschließen** (QuickTaskModal)
+  - **Quick-Aufgaben**: einmalig, sofort abgeschlossen + sofort soft-deleted → erscheinen NUR in der
+    Historie (mit „Quick"-Badge), nicht in der Aufgabenliste. Punkte zählen in Stats/Ausgleich.
+    Insert direkt via `taskStore.createQuickTask()` (keine Edge Function, RLS erlaubt Client-Insert)
 - `/history` - **HistoryView** - Chronologischer Verlauf aller Completions
 - `/stats` - **StatsView** - Gamification-Statistiken (Balken-/Tortendiagramm + Verlaufsgrafik mit Wochen-/Monatsansicht)
 - `/shopping` - **ShoppingView** - Einkaufsliste mit Autocomplete und Purchase-Tracking
@@ -97,6 +112,9 @@ putzplan_vue/
     - `'project'`: Langfristig, **nur 'checklist' + 'bonus'** (kein deduct)
 - `task_completions` - PK: `completion_id` (Append-only Historie, **Single Source of Truth**)
   - `user_id` referenziert direkt `auth.users.id`
+  - `is_quick` - Boolean (Default `FALSE`): markiert Quick-Aufgaben (einmalig + sofort
+    abgeschlossen, nur in Historie sichtbar). HistoryView zeigt dafür ein „Quick"-Badge
+    statt des „Gelöscht"-Badges (obwohl der Task soft-deleted ist)
 - `shopping_items` - PK: `shopping_item_id` (Einkaufsliste mit Purchase-Tracking)
   - `times_purchased` - Counter für Kaufhäufigkeit
   - `last_purchased_at`, `last_purchased_by` - Tracking von letztem Einkauf
@@ -158,10 +176,11 @@ putzplan_vue/
 - **Nicht Bootstrap Modals**: Vue 3 Kompatibilitätsprobleme
 - **Modal Pattern**: Zentralisierte Utility-Styles in `utilities.css` (flexbox, scrollable body)
 - **FAB Pattern** (CleaningView):
-  - Floating Action Buttons unten rechts (Material Design Standard)
-  - Search FAB: Expandiert zu Suchleiste (250px, smooth animation)
-  - Create FAB: Öffnet Task-Modal
-  - Thumb-freundliche Position für Mobile UX
+  - EIN Floating Action Button unten rechts (Material Design Standard, thumb-freundlich)
+  - Glyph: Lupe + kleines weißes +-Badge → signalisiert „suchen UND erstellen"
+  - Öffnet das Such-Overlay; bei Eingabe erscheinen die Aktionen Erstellen / Quick-Aufgabe
+  - Farbregel: FAB indigo (primär), +-Badge weiß-auf-indigo (kein grünes Erstellen-Signal,
+    Grün bleibt ausschließlich für „erledigt/abschließen")
 
 ### CSS Architecture
 - **Design System**: CSS Variables in `base.css`:
