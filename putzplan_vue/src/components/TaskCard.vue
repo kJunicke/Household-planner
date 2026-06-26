@@ -252,6 +252,15 @@ const assignedMember = computed(() => {
      return householdStore.householdMembers.find(m => m.user_id === props.task.assigned_to)
 })
 
+// Initialen des zugewiesenen Members für den Avatar-Chip
+const assigneeInitials = computed(() => {
+     const name = assignedMember.value?.display_name?.trim()
+     if (!name) return ''
+     const parts = name.split(/\s+/)
+     if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase()
+     return name.slice(0, 2).toUpperCase()
+})
+
 // Assignment Glow - Subtiler Farbschimmer für zugewiesene Tasks
 const assignmentGlowStyle = computed(() => {
      if (!assignedMember.value) return {}
@@ -410,8 +419,19 @@ const handleCompleteProject = async () => {
      <div class="task-card" :class="{ 'has-assignment': props.task.assigned_to }" :style="assignmentGlowStyle">
           <!-- Main Horizontal Layout -->
           <div class="task-card-main" @click="!props.task.parent_task_id && subtasks.length > 0 ? toggleSubtasks() : null" :style="{ cursor: !props.task.parent_task_id && subtasks.length > 0 ? 'pointer' : 'default' }">
-               <!-- Left: Title + Badges -->
+               <!-- Left: Assignee + Title + Badges -->
                <div class="task-left">
+                    <!-- Assignee Avatar (zeigt Zuständigkeit auf einen Blick) -->
+                    <button
+                         class="assignee-avatar"
+                         :class="{ unassigned: !assignedMember }"
+                         :style="assignedMember ? { backgroundColor: assignedMember.user_color } : {}"
+                         @click.stop="openAssignmentModal"
+                         :title="assignedMember ? 'Zugewiesen: ' + assignedMember.display_name : 'Aufgabe zuweisen'"
+                    >
+                         <span v-if="assignedMember">{{ assigneeInitials }}</span>
+                         <i v-else class="bi bi-person-plus"></i>
+                    </button>
                     <div class="task-info-block">
                          <h4 class="task-title">{{ props.task.title }}</h4>
                          <div class="task-meta">
@@ -434,19 +454,16 @@ const handleCompleteProject = async () => {
                                    Täglich
                               </span>
 
-                              <!-- Subtasks Count -->
-                              <span v-if="!props.task.parent_task_id && subtasks.length > 0" class="meta-badge subtasks-badge">
-                                   {{ completedSubtasksCount }}/{{ subtasks.length }}
-                              </span>
-
-                              <!-- Expand Icon (klein, ausgegraut, unten rechts) -->
+                              <!-- Subtasks: Fortschritt + Ausklappen in einem Control -->
                               <button
                                    v-if="!props.task.parent_task_id && subtasks.length > 0"
-                                   class="expand-indicator"
+                                   class="subtask-toggle"
                                    @click.stop="toggleSubtasks"
                                    :title="subtasksExpanded ? 'Subtasks einklappen' : 'Subtasks ausklappen'"
                               >
-                                   {{ subtasksExpanded ? '▲' : '▼' }}
+                                   <i class="bi bi-list-check"></i>
+                                   {{ completedSubtasksCount }}/{{ subtasks.length }}
+                                   <i :class="subtasksExpanded ? 'bi bi-chevron-up' : 'bi bi-chevron-down'"></i>
                               </button>
 
                               <!-- Due Date (wenn vorhanden) -->
@@ -669,7 +686,6 @@ const handleCompleteProject = async () => {
      border: 1px solid var(--color-border);
      border-radius: var(--radius-md);
      background: var(--color-background-elevated);
-     box-shadow: var(--shadow-sm);
      transition: all var(--transition-base);
      overflow: hidden;
      display: flex;
@@ -678,12 +694,8 @@ const handleCompleteProject = async () => {
 }
 
 .task-card:hover {
-     box-shadow: var(--shadow-md);
-     border-color: var(--color-primary);
-}
-
-.task-card.has-assignment {
-     border-width: 2px;
+     box-shadow: var(--shadow-sm);
+     border-color: var(--color-border-hover);
 }
 
 /* Main Horizontal Layout */
@@ -691,43 +703,56 @@ const handleCompleteProject = async () => {
      display: flex;
      align-items: center;
      justify-content: space-between;
-     padding: var(--spacing-md);
-     gap: var(--spacing-md);
-     min-height: calc(var(--touch-target-min) + var(--spacing-md));
+     padding: var(--spacing-sm) var(--spacing-md);
+     gap: var(--spacing-sm);
+     min-height: var(--touch-target-min);
 }
 
-/* Left Side: Expand + Title + Badges */
+/* Left Side: Assignee + Title + Badges */
 .task-left {
      display: flex;
      align-items: center;
-     gap: 0.5rem;
+     gap: 0.625rem;
      flex: 1;
      min-width: 0;
 }
 
-.expand-indicator {
-     background: transparent;
+/* Assignee Avatar */
+.assignee-avatar {
+     width: 36px;
+     height: 36px;
+     min-width: 36px;
+     border-radius: 50%;
      border: none;
-     color: var(--color-text-secondary);
-     opacity: 0.5;
-     font-size: var(--font-sm);
-     cursor: pointer;
-     padding: 0;
-     width: var(--touch-target-min);
-     height: var(--touch-target-min);
-     min-width: var(--touch-target-min);
-     min-height: var(--touch-target-min);
+     color: #fff;
+     font-size: 0.7rem;
+     font-weight: 700;
+     letter-spacing: 0.02em;
      display: inline-flex;
      align-items: center;
      justify-content: center;
+     cursor: pointer;
      flex-shrink: 0;
-     transition: all var(--transition-base);
-     border-radius: var(--radius-sm);
+     transition: transform var(--transition-base);
 }
 
-.expand-indicator:hover {
-     opacity: 0.8;
-     background: var(--color-background-muted);
+.assignee-avatar:hover {
+     transform: scale(1.08);
+}
+
+.assignee-avatar.unassigned {
+     background: transparent;
+     border: 1.5px dashed var(--color-border);
+     color: var(--color-text-muted);
+}
+
+.assignee-avatar.unassigned:hover {
+     border-color: var(--color-primary);
+     color: var(--color-primary);
+}
+
+.assignee-avatar i {
+     font-size: var(--font-md);
 }
 
 .task-info-block {
@@ -785,30 +810,55 @@ const handleCompleteProject = async () => {
      white-space: nowrap;
 }
 
+/* Effort = einziger gefüllter Badge (Schlüsselinfo), Typ-Badges dezent als
+   Outline, damit die Meta-Zeile nicht „bunt" wirkt. */
 .effort-badge {
      background: var(--bs-primary);
      color: white;
 }
 
 .type-badge-one-time {
-     background: var(--bs-secondary);
-     color: white;
+     background: transparent;
+     color: var(--color-text-secondary);
+     border: 1px solid var(--color-border);
 }
 
 .type-badge-project {
-     background: var(--bs-info);
-     color: white;
+     background: transparent;
+     color: var(--color-info, #0d6efd);
+     border: 1px solid currentColor;
 }
 
 .type-badge-daily {
-     background: var(--bs-warning);
-     color: white;
+     background: transparent;
+     color: var(--color-warning-dark);
+     border: 1px solid var(--color-warning);
 }
 
-.subtasks-badge {
-     background: var(--color-background-muted);
+/* Subtask-Toggle: Fortschritt + Chevron in einem tappbaren Control */
+.subtask-toggle {
+     display: inline-flex;
+     align-items: center;
+     gap: 0.25rem;
+     padding: 0.125rem 0.5rem;
+     border-radius: var(--radius-sm);
+     font-size: 0.6875rem;
+     font-weight: 600;
+     white-space: nowrap;
+     background: var(--color-background);
      color: var(--color-text-secondary);
      border: 1px solid var(--color-border);
+     cursor: pointer;
+     transition: all var(--transition-base);
+}
+
+.subtask-toggle:hover {
+     border-color: var(--color-primary);
+     color: var(--color-primary);
+}
+
+.subtask-toggle i {
+     font-size: 0.7rem;
 }
 
 .due-badge {
