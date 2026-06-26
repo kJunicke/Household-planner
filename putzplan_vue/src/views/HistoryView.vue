@@ -34,6 +34,7 @@ const completions = computed((): CompletionWithDetails[] => {
       ...enriched,
       // Fallback falls nicht enriched (z.B. von Realtime)
       isDeleted: enriched.isDeleted ?? false,
+      isQuick: enriched.isQuick ?? false,
       tasks: enriched.tasks ?? { title: 'Unbekannte Aufgabe' },
       household_members: {
         display_name: enriched.household_members?.display_name || member?.display_name || 'Unbekannt',
@@ -234,8 +235,12 @@ onUnmounted(() => {
           <div class="completion-details">
             <div class="task-title">
               {{ completion.tasks?.title || 'Unbekannte Aufgabe' }}
-              <!-- Gelöscht Badge (Soft Delete) -->
-              <span v-if="completion.isDeleted" class="deleted-badge">
+              <!-- Quick-Aufgabe Badge -->
+              <span v-if="completion.isQuick" class="quick-badge">
+                <i class="bi bi-lightning-charge-fill"></i> Quick
+              </span>
+              <!-- Gelöscht Badge (Soft Delete) – nicht bei Quick-Aufgaben -->
+              <span v-else-if="completion.isDeleted" class="deleted-badge">
                 Gelöscht
               </span>
               <!-- Subtask Badge -->
@@ -430,6 +435,19 @@ onUnmounted(() => {
   padding: 0.125rem 0.5rem;
   border-radius: var(--radius-sm);
   border: 1px solid var(--bs-secondary);
+}
+
+.quick-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #b45309;
+  background: rgba(245, 158, 11, 0.15);
+  padding: 0.125rem 0.5rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-warning);
 }
 
 .completion-meta {

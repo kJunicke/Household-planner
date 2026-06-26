@@ -3,11 +3,13 @@ import { onMounted, onUnmounted, ref, computed } from "vue";
 import TaskCard from '../components/TaskCard.vue';
 import CategoryNav, { type TaskCategory } from '../components/CategoryNav.vue';
 import TaskCreateModal from '../components/TaskCreateModal.vue';
+import QuickTaskModal from '../components/QuickTaskModal.vue';
 import { useTaskStore } from "../stores/taskStore";
 import type { Task } from '@/types/Task';
 
 const taskStore = useTaskStore()
 const showCreateModal = ref(false)
+const showQuickModal = ref(false)
 
 // Search state
 const searchQuery = ref('')
@@ -203,12 +205,36 @@ const groupedTasks = computed((): TaskGroup[] => {
   return groups
 })
 
-const openCreateModal = () => {
+const closeCreateModal = () => {
+  showCreateModal.value = false
+}
+
+// Aus dem Such-Overlay heraus: zuerst Suche schließen, dann jeweiliges Modal
+// öffnen. searchQuery bleibt erhalten und wird als initialTitle übernommen.
+const openCreateFromSearch = () => {
+  showSearchOverlay.value = false
   showCreateModal.value = true
 }
 
-const closeCreateModal = () => {
-  showCreateModal.value = false
+const openQuickFromSearch = () => {
+  showSearchOverlay.value = false
+  showQuickModal.value = true
+}
+
+const closeQuickModal = () => {
+  showQuickModal.value = false
+}
+
+const handleCreateQuickTask = async (data: {
+  title: string
+  effort: 1 | 2 | 3 | 4 | 5
+  note?: string
+}) => {
+  const result = await taskStore.createQuickTask(data)
+  if (result) {
+    showQuickModal.value = false
+    searchQuery.value = ''
+  }
 }
 
 const openSearchOverlay = () => {
@@ -234,6 +260,7 @@ const handleCreateTask = async (taskData: {
   try {
     await taskStore.createTask(taskData)
     showCreateModal.value = false
+    searchQuery.value = ''
   } catch (error) {
     console.error('Fehler beim Erstellen:', error)
   }
@@ -300,25 +327,19 @@ onUnmounted(() => {
       </section>
     </div>
 
-    <!-- Floating Action Buttons -->
+    <!-- Floating Action Button (vereint: Suchen + Erstellen) -->
     <div class="fab-group">
-      <!-- Search FAB -->
-      <button
-        class="fab fab-search"
-        @click="openSearchOverlay"
-        aria-label="Suchen"
-      >
-        <i class="bi bi-search"></i>
-      </button>
-
-      <!-- Create FAB -->
       <button
         class="fab fab-create"
-        @click="openCreateModal"
+        @click="openSearchOverlay"
         :disabled="taskStore.isLoading"
-        aria-label="Aufgabe hinzufügen"
+        aria-label="Aufgabe suchen oder hinzufügen"
       >
-        <i class="bi bi-plus"></i>
+        <!-- Lupe = suchen, +-Badge = erstellen -->
+        <i class="bi bi-search fab-icon-main"></i>
+        <span class="fab-plus-badge" aria-hidden="true">
+          <i class="bi bi-plus"></i>
+        </span>
       </button>
     </div>
 
@@ -334,7 +355,7 @@ onUnmounted(() => {
               type="text"
               v-model="searchQuery"
               class="search-overlay-input"
-              placeholder="Suchen..."
+              placeholder="Aufgabe suchen oder erstellen..."
               @keyup.esc="closeSearchOverlay"
             />
             <button
@@ -352,6 +373,16 @@ onUnmounted(() => {
             aria-label="Suche schließen"
           >
             <i class="bi bi-x-lg"></i>
+          </button>
+        </div>
+
+        <!-- Aktionen: erst wenn etwas eingegeben wurde (Titel-Vorschlag) -->
+        <div v-if="searchQuery.trim()" class="search-overlay-actions">
+          <button class="btn btn-primary action-create" @click="openCreateFromSearch">
+            <i class="bi bi-plus-lg"></i> Aufgabe erstellen
+          </button>
+          <button class="btn btn-success action-quick" @click="openQuickFromSearch">
+            <i class="bi bi-lightning-charge-fill"></i> Quick-Aufgabe abschließen
           </button>
         </div>
 
@@ -391,6 +422,15 @@ onUnmounted(() => {
       :isLoading="taskStore.isLoading"
       @close="closeCreateModal"
       @create="handleCreateTask"
+    />
+
+    <!-- Quick Task Modal -->
+    <QuickTaskModal
+      v-if="showQuickModal"
+      :initialTitle="searchQuery.trim()"
+      :isLoading="taskStore.isLoading"
+      @close="closeQuickModal"
+      @complete="handleCreateQuickTask"
     />
   </main>
 </template>
@@ -491,6 +531,33 @@ onUnmounted(() => {
   flex-shrink: 0;
 }
 
+/* Lupe + kleines +-Badge: signalisiert "suchen ODER neu anlegen" */
+.fab-create {
+  position: relative;
+}
+
+.fab-icon-main {
+  font-size: 1.4rem;
+}
+
+.fab-plus-badge {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: white;
+  color: var(--bs-primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.95rem;
+  font-weight: 700;
+  line-height: 1;
+  box-shadow: 0 0 0 2px var(--bs-primary);
+}
+
 .fab:hover:not(:disabled) {
   transform: scale(1.1);
   box-shadow: 0 6px 16px rgba(0, 0, 0, 0.2);
@@ -503,10 +570,6 @@ onUnmounted(() => {
 .fab:disabled {
   opacity: 0.6;
   cursor: not-allowed;
-}
-
-.fab-search {
-  background: var(--bs-secondary);
 }
 
 /* Search Overlay */
@@ -580,6 +643,27 @@ onUnmounted(() => {
   border: 1px solid var(--color-border);
   border-radius: 24px;
   padding: 12px 16px;
+}
+
+/* Aktions-Buttons unter der Eingabe (Erstellen / Quick) */
+.search-overlay-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 12px 16px;
+  background: var(--color-background-elevated);
+  border-bottom: 1px solid var(--color-border);
+  flex-shrink: 0;
+}
+
+.search-overlay-actions .btn {
+  flex: 1 1 0;
+  min-width: 140px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  white-space: nowrap;
 }
 
 .search-overlay-input-wrapper i {
