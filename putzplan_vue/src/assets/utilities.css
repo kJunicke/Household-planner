@@ -261,3 +261,22 @@
 .btn-icon i {
   font-size: var(--font-lg);
 }
+
+/* Ghost delete button: neutral by default so per-row trash icons don't
+   dominate a list with red, but clearly signals "danger" on hover/active.
+   Use for low-stakes inline deletes (list items, history rows). The explicit
+   confirm action in a modal stays solid red. */
+.btn-delete-ghost {
+  border: 1.5px solid var(--color-border);
+  background: transparent;
+  color: var(--color-text-muted);
+  transition: all var(--transition-base);
+}
+
+.btn-delete-ghost:hover,
+.btn-delete-ghost:active,
+.btn-delete-ghost:focus-visible {
+  border-color: var(--color-danger);
+  color: var(--color-danger);
+  background: rgba(239, 68, 68, 0.08);
+}

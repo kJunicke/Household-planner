@@ -601,29 +601,29 @@ const lineChartOptions = computed(() => ({
       </div>
 
       <template v-else>
-      <!-- Zeitraum-Tabs -->
-      <div class="time-period-tabs mb-4">
+      <!-- Zeitraum-Filter (Segmented Control) -->
+      <div class="segmented-control mb-4">
         <button
           @click="selectedPeriod = 'all'"
-          :class="['btn', 'btn-sm', selectedPeriod === 'all' ? 'btn-primary' : 'btn-outline-primary']"
+          :class="['segment', selectedPeriod === 'all' && 'active']"
         >
           Gesamt
         </button>
         <button
           @click="selectedPeriod = 'week'"
-          :class="['btn', 'btn-sm', selectedPeriod === 'week' ? 'btn-primary' : 'btn-outline-primary']"
+          :class="['segment', selectedPeriod === 'week' && 'active']"
         >
           Woche
         </button>
         <button
           @click="selectedPeriod = 'month'"
-          :class="['btn', 'btn-sm', selectedPeriod === 'month' ? 'btn-primary' : 'btn-outline-primary']"
+          :class="['segment', selectedPeriod === 'month' && 'active']"
         >
           Monat
         </button>
         <button
           @click="selectedPeriod = 'year'"
-          :class="['btn', 'btn-sm', selectedPeriod === 'year' ? 'btn-primary' : 'btn-outline-primary']"
+          :class="['segment', selectedPeriod === 'year' && 'active']"
         >
           Jahr
         </button>
@@ -697,38 +697,44 @@ const lineChartOptions = computed(() => ({
 <style scoped>
 /* Use global .page-title from base.css - no override needed */
 
-.time-period-tabs {
+/* Segmented control (iOS-style): one connected pill, active segment elevated */
+.segmented-control {
   display: flex;
-  gap: 0.5rem;
-  flex-wrap: nowrap;
-  padding: 0.75rem;
-  background: var(--color-background-elevated);
+  gap: 2px;
+  padding: 4px;
+  background: var(--color-background);
+  border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
+}
+
+.segment {
+  flex: 1;
+  border: none;
+  background: transparent;
+  color: var(--color-text-secondary);
+  font-size: var(--font-md);
+  font-weight: 600;
+  padding: 0.5rem 0.25rem;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: all var(--transition-base);
+  white-space: nowrap;
+}
+
+.segment:hover:not(.active) {
+  color: var(--color-text-primary);
+}
+
+.segment.active {
+  background: var(--color-background-elevated);
+  color: var(--color-primary);
   box-shadow: var(--shadow-sm);
 }
 
-.time-period-tabs .btn {
-  flex: 1;
-}
-
-/* Desktop: Limitiere maximale Breite der Buttons */
-@media (min-width: 768px) {
-  .time-period-tabs .btn {
-    flex: 0 1 auto;
-    min-width: 120px;
-  }
-}
-
-/* Mobile: Kleinere Buttons für bessere Platznutzung */
 @media (max-width: 480px) {
-  .time-period-tabs {
-    gap: 0.5rem;
-    padding: 0.75rem;
-  }
-
-  .time-period-tabs .btn-sm {
-    font-size: 0.75rem;
-    padding: 0.4rem 0.6rem;
+  .segment {
+    font-size: var(--font-sm);
+    padding: 0.45rem 0.2rem;
   }
 }
 

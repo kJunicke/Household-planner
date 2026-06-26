@@ -286,7 +286,7 @@ onUnmounted(() => {
                     <i class="bi bi-star-fill"></i>
                   </button>
                   <button
-                    class="btn btn-sm btn-outline-danger"
+                    class="btn btn-sm btn-delete-ghost"
                     @click="shoppingStore.deleteItem(item.shopping_item_id)"
                     title="Löschen"
                   >
@@ -337,7 +337,7 @@ onUnmounted(() => {
                     </span>
                   </small>
                   <button
-                    class="btn btn-sm btn-outline-danger ms-2"
+                    class="btn btn-sm btn-delete-ghost ms-2"
                     @click="shoppingStore.deleteItem(item.shopping_item_id)"
                     title="Löschen"
                   >

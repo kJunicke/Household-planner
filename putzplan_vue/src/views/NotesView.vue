@@ -156,7 +156,7 @@ onUnmounted(() => {
                 <i class="bi bi-pencil"></i>
               </button>
               <button
-                class="btn btn-sm btn-outline-danger"
+                class="btn btn-sm btn-delete-ghost"
                 @click="openDeleteModal(note)"
                 title="Löschen"
               >

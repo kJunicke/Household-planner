@@ -172,7 +172,7 @@ onUnmounted(() => {
                   </label>
                 </div>
                 <button
-                  class="btn btn-sm btn-outline-danger"
+                  class="btn btn-sm btn-delete-ghost"
                   @click="packingStore.removeItem(item.item_id)"
                   title="Löschen"
                 >
@@ -207,7 +207,7 @@ onUnmounted(() => {
                   </label>
                 </div>
                 <button
-                  class="btn btn-sm btn-outline-danger"
+                  class="btn btn-sm btn-delete-ghost"
                   @click="packingStore.removeItem(item.item_id)"
                   title="Löschen"
                 >

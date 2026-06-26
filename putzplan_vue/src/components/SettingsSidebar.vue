@@ -27,6 +27,19 @@ const closeSidebar = () => {
   emit('update:open', false)
 }
 
+const codeCopied = ref(false)
+const copyInviteCode = async () => {
+  const code = householdStore.currentHousehold?.invite_code
+  if (!code) return
+  try {
+    await navigator.clipboard.writeText(code)
+    codeCopied.value = true
+    setTimeout(() => { codeCopied.value = false }, 2000)
+  } catch {
+    // Clipboard API not available (e.g. insecure context) — silently ignore
+  }
+}
+
 const handleLogout = async () => {
   await authStore.logout()
   closeSidebar()
@@ -117,7 +130,16 @@ watch(() => props.open, (isOpen) => {
           </div>
           <div class="info-item">
             <span class="info-label">Einladungs-Code:</span>
-            <span class="info-value mono">{{ householdStore.currentHousehold?.invite_code }}</span>
+            <span class="info-value-row">
+              <span class="info-value mono">{{ householdStore.currentHousehold?.invite_code }}</span>
+              <button
+                class="copy-btn"
+                @click="copyInviteCode"
+                :title="codeCopied ? 'Kopiert!' : 'Code kopieren'"
+              >
+                <i :class="codeCopied ? 'bi bi-check-lg' : 'bi bi-clipboard'"></i>
+              </button>
+            </span>
           </div>
         </section>
 
@@ -348,6 +370,33 @@ watch(() => props.open, (isOpen) => {
 .info-value.mono {
   font-family: 'Courier New', monospace;
   letter-spacing: 0.05em;
+}
+
+.info-value-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.copy-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  transition: all var(--transition-base);
+}
+
+.copy-btn:hover {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+  background: var(--color-background);
 }
 
 /* Members List */
