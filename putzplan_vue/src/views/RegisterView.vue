@@ -2,6 +2,7 @@
 import {useAuthStore} from "@/stores/authStore"
 import { ref } from "vue"
 import { useRouter } from 'vue-router'
+import BrandLogo from '@/components/BrandLogo.vue'
 
 const authStore = useAuthStore()
 const router = useRouter()
@@ -31,6 +32,7 @@ const handleRegister = async () => {
       <div class="auth-wrapper">
         <div class="auth-card">
           <div class="card-body">
+            <BrandLogo size="lg" class="auth-brand" />
             <h1 class="auth-title">Registrierung</h1>
             <p class="auth-subtitle">Erstelle einen Account, um loszulegen.</p>
 
@@ -83,3 +85,10 @@ const handleRegister = async () => {
       </div>
     </div>
   </template>
+
+<style scoped>
+.auth-brand {
+  justify-content: center;
+  margin-bottom: var(--spacing-md);
+}
+</style>

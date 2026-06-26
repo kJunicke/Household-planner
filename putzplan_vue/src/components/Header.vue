@@ -3,6 +3,7 @@ import { ref, computed, onMounted } from 'vue'
 import { useAuthStore } from '../stores/authStore'
 import { useHouseholdStore } from '../stores/householdStore'
 import SettingsSidebar from './SettingsSidebar.vue'
+import BrandLogo from './BrandLogo.vue'
 
 const authStore = useAuthStore()
 const householdStore = useHouseholdStore()
@@ -23,7 +24,7 @@ onMounted(async () => {
   <header class="app-header">
     <!-- Compact Header Bar -->
     <div class="header-bar">
-      <h1 class="page-title">Putzplan</h1>
+      <BrandLogo size="sm" />
 
       <!-- Weekly Points Display -->
       <div v-if="householdStore.weeklyRanking" class="points-display">
@@ -54,20 +55,20 @@ onMounted(async () => {
         </div>
       </div>
 
+      <!-- Empty state: keine Completions diese Woche -->
+      <div v-else class="points-display points-empty">
+        <i class="bi bi-trophy"></i>
+        <span class="empty-hint">Diese Woche: {{ householdStore.currentUserWeeklyPoints }} Pkt</span>
+      </div>
+
       <div class="header-actions">
         <button
           class="user-avatar"
           :style="{ backgroundColor: currentMemberColor }"
-          :title="'Deine Farbe: ' + currentMemberColor"
+          :title="'Einstellungen · Deine Farbe: ' + currentMemberColor"
+          aria-label="Einstellungen öffnen"
           @click="sidebarOpen = true"
         />
-        <button
-          class="menu-btn"
-          @click="sidebarOpen = true"
-          aria-label="Menü öffnen"
-        >
-          <i class="bi bi-list"></i>
-        </button>
       </div>
     </div>
 
@@ -95,14 +96,6 @@ onMounted(async () => {
   gap: 0.75rem;
 }
 
-.page-title {
-  font-size: 1.25rem;
-  font-weight: 700;
-  color: var(--color-text-primary);
-  margin: 0;
-  white-space: nowrap;
-}
-
 /* Weekly Points Display */
 .points-display {
   display: flex;
@@ -110,6 +103,25 @@ onMounted(async () => {
   gap: 0.75rem;
   flex-shrink: 1;
   min-width: 0;
+}
+
+/* Empty state when there are no completions this week */
+.points-empty {
+  gap: 0.375rem;
+  color: var(--color-text-secondary);
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.points-empty i {
+  color: var(--color-warning);
+  font-size: 0.9rem;
+}
+
+.points-empty .empty-hint {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .rank-item {
@@ -175,32 +187,10 @@ onMounted(async () => {
   border-color: var(--color-text-primary);
 }
 
-.menu-btn {
-  background: none;
-  border: none;
-  font-size: 1.75rem;
-  color: var(--color-text-secondary);
-  cursor: pointer;
-  padding: 0.25rem;
-  transition: all 0.2s ease;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  line-height: 1;
-}
-
-.menu-btn:hover {
-  color: var(--color-text-primary);
-}
-
 /* Desktop: slightly larger */
 @media (min-width: 768px) {
   .header-bar {
     padding: 1rem 1.5rem;
-  }
-
-  .page-title {
-    font-size: 1.5rem;
   }
 }
 </style>

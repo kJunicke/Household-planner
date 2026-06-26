@@ -118,6 +118,21 @@
 **Migrations:** Konsolidiert am 26.10.2025 (29 → 4 Migrations)
 
 **Letzte größere Features:**
+- ✅ Quick-Aufgaben + vereinter Such-/Erstellen-FAB - 26.06.2026
+  - Such- und Erstellen-FAB zu EINEM Button vereint (Lupe + kleines +-Badge)
+  - Such-Overlay zeigt bei Eingabe zwei Aktionen: „Aufgabe erstellen" + „Quick-Aufgabe abschließen"
+  - Quick-Aufgaben: einmalig, sofort abgeschlossen + soft-deleted → nur in Historie mit „Quick"-Badge
+  - Punkte zählen in Stats/Ausgleich; `taskStore.createQuickTask()` (Client-Insert, keine Edge Function)
+  - Migration `20260626141312_add_is_quick_to_completions.sql` (Spalte `is_quick`)
+  - Neue Komponente: QuickTaskModal (Titel + Punkte + Notiz)
+- ✅ UX Look & Feel P0–P2 + Folge-Politur - 06/2026
+  - Audit-basierte Fixes: Header-Empty-State, distinkte Member-Farben (`lib/memberColors.ts`),
+    FAB-z-index (Teleport), Task-Button-Affordance, CTA-Farbregel (Indigo=erstellen/Grün=erledigt)
+  - HistoryView: Datums-Gruppierung; Ghost-Delete-Buttons; Branding (BrandLogo) auf Auth-Screens
+  - StatsView: Ausgleich-Punkte gestapelt in Punkteverteilung UND als Slice im Kuchendiagramm (Amber);
+    Segmented Control für Zeitraum-Filter; Charts gegen kollidierende Farben abgesichert
+  - Putzen-Filter: Single-Select-Toggle mit ✕-Badge (erneuter Klick = Filter aufheben)
+  - TaskCard: Zuständigkeits-Avatar, ruhigere Badges, höhere Dichte
 - ✅ Verlaufsgrafik (Trend Line Chart) in StatsView - 16.02.2026
   - Line Chart mit Chart.js: Punkteverlauf über die Zeit
   - Toggle Wochen/Monats-Aggregation (KW X / Monat Jahr)

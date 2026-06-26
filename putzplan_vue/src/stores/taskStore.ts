@@ -257,6 +257,77 @@ export const useTaskStore = defineStore('tasks', () => {
         return data
     }
 
+    // CREATE QUICK TASK - Einmalige Aufgabe, sofort abgeschlossen, nur in Historie
+    // Legt einen one-time Task an (sofort soft-deleted, damit er weder in der
+    // aktiven Liste noch unter "Erledigt" auftaucht) und schreibt direkt eine
+    // Completion mit is_quick=true. RLS erlaubt den Client-Insert in
+    // task_completions, daher keine Edge Function nötig.
+    const createQuickTask = async (quickData: { title: string; effort: number; note?: string }) => {
+        const householdStore = useHouseholdStore()
+        const authStore = useAuthStore()
+        const toastStore = useToastStore()
+
+        if (!householdStore.currentHousehold) {
+            toastStore.showToast('Fehler: Kein Haushalt ausgewählt', 'error')
+            return null
+        }
+        if (!authStore.user) {
+            toastStore.showToast('Fehler: Nicht angemeldet', 'error')
+            return null
+        }
+
+        isLoading.value = true
+        const now = new Date().toISOString()
+
+        // 1. Task: one-time, bereits abgeschlossen, sofort soft-deleted
+        const { data: task, error: taskError } = await supabase
+            .from('tasks')
+            .insert({
+                title: quickData.title,
+                effort: quickData.effort,
+                recurrence_days: 0,
+                task_type: 'one-time',
+                completed: true,
+                last_completed_at: now,
+                deleted_at: now,
+                household_id: householdStore.currentHousehold.household_id
+            })
+            .select()
+            .single()
+
+        if (taskError || !task) {
+            isLoading.value = false
+            console.error('Error creating quick task:', taskError)
+            toastStore.showToast('Fehler beim Erstellen der Quick-Aufgabe', 'error')
+            return null
+        }
+
+        // 2. Completion direkt schreiben (Single Source of Truth für Punkte/Historie)
+        const { error: completionError } = await supabase
+            .from('task_completions')
+            .insert({
+                task_id: task.task_id,
+                user_id: authStore.user.id,
+                effort_override: quickData.effort,
+                completion_note: quickData.note?.trim() || null,
+                is_quick: true
+            })
+
+        isLoading.value = false
+
+        if (completionError) {
+            console.error('Error creating quick completion:', completionError)
+            toastStore.showToast('Fehler beim Abschließen der Quick-Aufgabe', 'error')
+            return null
+        }
+
+        // Header-Stats (Wochenpunkte) aktualisieren
+        await householdStore.loadWeeklyCompletions()
+
+        toastStore.showToast('Quick-Aufgabe abgeschlossen', 'success', 3000)
+        return task
+    }
+
     // UPDATE - Task vollständig aktualisieren
     const updateTask = async (taskId: string, updates: Partial<Omit<Task, 'task_id'>>) => {
         const toastStore = useToastStore()
@@ -474,6 +545,7 @@ export const useTaskStore = defineStore('tasks', () => {
                 task_id,
                 effort_override,
                 completion_note,
+                is_quick,
                 tasks (
                     title,
                     household_id,
@@ -502,6 +574,7 @@ export const useTaskStore = defineStore('tasks', () => {
             const completionData = completion as typeof completion & {
                 effort_override: number
                 completion_note?: string | null
+                is_quick?: boolean
             }
 
             // Task-Titel: Bei Soft-Deleted Tasks ist deleted_at gesetzt
@@ -516,6 +589,7 @@ export const useTaskStore = defineStore('tasks', () => {
                 effort_override: completionData.effort_override, // UNIFIED: ALWAYS set (Single Source of Truth)
                 completion_note: completionData.completion_note || null,
                 isDeleted, // NEU: Flag für gelöschte Tasks (UI kann Badge anzeigen)
+                isQuick: completionData.is_quick ?? false, // Quick-Aufgabe (nur Historie)
                 tasks: {
                     title: taskTitle
                 },
@@ -705,6 +779,7 @@ export const useTaskStore = defineStore('tasks', () => {
         markAsDirty,
         skipTask,
         createTask,
+        createQuickTask,
         updateTask,
         deleteTask,
         subscribeToTasks,

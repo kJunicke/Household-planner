@@ -194,7 +194,7 @@ const handleDeleteSubtask = (subtaskId: string) => {
               </div>
 
               <button
-                class="btn btn-sm btn-success"
+                class="btn btn-sm btn-primary"
                 :disabled="!canAddSubtask"
                 @click="handleAddSubtask"
               >

@@ -136,7 +136,7 @@ const joinHousehold = async () => {
               <div v-if="joinError" class="alert alert-danger">
                 {{ joinError }}
               </div>
-              <button type="submit" class="btn btn-success w-100" :disabled="joinLoading">
+              <button type="submit" class="btn btn-primary w-100" :disabled="joinLoading">
                 <span v-if="joinLoading">Trete bei...</span>
                 <span v-else>Beitreten</span>
               </button>

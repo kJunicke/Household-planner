@@ -3,6 +3,7 @@ import { ref, computed, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/authStore'
 import { useHouseholdStore } from '../stores/householdStore'
+import { MEMBER_COLORS, DEFAULT_MEMBER_COLOR } from '../lib/memberColors'
 
 const props = defineProps<{
   open: boolean
@@ -20,23 +21,23 @@ const isEditingName = ref(false)
 const newDisplayName = ref('')
 const newUserColor = ref('')
 
-const predefinedColors = [
-  '#4A90E2', // Blue
-  '#E74C3C', // Red
-  '#2ECC71', // Green
-  '#F39C12', // Orange
-  '#9B59B6', // Purple
-  '#1ABC9C', // Turquoise
-  '#E67E22', // Dark Orange
-  '#34495E', // Dark Gray
-  '#3498DB', // Light Blue
-  '#E91E63', // Pink
-  '#16A085', // Dark Turquoise
-  '#C0392B', // Dark Red
-]
+const predefinedColors = MEMBER_COLORS
 
 const closeSidebar = () => {
   emit('update:open', false)
+}
+
+const codeCopied = ref(false)
+const copyInviteCode = async () => {
+  const code = householdStore.currentHousehold?.invite_code
+  if (!code) return
+  try {
+    await navigator.clipboard.writeText(code)
+    codeCopied.value = true
+    setTimeout(() => { codeCopied.value = false }, 2000)
+  } catch {
+    // Clipboard API not available (e.g. insecure context) — silently ignore
+  }
 }
 
 const handleLogout = async () => {
@@ -48,7 +49,7 @@ const handleLogout = async () => {
 const startEditingName = () => {
   newDisplayName.value = householdStore.getCurrentMemberDisplayName()
   const currentMember = householdStore.householdMembers.find(m => m.user_id === authStore.user?.id)
-  newUserColor.value = currentMember?.user_color || '#4A90E2'
+  newUserColor.value = currentMember?.user_color || DEFAULT_MEMBER_COLOR
   isEditingName.value = true
 }
 
@@ -77,7 +78,7 @@ const currentMemberName = computed(() => {
 
 const currentMemberColor = computed(() => {
   const member = householdStore.householdMembers.find(m => m.user_id === authStore.user?.id)
-  return member?.user_color || '#4A90E2'
+  return member?.user_color || DEFAULT_MEMBER_COLOR
 })
 
 // Close on ESC key
@@ -95,6 +96,9 @@ watch(() => props.open, (isOpen) => {
 </script>
 
 <template>
+  <!-- Teleport to body so the sidebar escapes the sticky header's stacking
+       context; otherwise root-level fixed elements (FABs) paint over it. -->
+  <Teleport to="body">
   <!-- Backdrop Overlay -->
   <Transition name="backdrop">
     <div
@@ -126,7 +130,16 @@ watch(() => props.open, (isOpen) => {
           </div>
           <div class="info-item">
             <span class="info-label">Einladungs-Code:</span>
-            <span class="info-value mono">{{ householdStore.currentHousehold?.invite_code }}</span>
+            <span class="info-value-row">
+              <span class="info-value mono">{{ householdStore.currentHousehold?.invite_code }}</span>
+              <button
+                class="copy-btn"
+                @click="copyInviteCode"
+                :title="codeCopied ? 'Kopiert!' : 'Code kopieren'"
+              >
+                <i :class="codeCopied ? 'bi bi-check-lg' : 'bi bi-clipboard'"></i>
+              </button>
+            </span>
           </div>
         </section>
 
@@ -141,7 +154,7 @@ watch(() => props.open, (isOpen) => {
             >
               <div
                 class="member-color"
-                :style="{ backgroundColor: member.user_color || '#4A90E2' }"
+                :style="{ backgroundColor: member.user_color || DEFAULT_MEMBER_COLOR }"
               />
               <span class="member-name">{{ member.display_name || 'Unbekannt' }}</span>
             </div>
@@ -196,7 +209,7 @@ watch(() => props.open, (isOpen) => {
             </div>
 
             <div class="d-flex gap-2">
-              <button @click="saveDisplayName" class="btn btn-success btn-sm flex-1">
+              <button @click="saveDisplayName" class="btn btn-primary btn-sm flex-1">
                 <i class="bi bi-check-lg"></i> Speichern
               </button>
               <button @click="cancelEditingName" class="btn btn-secondary btn-sm flex-1">
@@ -215,6 +228,7 @@ watch(() => props.open, (isOpen) => {
       </div>
     </aside>
   </Transition>
+  </Teleport>
 </template>
 
 <style scoped>
@@ -356,6 +370,33 @@ watch(() => props.open, (isOpen) => {
 .info-value.mono {
   font-family: 'Courier New', monospace;
   letter-spacing: 0.05em;
+}
+
+.info-value-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.copy-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  transition: all var(--transition-base);
+}
+
+.copy-btn:hover {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+  background: var(--color-background);
 }
 
 /* Members List */

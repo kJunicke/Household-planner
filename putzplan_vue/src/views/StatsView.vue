@@ -4,11 +4,18 @@ import { Pie, Bar, Line } from 'vue-chartjs'
 import { Chart as ChartJS, Title, Tooltip, Legend, ArcElement, BarElement, LineElement, PointElement, CategoryScale, LinearScale } from 'chart.js'
 import { useHouseholdStore } from '../stores/householdStore'
 import { useTaskStore } from '../stores/taskStore'
+import { useSettlementStore } from '../stores/settlementStore'
+import { MEMBER_COLORS } from '../lib/memberColors'
+
+// Eigene Farbe für ausgeglichene (Ausgleich-)Punkte, klar abgesetzt von den
+// Member-Farben der Aufgaben-Punkte.
+const SETTLED_COLOR = '#f59e0b'
 
 ChartJS.register(Title, Tooltip, Legend, ArcElement, BarElement, LineElement, PointElement, CategoryScale, LinearScale)
 
 const householdStore = useHouseholdStore()
 const taskStore = useTaskStore()
+const settlementStore = useSettlementStore()
 
 type TimePeriod = 'all' | 'week' | 'month' | 'year'
 const selectedPeriod = ref<TimePeriod>('all')
@@ -39,6 +46,7 @@ onMounted(async () => {
     const data = await taskStore.fetchCompletions()
     console.log('Stats View - Loaded completions:', data)
     allCompletions.value = data as CompletionWithDetails[]
+    await settlementStore.loadSettlements()
   } catch (error) {
     console.error('Error loading completions:', error)
   } finally {
@@ -46,25 +54,39 @@ onMounted(async () => {
   }
 })
 
+// Stichtag für den gewählten Zeitraum (null = Gesamt). Wird sowohl für
+// Completions als auch für Ausgleiche verwendet.
+const periodCutoff = computed<Date | null>(() => {
+  if (selectedPeriod.value === 'all') return null
+  const now = new Date()
+  const cutoff = new Date()
+  if (selectedPeriod.value === 'week') {
+    cutoff.setDate(now.getDate() - 7)
+  } else if (selectedPeriod.value === 'month') {
+    cutoff.setMonth(now.getMonth() - 1)
+  } else if (selectedPeriod.value === 'year') {
+    cutoff.setFullYear(now.getFullYear() - 1)
+  }
+  return cutoff
+})
+
 // Filtere Completions nach Zeitraum
 const filteredCompletions = computed(() => {
-  const now = new Date()
-  const completions = allCompletions.value
+  const cutoff = periodCutoff.value
+  if (!cutoff) return allCompletions.value
+  return allCompletions.value.filter(c => new Date(c.completed_at) >= cutoff)
+})
 
-  if (selectedPeriod.value === 'all') {
-    return completions
+// Ausgeglichene Punkte pro Member (die ein Member kompensiert hat, also als
+// from_user_id), gefiltert nach Zeitraum über settled_at.
+const settledByUser = computed(() => {
+  const cutoff = periodCutoff.value
+  const map = new Map<string, number>()
+  for (const s of settlementStore.settlements) {
+    if (cutoff && s.settled_at && new Date(s.settled_at) < cutoff) continue
+    map.set(s.from_user_id, (map.get(s.from_user_id) ?? 0) + s.points_settled)
   }
-
-  const cutoffDate = new Date()
-  if (selectedPeriod.value === 'week') {
-    cutoffDate.setDate(now.getDate() - 7)
-  } else if (selectedPeriod.value === 'month') {
-    cutoffDate.setMonth(now.getMonth() - 1)
-  } else if (selectedPeriod.value === 'year') {
-    cutoffDate.setFullYear(now.getFullYear() - 1)
-  }
-
-  return completions.filter(c => new Date(c.completed_at) >= cutoffDate)
+  return map
 })
 
 // Helper: Convert hex to rgba
@@ -73,6 +95,28 @@ const hexToRgba = (hex: string, alpha: number = 1) => {
   if (!result) return `rgba(79, 70, 229, ${alpha})` // Fallback to primary color
   return `rgba(${parseInt(result[1], 16)}, ${parseInt(result[2], 16)}, ${parseInt(result[3], 16)}, ${alpha})`
 }
+
+// Resolve a distinct, readable color per member for charts. Uses the member's
+// chosen color, but if colors are missing or collide (e.g. legacy households
+// where everyone defaulted to the same blue) it falls back to distinct palette
+// colors by member order, so charts never render as one indistinguishable blob.
+const memberChartColors = computed<Map<string, string>>(() => {
+  const map = new Map<string, string>()
+  const used = new Set<string>()
+  householdStore.householdMembers.forEach((member, index) => {
+    let color = member.user_color
+    if (!color || used.has(color.toUpperCase())) {
+      color = MEMBER_COLORS.find(c => !used.has(c.toUpperCase()))
+        || MEMBER_COLORS[index % MEMBER_COLORS.length]
+    }
+    used.add(color.toUpperCase())
+    map.set(member.user_id, color)
+  })
+  return map
+})
+
+const colorFor = (userId: string): string =>
+  memberChartColors.value.get(userId) || MEMBER_COLORS[0]
 
 // ISO 8601 Wochennummer berechnen
 const getISOWeekAndYear = (date: Date): { week: number; year: number } => {
@@ -138,8 +182,20 @@ const pieChartData = computed(() => {
     const effort = effortMap.get(member.user_id) || 0
     labels.push(member.display_name || 'Unbekannt')
     data.push(effort)
-    backgroundColors.push(hexToRgba(member.user_color, 0.9))
-    borderColors.push(member.user_color)
+    backgroundColors.push(hexToRgba(colorFor(member.user_id), 0.9))
+    borderColors.push(colorFor(member.user_id))
+  })
+
+  // Ausgleich-Punkte als eigene Slices in der Ausgleich-Farbe (Amber) anhängen,
+  // Rand in der Member-Farbe zur Zuordnung. Eine Pie-Slice kann nicht zweifarbig
+  // sein, daher pro Member eine separate Slice statt Stapelung.
+  members.forEach((member) => {
+    const settled = settledByUser.value.get(member.user_id) || 0
+    if (settled <= 0) return
+    labels.push(`Ausgleich: ${member.display_name || 'Unbekannt'}`)
+    data.push(settled)
+    backgroundColors.push(hexToRgba(SETTLED_COLOR, 0.85))
+    borderColors.push(colorFor(member.user_id))
   })
 
   return {
@@ -167,6 +223,7 @@ const barChartData = computed(() => {
   // Erstelle Labels und Data Arrays
   const labels: string[] = []
   const data: number[] = []
+  const settledData: number[] = []
   const backgroundColors: string[] = []
   const borderColors: string[] = []
 
@@ -174,20 +231,36 @@ const barChartData = computed(() => {
     const effort = effortMap.get(member.user_id) || 0
     labels.push(member.display_name || 'Unbekannt')
     data.push(effort)
-    backgroundColors.push(hexToRgba(member.user_color, 0.85))
-    borderColors.push(member.user_color)
+    settledData.push(settledByUser.value.get(member.user_id) || 0)
+    backgroundColors.push(hexToRgba(colorFor(member.user_id), 0.85))
+    borderColors.push(colorFor(member.user_id))
   })
+
+  const hasSettled = settledData.some(v => v > 0)
 
   return {
     labels,
-    datasets: [{
-      label: 'Punkte',
-      data,
-      backgroundColor: backgroundColors,
-      borderColor: borderColors,
-      borderWidth: 2,
-      borderRadius: 8
-    }]
+    datasets: [
+      {
+        label: 'Aufgaben',
+        data,
+        backgroundColor: backgroundColors,
+        borderColor: borderColors,
+        borderWidth: 2,
+        borderRadius: 6,
+        stack: 'punkte'
+      },
+      // Ausgleich-Punkte gestapelt obendrauf, in eigener Farbe.
+      ...(hasSettled ? [{
+        label: 'Ausgleich',
+        data: settledData,
+        backgroundColor: hexToRgba(SETTLED_COLOR, 0.85),
+        borderColor: SETTLED_COLOR,
+        borderWidth: 2,
+        borderRadius: 6,
+        stack: 'punkte'
+      }] : [])
+    ]
   }
 })
 
@@ -294,12 +367,12 @@ const lineChartData = computed(() => {
       const userMap = bucketMap.get(key)
       return userMap?.get(member.user_id) || 0
     }),
-    borderColor: member.user_color,
-    backgroundColor: hexToRgba(member.user_color, 0.1),
+    borderColor: colorFor(member.user_id),
+    backgroundColor: hexToRgba(colorFor(member.user_id), 0.1),
     borderWidth: 2,
     pointRadius: 3,
     pointHoverRadius: 6,
-    pointBackgroundColor: member.user_color,
+    pointBackgroundColor: colorFor(member.user_id),
     tension: 0.3,
     fill: false
   }))
@@ -393,7 +466,14 @@ const barChartOptions = {
   maintainAspectRatio: false,
   plugins: {
     legend: {
-      display: false
+      display: true,
+      position: 'bottom' as const,
+      labels: {
+        font: { family: 'Inter, system-ui, sans-serif', size: 12 },
+        color: '#64748b',
+        usePointStyle: true,
+        boxWidth: 8
+      }
     },
     title: {
       display: true,
@@ -424,15 +504,16 @@ const barChartOptions = {
       callbacks: {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         label: function(context: any) {
-          const label = context.label || ''
+          const dataset = context.dataset.label || ''
           const value = context.parsed.y || 0
-          return ` ${label}: ${value} Punkte`
+          return ` ${dataset}: ${value} Punkte`
         }
       }
     }
   },
   scales: {
     x: {
+      stacked: true,
       grid: {
         display: false
       },
@@ -446,6 +527,7 @@ const barChartOptions = {
       }
     },
     y: {
+      stacked: true,
       beginAtZero: true,
       grid: {
         color: '#e2e8f0',
@@ -567,7 +649,7 @@ const lineChartOptions = computed(() => ({
 <template>
   <div class="page-container">
     <div class="container mt-4">
-      <h2 class="page-title mb-4">Statistiken</h2>
+      <!-- Titel kommt vom Tab darüber (Statistiken/Ausgleich) -->
 
       <!-- Loading State -->
       <div v-if="isLoading" class="empty-state">
@@ -578,29 +660,29 @@ const lineChartOptions = computed(() => ({
       </div>
 
       <template v-else>
-      <!-- Zeitraum-Tabs -->
-      <div class="time-period-tabs mb-4">
+      <!-- Zeitraum-Filter (Segmented Control) -->
+      <div class="segmented-control mb-4">
         <button
           @click="selectedPeriod = 'all'"
-          :class="['btn', 'btn-sm', selectedPeriod === 'all' ? 'btn-primary' : 'btn-outline-primary']"
+          :class="['segment', selectedPeriod === 'all' && 'active']"
         >
           Gesamt
         </button>
         <button
           @click="selectedPeriod = 'week'"
-          :class="['btn', 'btn-sm', selectedPeriod === 'week' ? 'btn-primary' : 'btn-outline-primary']"
+          :class="['segment', selectedPeriod === 'week' && 'active']"
         >
           Woche
         </button>
         <button
           @click="selectedPeriod = 'month'"
-          :class="['btn', 'btn-sm', selectedPeriod === 'month' ? 'btn-primary' : 'btn-outline-primary']"
+          :class="['segment', selectedPeriod === 'month' && 'active']"
         >
           Monat
         </button>
         <button
           @click="selectedPeriod = 'year'"
-          :class="['btn', 'btn-sm', selectedPeriod === 'year' ? 'btn-primary' : 'btn-outline-primary']"
+          :class="['segment', selectedPeriod === 'year' && 'active']"
         >
           Jahr
         </button>
@@ -674,38 +756,44 @@ const lineChartOptions = computed(() => ({
 <style scoped>
 /* Use global .page-title from base.css - no override needed */
 
-.time-period-tabs {
+/* Segmented control (iOS-style): one connected pill, active segment elevated */
+.segmented-control {
   display: flex;
-  gap: 0.5rem;
-  flex-wrap: nowrap;
-  padding: 0.75rem;
-  background: var(--color-background-elevated);
+  gap: 2px;
+  padding: 4px;
+  background: var(--color-background);
+  border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
+}
+
+.segment {
+  flex: 1;
+  border: none;
+  background: transparent;
+  color: var(--color-text-secondary);
+  font-size: var(--font-md);
+  font-weight: 600;
+  padding: 0.5rem 0.25rem;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: all var(--transition-base);
+  white-space: nowrap;
+}
+
+.segment:hover:not(.active) {
+  color: var(--color-text-primary);
+}
+
+.segment.active {
+  background: var(--color-background-elevated);
+  color: var(--color-primary);
   box-shadow: var(--shadow-sm);
 }
 
-.time-period-tabs .btn {
-  flex: 1;
-}
-
-/* Desktop: Limitiere maximale Breite der Buttons */
-@media (min-width: 768px) {
-  .time-period-tabs .btn {
-    flex: 0 1 auto;
-    min-width: 120px;
-  }
-}
-
-/* Mobile: Kleinere Buttons für bessere Platznutzung */
 @media (max-width: 480px) {
-  .time-period-tabs {
-    gap: 0.5rem;
-    padding: 0.75rem;
-  }
-
-  .time-period-tabs .btn-sm {
-    font-size: 0.75rem;
-    padding: 0.4rem 0.6rem;
+  .segment {
+    font-size: var(--font-sm);
+    padding: 0.45rem 0.2rem;
   }
 }
 

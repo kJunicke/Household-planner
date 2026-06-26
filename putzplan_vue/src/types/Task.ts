@@ -48,6 +48,7 @@ export interface TaskCompletion {
 // fetchCompletions() enriches TaskCompletion with task and member info
 export interface EnrichedCompletion extends TaskCompletion {
   isDeleted: boolean // Soft Delete: Task wurde gelöscht aber Daten bleiben erhalten
+  isQuick: boolean // Quick-Aufgabe: einmalig erstellt + sofort abgeschlossen, nur in Historie
   tasks: {
     title: string
   }

@@ -34,6 +34,7 @@ const completions = computed((): CompletionWithDetails[] => {
       ...enriched,
       // Fallback falls nicht enriched (z.B. von Realtime)
       isDeleted: enriched.isDeleted ?? false,
+      isQuick: enriched.isQuick ?? false,
       tasks: enriched.tasks ?? { title: 'Unbekannte Aufgabe' },
       household_members: {
         display_name: enriched.household_members?.display_name || member?.display_name || 'Unbekannt',
@@ -43,16 +44,48 @@ const completions = computed((): CompletionWithDetails[] => {
   }).sort((a, b) => new Date(b.completed_at).getTime() - new Date(a.completed_at).getTime())
 })
 
-const formatDate = (dateString: string) => {
-  const date = new Date(dateString)
-  return date.toLocaleDateString('de-DE', {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
+// Only the time per row — the day is shown once in the group header below.
+const formatTime = (dateString: string) => {
+  return new Date(dateString).toLocaleTimeString('de-DE', {
     hour: '2-digit',
     minute: '2-digit'
   })
 }
+
+// Human-friendly day label: Heute / Gestern / weekday + date.
+const dayLabel = (date: Date): string => {
+  const today = new Date()
+  const yesterday = new Date()
+  yesterday.setDate(today.getDate() - 1)
+  const sameDay = (a: Date, b: Date) =>
+    a.getFullYear() === b.getFullYear() &&
+    a.getMonth() === b.getMonth() &&
+    a.getDate() === b.getDate()
+  if (sameDay(date, today)) return 'Heute'
+  if (sameDay(date, yesterday)) return 'Gestern'
+  return date.toLocaleDateString('de-DE', {
+    weekday: 'short',
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric'
+  })
+}
+
+// Group the (already date-sorted) completions by calendar day.
+const groupedCompletions = computed(() => {
+  const groups: { key: string; label: string; items: CompletionWithDetails[] }[] = []
+  let current: { key: string; label: string; items: CompletionWithDetails[] } | null = null
+  for (const completion of completions.value) {
+    const date = new Date(completion.completed_at)
+    const key = `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`
+    if (!current || current.key !== key) {
+      current = { key, label: dayLabel(date), items: [] }
+      groups.push(current)
+    }
+    current.items.push(completion)
+  }
+  return groups
+})
 
 const openDeleteModal = (completion: CompletionWithDetails) => {
   completionToDelete.value = completion
@@ -185,19 +218,29 @@ onUnmounted(() => {
 
       <div v-else class="completions-list">
         <div
-          v-for="completion in completions"
-          :key="completion.completion_id"
-          class="completion-item"
-          :style="{
-            '--user-color': completion.household_members.user_color,
-            'background': `linear-gradient(to right, ${completion.household_members.user_color}15 0%, var(--color-background-elevated) 100%)`
-          }"
+          v-for="group in groupedCompletions"
+          :key="group.key"
+          class="completion-group"
         >
+          <div class="date-header">{{ group.label }}</div>
+          <div
+            v-for="completion in group.items"
+            :key="completion.completion_id"
+            class="completion-item"
+            :style="{
+              '--user-color': completion.household_members.user_color,
+              'background': `linear-gradient(to right, ${completion.household_members.user_color}15 0%, var(--color-background-elevated) 100%)`
+            }"
+          >
           <div class="completion-details">
             <div class="task-title">
               {{ completion.tasks?.title || 'Unbekannte Aufgabe' }}
-              <!-- Gelöscht Badge (Soft Delete) -->
-              <span v-if="completion.isDeleted" class="deleted-badge">
+              <!-- Quick-Aufgabe Badge -->
+              <span v-if="completion.isQuick" class="quick-badge">
+                <i class="bi bi-lightning-charge-fill"></i> Quick
+              </span>
+              <!-- Gelöscht Badge (Soft Delete) – nicht bei Quick-Aufgaben -->
+              <span v-else-if="completion.isDeleted" class="deleted-badge">
                 Gelöscht
               </span>
               <!-- Subtask Badge -->
@@ -212,7 +255,7 @@ onUnmounted(() => {
               </span>
               <span class="completion-date">
                 <i class="bi bi-clock"></i>
-                {{ formatDate(completion.completed_at) }}
+                {{ formatTime(completion.completed_at) }}
               </span>
               <span class="completion-points">
                 <i class="bi bi-star-fill"></i>
@@ -232,11 +275,12 @@ onUnmounted(() => {
           <div class="completion-actions">
             <button
               @click="openDeleteModal(completion)"
-              class="btn btn-sm btn-outline-danger"
+              class="btn btn-sm btn-delete-ghost"
               title="Eintrag löschen"
             >
               <i class="bi bi-trash"></i>
             </button>
+          </div>
           </div>
         </div>
       </div>
@@ -315,7 +359,26 @@ onUnmounted(() => {
 .completions-list {
   display: flex;
   flex-direction: column;
+  gap: 1.25rem;
+}
+
+.completion-group {
+  display: flex;
+  flex-direction: column;
   gap: 0.5rem;
+}
+
+.date-header {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-text-muted);
+  background: var(--color-background);
+  padding: 0.25rem 0.125rem;
 }
 
 .completion-item {
@@ -372,6 +435,19 @@ onUnmounted(() => {
   padding: 0.125rem 0.5rem;
   border-radius: var(--radius-sm);
   border: 1px solid var(--bs-secondary);
+}
+
+.quick-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #b45309;
+  background: rgba(245, 158, 11, 0.15);
+  padding: 0.125rem 0.5rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-warning);
 }
 
 .completion-meta {

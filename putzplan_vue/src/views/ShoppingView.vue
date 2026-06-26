@@ -146,9 +146,7 @@ onUnmounted(() => {
 <template>
   <div class="page-container">
     <div class="container-fluid">
-      <h2 class="page-title">
-        <i class="bi bi-cart3"></i> Einkauf
-      </h2>
+      <!-- Titel kommt vom Tab darüber (Einkauf/Packlisten) -->
 
       <!-- Einkaufslisten Chip-Leiste -->
       <div class="list-chip-bar mb-3">
@@ -280,15 +278,15 @@ onUnmounted(() => {
                 </div>
                 <div class="item-actions">
                   <button
-                    class="btn btn-sm"
-                    :class="item.is_priority ? 'btn-warning' : 'btn-outline-secondary'"
+                    class="btn btn-sm btn-star"
+                    :class="{ active: item.is_priority }"
                     @click="shoppingStore.togglePriority(item.shopping_item_id)"
                     :title="item.is_priority ? 'Priorität entfernen' : 'Als prioritär markieren'"
                   >
-                    <i class="bi bi-star-fill"></i>
+                    <i :class="item.is_priority ? 'bi bi-star-fill' : 'bi bi-star'"></i>
                   </button>
                   <button
-                    class="btn btn-sm btn-outline-danger"
+                    class="btn btn-sm btn-delete-ghost"
                     @click="shoppingStore.deleteItem(item.shopping_item_id)"
                     title="Löschen"
                   >
@@ -339,7 +337,7 @@ onUnmounted(() => {
                     </span>
                   </small>
                   <button
-                    class="btn btn-sm btn-outline-danger ms-2"
+                    class="btn btn-sm btn-delete-ghost ms-2"
                     @click="shoppingStore.deleteItem(item.shopping_item_id)"
                     title="Löschen"
                   >
@@ -573,6 +571,26 @@ onUnmounted(() => {
 .item-actions {
   display: flex;
   gap: var(--spacing-xs);
+}
+
+/* Priority star: calm ghost when inactive (matches the delete ghost button),
+   amber when active. Keeps the trailing controls quiet until used. */
+.btn-star {
+  border: 1.5px solid var(--color-border);
+  background: transparent;
+  color: var(--color-text-muted);
+  transition: all var(--transition-base);
+}
+
+.btn-star:hover {
+  border-color: var(--color-warning);
+  color: var(--color-warning);
+}
+
+.btn-star.active {
+  border-color: var(--color-warning);
+  background: var(--color-warning);
+  color: #fff;
 }
 
 .form-check-input {

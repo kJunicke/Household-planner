@@ -8,11 +8,10 @@ interface Props {
 
 interface Emits {
   (e: 'close'): void
-  (e: 'create', taskData: {
+  (e: 'complete', data: {
     title: string
     effort: 1 | 2 | 3 | 4 | 5
-    recurrence_days: number
-    task_type: 'recurring' | 'daily' | 'one-time' | 'project'
+    note?: string
   }): void
 }
 
@@ -22,29 +21,24 @@ const emit = defineEmits<Emits>()
 const formData = ref({
   title: props.initialTitle || '',
   effort: 1 as 1 | 2 | 3 | 4 | 5,
-  recurrence_days: 0,
-  task_type: 'recurring' as 'recurring' | 'daily' | 'one-time' | 'project'
+  note: ''
 })
 
-// Watch for initialTitle changes (when modal opens with search query)
 watch(() => props.initialTitle, (newVal) => {
   if (newVal) {
     formData.value.title = newVal
   }
 }, { immediate: true })
 
-const canConfirm = computed(() => {
-  return formData.value.title.trim().length > 0
-})
+const canConfirm = computed(() => formData.value.title.trim().length > 0)
 
 const handleConfirm = () => {
   if (!canConfirm.value || props.isLoading) return
 
-  emit('create', {
+  emit('complete', {
     title: formData.value.title.trim(),
     effort: formData.value.effort,
-    recurrence_days: formData.value.recurrence_days,
-    task_type: formData.value.task_type
+    note: formData.value.note.trim() || undefined
   })
 }
 
@@ -58,25 +52,31 @@ const handleClose = () => {
     <div class="modal-backdrop" @click="handleClose">
       <div class="modal-content" @click.stop>
         <div class="modal-header">
-          <h3 class="modal-title">Neue Aufgabe erstellen</h3>
+          <h3 class="modal-title">
+            <i class="bi bi-lightning-charge-fill"></i> Quick-Aufgabe
+          </h3>
           <button class="btn-close" @click="handleClose" aria-label="Schließen">×</button>
         </div>
 
         <div class="modal-body">
+          <p class="quick-hint">
+            <i class="bi bi-info-circle"></i>
+            Wird sofort als erledigt gespeichert und erscheint nur in der Historie.
+          </p>
           <form @submit.prevent="handleConfirm">
             <div class="mb-3">
-              <label class="form-label">Task Titel</label>
+              <label class="form-label">Titel</label>
               <input
                 type="text"
                 v-model="formData.title"
-                placeholder="z.B. Küche putzen"
+                placeholder="z.B. Müll rausgebracht"
                 class="form-control"
                 :disabled="isLoading"
               />
             </div>
 
             <div class="mb-3">
-              <label class="form-label">Aufwand (1-5)</label>
+              <label class="form-label">Punkte (1-5)</label>
               <select
                 v-model="formData.effort"
                 class="form-select"
@@ -91,35 +91,14 @@ const handleClose = () => {
             </div>
 
             <div class="mb-3">
-              <label class="form-label">Task-Typ</label>
-              <select
-                v-model="formData.task_type"
-                class="form-select"
-                :disabled="isLoading"
-              >
-                <option value="daily">Täglich / Allgemein (immer sichtbar)</option>
-                <option value="recurring">Wiederkehrend (zeitbasiert)</option>
-                <option value="one-time">Einmalig</option>
-                <option value="project">Projekt (langfristig)</option>
-              </select>
-            </div>
-
-            <div class="mb-3" v-if="formData.task_type === 'recurring'">
-              <label class="form-label">Tage bis zum nächsten Putzen</label>
-              <input
-                type="number"
-                v-model.number="formData.recurrence_days"
-                placeholder="3"
+              <label class="form-label">Notiz (optional)</label>
+              <textarea
+                v-model="formData.note"
+                placeholder="z.B. Details zur Aufgabe"
                 class="form-control"
+                rows="2"
                 :disabled="isLoading"
-              />
-            </div>
-
-            <div v-if="formData.task_type === 'project'" class="project-info">
-              <i class="bi bi-info-circle"></i>
-              <span>
-                Projekte sind langfristige Aufgaben ohne Wiederholung. Es wird automatisch ein "Am Projekt arbeiten" Subtask erstellt.
-              </span>
+              ></textarea>
             </div>
           </form>
         </div>
@@ -129,14 +108,14 @@ const handleClose = () => {
             Abbrechen
           </button>
           <button
-            class="btn btn-primary"
+            class="btn btn-success"
             :disabled="!canConfirm || isLoading"
             @click="handleConfirm"
           >
-            <span v-if="!isLoading">Aufgabe erstellen</span>
+            <span v-if="!isLoading"><i class="bi bi-check-lg"></i> Abschließen</span>
             <span v-else>
               <span class="spinner-border spinner-border-sm me-2"></span>
-              Erstellt...
+              Speichert...
             </span>
           </button>
         </div>
@@ -146,9 +125,27 @@ const handleClose = () => {
 </template>
 
 <style scoped>
-/* Component-specific styles only */
 .mb-3 {
   margin-bottom: 1rem;
+}
+
+.quick-hint {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  padding: 0.6rem 0.85rem;
+  margin-bottom: 1rem;
+  background: var(--color-background);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  color: var(--color-text-secondary);
+  font-size: 0.85rem;
+}
+
+.quick-hint i {
+  flex-shrink: 0;
+  margin-top: 0.1rem;
+  color: var(--color-warning);
 }
 
 .form-label {
@@ -175,24 +172,6 @@ const handleClose = () => {
   outline: none;
   border-color: var(--color-primary);
   box-shadow: 0 0 0 3px rgba(13, 110, 253, 0.15);
-}
-
-.project-info {
-  display: flex;
-  align-items: flex-start;
-  gap: 0.5rem;
-  padding: 0.75rem 1rem;
-  background: var(--bs-info-bg-subtle, #cfe2ff);
-  border: 1px solid var(--bs-info-border-subtle, #9ec5fe);
-  border-radius: var(--radius-md);
-  color: var(--bs-info-text, #084298);
-  font-size: 0.875rem;
-}
-
-.project-info i {
-  font-size: 1rem;
-  flex-shrink: 0;
-  margin-top: 0.125rem;
 }
 
 .spinner-border {

@@ -89,7 +89,10 @@ onUnmounted(() => {
         <i class="bi bi-sticky"></i> Notizen
       </h2>
 
-      <!-- Create Note Form -->
+      <!-- Create Note Form.
+           Bewusste Ausnahme zum FAB/Modal-Pattern der übrigen App: Notizen
+           sollen mit minimaler Reibung (ein Tap ins Feld) erfassbar sein,
+           daher ein persistentes Inline-Formular statt FAB + Modal. -->
       <div class="note-create-section mb-4">
         <div class="input-group">
           <textarea
@@ -156,7 +159,7 @@ onUnmounted(() => {
                 <i class="bi bi-pencil"></i>
               </button>
               <button
-                class="btn btn-sm btn-outline-danger"
+                class="btn btn-sm btn-delete-ghost"
                 @click="openDeleteModal(note)"
                 title="Löschen"
               >

@@ -174,11 +174,11 @@ const handleProjectWork = async (effort: number, note: string) => {
             </button>
             <button
               v-if="task.subtask_points_mode !== 'checklist'"
-              class="btn btn-success btn-sm subtask-action-btn-modifier"
+              class="subtask-action-btn-modifier"
               @click="openCompletionModal"
               title="Aufwand anpassen"
             >
-              <i class="bi bi-chevron-double-up"></i>
+              <i class="bi bi-sliders"></i>
             </button>
           </template>
         </div>
@@ -334,14 +334,17 @@ const handleProjectWork = async (effort: number, note: string) => {
   font-size: var(--font-xl);
 }
 
+/* Secondary action: subordinate to the primary green complete button. */
 .subtask-action-btn-modifier {
   width: var(--touch-target-min);
   height: var(--touch-target-min);
   min-width: var(--touch-target-min);
   min-height: var(--touch-target-min);
   padding: 0;
-  border: none;
+  border: 1.5px solid var(--color-border);
   border-radius: var(--radius-md);
+  background: var(--color-background-elevated);
+  color: var(--color-text-secondary);
   cursor: pointer;
   transition: all var(--transition-base);
   display: flex;
@@ -349,8 +352,14 @@ const handleProjectWork = async (effort: number, note: string) => {
   justify-content: center;
 }
 
+.subtask-action-btn-modifier:hover {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+  background: var(--color-background);
+}
+
 .subtask-action-btn-modifier i {
-  font-size: var(--font-xl);
+  font-size: var(--font-lg);
 }
 
 .btn-primary {
