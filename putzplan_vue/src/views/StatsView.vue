@@ -4,12 +4,18 @@ import { Pie, Bar, Line } from 'vue-chartjs'
 import { Chart as ChartJS, Title, Tooltip, Legend, ArcElement, BarElement, LineElement, PointElement, CategoryScale, LinearScale } from 'chart.js'
 import { useHouseholdStore } from '../stores/householdStore'
 import { useTaskStore } from '../stores/taskStore'
+import { useSettlementStore } from '../stores/settlementStore'
 import { MEMBER_COLORS } from '../lib/memberColors'
+
+// Eigene Farbe für ausgeglichene (Ausgleich-)Punkte, klar abgesetzt von den
+// Member-Farben der Aufgaben-Punkte.
+const SETTLED_COLOR = '#f59e0b'
 
 ChartJS.register(Title, Tooltip, Legend, ArcElement, BarElement, LineElement, PointElement, CategoryScale, LinearScale)
 
 const householdStore = useHouseholdStore()
 const taskStore = useTaskStore()
+const settlementStore = useSettlementStore()
 
 type TimePeriod = 'all' | 'week' | 'month' | 'year'
 const selectedPeriod = ref<TimePeriod>('all')
@@ -40,6 +46,7 @@ onMounted(async () => {
     const data = await taskStore.fetchCompletions()
     console.log('Stats View - Loaded completions:', data)
     allCompletions.value = data as CompletionWithDetails[]
+    await settlementStore.loadSettlements()
   } catch (error) {
     console.error('Error loading completions:', error)
   } finally {
@@ -47,25 +54,39 @@ onMounted(async () => {
   }
 })
 
+// Stichtag für den gewählten Zeitraum (null = Gesamt). Wird sowohl für
+// Completions als auch für Ausgleiche verwendet.
+const periodCutoff = computed<Date | null>(() => {
+  if (selectedPeriod.value === 'all') return null
+  const now = new Date()
+  const cutoff = new Date()
+  if (selectedPeriod.value === 'week') {
+    cutoff.setDate(now.getDate() - 7)
+  } else if (selectedPeriod.value === 'month') {
+    cutoff.setMonth(now.getMonth() - 1)
+  } else if (selectedPeriod.value === 'year') {
+    cutoff.setFullYear(now.getFullYear() - 1)
+  }
+  return cutoff
+})
+
 // Filtere Completions nach Zeitraum
 const filteredCompletions = computed(() => {
-  const now = new Date()
-  const completions = allCompletions.value
+  const cutoff = periodCutoff.value
+  if (!cutoff) return allCompletions.value
+  return allCompletions.value.filter(c => new Date(c.completed_at) >= cutoff)
+})
 
-  if (selectedPeriod.value === 'all') {
-    return completions
+// Ausgeglichene Punkte pro Member (die ein Member kompensiert hat, also als
+// from_user_id), gefiltert nach Zeitraum über settled_at.
+const settledByUser = computed(() => {
+  const cutoff = periodCutoff.value
+  const map = new Map<string, number>()
+  for (const s of settlementStore.settlements) {
+    if (cutoff && s.settled_at && new Date(s.settled_at) < cutoff) continue
+    map.set(s.from_user_id, (map.get(s.from_user_id) ?? 0) + s.points_settled)
   }
-
-  const cutoffDate = new Date()
-  if (selectedPeriod.value === 'week') {
-    cutoffDate.setDate(now.getDate() - 7)
-  } else if (selectedPeriod.value === 'month') {
-    cutoffDate.setMonth(now.getMonth() - 1)
-  } else if (selectedPeriod.value === 'year') {
-    cutoffDate.setFullYear(now.getFullYear() - 1)
-  }
-
-  return completions.filter(c => new Date(c.completed_at) >= cutoffDate)
+  return map
 })
 
 // Helper: Convert hex to rgba
@@ -190,6 +211,7 @@ const barChartData = computed(() => {
   // Erstelle Labels und Data Arrays
   const labels: string[] = []
   const data: number[] = []
+  const settledData: number[] = []
   const backgroundColors: string[] = []
   const borderColors: string[] = []
 
@@ -197,20 +219,36 @@ const barChartData = computed(() => {
     const effort = effortMap.get(member.user_id) || 0
     labels.push(member.display_name || 'Unbekannt')
     data.push(effort)
+    settledData.push(settledByUser.value.get(member.user_id) || 0)
     backgroundColors.push(hexToRgba(colorFor(member.user_id), 0.85))
     borderColors.push(colorFor(member.user_id))
   })
 
+  const hasSettled = settledData.some(v => v > 0)
+
   return {
     labels,
-    datasets: [{
-      label: 'Punkte',
-      data,
-      backgroundColor: backgroundColors,
-      borderColor: borderColors,
-      borderWidth: 2,
-      borderRadius: 8
-    }]
+    datasets: [
+      {
+        label: 'Aufgaben',
+        data,
+        backgroundColor: backgroundColors,
+        borderColor: borderColors,
+        borderWidth: 2,
+        borderRadius: 6,
+        stack: 'punkte'
+      },
+      // Ausgleich-Punkte gestapelt obendrauf, in eigener Farbe.
+      ...(hasSettled ? [{
+        label: 'Ausgleich',
+        data: settledData,
+        backgroundColor: hexToRgba(SETTLED_COLOR, 0.85),
+        borderColor: SETTLED_COLOR,
+        borderWidth: 2,
+        borderRadius: 6,
+        stack: 'punkte'
+      }] : [])
+    ]
   }
 })
 
@@ -416,7 +454,14 @@ const barChartOptions = {
   maintainAspectRatio: false,
   plugins: {
     legend: {
-      display: false
+      display: true,
+      position: 'bottom' as const,
+      labels: {
+        font: { family: 'Inter, system-ui, sans-serif', size: 12 },
+        color: '#64748b',
+        usePointStyle: true,
+        boxWidth: 8
+      }
     },
     title: {
       display: true,
@@ -447,15 +492,16 @@ const barChartOptions = {
       callbacks: {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         label: function(context: any) {
-          const label = context.label || ''
+          const dataset = context.dataset.label || ''
           const value = context.parsed.y || 0
-          return ` ${label}: ${value} Punkte`
+          return ` ${dataset}: ${value} Punkte`
         }
       }
     }
   },
   scales: {
     x: {
+      stacked: true,
       grid: {
         display: false
       },
@@ -469,6 +515,7 @@ const barChartOptions = {
       }
     },
     y: {
+      stacked: true,
       beginAtZero: true,
       grid: {
         color: '#e2e8f0',
