@@ -2,7 +2,7 @@
 import { ref, onMounted } from 'vue'
 
 export type TaskCategory = 'daily' | 'recurring' | 'project' | 'completed'
-const STORAGE_KEY = 'putzplan_selected_categories'
+const STORAGE_KEY = 'putzplan_active_category'
 
 const categories: { value: TaskCategory; icon: string; label: string }[] = [
   { value: 'daily', icon: 'bi-lightning-fill', label: 'Alltag' },
@@ -11,65 +11,48 @@ const categories: { value: TaskCategory; icon: string; label: string }[] = [
   { value: 'completed', icon: 'bi-check-circle', label: 'Erledigt' }
 ]
 
-// Default: offene Aufgaben anzeigen, "Erledigt" aus — so wirkt die Leiste
-// erkennbar als Filter (gefüllte vs. Outline-Chips) statt "alles an".
-const DEFAULT_CATEGORIES: TaskCategory[] = ['daily', 'recurring', 'project']
+// Reihenfolge der "alle anzeigen"-Ansicht (kein Filter aktiv)
+const ALL_CATEGORIES: TaskCategory[] = ['daily', 'recurring', 'project', 'completed']
 
-// Load from localStorage or fall back to the default selection
-const loadCategories = (): Set<TaskCategory> => {
-  try {
-    const stored = localStorage.getItem(STORAGE_KEY)
-    if (stored) {
-      const parsed = JSON.parse(stored) as TaskCategory[]
-      if (Array.isArray(parsed) && parsed.length > 0) {
-        return new Set(parsed)
-      }
-    }
-  } catch {
-    // Invalid JSON, use default
+// Single-Select-Filter: null = kein Filter aktiv → alle Kategorien anzeigen.
+// Ein Chip filtert exklusiv; erneuter Klick auf den aktiven Chip setzt zurück.
+const loadActive = (): TaskCategory | null => {
+  const stored = localStorage.getItem(STORAGE_KEY)
+  if (stored && categories.some(c => c.value === stored)) {
+    return stored as TaskCategory
   }
-  return new Set<TaskCategory>(DEFAULT_CATEGORIES)
+  return null
 }
 
-const selectedCategories = ref<Set<TaskCategory>>(loadCategories())
+const activeCategory = ref<TaskCategory | null>(loadActive())
 
-// Emit to parent
 const emit = defineEmits<{
   'update:categories': [categories: TaskCategory[]]
 }>()
 
-// Save to localStorage and emit
 const saveAndEmit = () => {
-  const arr = [...selectedCategories.value]
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(arr))
-  emit('update:categories', arr)
+  if (activeCategory.value) {
+    localStorage.setItem(STORAGE_KEY, activeCategory.value)
+    emit('update:categories', [activeCategory.value])
+  } else {
+    localStorage.removeItem(STORAGE_KEY)
+    emit('update:categories', [...ALL_CATEGORIES])
+  }
 }
 
-// Toggle category (multi-select, at least one must be active)
-const toggleCategory = (category: TaskCategory) => {
-  if (selectedCategories.value.has(category)) {
-    // Prevent deselecting all - must have at least one active
-    if (selectedCategories.value.size > 1) {
-      selectedCategories.value.delete(category)
-      // Trigger reactivity
-      selectedCategories.value = new Set(selectedCategories.value)
-    }
-  } else {
-    selectedCategories.value.add(category)
-    // Trigger reactivity
-    selectedCategories.value = new Set(selectedCategories.value)
-  }
+// Klick: aktiven Chip abwählen (→ alle), sonst exklusiv auswählen
+const selectCategory = (category: TaskCategory) => {
+  activeCategory.value = activeCategory.value === category ? null : category
   saveAndEmit()
 }
 
-// Check if category is active
 const isActive = (category: TaskCategory): boolean => {
-  return selectedCategories.value.has(category)
+  return activeCategory.value === category
 }
 
-// Emit initial value
+// Initialen Zustand emittieren
 onMounted(() => {
-  emit('update:categories', [...selectedCategories.value])
+  saveAndEmit()
 })
 </script>
 
@@ -79,11 +62,13 @@ onMounted(() => {
       <button
         v-for="cat in categories"
         :key="cat.value"
-        @click="toggleCategory(cat.value)"
+        @click="selectCategory(cat.value)"
         :class="['chip', isActive(cat.value) && 'active']"
+        :title="isActive(cat.value) ? 'Filter aufheben' : undefined"
       >
         <i :class="cat.icon"></i>
         <span>{{ cat.label }}</span>
+        <i v-if="isActive(cat.value)" class="bi bi-x-lg chip-clear"></i>
       </button>
     </div>
   </nav>
@@ -150,5 +135,16 @@ onMounted(() => {
 
 .chip i {
   font-size: 1rem;
+}
+
+/* X auf dem aktiven Chip: signalisiert "Klick hebt den Filter auf" */
+.chip-clear {
+  font-size: 0.7rem !important;
+  margin-left: 2px;
+  margin-right: -2px;
+  padding: 2px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.22);
+  line-height: 1;
 }
 </style>
