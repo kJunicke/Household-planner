@@ -1,47 +1,79 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
-import { usePackingStore, type ImportCandidate } from '@/stores/packingStore'
 import { categoryColor } from '@/lib/categoryColor'
 
+export interface CategoryCandidate {
+  sourceListId: string
+  sourceListName: string
+  category: string
+  itemCount: number
+}
+
+export interface CategoryPreviewItem {
+  key: string
+  name: string
+  quantity: number
+}
+
+const props = withDefaults(defineProps<{
+  /** true → offer importing the source items; false → reuse the NAME only. */
+  importItems?: boolean
+  /** Category labels already in the current list (block duplicate create). */
+  existingLabels: string[]
+  /** All reuse/import options across the household's other lists (unfiltered). */
+  candidates: CategoryCandidate[]
+  /** Import mode: items that would be copied from a candidate (for the preview). */
+  previewItems?: (c: CategoryCandidate) => CategoryPreviewItem[]
+  /** Import mode: names already in the target category → shown greyed, skipped. */
+  targetDupeNames?: (c: CategoryCandidate) => Set<string>
+}>(), {
+  importItems: true,
+  previewItems: () => [],
+  targetDupeNames: () => new Set<string>(),
+})
+
 const emit = defineEmits<{
-  /** Create a new empty category in the current list. */
+  /** Create/reuse a category by name in the current list. */
   create: [name: string]
+  /** Import a candidate's items (only fired when importItems=true). */
+  import: [candidate: CategoryCandidate]
   close: []
 }>()
 
-const packingStore = usePackingStore()
-
 const query = ref('')
-const confirming = ref<ImportCandidate | null>(null)
+const confirming = ref<CategoryCandidate | null>(null)
 
-const candidates = computed(() => packingStore.categoryImportCandidates(query.value))
+const filtered = computed(() => {
+  const q = query.value.trim().toLowerCase()
+  const matches = q
+    ? props.candidates.filter(c => c.category.toLowerCase().includes(q))
+    : props.candidates
+  if (props.importItems) return matches
+  // Name-only reuse: collapse to distinct category names across all lists.
+  const seen = new Set<string>()
+  const out: CategoryCandidate[] = []
+  for (const c of matches) {
+    const key = c.category.trim().toLowerCase()
+    if (seen.has(key)) continue
+    seen.add(key)
+    out.push(c)
+  }
+  return out
+})
 
 const canCreate = computed(() => {
-  const q = query.value.trim()
+  const q = query.value.trim().toLowerCase()
   if (!q) return false
-  // Don't offer "create" if the exact label already exists in this list.
-  const existing = packingStore.itemsByCategory.some(
-    g => !g.isUncategorized && g.label.toLowerCase() === q.toLowerCase()
-  )
-  return !existing
+  return !props.existingLabels.some(l => l.trim().toLowerCase() === q)
 })
 
-const previewItems = computed(() =>
-  confirming.value
-    ? packingStore.importPreview(confirming.value.sourceListId, confirming.value.category)
-    : []
+const previewList = computed(() =>
+  confirming.value ? props.previewItems(confirming.value) : []
 )
 
-// Names already present in the target category → shown greyed, skipped on import.
-const existingTargetNames = computed(() => {
-  if (!confirming.value) return new Set<string>()
-  const label = confirming.value.category.toLowerCase()
-  return new Set(
-    packingStore.currentListItems
-      .filter(i => (i.category ?? '').toLowerCase() === label)
-      .map(i => i.name.trim().toLowerCase())
-  )
-})
+const dupeNames = computed(() =>
+  confirming.value ? props.targetDupeNames(confirming.value) : new Set<string>()
+)
 
 const handleCreate = () => {
   const name = query.value.trim()
@@ -50,9 +82,20 @@ const handleCreate = () => {
   emit('close')
 }
 
-const confirmImport = async () => {
+// Reuse an existing category's name without copying its items.
+const reuseName = (c: CategoryCandidate) => {
+  emit('create', c.category)
+  emit('close')
+}
+
+const onCandidate = (c: CategoryCandidate) => {
+  if (props.importItems) confirming.value = c
+  else reuseName(c)
+}
+
+const confirmImport = () => {
   if (!confirming.value) return
-  await packingStore.importCategory(confirming.value.sourceListId, confirming.value.category)
+  emit('import', confirming.value)
   emit('close')
 }
 </script>
@@ -61,7 +104,7 @@ const confirmImport = async () => {
   <Teleport to="body">
     <div class="modal-overlay" @click.self="emit('close')">
       <div class="modal-content" @click.stop>
-        <!-- Import confirmation step -->
+        <!-- Import confirmation step (importItems only) -->
         <template v-if="confirming">
           <div class="modal-header">
             <button class="btn-icon back-btn" @click="confirming = null" title="Zurück">
@@ -79,14 +122,14 @@ const confirmImport = async () => {
             </p>
             <ul class="preview-list">
               <li
-                v-for="it in previewItems"
-                :key="it.item_id"
-                :class="{ 'preview-dupe': existingTargetNames.has(it.name.trim().toLowerCase()) }"
+                v-for="it in previewList"
+                :key="it.key"
+                :class="{ 'preview-dupe': dupeNames.has(it.name.trim().toLowerCase()) }"
               >
                 <span class="preview-name">{{ it.name }}</span>
                 <span v-if="it.quantity > 1" class="preview-qty">×{{ it.quantity }}</span>
                 <span
-                  v-if="existingTargetNames.has(it.name.trim().toLowerCase())"
+                  v-if="dupeNames.has(it.name.trim().toLowerCase())"
                   class="preview-badge"
                 >bereits vorhanden</span>
               </li>
@@ -129,22 +172,26 @@ const confirmImport = async () => {
               </button>
 
               <button
-                v-for="cand in candidates"
+                v-for="cand in filtered"
                 :key="`${cand.sourceListId}::${cand.category}`"
                 class="result-row"
-                @click="confirming = cand"
+                @click="onCandidate(cand)"
               >
-                <span class="result-icon"><i class="bi bi-box-seam"></i></span>
+                <span class="result-icon">
+                  <i :class="importItems ? 'bi bi-box-seam' : 'bi bi-tag'"></i>
+                </span>
                 <span class="result-text">
                   <span class="cat-dot" :style="{ background: categoryColor(cand.category) }"></span>
                   <strong>{{ cand.category }}</strong>
-                  <span class="result-source">· aus {{ cand.sourceListName }}</span>
-                  <span class="result-count">({{ cand.itemCount }})</span>
+                  <template v-if="importItems">
+                    <span class="result-source">· aus {{ cand.sourceListName }}</span>
+                    <span class="result-count">({{ cand.itemCount }})</span>
+                  </template>
                 </span>
                 <i class="bi bi-chevron-right result-chevron"></i>
               </button>
 
-              <p v-if="!canCreate && candidates.length === 0" class="empty-hint text-muted">
+              <p v-if="!canCreate && filtered.length === 0" class="empty-hint text-muted">
                 {{ query.trim() ? 'Kategorie existiert bereits in dieser Liste.' : 'Tippe, um eine Kategorie zu erstellen oder aus einer anderen Liste zu übernehmen.' }}
               </p>
             </div>
