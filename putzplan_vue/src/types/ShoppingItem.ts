@@ -6,6 +6,10 @@ export interface ShoppingItem {
   household_id: string
   list_id: string
   name: string
+  /** Free-text category; null = "Unkategorisiert" bucket. */
+  category: string | null
+  /** Desired amount (>= 1), shown as a plain ×N annotation. */
+  quantity: number
   purchased: boolean
   is_priority: boolean
   times_purchased: number

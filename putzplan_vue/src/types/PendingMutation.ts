@@ -15,7 +15,11 @@ export interface PendingMutation {
     itemId?: string // Für update/delete
     name?: string // Für create
     listId?: string // Für create (shopping list)
+    category?: string | null // Für create (Kategorie, null = Unkategorisiert)
+    quantity?: number // Für create (Menge, >= 1)
     updates?: Record<string, unknown> // Für update (purchased, is_priority, etc.)
+    /** Für create: temp-ID des optimistischen Items → Verkettung von Folge-Mutationen. */
+    tempId?: string
   }
 
   // Metadaten für Retry-Logik
