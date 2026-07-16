@@ -828,7 +828,11 @@ export const useShoppingStore = defineStore('shopping', () => {
     toastStore.showToast('Kategorie umbenannt', 'success', 2000)
   }
 
-  /** Delete a category and all its unpurchased items in the current list. */
+  /**
+   * Delete a category's still-to-buy items. Purchased items keep their category
+   * label (they live in the global Gekauft history block) — deleting them here
+   * would silently drop purchase history, so they're left untouched.
+   */
   const deleteCategory = async (category: string) => {
     const toastStore = useToastStore()
     if (!currentListId.value) return
@@ -843,7 +847,9 @@ export const useShoppingStore = defineStore('shopping', () => {
       }
     }
 
-    const affected = items.value.filter(i => i.list_id === listId && i.category === category)
+    const affected = items.value.filter(
+      i => i.list_id === listId && i.category === category && !i.purchased
+    )
     for (const item of affected) {
       deleteItemOptimistic(item.shopping_item_id)
       addToQueue({ operation: 'delete', payload: { itemId: item.shopping_item_id } })
