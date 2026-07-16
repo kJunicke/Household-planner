@@ -87,7 +87,25 @@ putzplan_vue/
     Insert direkt via `taskStore.createQuickTask()` (keine Edge Function, RLS erlaubt Client-Insert)
 - `/history` - **HistoryView** - Chronologischer Verlauf aller Completions
 - `/stats` - **StatsView** - Gamification-Statistiken (Balken-/Tortendiagramm + Verlaufsgrafik mit Wochen-/Monatsansicht)
-- `/shopping` - **ShoppingView** - Einkaufsliste mit Autocomplete und Purchase-Tracking
+- `/shopping` - **ListsView** - zwei Subtabs: **Einkauf** (ShoppingView) & **Packlisten** (PackingView)
+  - **ShoppingView** - Einkaufsliste mit Autocomplete und Purchase-Tracking
+  - **PackingView** - nach Kategorien gruppierte Packlisten (Redesign 07/2026):
+    - **Kategorien**: frei definierbare Textlabels pro Liste (keine Kategorie-Tabelle), Farbe
+      deterministisch aus Namens-Hash (`lib/categoryColor.ts`, feste 12er-Palette). „Unkategorisiert"
+      (`category = null`) ist immer vorhanden, muted, unten angepinnt. Fertige Kategorien sinken
+      nach unten + klappen zu; offene manuell zuklappbar (Session-State, kein DB-Feld).
+    - **Entkoppeltes Modell**: `packed` (Fertig-Flag) ist unabhängig von `packed_count` (0..`quantity`).
+      Körper-Tap togglet nur `packed`; Stepper `[–] X/N [＋]` (nur qty>1) ändert `packed_count`
+      (Voll → auto-fertig, drunter → wieder offen). Long-Press / Rechtsklick öffnet Edit-Modal.
+    - **Add-Zeile pro Sektion** klappt ein, sobald in der Sektion etwas gepackt ist
+      (`packedCount > 0`), „+ hinzufügen" öffnet wieder (`forcedAddOpen`-Set).
+    - **Wiederverwendung**: „+ Kategorie"-Schnellsuche (`CategorySearchModal`) verschmilzt Neu-Erstellen
+      + Import distinct (Kategorie × Quell-Liste) über den Haushalt; Import überspringt Namens-Dubletten.
+      „Neue Liste" kann leer oder als Kopie einer bestehenden Liste (`copyList`) erstellt werden.
+    - **Reise-Notizen** (`packing_lists.notes`, Freitext, einklappbar oben).
+    - Store: `usePackingStore` — Getter `itemsByCategory`, `overallProgress`; Actions `togglePacked`,
+      `incrementPacked`/`decrementPacked`, `updateItem`, `addItem(name, category)`, `importCategory`,
+      `copyList`, `updateNotes`. Optimistische Updates mit Revert.
 - `/notes` - **NotesView** - Haushalt-Notizen (alle Mitglieder können erstellen/bearbeiten/löschen)
 - `/login` - LoginView
 - `/register` - RegisterView
