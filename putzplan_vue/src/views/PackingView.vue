@@ -6,6 +6,7 @@ import type { PackingItem } from '@/types/PackingItem'
 import ListEditModal from '@/components/ListEditModal.vue'
 import PackingItemEditModal from '@/components/PackingItemEditModal.vue'
 import CategorySearchModal from '@/components/CategorySearchModal.vue'
+import CategoryEditModal from '@/components/CategoryEditModal.vue'
 
 const packingStore = usePackingStore()
 
@@ -18,11 +19,17 @@ const editingList = ref<{ list_id: string; name: string } | null>(null)
 const showResetConfirm = ref(false)
 const showCategorySearch = ref(false)
 const editingItem = ref<PackingItem | null>(null)
+const editingCategory = ref<{ name: string; count: number } | null>(null)
 
 // --- Per-section UI state (session-only, reset on list switch) ---------------
 const addDraft = ref<Record<string, string>>({})
+const addQty = ref<Record<string, number>>({})
+const qtyFieldOpen = ref<Set<string>>(new Set())
 const forcedAddOpen = ref<Set<string>>(new Set())
 const sectionOverride = ref<Map<string, boolean>>(new Map())
+
+// Focus the number field the moment it appears.
+const vFocus = { mounted: (el: HTMLElement) => el.focus() }
 
 // --- Notes ------------------------------------------------------------------
 const notesOpen = ref(false)
@@ -33,6 +40,9 @@ watch(
   () => packingStore.currentListId,
   () => {
     addDraft.value = {}
+    addQty.value = {}
+    qtyFieldOpen.value = new Set()
+    suggestFocusKey.value = null
     forcedAddOpen.value = new Set()
     sectionOverride.value = new Map()
     notesDraft.value = packingStore.currentList?.notes ?? ''
@@ -71,11 +81,54 @@ const openAddLine = (group: CategoryGroup) => {
   forcedAddOpen.value.add(group.key)
 }
 
+// --- Name suggestions (from all items across the household's lists) ---------
+const suggestFocusKey = ref<string | null>(null)
+
+const suggestionsFor = (group: CategoryGroup): string[] => {
+  const q = (addDraft.value[group.key] ?? '').trim().toLowerCase()
+  if (!q) return []
+  const inSection = new Set(group.items.map(i => i.name.trim().toLowerCase()))
+  const seen = new Set<string>()
+  const out: string[] = []
+  for (const it of packingStore.items) {
+    const name = it.name.trim()
+    const lower = name.toLowerCase()
+    if (!lower.includes(q) || inSection.has(lower) || seen.has(lower)) continue
+    seen.add(lower)
+    out.push(name)
+    if (out.length >= 5) break
+  }
+  return out
+}
+
+const onAddFocus = (key: string) => { suggestFocusKey.value = key }
+const onAddBlur = () => { setTimeout(() => { suggestFocusKey.value = null }, 200) }
+
+const selectSuggestion = (group: CategoryGroup, name: string) => {
+  addDraft.value[group.key] = name
+  suggestFocusKey.value = null
+  handleSectionAdd(group)
+}
+
+const openQtyField = (key: string) => {
+  if (!addQty.value[key]) addQty.value[key] = 1
+  qtyFieldOpen.value.add(key)
+}
+
+const closeQtyField = (key: string) => {
+  const qty = Math.max(1, Math.floor(Number(addQty.value[key]) || 1))
+  addQty.value[key] = qty
+  qtyFieldOpen.value.delete(key)
+}
+
 const handleSectionAdd = async (group: CategoryGroup) => {
   const name = (addDraft.value[group.key] ?? '').trim()
   if (!name) return
-  await packingStore.addItem(name, group.category)
+  const qty = Math.max(1, Math.floor(Number(addQty.value[group.key]) || 1))
+  await packingStore.addItem(name, group.category, qty)
   addDraft.value[group.key] = ''
+  addQty.value[group.key] = 1
+  qtyFieldOpen.value.delete(group.key)
 }
 
 // --- Item interactions ------------------------------------------------------
@@ -210,6 +263,21 @@ const handleCreateCategory = (name: string) => {
   packingStore.addCategory(name)
 }
 
+const openCategoryEdit = (group: CategoryGroup) => {
+  if (!group.category) return
+  editingCategory.value = { name: group.category, count: group.total }
+}
+
+const handleCategoryRename = async (oldName: string, newName: string) => {
+  await packingStore.renameCategory(oldName, newName)
+  editingCategory.value = null
+}
+
+const handleCategoryDelete = async (name: string) => {
+  await packingStore.deleteCategory(name)
+  editingCategory.value = null
+}
+
 // --- Notes ------------------------------------------------------------------
 const saveNotes = () => {
   notesFocused.value = false
@@ -335,18 +403,35 @@ onUnmounted(() => {
             class="cat-section"
             :class="{ 'cat-uncategorized': group.isUncategorized, 'cat-complete': group.isComplete }"
           >
-            <button class="cat-header" @click="toggleSection(group)">
+            <div
+              class="cat-header"
+              role="button"
+              tabindex="0"
+              @click="toggleSection(group)"
+              @keydown.enter.prevent="toggleSection(group)"
+              @keydown.space.prevent="toggleSection(group)"
+            >
               <span class="cat-dot" :style="{ background: categoryColor(group.category) }"></span>
               <span class="cat-name">{{ group.label }}</span>
-              <span class="cat-count" v-if="group.total > 0">
-                <i v-if="group.isComplete" class="bi bi-check-circle-fill cat-complete-icon"></i>
-                {{ group.packedCount }}/{{ group.total }}
-              </span>
-              <i
-                class="bi cat-chevron ms-auto"
-                :class="isSectionOpen(group) ? 'bi-chevron-up' : 'bi-chevron-down'"
-              ></i>
-            </button>
+              <div class="cat-header-right">
+                <span class="cat-count" v-if="group.total > 0">
+                  <i v-if="group.isComplete" class="bi bi-check-circle-fill cat-complete-icon"></i>
+                  {{ group.packedCount }}/{{ group.total }}
+                </span>
+                <button
+                  v-if="!group.isUncategorized"
+                  class="cat-edit-btn"
+                  @click.stop="openCategoryEdit(group)"
+                  title="Kategorie bearbeiten"
+                >
+                  <i class="bi bi-pencil"></i>
+                </button>
+                <i
+                  class="bi cat-chevron"
+                  :class="isSectionOpen(group) ? 'bi-chevron-up' : 'bi-chevron-down'"
+                ></i>
+              </div>
+            </div>
 
             <div v-if="isSectionOpen(group)" class="cat-body">
               <div
@@ -394,14 +479,51 @@ onUnmounted(() => {
 
               <!-- Kontextuelle Add-Zeile -->
               <div v-if="isAddOpen(group)" class="add-line">
+                <div class="add-input-wrap">
+                  <input
+                    v-model="addDraft[group.key]"
+                    type="text"
+                    class="add-input"
+                    :placeholder="group.isUncategorized ? '+ hinzufügen…' : `+ zu ${group.label}…`"
+                    maxlength="200"
+                    @focus="onAddFocus(group.key)"
+                    @blur="onAddBlur"
+                    @keyup.enter="handleSectionAdd(group)"
+                  />
+                  <div
+                    v-if="suggestFocusKey === group.key && suggestionsFor(group).length > 0"
+                    class="suggestions-dropdown"
+                  >
+                    <button
+                      v-for="s in suggestionsFor(group)"
+                      :key="s"
+                      class="suggestion-item"
+                      @mousedown.prevent="selectSuggestion(group, s)"
+                    >
+                      {{ s }}
+                    </button>
+                  </div>
+                </div>
                 <input
-                  v-model="addDraft[group.key]"
-                  type="text"
-                  class="add-input"
-                  :placeholder="group.isUncategorized ? '+ hinzufügen…' : `+ zu ${group.label}…`"
-                  maxlength="200"
+                  v-if="qtyFieldOpen.has(group.key)"
+                  v-focus
+                  v-model.number="addQty[group.key]"
+                  type="number"
+                  class="add-qty-input"
+                  min="1"
+                  max="999"
                   @keyup.enter="handleSectionAdd(group)"
+                  @blur="closeQtyField(group.key)"
                 />
+                <button
+                  v-else
+                  class="add-qty-toggle"
+                  :class="{ active: (addQty[group.key] || 1) > 1 }"
+                  @click="openQtyField(group.key)"
+                  title="Anzahl festlegen"
+                >
+                  ×{{ addQty[group.key] || 1 }}
+                </button>
                 <button
                   class="add-confirm"
                   @click="handleSectionAdd(group)"
@@ -441,6 +563,16 @@ onUnmounted(() => {
     v-if="showCategorySearch"
     @create="handleCreateCategory"
     @close="showCategorySearch = false"
+  />
+
+  <!-- Kategorie bearbeiten / löschen -->
+  <CategoryEditModal
+    v-if="editingCategory"
+    :category="editingCategory.name"
+    :item-count="editingCategory.count"
+    @rename="handleCategoryRename"
+    @delete="handleCategoryDelete"
+    @close="editingCategory = null"
   />
 
   <!-- Liste bearbeiten Modal -->
@@ -641,7 +773,6 @@ onUnmounted(() => {
   background: var(--color-background-elevated);
   border-radius: var(--radius-md);
   margin-bottom: var(--spacing-sm);
-  overflow: hidden;
 }
 .cat-uncategorized { opacity: 0.92; }
 .cat-complete .cat-header { opacity: 0.7; }
@@ -658,7 +789,32 @@ onUnmounted(() => {
   text-align: left;
   color: var(--color-text-primary);
   min-height: var(--touch-target-min);
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
 }
+.cat-header:focus-visible { outline: 2px solid var(--color-primary); outline-offset: -2px; }
+
+.cat-header-right {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  flex-shrink: 0;
+}
+
+.cat-edit-btn {
+  background: none;
+  border: none;
+  padding: 4px;
+  cursor: pointer;
+  color: var(--color-text-muted);
+  opacity: 0.6;
+  display: flex;
+  align-items: center;
+  font-size: var(--font-sm);
+  border-radius: var(--radius-sm);
+}
+.cat-edit-btn:hover { opacity: 1; color: var(--color-primary); }
 .cat-dot {
   display: inline-block;
   width: 10px;
@@ -764,9 +920,13 @@ onUnmounted(() => {
   gap: var(--spacing-sm);
   padding: 2px 0;
 }
-.add-input {
+.add-input-wrap {
+  position: relative;
   flex: 1;
   min-width: 0;
+}
+.add-input {
+  width: 100%;
   border: 1px dashed var(--color-border-hover);
   background: transparent;
   border-radius: var(--radius-sm);
@@ -775,6 +935,71 @@ onUnmounted(() => {
   color: var(--color-text-primary);
 }
 .add-input:focus { outline: none; border-color: var(--color-primary); border-style: solid; }
+
+.suggestions-dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  margin-top: 4px;
+  background: var(--color-background-elevated);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+  z-index: 1000;
+  max-height: 200px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+.suggestion-item {
+  padding: var(--spacing-sm) var(--spacing-md);
+  background: none;
+  border: none;
+  border-bottom: 1px solid var(--color-border);
+  text-align: left;
+  font-size: var(--font-base);
+  color: var(--color-text-primary);
+  cursor: pointer;
+  transition: background-color 0.15s;
+}
+.suggestion-item:last-child { border-bottom: none; }
+.suggestion-item:hover { background: var(--color-background); }
+.add-qty-toggle {
+  flex-shrink: 0;
+  min-width: 36px;
+  height: 36px;
+  padding: 0 8px;
+  border: 1px dashed var(--color-border-hover);
+  background: transparent;
+  border-radius: var(--radius-sm);
+  color: var(--color-text-muted);
+  font-size: var(--font-sm);
+  font-weight: 600;
+  cursor: pointer;
+  font-variant-numeric: tabular-nums;
+}
+.add-qty-toggle:hover { border-color: var(--color-primary); color: var(--color-primary); }
+.add-qty-toggle.active {
+  border-style: solid;
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+}
+
+.add-qty-input {
+  flex-shrink: 0;
+  width: 56px;
+  height: 36px;
+  text-align: center;
+  border: 1px solid var(--color-primary);
+  border-radius: var(--radius-sm);
+  background: var(--color-background);
+  color: var(--color-text-primary);
+  font-size: var(--font-base);
+  font-variant-numeric: tabular-nums;
+}
+.add-qty-input:focus { outline: none; }
+
 .add-confirm {
   flex-shrink: 0;
   width: 36px;
