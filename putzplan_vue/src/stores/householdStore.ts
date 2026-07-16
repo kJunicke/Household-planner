@@ -203,6 +203,16 @@ export const useHouseholdStore = defineStore('household', () => {
         return pointsMap
     })
 
+    // Anzahl heute (Kalendertag) im Haushalt abgeschlossener Aufgaben.
+    // Kooperative Momentum-Metrik fürs Putzen-Dashboard.
+    const todayCompletionsCount = computed(() => {
+        const now = new Date()
+        const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+        return weeklyCompletions.value.filter(
+            c => new Date(c.completed_at) >= startOfToday
+        ).length
+    })
+
     // Aktuelle User-Punkte diese Woche
     const currentUserWeeklyPoints = computed(() => {
         const authStore = useAuthStore()
@@ -411,6 +421,7 @@ export const useHouseholdStore = defineStore('household', () => {
         leaveHousehold,
         loadWeeklyCompletions,
         currentUserWeeklyPoints,
+        todayCompletionsCount,
         weeklyRanking
     }
 })

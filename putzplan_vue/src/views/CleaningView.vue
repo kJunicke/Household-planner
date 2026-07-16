@@ -5,9 +5,11 @@ import CategoryNav, { type TaskCategory } from '../components/CategoryNav.vue';
 import TaskCreateModal from '../components/TaskCreateModal.vue';
 import QuickTaskModal from '../components/QuickTaskModal.vue';
 import { useTaskStore } from "../stores/taskStore";
+import { useHouseholdStore } from "../stores/householdStore";
 import type { Task } from '@/types/Task';
 
 const taskStore = useTaskStore()
+const householdStore = useHouseholdStore()
 const showCreateModal = ref(false)
 const showQuickModal = ref(false)
 
@@ -177,6 +179,35 @@ const getTasksForCategory = (category: TaskCategory): Task[] => {
   return tasks
 }
 
+// Überfällige Aufgaben (recurring, deren Kadenz abgelaufen ist).
+// Werden im Dashboard nach oben gezogen ("Jetzt dran") und unten aus der
+// regulären Putzaufgaben-Gruppe entfernt, damit nichts doppelt erscheint.
+const isOverdue = (task: Task): boolean =>
+  task.task_type === 'recurring' &&
+  !task.completed &&
+  task.parent_task_id === null &&
+  !!task.last_completed_at &&
+  getDaysUntilDue(task) < 0
+
+const overdueTasks = computed((): Task[] => {
+  // Nur zeigen, wenn die Kategorie 'recurring' im aktuellen Filter sichtbar ist
+  if (!selectedCategories.value.includes('recurring')) return []
+  return taskStore.tasks
+    .filter(isOverdue)
+    .sort((a, b) => getDaysOverdue(b) - getDaysOverdue(a))
+})
+
+// Status-Zeile: definierte, vorhandene Daten (keine neuen Tabellen).
+// Daily-Aufgaben sind immer sichtbar/resetten täglich → kein "offener Rückstand",
+// daher nur recurring + one-time zählen.
+const openTasksCount = computed((): number =>
+  taskStore.tasks.filter(
+    t => !t.completed &&
+      t.parent_task_id === null &&
+      (t.task_type === 'recurring' || t.task_type === 'one-time')
+  ).length
+)
+
 // Grouped tasks computed property
 interface TaskGroup {
   category: TaskCategory
@@ -188,10 +219,15 @@ interface TaskGroup {
 const groupedTasks = computed((): TaskGroup[] => {
   const order: TaskCategory[] = ['daily', 'recurring', 'project', 'completed']
   const groups: TaskGroup[] = []
+  const overdueIds = new Set(overdueTasks.value.map(t => t.task_id))
 
   for (const cat of order) {
     if (selectedCategories.value.includes(cat)) {
-      const tasks = getTasksForCategory(cat)
+      let tasks = getTasksForCategory(cat)
+      // Überfällige sind bereits in der "Jetzt dran"-Sektion oben
+      if (cat === 'recurring') {
+        tasks = tasks.filter(t => !overdueIds.has(t.task_id))
+      }
       if (tasks.length > 0) {
         groups.push({
           category: cat,
@@ -271,6 +307,8 @@ onMounted(async () => {
   await taskStore.loadTasks()
   // Startet Realtime Subscriptions für Live-Updates (erst NACH initialem Load)
   taskStore.subscribeToTasks()
+  // Wochen-Completions für die Status-Zeile ("heute erledigt") frisch halten
+  householdStore.loadWeeklyCompletions()
 })
 
 onUnmounted(() => {
@@ -300,31 +338,65 @@ onUnmounted(() => {
         </div>
       </div>
 
-      <!-- Empty State when no active categories have tasks -->
-      <div v-else-if="groupedTasks.length === 0" class="empty-state">
-        <i class="bi bi-check-circle"></i>
-        <p>Keine Aufgaben in den ausgewählten Kategorien</p>
-      </div>
+      <template v-else>
+        <!-- Status-Zeile: definierte, kooperative Momentum-Metrik -->
+        <div class="dashboard-status">
+          <span class="status-item">
+            <i class="bi bi-list-task"></i>
+            Offen: <strong>{{ openTasksCount }}</strong>
+          </span>
+          <span v-if="overdueTasks.length" class="status-item status-overdue">
+            <i class="bi bi-exclamation-triangle-fill"></i>
+            {{ overdueTasks.length }} überfällig
+          </span>
+          <span class="status-item">
+            <i class="bi bi-check2-circle"></i>
+            heute erledigt: <strong>{{ householdStore.todayCompletionsCount }}</strong>
+          </span>
+        </div>
 
-      <!-- Grouped Task Sections -->
-      <section
-        v-for="group in groupedTasks"
-        :key="group.category"
-        class="task-section"
-      >
-        <div class="category-header">
-          <i :class="group.icon"></i>
-          <span class="category-label">{{ group.label }}</span>
-          <span class="task-count">{{ group.tasks.length }}</span>
+        <!-- Jetzt dran: überfällige Aufgaben nach oben gezogen -->
+        <section v-if="overdueTasks.length" class="task-section section-overdue">
+          <div class="category-header category-header-overdue">
+            <i class="bi bi-exclamation-triangle-fill"></i>
+            <span class="category-label">Jetzt dran</span>
+            <span class="task-count">{{ overdueTasks.length }}</span>
+          </div>
+          <div class="task-list">
+            <TaskCard
+              v-for="task in overdueTasks"
+              :key="task.task_id"
+              :task="task"
+            />
+          </div>
+        </section>
+
+        <!-- Empty State when no active categories have tasks -->
+        <div v-if="groupedTasks.length === 0 && overdueTasks.length === 0" class="empty-state">
+          <i class="bi bi-check-circle"></i>
+          <p>Keine Aufgaben in den ausgewählten Kategorien</p>
         </div>
-        <div class="task-list">
-          <TaskCard
-            v-for="task in group.tasks"
-            :key="task.task_id"
-            :task="task"
-          />
-        </div>
-      </section>
+
+        <!-- Grouped Task Sections -->
+        <section
+          v-for="group in groupedTasks"
+          :key="group.category"
+          class="task-section"
+        >
+          <div class="category-header">
+            <i :class="group.icon"></i>
+            <span class="category-label">{{ group.label }}</span>
+            <span class="task-count">{{ group.tasks.length }}</span>
+          </div>
+          <div class="task-list">
+            <TaskCard
+              v-for="task in group.tasks"
+              :key="task.task_id"
+              :task="task"
+            />
+          </div>
+        </section>
+      </template>
     </div>
 
     <!-- Floating Action Button (vereint: Suchen + Erstellen) -->
@@ -449,6 +521,62 @@ onUnmounted(() => {
 
 .task-section {
   margin-bottom: var(--spacing-xl);
+}
+
+/* Status-Zeile (Dashboard) – schlank, eine Zeile, definierte Werte */
+.dashboard-status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem 1rem;
+  padding: 0.75rem 0.25rem;
+  font-size: 0.8125rem;
+  color: var(--color-text-secondary);
+}
+
+.dashboard-status .status-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.dashboard-status .status-item i {
+  font-size: 0.875rem;
+  color: var(--color-text-secondary);
+}
+
+.dashboard-status strong {
+  color: var(--color-text-primary);
+  font-weight: 600;
+}
+
+.dashboard-status .status-overdue,
+.dashboard-status .status-overdue i {
+  color: var(--color-danger);
+  font-weight: 600;
+}
+
+/* "Jetzt dran"-Sektion: überfällige Aufgaben, deutlich abgesetzt.
+   Dezenter roter Tint (overflow-sicher, kein negativer Margin). */
+.section-overdue {
+  background: color-mix(in srgb, var(--color-danger) 5%, transparent);
+  border: 1px solid color-mix(in srgb, var(--color-danger) 18%, transparent);
+  border-radius: var(--radius-lg);
+  padding: var(--spacing-sm) var(--spacing-md);
+}
+
+.section-overdue .category-header-overdue {
+  border-bottom: none;
+  margin-bottom: 0;
+}
+
+.category-header-overdue {
+  color: var(--color-danger);
+  border-bottom-color: color-mix(in srgb, var(--color-danger) 35%, transparent);
+}
+
+.category-header-overdue i {
+  color: var(--color-danger);
 }
 
 /* Category Headers */

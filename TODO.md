@@ -1,29 +1,115 @@
 # Putzplan TODOs
 
-**Status:** 🎉 APP IST LIVE AUF GITHUB PAGES! 🎉
+**Status:** 🎉 Live auf GitHub Pages
 
 ---
 
-## 🎯 High Priority
+## 🧳 Packlisten-Redesign (geplant)
 
-### UX Improvements
-- ✅ **CleaningView UX Redesign** - ABGESCHLOSSEN (22.12.2025)
-  - Multi-Select Filter-Bubbles oben (statt Single-Select Tabs unten)
-  - Gruppierte Aufgaben-Anzeige mit Kategorie-Headers
-  - Überfälligkeits-Farbgradient (0-14 Tage = weiß bis rot)
-  - Einheitliche Bootstrap Icons in der gesamten App
-- ✅ **Bottom Navigation** - ABGESCHLOSSEN (02.12.2025)
-  - FAB-Positionierung über Bottom Nav + CategoryNav
-  - iOS Safari safe-area-inset-bottom Support
-  - Material Design Bottom Nav Pattern
-- ✅ **Task-Dringlichkeitsanzeige** - ABGESCHLOSSEN (02.12.2025)
-  - "X Tage überfällig" / "Noch nie gemacht" im Putzen-View
-  - Sortierung nach Dringlichkeit (dringendste zuerst)
-  - "Fällig in X Tagen" / "Erledigt am [Datum]" im Erledigt-View
-  - Sortierung nach Fälligkeit (nächste zuerst)
-- ✅ **Skip-Funktion** - ABGESCHLOSSEN (02.12.2025)
-  - ⏭️ Button im TaskEditModal
-  - Task zeitlich verschieben ohne Punkte zu vergeben
+**Ziel:** Von der flachen Liste mit großen Karten → dichte, nach Kategorien gruppierte Ansicht mit Mengen-/Fortschrittstracking, Reise-Notizen und Wiederverwendung über Reisen hinweg. Kernproblem heute: wenige Items pro Screen, keine Struktur, keine Mengen, jede Reise fängt bei Null an.
+
+> Design vollständig durchgegrillt (22 Fragen + Zusatzanforderungen). Dies ist die verbindliche Spec.
+
+### Kern-Konzept
+
+**Karten-Anatomie (kompakte Zeilen statt großer Karten):**
+```
+● Kleidung 2/3                                    ← Sektions-Header (Farbpunkt + X/Y)
+  ☐  T-Shirt            [–]  2/5  [＋]            ← qty >1: Stepper beidseitig
+  ☐  Jacke                          ✓            ← qty 1: simple Checkbox
+──────────────────────────────────────
+● Bad 0/2
+  ☐  Zahnbürste                     ✓
+  ┌ + zu Bad… ──────────────── [– 1 +] ┐         ← kontextuelle Add-Zeile
+● Unkategorisiert (muted)                         ← immer vorhanden, unten angepinnt
+  ┌ + hinzufügen… ────────────────────── ┐
+```
+
+**Interaktionsmodell (bewusst entkoppelt):**
+- **Tap auf Karten-Körper** = `packed` Fertig-Status togglen — **fasst den Zähler NIE an** (Fehler schnell korrigierbar).
+- **Stepper `[–] X/N [＋]`** (nur qty>1) = ändert nur `packed_count`. `[＋]` bis Voll (N/N) → auto-fertig; runterzählen nimmt „fertig" wieder zurück.
+- **Long-Press** (Desktop: Rechtsklick) = öffnet Edit-Modal (Name · Kategorie · Menge · Löschen).
+- Add-UI pro Sektion **klappt ein, sobald das erste Item abgehakt wird**; ein immer sichtbarer **„+ hinzufügen"-Button** klappt wieder auf. Löschen & Menge-Ändern klappen NICHT ein.
+
+**Kategorien:**
+- Frei definierbar **pro Liste**, reine Textlabels, **Farbe automatisch aus Namens-Hash** (keine Kategorie-Tabelle).
+- **Reihenfolge:** Erstellungsreihenfolge; **fertige Kategorien sinken automatisch nach unten** + klappen automatisch zu (`✓ Kleidung 3/3`). Kein manuelles Drag.
+- Offene Sektionen manuell zuklappbar (Session-only State).
+- Gepackte Items bleiben in ihrer Kategorie, durchgestrichen, ans Sektionsende sortiert.
+- **„Unkategorisiert"**: feste, muted, nicht löschbare Sektion in jeder Liste, unten angepinnt. Quick-Add-Landeplatz; existierende Items ohne Kategorie erscheinen hier.
+
+**„+ Kategorie" = unified Schnellsuche** (verschmilzt Neu-Erstellen + Import):
+```
+🔍 bad
+  ✚ „bad" — Neu erstellen                        ← immer oberste Option
+  📦 Bad · aus Urlaub 2026 (5 Items)             ← Import-Kandidaten, eine Zeile
+  📦 Bad & Hygiene · aus Wochenende (3 Items)      pro (Kategorie × Quell-Liste),
+                                                    neueste Liste oben
+```
+- Klick auf Import-Kandidat → **Bestätigungsmodal** listet alle Items (mit Menge) vor Übernahme.
+- **Merge** in bestehende Kategorie: exakte Namens-Dubletten (case-insensitive, getrimmt) überspringen, im Modal grau als „bereits vorhanden".
+
+**Reise-Notizen:** Freitext-Feld pro Liste (`notes`), ganz oben, einklappbar, im Pack-Zustand standardmäßig zu.
+
+**Liste kopieren:** Quelle-Dropdown im „Neue Liste"-Modal („Leer" / „Kopieren von…"). Übernimmt Items + Kategorie + Menge, aber `packed_count=0`, `packed=false`.
+
+**Gesamt-Fortschritt:** Dezente Leiste oben, `Urlaub 2026 · 12/40 gepackt` + dünner Balken. Zählt Items (voll gepackt / gesamt), konsistent zur `X/Y`-Header-Logik.
+
+**Reset-Button:** setzt `packed_count → 0` UND `packed → false` für alle Items.
+
+### Datenmodell (Migration)
+```sql
+-- packing_items
+ALTER TABLE packing_items ADD COLUMN category text;              -- NULL = Unkategorisiert
+ALTER TABLE packing_items ADD COLUMN quantity int NOT NULL DEFAULT 1;
+ALTER TABLE packing_items ADD COLUMN packed_count int NOT NULL DEFAULT 0;
+-- bestehendes packed boolean bleibt (Fertig-Flag, entkoppelt vom Zähler)
+
+-- packing_lists
+ALTER TABLE packing_lists ADD COLUMN notes text;
+```
+- Keine Kategorie-Tabelle, keine `category_order`-Spalte (Reihenfolge = Erstellungsreihenfolge, rein clientseitig ableitbar via `created_at` der ersten Items je Kategorie bzw. Insert-Reihenfolge).
+- Bestehende Items: `category = NULL` → landen in „Unkategorisiert".
+- Constraints erwägen: `CHECK (quantity >= 1)`, `CHECK (packed_count >= 0 AND packed_count <= quantity)`, `CHECK (length(category) <= 100)`, `CHECK (length(notes) <= 5000)`.
+- RLS: neue Spalten erben bestehende Policies; kein zusätzlicher Policy-Bedarf.
+
+### Umsetzung in 3 Phasen
+
+**Phase 1 — Fundament (Datenmodell + Gruppierung + Mengen/Zähler)**
+- [ ] Migration `packing_items` (category, quantity, packed_count) + `packing_lists` (notes) + CHECK-Constraints
+- [ ] Types erweitern: `PackingItem` (category, quantity, packed_count), `PackingList` (notes)
+- [ ] `packingStore`: Getter `itemsByCategory` (gruppiert, fertige Kategorien nach unten), `overallProgress`; Actions `setQuantity`, `incrementPacked`/`decrementPacked` (mit Auto-Fertig bei Voll), `togglePacked` (nur `packed`, Zähler unangetastet), `updateItem` (name/category/quantity), `renameCategory`
+- [ ] `PackingView` neu aufbauen: kompakte Zeilen, Kategorie-Sektionen mit `X/Y`-Header + Farbpunkt (Hash→Farbe), Auto-Farb-Helper
+- [ ] Karten-Interaktion: Körper-Tap = togglePacked; Stepper `[–] X/N [＋]` bei qty>1; simple Checkbox bei qty=1
+- [ ] „Unkategorisiert"-Sektion (muted, unten angepinnt, immer da)
+- [ ] Kontextuelle Add-Zeile pro Sektion (Kategorie aus Kontext) + Einklapp-Logik (erstes Abhaken klappt ein, „+"-Button klappt auf)
+- [ ] Fertige Kategorien: auto-sinken + auto-zuklappen; offene manuell zuklappbar (Session-State)
+- [ ] Gesamt-Fortschrittsleiste oben
+- [ ] Reset-Button auf neues Modell umstellen (`packed_count=0` + `packed=false`)
+- [ ] Realtime-Handler auf neue Felder anpassen
+- [ ] Long-Press → Edit-Modal (Name, Menge, Kategorie-Wahl, Löschen); Desktop-Rechtsklick-Mapping; sauberer Touch-Timer (`touchstart`/`touchmove`-Cancel, `contextmenu` unterdrücken)
+- [ ] Test (Playwright, 360×740): Abhaken, Zähler, Auto-Fertig, Einklappen, Long-Press
+
+**Phase 2 — Wiederverwendung (Import-Schnellsuche + Liste kopieren)**
+- [ ] `packingStore`: `categoryImportCandidates(query)` (DISTINCT Kategorie × Quell-Liste über Haushalt, Item-Count, sortiert neueste Liste oben), `importCategory(sourceListId, category, targetListId)` mit Dubletten-Skip
+- [ ] Unified „+ Kategorie"-Schnellsuche-Overlay: „Neu erstellen" oben + Import-Kandidaten darunter
+- [ ] Import-Bestätigungsmodal (Item-Liste inkl. Menge, übersprungene Dubletten grau)
+- [ ] `copyList(sourceListId, newName)` (Items + Kategorie + Menge, packed/packed_count reset)
+- [ ] Quelle-Dropdown im „Neue Liste"-Modal („Leer" / „Kopieren von…")
+- [ ] Test: Kategorie-Import mit/ohne Namenskonflikt, Liste kopieren
+
+**Phase 3 — Notizen + Politur**
+- [ ] Reise-Notizblock (Freitext, einklappbar, oben; im Pack-Zustand zu) + `updateNotes`
+- [ ] Feinschliff Auto-Collapse-Animationen, Farbkontraste (Hash-Farben lesbar in Light/Dark), Empty-States
+- [ ] `maxlength` auf allen neuen Inputs; CLAUDE.md-Doku aktualisieren (Packlisten-Abschnitt)
+
+### Offene Detail-Entscheidungen (beim Bauen final)
+- Hash→Farb-Funktion: fester Palette-Satz (z.B. 8–12 vordefinierte, kontrastgeprüfte Farben) statt beliebigem HSL, damit Light/Dark lesbar bleibt.
+- Long-Press-Schwelle (~450–500 ms) + Bewegungs-Toleranz gegen versehentliches Auslösen beim Scroll.
+
+---
+
+## 🎯 Offene Aufgaben
 
 ### Task Management
 - **"Meine Aufgaben" View** - Extra Tab für zugewiesene Tasks (Option 1)
@@ -31,7 +117,6 @@
   - Neuer Filter in TaskList: `filter="assigned-todo"`
   - Store-Computed: `taskStore.assignedTasks` (filtert nach `assigned_to = current_user_id`)
   - Pattern: Standard in Asana "My Tasks", Todoist "Assigned to me"
-  - Vorteil: Klare User-Erwartung, nutzt bereits vorhandenes Assignment-Feature
 
 ### Gamification System
 - **User Stats** - XP, Level, Streaks pro Haushalt
@@ -43,12 +128,12 @@
   - `npm init playwright@latest` in `putzplan_vue/`
   - Test-Accounts aus CLAUDE.md nutzen (test@example.com / test2@example.com)
   - Kritische Flows zuerst: Login, Task-Complete, Shopping-Item hinzufügen
-  - Läuft bei jedem Build automatisch (anders als MCP, das nur manuell/explorativ ist)
-  - Vorteil: Sofortiges Feedback ob Refactoring etwas kaputt gemacht hat
 
-### 🔒 Security (Audit 16.02.2026)
+---
 
-#### 🔴 HIGH - Sofort handeln
+## 🔒 Security (Audit 16.02.2026)
+
+### 🔴 HIGH - Sofort handeln
 - **`households` SELECT mit `USING (true)`** - Jeder eingeloggte User kann ALLE Haushalte + Invite-Codes lesen
   - Datei: `supabase/migrations/20251026000001_rls_policies.sql:59-62`
   - Fix: SECURITY-DEFINER-Function `find_household_by_invite_code(code)` erstellen, SELECT-Policy auf Membership beschränken
@@ -64,7 +149,7 @@
 - **npm audit: 18 Vulnerabilities (10 high)** - Vite 7.0-7.3.1, @babel/..., ws
   - Fix: `npm audit fix` (alle Fixes verfügbar, Dev-Server-only Risiken)
 
-#### 🟠 MEDIUM
+### 🟠 MEDIUM
 - **Kein `onAuthStateChange`-Listener** - Store kann veralten bei Token-Refresh/Logout aus anderem Tab
   - Fix: `supabase.auth.onAuthStateChange()` in `authStore.initializeAuth()` registrieren
 - **Jeder Member kann Haushalt löschen** (im SQL als TODO markiert)
@@ -83,7 +168,7 @@
 - **30+ console.log mit sensitiven Daten** (household_id, Members, Realtime-Payloads)
   - Fix: `esbuild.drop: ['console']` in Production-Build (vite.config.ts)
 
-#### 🟢 LOW
+### 🟢 LOW
 - **Password-Reset-Flow fehlt** - User können Passwörter nicht selbst zurücksetzen
   - Fix: `supabase.auth.resetPasswordForEmail()` Flow ergänzen
 - **localStorage-Cleanup bei Logout** - shoppingStore cached ohne Cleanup → Shared-Device Leak
@@ -91,7 +176,7 @@
 - **SUPABASE_ACCESS_TOKEN in .env** - liegt in Nextcloud-synced Verzeichnis (Backup-Risiko)
   - Fix: In CI/CD-Secret-Manager halten, lokal rotieren wenn jemals exponiert
 
-#### ✅ OK / Bereits gut
+### ✅ OK / Bereits gut
 - Keine `v-html` / `eval` / `innerHTML` → XSS-sauber
 - Edge Function `complete-task` authentifiziert via `auth.getUser()` (server-verified)
 - Realtime-Channels mit `household_id`-Filter (RLS ist Schutz)
@@ -103,168 +188,45 @@
 
 ## 💡 Backlog (Future Ideas)
 
-### Gamification
 - **Achievements** - Badges/Trophäen für besondere Leistungen
 - **Push Notifications** - Erinnerungen für überfällige Tasks
-
-### Task Management
 - **Task Categories** - Kategorien wie Küche, Bad, Wohnzimmer etc.
 - **Task Templates** - Vorgefertigte Task-Sets für neue Haushalte
+
+---
+
+## ✅ Erledigt (Changelog)
+
+- **Quick-Aufgaben + vereinter Such-/Erstellen-FAB** - 26.06.2026
+- **UX Look & Feel P0–P2 + Folge-Politur** - 06/2026 (Member-Farben, FAB, CTA-Farbregel, Single-Select-Filter, TaskCard-Politur)
+- **Verlaufsgrafik (Trend Line Chart) in StatsView** - 16.02.2026
+- **Soft Delete für Tasks** (`deleted_at`, Historie bleibt sichtbar) - 04.01.2026
+- **CleaningView UX Redesign** (Filter-Bubbles, Kategorie-Header, Überfälligkeits-Gradient, Bootstrap Icons) - 22.12.2025
+- **Fix: Deduct-Subtask Overflow Bug** (`Math.max(0, …)` statt 400) - 22.12.2025
+- **Haushalt-Notizen Feature** (5. Tab, Realtime-Sync) - 22.12.2025
+- **Task-Dringlichkeitsanzeige & Skip-Funktion** - 02.12.2025
+- **Bottom Navigation für Mobile UX** (iOS Safe-area, Material Design) - 02.12.2025
+- **Vollständige Typography-Vereinheitlichung** (Single Source: base.css) - 30.11.2025
+- **Chip-Navigation mit Swipe-Gesten** - 30.11.2025
+- **Header Komprimierung + Settings Sidebar** - 30.11.2025
+- **Daily Tasks Bonus-only Subtasks** - 30.11.2025
+- **Universell Responsive Design ohne Media Queries** - 23.11.2025
+- **TaskCard Typography & Spacing Update** - 23.11.2025
+- **Mobile Layout Optimierung & Modal Refactoring** (TaskEditModal, TaskCreateModal) - 23.11.2025
+- **UI/UX Kompakt-Design Optimierung** - 23.11.2025
+- **Shopping-Liste Offline-Modus** (localStorage Cache, Optimistic Updates, Auto-Sync) - 16.11.2025
+- **Shopping-Liste Priorisierung** (`is_priority`) - 15.11.2025
+- **Projects Feature** (langfristige Tasks, Effort-Logging) - 15.11.2025
+- **Loading States & Race Condition Fixes** - 06.11.2025
+- **Toast Notification System** (Bootstrap 5 + Pinia) - 06.11.2025
+- Subtasks System mit Completion-Modes
+- Effort Override mit Begründung
+- Stats Dashboard mit Zeit-Filtern
+- User Color Customization
+- Confetti Animation bei Task-Completion
 
 ---
 
 ## 📝 Notizen
 
 **Migrations:** Konsolidiert am 26.10.2025 (29 → 4 Migrations)
-
-**Letzte größere Features:**
-- ✅ Quick-Aufgaben + vereinter Such-/Erstellen-FAB - 26.06.2026
-  - Such- und Erstellen-FAB zu EINEM Button vereint (Lupe + kleines +-Badge)
-  - Such-Overlay zeigt bei Eingabe zwei Aktionen: „Aufgabe erstellen" + „Quick-Aufgabe abschließen"
-  - Quick-Aufgaben: einmalig, sofort abgeschlossen + soft-deleted → nur in Historie mit „Quick"-Badge
-  - Punkte zählen in Stats/Ausgleich; `taskStore.createQuickTask()` (Client-Insert, keine Edge Function)
-  - Migration `20260626141312_add_is_quick_to_completions.sql` (Spalte `is_quick`)
-  - Neue Komponente: QuickTaskModal (Titel + Punkte + Notiz)
-- ✅ UX Look & Feel P0–P2 + Folge-Politur - 06/2026
-  - Audit-basierte Fixes: Header-Empty-State, distinkte Member-Farben (`lib/memberColors.ts`),
-    FAB-z-index (Teleport), Task-Button-Affordance, CTA-Farbregel (Indigo=erstellen/Grün=erledigt)
-  - HistoryView: Datums-Gruppierung; Ghost-Delete-Buttons; Branding (BrandLogo) auf Auth-Screens
-  - StatsView: Ausgleich-Punkte gestapelt in Punkteverteilung UND als Slice im Kuchendiagramm (Amber);
-    Segmented Control für Zeitraum-Filter; Charts gegen kollidierende Farben abgesichert
-  - Putzen-Filter: Single-Select-Toggle mit ✕-Badge (erneuter Klick = Filter aufheben)
-  - TaskCard: Zuständigkeits-Avatar, ruhigere Badges, höhere Dichte
-- ✅ Verlaufsgrafik (Trend Line Chart) in StatsView - 16.02.2026
-  - Line Chart mit Chart.js: Punkteverlauf über die Zeit
-  - Toggle Wochen/Monats-Aggregation (KW X / Monat Jahr)
-  - Eine Linie pro WG-Mitglied (user_color) + gestrichelte Gesamt-Linie
-  - Tooltip bei Hover/Touch zeigt alle Werte am Zeitpunkt
-  - Lücken-Füllung (leere Wochen/Monate = 0, durchgehende Linie)
-  - Mobile-optimiert (300px Höhe, autoSkip bei vielen Labels)
-- ✅ Soft Delete für Tasks - 04.01.2026
-  - `deleted_at` Column statt echtem DELETE
-  - Task-Namen bleiben in HistoryView sichtbar (auch nach Löschen)
-  - "Gelöscht" Badge zeigt gelöschte Tasks in Historie
-  - EnrichedCompletion Type für JOINed History-Daten
-  - Fix: Race Condition in loadTasks() - überschrieb enriched Completions mit Rohdaten (06.01.2026)
-- ✅ CleaningView UX Redesign - 22.12.2025
-  - Multi-Select Filter-Bubbles oben statt Single-Select Tabs unten
-  - Gruppierte Aufgaben-Anzeige mit Kategorie-Headers (wie Search-View)
-  - Überfälligkeits-Farbgradient für recurring Tasks (0-14 Tage linear)
-  - Einheitliche Bootstrap Icons: Emojis/SVGs durch bi-* ersetzt
-  - 6 Dateien aktualisiert: CategoryNav, CleaningView, TaskCard, TaskEditModal, SubtaskItem, SettingsSidebar
-- ✅ Fix: Deduct-Subtask Overflow Bug - 22.12.2025
-  - Edge Function `complete-task` blockierte Parent-Task wenn Deduct-Sum > Parent-Effort
-  - Jetzt graceful: `Math.max(0, parentEffort - deductSum)` statt 400 Error
-  - Warnung wird geloggt für Debugging
-- ✅ Haushalt-Notizen Feature - 22.12.2025
-  - 5. Tab "Notizen" in Bottom Navigation
-  - Alle Haushaltsmitglieder können Notizen erstellen, bearbeiten, löschen
-  - Autor + Datum werden angezeigt, "(bearbeitet)" Tag bei Änderungen
-  - Realtime-Sync zwischen allen Mitgliedern
-  - Lösch-Bestätigungsmodal
-- ✅ Task-Dringlichkeitsanzeige & Skip-Funktion - 02.12.2025
-  - Overdue-Anzeige: "X Tage überfällig" / "Noch nie gemacht" im Putzen-View
-  - Sortierung nach Dringlichkeit (dringendste Tasks zuerst)
-  - Skip-Funktion: ⏭️ Button setzt last_completed_at ohne Punkte zu vergeben
-  - Erledigt-View: "Fällig in X Tagen" für recurring Tasks, "Erledigt am [Datum]" für one-time Tasks
-  - Sortierung nach Fälligkeit (nächste Fälligkeit zuerst)
-  - Graue dezente Textzeile in task-meta (0.75rem)
-- ✅ Bottom Navigation für Mobile UX - 02.12.2025
-  - Fixed Bottom Navigation mit 4 Tabs (Putzen, Verlauf, Stats, Einkauf)
-  - Material Design Pattern mit Active State Indicator
-  - Header vereinfacht (Navigation Tabs entfernt, ~50% kompakter)
-  - CategoryNav über Bottom Nav positioniert
-  - FABs über CategoryNav + Bottom Nav (WhatsApp-Style)
-  - iOS Safe-area-inset Support
-  - Z-Index Hierarchie optimiert
-- ✅ Vollständige Typography-Vereinheitlichung - 30.11.2025
-  - Typography-Overrides aus utilities.css entfernt
-  - Semantisch korrekte HTML-Heading-Hierarchie (h1 → h2 → h3 → h4)
-  - 100% konsistente Typography app-weit (Single Source of Truth: base.css)
-  - Usage Guidelines in base.css dokumentiert
-  - Bessere Accessibility & SEO durch korrekte Heading-Struktur
-- ✅ Chip-Navigation mit Swipe-Gesten - 30.11.2025
-  - Kompakte Chip-Navigation (~40px statt 60px, ~33% Platzersparnis)
-  - Scrollbare Chip-Leiste (Material Design Pattern)
-  - Swipe-Gesten: Links/Rechts swipen zum Tab-Wechsel
-  - Versteckte Scrollbar für cleanes Design
-  - 1-Click Tab-Wechsel (besser als Dropdown)
-  - Touch-optimiert mit iOS smooth scrolling
-  - Alle 4 Tabs horizontal scrollbar
-- ✅ Header Komprimierung + Settings Sidebar - 30.11.2025
-  - Header von ~35% auf ~15% Viewport reduziert (250px → 120px)
-  - SettingsSidebar Component mit Slide-in Animation
-  - Haushalt-Info, Mitglieder, Profil-Edit in Sidebar verschoben
-  - Hamburger-Menü (☰) statt Zahnrad-Icon
-  - Backdrop Overlay mit Blur-Effekt
-  - ESC-Key Support zum Schließen
-  - 4-5 Tasks statt 2-3 Tasks auf Mobile Screen sichtbar
-- ✅ Daily Tasks Bonus-only Subtasks - 30.11.2025
-  - SubtaskManagementModal: isDailyTask check, nur Bonus-Modus erlaubt
-  - Daily-Banner (grün) mit Erklärung für User
-  - Kein Punktemodus-Selector bei Daily (auto-select bonus)
-  - TaskCard: Flache Subtask-Liste ohne Gruppierung
-  - Effort-Badge in Action-Row verschoben (4 Icons statt 3)
-  - Subtask-Titel umbrechen bei langer Länge
-  - Edge Function: Validation für Daily-Subtasks
-  - Dokumentation in CLAUDE.md aktualisiert
-- Universell Responsive Design ohne Media Queries - 23.11.2025
-  - Mobile Media Queries komplett entfernt für einheitliches Design
-  - Touch-optimierte Button-Größen auf allen Viewports (padding: 0.75rem vertikal)
-  - Keine separaten Cases für verschiedene Viewports mehr
-  - Konsistentes Look & Feel von Mobile bis Desktop
-- TaskCard Typography & Spacing Update - 23.11.2025
-  - Vergrößerte Schriftgrößen für bessere Lesbarkeit (Titel: 1rem, Info: 0.875rem)
-  - Größere Buttons (0.875rem) und Icons (16px)
-  - Mehr Padding in Card-Body und Footer (var(--spacing-md))
-  - Assignment Badge vergrößert (32px)
-  - Bessere Touch-Targets für Mobile
-- Mobile Layout Optimierung & Modal Refactoring - 23.11.2025
-  - **Neue Modals**: TaskEditModal, TaskCreateModal (statt inline Forms)
-  - **SubtaskItem Layout**: 3-Zeilen Struktur wie TaskCard (Assignment Badge, Edit/Delete Icons, Sauber-Button)
-  - **Subtasks verwalten Button**: Nur bei ausgeklappten Subtasks sichtbar
-  - **Modal Mobile-Fix**: Flexbox Layout mit scrollbarem Body (utilities.css)
-  - **Kompakte Buttons**: Subtask "Sauber" nur ✓ (ohne Text)
-  - **Punktemodus-Buttons**: Responsive mit flex: 1 für Mobile (360px)
-  - Alle Features auf Mobile (360x740) mit Playwright getestet
-- UI/UX Kompakt-Design Optimierung - 23.11.2025
-  - TaskCard kompakter (reduzierte Paddings, kleinere Fonts)
-  - Grid-Layout: 2 Spalten auf Mobile (360px)
-  - Kategorie-Navigation als 2. Leiste unter Hauptnavigation
-  - Icons + Labels (Blitz-Icon für Alltag statt Uhr)
-  - Footer zweizeilig: Oben Actions (Zuweisung/Edit/Delete), unten Sauber-Button
-  - Sauber-Button immer auf gleicher Höhe innerhalb Spalte
-  - Subtasks standardmäßig eingeklappt
-  - Deutlich weniger Leerraum, mehr Übersichtlichkeit
-- Shopping-Liste Offline-Modus - 16.11.2025
-  - Offline-First Architektur mit localStorage Cache
-  - Optimistic Updates (UI reagiert sofort)
-  - Mutation Queue für Offline-Operationen
-  - Auto-Sync bei Reconnect mit Exponential Backoff Retry
-  - Temp ID Blocking (Updates nur für existierende Items)
-  - Offline/Sync Status Banner in UI
-  - Network Status Detection (useNetworkStatus composable)
-- Shopping-Liste Priorisierung - 15.11.2025
-  - `is_priority` Boolean-Flag in DB
-  - Stern-Button zum Markieren/Demarkieren
-  - Orange Gradient-Hintergrund für Priority-Items
-  - Auto-Sortierung: Priority Items ganz oben
-  - DB-Trigger: Priorität wird beim Abhaken automatisch entfernt
-- Projects Feature für langfristige Task-Verwaltung - 15.11.2025
-  - Eigener "Projekte" Tab mit separater Completed-Sektion
-  - Auto-generierter "Am Projekt arbeiten" Subtask
-  - ProjectWorkModal für Effort-Logging (1-5 Punkte) + Notes
-  - Nur Bonus/Checklist Subtasks erlaubt (Deduct disabled)
-  - ProjectCompleteModal mit Bestätigung
-  - Custom Effort Tracking in History & Stats
-- Loading States & Race Condition Fixes - 06.11.2025
-  - Skeleton Screens für Initial Load
-  - Button Disabled States während Actions
-  - Guard Clauses gegen parallele Calls
-  - Sequential Load → Subscribe Pattern
-- Toast Notification System (Bootstrap 5 + Pinia) - 06.11.2025
-- Subtasks System mit Completion-Modes
-- Effort Override mit Begründung
-- Stats Dashboard mit Zeit-Filtern
-- User Color Customization
-- Confetti Animation bei Task-Completion

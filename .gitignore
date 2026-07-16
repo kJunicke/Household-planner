@@ -12,5 +12,10 @@ node_modules/
 # Note: Git is configured to use GitHub noreply email (kJunicke@users.noreply.github.com)
 .claude/settings.local.json
 
+# Claude Code / agent skill artifacts (local tooling, not app code)
+.agents/
+.claude/skills/
+skills-lock.json
+
 # Playwright MCP screenshots and test artifacts
 .playwright-mcp/

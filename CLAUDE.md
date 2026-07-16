@@ -17,7 +17,7 @@
 
 **WICHTIG**: `npm run dev` läuft bereits
 
-### Test Accounts (Playwright E2E Tests)
+### Test Accounts (E2E Tests)
 **Account 1:**
 Email: test@example.com
 Passwort: test123456
@@ -33,12 +33,14 @@ Haushalt: Test-Haushalt (beigetreten via FD1EB9CE)
 
 **Context7** - Bei jedem Feature für Up-to-date Library-Docs konsultieren (Vue 3, Pinia, Supabase, TypeScript)
 
-**Playwright** für Browser-Testing und Automatisierung:
+**Claude-in-Chrome** (Browser-Erweiterung) für Browser-Testing und Automatisierung:
 - **Test-URL**: `http://localhost:5173/Household-planner/`
-- Features IMMER mit Playwright MCP testen (Browser-Automatisierung)
-- **Mobile Testing**: IMMER mit schmaler Viewport testen (360x740 für Smartphone)
-  - Standard Playwright Viewport ist zu breit für echtes Mobile Testing
-  - Verwende `browser_resize` mit width: 360, height: 740 vor dem Testen
+- Features IMMER mit der Chrome-Erweiterung testen (`mcp__claude-in-chrome__*` Tools),
+  NICHT mehr mit Playwright
+- Tools bei Bedarf via ToolSearch laden (Core-Set: `tabs_context_mcp`, `navigate`,
+  `computer`, `read_page`); für Debugging `read_console_messages`
+- **Mobile Testing**: IMMER mit schmaler Viewport testen (z.B. 390x800 für Smartphone)
+  - Verwende `resize_window` vor dem Testen (Desktop-Breite ist zu breit für echtes Mobile Testing)
 ```bash
 # Code-Qualität prüfen
 npm run type-check && npm run lint
