@@ -75,33 +75,33 @@ ALTER TABLE packing_lists ADD COLUMN notes text;
 
 ### Umsetzung in 3 Phasen
 
-**Phase 1 — Fundament (Datenmodell + Gruppierung + Mengen/Zähler)**
-- [ ] Migration `packing_items` (category, quantity, packed_count) + `packing_lists` (notes) + CHECK-Constraints
-- [ ] Types erweitern: `PackingItem` (category, quantity, packed_count), `PackingList` (notes)
-- [ ] `packingStore`: Getter `itemsByCategory` (gruppiert, fertige Kategorien nach unten), `overallProgress`; Actions `setQuantity`, `incrementPacked`/`decrementPacked` (mit Auto-Fertig bei Voll), `togglePacked` (nur `packed`, Zähler unangetastet), `updateItem` (name/category/quantity), `renameCategory`
-- [ ] `PackingView` neu aufbauen: kompakte Zeilen, Kategorie-Sektionen mit `X/Y`-Header + Farbpunkt (Hash→Farbe), Auto-Farb-Helper
-- [ ] Karten-Interaktion: Körper-Tap = togglePacked; Stepper `[–] X/N [＋]` bei qty>1; simple Checkbox bei qty=1
-- [ ] „Unkategorisiert"-Sektion (muted, unten angepinnt, immer da)
-- [ ] Kontextuelle Add-Zeile pro Sektion (Kategorie aus Kontext) + Einklapp-Logik (erstes Abhaken klappt ein, „+"-Button klappt auf)
-- [ ] Fertige Kategorien: auto-sinken + auto-zuklappen; offene manuell zuklappbar (Session-State)
-- [ ] Gesamt-Fortschrittsleiste oben
-- [ ] Reset-Button auf neues Modell umstellen (`packed_count=0` + `packed=false`)
-- [ ] Realtime-Handler auf neue Felder anpassen
-- [ ] Long-Press → Edit-Modal (Name, Menge, Kategorie-Wahl, Löschen); Desktop-Rechtsklick-Mapping; sauberer Touch-Timer (`touchstart`/`touchmove`-Cancel, `contextmenu` unterdrücken)
-- [ ] Test (Playwright, 360×740): Abhaken, Zähler, Auto-Fertig, Einklappen, Long-Press
+**Phase 1 — Fundament (Datenmodell + Gruppierung + Mengen/Zähler)** ✅
+- [x] Migration `packing_items` (category, quantity, packed_count) + `packing_lists` (notes) + CHECK-Constraints
+- [x] Types erweitern: `PackingItem` (category, quantity, packed_count), `PackingList` (notes)
+- [x] `packingStore`: Getter `itemsByCategory` (gruppiert, fertige Kategorien nach unten), `overallProgress`; Actions `incrementPacked`/`decrementPacked` (mit Auto-Fertig bei Voll), `togglePacked` (nur `packed`, Zähler unangetastet), `updateItem` (name/category/quantity). (`renameCategory` verworfen → YAGNI, Umkategorisieren via Edit-Modal)
+- [x] `PackingView` neu aufbauen: kompakte Zeilen, Kategorie-Sektionen mit `X/Y`-Header + Farbpunkt (Hash→Farbe via `lib/categoryColor.ts`)
+- [x] Karten-Interaktion: Körper-Tap = togglePacked; Stepper `[–] X/N [＋]` bei qty>1; simple Checkbox bei qty=1
+- [x] „Unkategorisiert"-Sektion (muted, unten angepinnt, immer da)
+- [x] Kontextuelle Add-Zeile pro Sektion (Kategorie aus Kontext) + Einklapp-Logik (erstes Abhaken klappt ein, „+"-Button klappt auf)
+- [x] Fertige Kategorien: auto-sinken + auto-zuklappen; offene manuell zuklappbar (Session-State)
+- [x] Gesamt-Fortschrittsleiste oben
+- [x] Reset-Button auf neues Modell umstellen (`packed_count=0` + `packed=false`)
+- [x] Realtime-Handler auf neue Felder anpassen (Row-Replace, neue Felder fließen durch)
+- [x] Long-Press → Edit-Modal (Name, Menge, Kategorie-Wahl, Löschen); Desktop-Rechtsklick-Mapping; sauberer Touch-Timer (`touchstart`/`touchmove`-Cancel, öffnet auf `touchend` gegen Modal-unter-Finger, Ghost-Click unterdrückt)
+- [x] Browser-Test (Chrome MCP): Abhaken, Zähler, Auto-Fertig, Einklappen, Long-Press ✓
 
-**Phase 2 — Wiederverwendung (Import-Schnellsuche + Liste kopieren)**
-- [ ] `packingStore`: `categoryImportCandidates(query)` (DISTINCT Kategorie × Quell-Liste über Haushalt, Item-Count, sortiert neueste Liste oben), `importCategory(sourceListId, category, targetListId)` mit Dubletten-Skip
-- [ ] Unified „+ Kategorie"-Schnellsuche-Overlay: „Neu erstellen" oben + Import-Kandidaten darunter
-- [ ] Import-Bestätigungsmodal (Item-Liste inkl. Menge, übersprungene Dubletten grau)
-- [ ] `copyList(sourceListId, newName)` (Items + Kategorie + Menge, packed/packed_count reset)
-- [ ] Quelle-Dropdown im „Neue Liste"-Modal („Leer" / „Kopieren von…")
-- [ ] Test: Kategorie-Import mit/ohne Namenskonflikt, Liste kopieren
+**Phase 2 — Wiederverwendung (Import-Schnellsuche + Liste kopieren)** ✅
+- [x] `packingStore`: `categoryImportCandidates(query)` (DISTINCT Kategorie × Quell-Liste über Haushalt, Item-Count, sortiert neueste Liste oben), `importCategory(...)` mit Dubletten-Skip + Case-insensitivem Merge auf existierende Kategorie-Schreibweise
+- [x] Unified „+ Kategorie"-Schnellsuche-Overlay: „Neu erstellen" oben + Import-Kandidaten darunter
+- [x] Import-Bestätigungsmodal (Item-Liste inkl. Menge, übersprungene Dubletten grau „bereits vorhanden")
+- [x] `copyList(sourceListId, newName)` (Items + Kategorie + Menge, packed/packed_count reset)
+- [x] Quelle-Dropdown im „Neue Liste"-Modal („Leer" / „Kopieren von…")
+- [x] Browser-Test: Kategorie-Import mit Namenskonflikt (Dubletten-Skip), Liste kopieren ✓
 
-**Phase 3 — Notizen + Politur**
-- [ ] Reise-Notizblock (Freitext, einklappbar, oben; im Pack-Zustand zu) + `updateNotes`
-- [ ] Feinschliff Auto-Collapse-Animationen, Farbkontraste (Hash-Farben lesbar in Light/Dark), Empty-States
-- [ ] `maxlength` auf allen neuen Inputs; CLAUDE.md-Doku aktualisieren (Packlisten-Abschnitt)
+**Phase 3 — Notizen + Politur** ✅
+- [x] Reise-Notizblock (Freitext, einklappbar, oben; Preview im collapsed Zustand) + `updateNotes` (Optimistic, Focus-Guard gegen Realtime-Überschreiben)
+- [x] Farbkontraste (feste 12er-Hash-Palette, Light/Dark lesbar), Empty-States, Keyboard-a11y auf Item-Zeilen (role/aria-checked/tabindex, Enter/Space)
+- [x] `maxlength` auf allen neuen Inputs; CLAUDE.md-Doku aktualisiert (Packlisten-Abschnitt)
 
 ### Offene Detail-Entscheidungen (beim Bauen final)
 - Hash→Farb-Funktion: fester Palette-Satz (z.B. 8–12 vordefinierte, kontrastgeprüfte Farben) statt beliebigem HSL, damit Light/Dark lesbar bleibt.
@@ -197,6 +197,7 @@ ALTER TABLE packing_lists ADD COLUMN notes text;
 
 ## ✅ Erledigt (Changelog)
 
+- **Packlisten-Redesign** (Kategorien mit Hash-Farben, Mengen/Zähler entkoppelt von Fertig-Flag, Stepper mit Auto-Fertig, Unkategorisiert-Bucket, Auto-Collapse fertiger Kategorien, Gesamt-Fortschritt, Reise-Notizen, Kategorie-Import & Liste-kopieren, Long-Press-Edit) - 16.07.2026
 - **Quick-Aufgaben + vereinter Such-/Erstellen-FAB** - 26.06.2026
 - **UX Look & Feel P0–P2 + Folge-Politur** - 06/2026 (Member-Farben, FAB, CTA-Farbregel, Single-Select-Filter, TaskCard-Politur)
 - **Verlaufsgrafik (Trend Line Chart) in StatsView** - 16.02.2026
