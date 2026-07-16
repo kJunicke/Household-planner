@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted, ref, computed, watch } from 'vue'
+import { onMounted, onUnmounted, ref, computed, watch, nextTick } from 'vue'
 import { usePackingStore, type CategoryGroup } from '@/stores/packingStore'
 import { categoryColor } from '@/lib/categoryColor'
 import type { PackingItem } from '@/types/PackingItem'
@@ -292,15 +292,75 @@ const hasPacked = computed(() =>
   packingStore.currentListItems.some(i => i.packed || i.packed_count > 0)
 )
 
+// --- Right-side category quick-nav rail --------------------------------------
+const activeCatKey = ref<string | null>(null)
+const sectionEls = new Map<string, HTMLElement>()
+
+// Only worth showing once there's more than the single Unkategorisiert bucket.
+const showRail = computed(() => packingStore.itemsByCategory.length > 1)
+
+// Collapsible rail (persisted).
+const RAIL_STORAGE_KEY = 'putzplan_packing_rail_collapsed'
+const railCollapsed = ref(localStorage.getItem(RAIL_STORAGE_KEY) === '1')
+const setRailCollapsed = (v: boolean) => {
+  railCollapsed.value = v
+  localStorage.setItem(RAIL_STORAGE_KEY, v ? '1' : '0')
+}
+
+const setSectionEl = (key: string, el: unknown) => {
+  if (el instanceof HTMLElement) sectionEls.set(key, el)
+  else sectionEls.delete(key)
+}
+
+// Scrollspy: the active chip is the last section whose top has crossed the
+// active line (~120px below the viewport top). Deterministic and cheap.
+const ACTIVE_LINE = 120
+const refreshActiveCat = () => {
+  const groups = packingStore.itemsByCategory
+  let current: string | null = groups[0]?.key ?? null
+  for (const g of groups) {
+    const el = sectionEls.get(g.key)
+    if (!el) continue
+    if (el.getBoundingClientRect().top <= ACTIVE_LINE) current = g.key
+    else break
+  }
+  activeCatKey.value = current
+}
+
+let scrollRaf = 0
+const onScroll = () => {
+  if (scrollRaf) return
+  scrollRaf = requestAnimationFrame(() => {
+    scrollRaf = 0
+    refreshActiveCat()
+  })
+}
+
+const scrollToCategory = (key: string) => {
+  activeCatKey.value = key
+  sectionEls.get(key)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+}
+
+// Recompute the highlight when the category set changes (list switch, add/delete).
+watch(
+  () => packingStore.itemsByCategory.map(g => g.key).join('|'),
+  () => nextTick(refreshActiveCat)
+)
+
 onMounted(async () => {
   await packingStore.loadLists()
   await packingStore.loadItems()
   notesDraft.value = packingStore.currentList?.notes ?? ''
   packingStore.subscribe()
+  window.addEventListener('scroll', onScroll, { passive: true })
+  await nextTick()
+  refreshActiveCat()
 })
 
 onUnmounted(() => {
   packingStore.unsubscribe()
+  window.removeEventListener('scroll', onScroll)
+  if (scrollRaf) cancelAnimationFrame(scrollRaf)
 })
 </script>
 
@@ -395,11 +455,15 @@ onUnmounted(() => {
           <div class="skeleton-card" style="height: 60px;"></div>
         </div>
 
-        <!-- Kategorie-Sektionen -->
+        <!-- Kategorie-Sektionen + rechte Schnellnav -->
         <template v-else>
+        <div class="packing-body" :class="{ 'rail-open': showRail && !railCollapsed }">
+          <div class="cat-column">
           <div
             v-for="group in packingStore.itemsByCategory"
             :key="group.key"
+            :ref="(el) => setSectionEl(group.key, el)"
+            :data-cat-key="group.key"
             class="cat-section"
             :class="{ 'cat-uncategorized': group.isUncategorized, 'cat-complete': group.isComplete }"
           >
@@ -543,6 +607,37 @@ onUnmounted(() => {
           <button class="add-category-btn" @click="showCategorySearch = true">
             <i class="bi bi-plus-lg me-1"></i> Kategorie
           </button>
+          </div>
+
+          <!-- Rechte Kategorie-Schnellnav (einklappbar) -->
+          <nav
+            v-if="showRail"
+            class="cat-rail"
+            :class="{ 'rail-collapsed': railCollapsed }"
+            aria-label="Kategorie-Schnellzugriff"
+          >
+            <template v-if="!railCollapsed">
+              <button
+                v-for="group in packingStore.itemsByCategory"
+                :key="group.key"
+                class="rail-chip"
+                :class="{ active: activeCatKey === group.key, uncat: group.isUncategorized }"
+                :title="group.label"
+                @click="scrollToCategory(group.key)"
+              >
+                <span class="rail-dot" :style="{ background: categoryColor(group.category) }"></span>
+                <span class="rail-label">{{ group.label }}</span>
+              </button>
+            </template>
+            <button
+              class="rail-toggle"
+              :title="railCollapsed ? 'Kategorien einblenden' : 'Ausblenden'"
+              @click="setRailCollapsed(!railCollapsed)"
+            >
+              <i class="bi" :class="railCollapsed ? 'bi-chevron-left' : 'bi-chevron-right'"></i>
+            </button>
+          </nav>
+        </div>
         </template>
       </template>
     </div>
@@ -768,11 +863,106 @@ onUnmounted(() => {
 }
 .notes-body { padding: 0 var(--spacing-md) var(--spacing-md); }
 
+/* ---- Body + fixed bottom-right quick-nav rail ---- */
+.packing-body {
+  position: relative;
+}
+.cat-column {
+  min-width: 0;
+}
+/* Reserve space so cards never slide under the fixed rail while it's open. */
+.packing-body.rail-open .cat-column {
+  padding-right: calc(20vw + 12px);
+  max-width: 100%;
+}
+@media (min-width: 480px) {
+  .packing-body.rail-open .cat-column { padding-right: 96px; }
+}
+
+.cat-rail {
+  position: fixed;
+  right: 8px;
+  bottom: 76px; /* clear the bottom navigation */
+  z-index: 900;
+  width: 20vw;
+  max-width: 84px;
+  min-width: 64px;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
+  max-height: calc(100vh - 150px);
+  overflow-y: auto;
+  scrollbar-width: none;
+}
+.cat-rail::-webkit-scrollbar { display: none; }
+.cat-rail.rail-collapsed {
+  width: auto;
+  min-width: 0;
+  max-width: none;
+}
+
+.rail-toggle {
+  align-self: flex-end;
+  flex-shrink: 0;
+  width: 34px;
+  height: 34px;
+  border: 1px solid var(--color-border);
+  background: var(--color-background-elevated);
+  border-radius: 50%;
+  color: var(--color-text-secondary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: var(--shadow-sm);
+  -webkit-tap-highlight-color: transparent;
+  margin-top: 2px;
+}
+.rail-toggle:hover { color: var(--color-primary); border-color: var(--color-primary); }
+
+.rail-chip {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  width: 100%;
+  padding: 5px 7px;
+  background: var(--color-background);
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  color: var(--color-text-secondary);
+  font-size: var(--font-xs);
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+  -webkit-tap-highlight-color: transparent;
+}
+.rail-chip:hover { border-color: var(--color-primary); color: var(--color-text-primary); }
+.rail-chip.active {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+  background: var(--color-background-elevated);
+  box-shadow: inset 2px 0 0 var(--color-primary);
+}
+.rail-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.rail-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.rail-chip.uncat .rail-label { color: var(--color-text-muted); font-weight: 500; }
+
 /* ---- Category Section ---- */
 .cat-section {
   background: var(--color-background-elevated);
   border-radius: var(--radius-md);
   margin-bottom: var(--spacing-sm);
+  scroll-margin-top: 72px;
 }
 .cat-uncategorized { opacity: 0.92; }
 .cat-complete .cat-header { opacity: 0.7; }
