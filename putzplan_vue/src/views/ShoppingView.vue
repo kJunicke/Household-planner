@@ -141,17 +141,15 @@ const handleAddItem = async () => {
   const existingPurchased = shoppingStore.currentListItems.find(
     item => item.purchased && item.name.toLowerCase() === value.toLowerCase()
   )
+  searchInput.value = ''
+  showSuggestions.value = false
   if (existingPurchased) {
     clearGrace(existingPurchased.shopping_item_id)
     await shoppingStore.markUnpurchased(existingPurchased.shopping_item_id)
-    searchInput.value = ''
-    showSuggestions.value = false
     return
   }
 
   await shoppingStore.createItem(value)
-  searchInput.value = ''
-  showSuggestions.value = false
 }
 
 const selectSuggestion = (suggestion: string) => {
@@ -198,10 +196,11 @@ const handleSectionAdd = async (group: ShoppingCategoryGroup) => {
   const name = (addDraft.value[group.key] ?? '').trim()
   if (!name) return
   const qty = Math.max(1, Math.floor(Number(addQty.value[group.key]) || 1))
-  await shoppingStore.createItem(name, group.category, qty)
+  // Clear the input immediately (optimistic) rather than after the sync round-trip.
   addDraft.value[group.key] = ''
   addQty.value[group.key] = 1
   qtyFieldOpen.value.delete(group.key)
+  await shoppingStore.createItem(name, group.category, qty)
 }
 
 const selectSectionSuggestion = (group: ShoppingCategoryGroup, name: string) => {

@@ -551,7 +551,22 @@ export const useShoppingStore = defineStore('shopping', () => {
 
       if (error) throw error
 
-      items.value = data || []
+      // Reconcile with the server WITHOUT clobbering in-flight optimistic state:
+      // items whose mutation is still queued keep their local (optimistic) copy,
+      // and temp rows for not-yet-synced creates are preserved. Prevents a
+      // concurrent reload (e.g. from another op's sync) from reverting a toggle
+      // that hasn't reached the DB yet.
+      const rows = data || []
+      const pendingIds = new Set(
+        mutationQueue.value.map(m => m.payload.itemId).filter(Boolean) as string[]
+      )
+      const merged = rows.map(row =>
+        pendingIds.has(row.shopping_item_id)
+          ? items.value.find(i => i.shopping_item_id === row.shopping_item_id) ?? row
+          : row
+      )
+      const tempRows = items.value.filter(i => i.shopping_item_id.startsWith('temp_'))
+      items.value = [...merged, ...tempRows]
       console.log('Loaded shopping items:', items.value.length)
 
       loadQueueFromStorage()
