@@ -1,12 +1,15 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted, ref, computed, watch, nextTick } from 'vue'
+import { onMounted, onUnmounted, ref, computed, watch } from 'vue'
 import { usePackingStore, type CategoryGroup } from '@/stores/packingStore'
 import { categoryColor } from '@/lib/categoryColor'
+import { useGraceWindow } from '@/composables/useGraceWindow'
+import { useCategoryRail } from '@/composables/useCategoryRail'
 import type { PackingItem } from '@/types/PackingItem'
 import ListEditModal from '@/components/ListEditModal.vue'
 import PackingItemEditModal from '@/components/PackingItemEditModal.vue'
 import PackingItemRow from '@/components/PackingItemRow.vue'
-import CategorySearchModal from '@/components/CategorySearchModal.vue'
+import CategoryRail from '@/components/CategoryRail.vue'
+import CategorySearchModal, { type CategoryCandidate } from '@/components/CategorySearchModal.vue'
 import CategoryEditModal from '@/components/CategoryEditModal.vue'
 
 const packingStore = usePackingStore()
@@ -156,31 +159,7 @@ const handleItemDelete = async (itemId: string) => {
 // --- Grace window for freshly-checked items ---------------------------------
 // Just-packed items stay visible (struck-through) for a moment so a mis-check
 // can be undone quickly, before they fold into the collapsed "erledigt" group.
-const GRACE_MS = 6000
-const graceIds = ref<Set<string>>(new Set())
-const graceTimers = new Map<string, number>()
-
-const markGrace = (id: string) => {
-  graceIds.value.add(id)
-  const existing = graceTimers.get(id)
-  if (existing) clearTimeout(existing)
-  graceTimers.set(id, window.setTimeout(() => {
-    graceIds.value.delete(id)
-    graceTimers.delete(id)
-  }, GRACE_MS))
-}
-
-const clearGrace = (id: string) => {
-  graceIds.value.delete(id)
-  const existing = graceTimers.get(id)
-  if (existing) { clearTimeout(existing); graceTimers.delete(id) }
-}
-
-const clearAllGrace = () => {
-  graceTimers.forEach(t => clearTimeout(t))
-  graceTimers.clear()
-  graceIds.value = new Set()
-}
+const { graceIds, markGrace, clearGrace, clearAllGrace } = useGraceWindow(6000)
 
 const onItemToggle = (item: PackingItem) => {
   const willPack = !item.packed
@@ -266,6 +245,21 @@ const handleCreateCategory = (name: string) => {
   packingStore.addCategory(name)
 }
 
+// Data for the shared CategorySearchModal (import mode: copies source items).
+const importCandidates = computed(() => packingStore.categoryImportCandidates(''))
+const importPreviewItems = (c: CategoryCandidate) =>
+  packingStore.importPreview(c.sourceListId, c.category)
+    .map(i => ({ key: i.item_id, name: i.name, quantity: i.quantity }))
+const importDupeNames = (c: CategoryCandidate) =>
+  new Set(
+    packingStore.currentListItems
+      .filter(i => (i.category ?? '').toLowerCase() === c.category.toLowerCase())
+      .map(i => i.name.trim().toLowerCase())
+  )
+const handleCategoryImport = (c: CategoryCandidate) => {
+  packingStore.importCategory(c.sourceListId, c.category)
+}
+
 const openCategoryEdit = (group: CategoryGroup) => {
   if (!group.category) return
   editingCategory.value = { name: group.category, count: group.total }
@@ -296,74 +290,27 @@ const hasPacked = computed(() =>
 )
 
 // --- Right-side category quick-nav rail --------------------------------------
-const activeCatKey = ref<string | null>(null)
-const sectionEls = new Map<string, HTMLElement>()
-
-// Only worth showing once there's more than the single Unkategorisiert bucket.
-const showRail = computed(() => packingStore.itemsByCategory.length > 1)
-
-// Collapsible rail (persisted).
-const RAIL_STORAGE_KEY = 'putzplan_packing_rail_collapsed'
-const railCollapsed = ref(localStorage.getItem(RAIL_STORAGE_KEY) === '1')
-const setRailCollapsed = (v: boolean) => {
-  railCollapsed.value = v
-  localStorage.setItem(RAIL_STORAGE_KEY, v ? '1' : '0')
-}
-
-const setSectionEl = (key: string, el: unknown) => {
-  if (el instanceof HTMLElement) sectionEls.set(key, el)
-  else sectionEls.delete(key)
-}
-
-// Scrollspy: the active chip is the last section whose top has crossed the
-// active line (~120px below the viewport top). Deterministic and cheap.
-const ACTIVE_LINE = 120
-const refreshActiveCat = () => {
-  const groups = packingStore.itemsByCategory
-  let current: string | null = groups[0]?.key ?? null
-  for (const g of groups) {
-    const el = sectionEls.get(g.key)
-    if (!el) continue
-    if (el.getBoundingClientRect().top <= ACTIVE_LINE) current = g.key
-    else break
-  }
-  activeCatKey.value = current
-}
-
-let scrollRaf = 0
-const onScroll = () => {
-  if (scrollRaf) return
-  scrollRaf = requestAnimationFrame(() => {
-    scrollRaf = 0
-    refreshActiveCat()
-  })
-}
-
-const scrollToCategory = (key: string) => {
-  activeCatKey.value = key
-  sectionEls.get(key)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-}
-
-// Recompute the highlight when the category set changes (list switch, add/delete).
-watch(
-  () => packingStore.itemsByCategory.map(g => g.key).join('|'),
-  () => nextTick(refreshActiveCat)
-)
+const {
+  activeKey: activeCatKey,
+  showRail,
+  railCollapsed,
+  setRailCollapsed,
+  setSectionEl,
+  scrollToKey: scrollToCategory,
+} = useCategoryRail({
+  keys: () => packingStore.itemsByCategory.map(g => g.key),
+  storageKey: 'putzplan_packing_rail_collapsed',
+})
 
 onMounted(async () => {
   await packingStore.loadLists()
   await packingStore.loadItems()
   notesDraft.value = packingStore.currentList?.notes ?? ''
   packingStore.subscribe()
-  window.addEventListener('scroll', onScroll, { passive: true })
-  await nextTick()
-  refreshActiveCat()
 })
 
 onUnmounted(() => {
   packingStore.unsubscribe()
-  window.removeEventListener('scroll', onScroll)
-  if (scrollRaf) cancelAnimationFrame(scrollRaf)
 })
 </script>
 
@@ -604,33 +551,14 @@ onUnmounted(() => {
           </div>
 
           <!-- Rechte Kategorie-Schnellnav (einklappbar) -->
-          <nav
+          <CategoryRail
             v-if="showRail"
-            class="cat-rail"
-            :class="{ 'rail-collapsed': railCollapsed }"
-            aria-label="Kategorie-Schnellzugriff"
-          >
-            <template v-if="!railCollapsed">
-              <button
-                v-for="group in packingStore.itemsByCategory"
-                :key="group.key"
-                class="rail-chip"
-                :class="{ active: activeCatKey === group.key, uncat: group.isUncategorized }"
-                :title="group.label"
-                @click="scrollToCategory(group.key)"
-              >
-                <span class="rail-dot" :style="{ background: categoryColor(group.category) }"></span>
-                <span class="rail-label">{{ group.label }}</span>
-              </button>
-            </template>
-            <button
-              class="rail-toggle"
-              :title="railCollapsed ? 'Kategorien einblenden' : 'Ausblenden'"
-              @click="setRailCollapsed(!railCollapsed)"
-            >
-              <i class="bi" :class="railCollapsed ? 'bi-chevron-left' : 'bi-chevron-right'"></i>
-            </button>
-          </nav>
+            :groups="packingStore.itemsByCategory"
+            :active-key="activeCatKey"
+            :collapsed="railCollapsed"
+            @select="scrollToCategory"
+            @update:collapsed="setRailCollapsed"
+          />
         </div>
         </template>
       </template>
@@ -650,7 +578,12 @@ onUnmounted(() => {
   <!-- Kategorie-Suche / Import -->
   <CategorySearchModal
     v-if="showCategorySearch"
+    :existing-labels="categoryLabels"
+    :candidates="importCandidates"
+    :preview-items="importPreviewItems"
+    :target-dupe-names="importDupeNames"
     @create="handleCreateCategory"
+    @import="handleCategoryImport"
     @close="showCategorySearch = false"
   />
 
@@ -872,84 +805,6 @@ onUnmounted(() => {
 @media (min-width: 480px) {
   .packing-body.rail-open .cat-column { padding-right: 96px; }
 }
-
-.cat-rail {
-  position: fixed;
-  right: 8px;
-  bottom: 76px; /* clear the bottom navigation */
-  z-index: 900;
-  width: 20vw;
-  max-width: 84px;
-  min-width: 64px;
-  display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  gap: 4px;
-  max-height: calc(100vh - 150px);
-  overflow-y: auto;
-  scrollbar-width: none;
-}
-.cat-rail::-webkit-scrollbar { display: none; }
-.cat-rail.rail-collapsed {
-  width: auto;
-  min-width: 0;
-  max-width: none;
-}
-
-.rail-toggle {
-  align-self: flex-end;
-  flex-shrink: 0;
-  width: 34px;
-  height: 34px;
-  border: 1px solid var(--color-border);
-  background: var(--color-background-elevated);
-  border-radius: 50%;
-  color: var(--color-text-secondary);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  box-shadow: var(--shadow-sm);
-  -webkit-tap-highlight-color: transparent;
-  margin-top: 2px;
-}
-.rail-toggle:hover { color: var(--color-primary); border-color: var(--color-primary); }
-
-.rail-chip {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  width: 100%;
-  padding: 5px 7px;
-  background: var(--color-background);
-  border: 1px solid var(--color-border);
-  border-radius: 12px;
-  color: var(--color-text-secondary);
-  font-size: var(--font-xs);
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.15s;
-  -webkit-tap-highlight-color: transparent;
-}
-.rail-chip:hover { border-color: var(--color-primary); color: var(--color-text-primary); }
-.rail-chip.active {
-  border-color: var(--color-primary);
-  color: var(--color-primary);
-  background: var(--color-background-elevated);
-  box-shadow: inset 2px 0 0 var(--color-primary);
-}
-.rail-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  flex-shrink: 0;
-}
-.rail-label {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.rail-chip.uncat .rail-label { color: var(--color-text-muted); font-weight: 500; }
 
 /* ---- Category Section ---- */
 .cat-section {

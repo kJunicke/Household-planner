@@ -14,6 +14,30 @@ const STORAGE_KEY_ITEMS = 'shopping_items_cache'
 const STORAGE_KEY_QUEUE = 'shopping_mutation_queue'
 const MAX_RETRIES = 5
 
+/** Sentinel key for the "Unkategorisiert" bucket (items with category === null). */
+export const UNCATEGORIZED = '__uncategorized__'
+
+export interface ShoppingCategoryGroup {
+  /** Real category label, or null for the Unkategorisiert bucket. */
+  category: string | null
+  /** Stable key for v-for (label or UNCATEGORIZED sentinel). */
+  key: string
+  label: string
+  /** Unpurchased items in this category (priority first, then name). */
+  items: ShoppingItem[]
+  total: number
+  isUncategorized: boolean
+}
+
+export interface ShoppingImportCandidate {
+  sourceListId: string
+  sourceListName: string
+  category: string
+  itemCount: number
+  /** created_at of the source list — newest first in the picker. */
+  sourceCreatedAt: string
+}
+
 export const useShoppingStore = defineStore('shopping', () => {
   // State
   const items = ref<ShoppingItem[]>([])
@@ -22,6 +46,13 @@ export const useShoppingStore = defineStore('shopping', () => {
   const isLoading = ref(false)
   const mutationQueue = ref<PendingMutation[]>([])
   const isSyncing = ref(false)
+
+  /**
+   * Client-only empty categories the user just created via "+ Kategorie".
+   * Keyed by list_id. They vanish on reload once they still have no items,
+   * which is fine — an empty category carries no data (no category table).
+   */
+  const pendingCategories = ref<Record<string, string[]>>({})
 
   // Realtime subscription channels
   let realtimeChannel: RealtimeChannel | null = null
@@ -102,13 +133,74 @@ export const useShoppingStore = defineStore('shopping', () => {
       .sort((a, b) => b.times_purchased - a.times_purchased)
   })
 
+  /**
+   * Unpurchased items grouped into category sections (the "Zu kaufen" area).
+   * Purchased items are NOT grouped — they live in the global Gekauft block.
+   * Ordering: named categories (creation order) → "Unkategorisiert" (always
+   * last, always present). Within a section: by name. Priority is a visual
+   * highlight only — it does not re-sort items to the top.
+   */
+  const itemsByCategory = computed<ShoppingCategoryGroup[]>(() => {
+    const list = currentListItems.value.filter(i => !i.purchased)
+    const groups = new Map<string, ShoppingItem[]>()
+    const firstSeen = new Map<string, number>()
+
+    list.forEach((it, idx) => {
+      const key = it.category ?? UNCATEGORIZED
+      if (!groups.has(key)) {
+        groups.set(key, [])
+        firstSeen.set(key, idx)
+      }
+      groups.get(key)!.push(it)
+    })
+
+    // Merge in client-only empty categories the user just created.
+    const pending = currentListId.value ? pendingCategories.value[currentListId.value] ?? [] : []
+    pending.forEach((cat, i) => {
+      if (!groups.has(cat)) {
+        groups.set(cat, [])
+        firstSeen.set(cat, list.length + i)
+      }
+    })
+
+    // Uncategorized is always present.
+    if (!groups.has(UNCATEGORIZED)) {
+      groups.set(UNCATEGORIZED, [])
+      firstSeen.set(UNCATEGORIZED, Number.MAX_SAFE_INTEGER)
+    }
+
+    const result: ShoppingCategoryGroup[] = []
+    for (const [key, its] of groups) {
+      const sorted = [...its].sort((a, b) => a.name.localeCompare(b.name))
+      const isUncategorized = key === UNCATEGORIZED
+      result.push({
+        category: isUncategorized ? null : key,
+        key,
+        label: isUncategorized ? 'Unkategorisiert' : key,
+        items: sorted,
+        total: its.length,
+        isUncategorized,
+      })
+    }
+
+    result.sort((a, b) => {
+      if (a.isUncategorized) return 1
+      if (b.isUncategorized) return -1
+      return (firstSeen.get(a.key) ?? 0) - (firstSeen.get(b.key) ?? 0)
+    })
+    return result
+  })
+
+  /** Category labels present in the current list (named only, for the edit modal). */
+  const categoryLabels = computed(() =>
+    itemsByCategory.value.filter(g => !g.isUncategorized).map(g => g.label)
+  )
+
   const hasPendingMutations = computed(() => mutationQueue.value.length > 0)
 
   // ============================================================================
   // Mutation Queue Helpers
   // ============================================================================
-
-  const isTemporaryId = (id: string): boolean => id.startsWith('temp_')
 
   const addToQueue = (mutation: Omit<PendingMutation, 'queueId' | 'timestamp' | 'retries'>) => {
     const queueItem: PendingMutation = {
@@ -129,7 +221,12 @@ export const useShoppingStore = defineStore('shopping', () => {
   // Offline-Aware Mutations (with Optimistic Updates)
   // ============================================================================
 
-  const createItemOptimistic = (name: string, listId: string): ShoppingItem => {
+  const createItemOptimistic = (
+    name: string,
+    listId: string,
+    category: string | null,
+    quantity: number
+  ): ShoppingItem => {
     const householdStore = useHouseholdStore()
     const tempId = `temp_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
 
@@ -138,6 +235,8 @@ export const useShoppingStore = defineStore('shopping', () => {
       household_id: householdStore.currentHousehold!.household_id,
       list_id: listId,
       name: name.trim(),
+      category: category?.trim() || null,
+      quantity: Math.max(1, Math.floor(quantity) || 1),
       purchased: false,
       is_priority: false,
       times_purchased: 0,
@@ -161,6 +260,37 @@ export const useShoppingStore = defineStore('shopping', () => {
     items.value = items.value.filter(i => i.shopping_item_id !== itemId)
   }
 
+  /**
+   * After a queued create syncs, replace its optimistic temp row with the real
+   * DB row and re-point every still-queued mutation that referenced the temp id.
+   * If realtime already inserted the real row, just drop the temp duplicate.
+   */
+  const reconcileTempId = (tempId: string, realItem: ShoppingItem) => {
+    const realExists = items.value.some(i => i.shopping_item_id === realItem.shopping_item_id)
+    const tempIdx = items.value.findIndex(i => i.shopping_item_id === tempId)
+    if (tempIdx !== -1) {
+      if (realExists) {
+        // Keep whatever optimistic edits sit on the temp row, drop the temp id.
+        items.value.splice(tempIdx, 1)
+      } else {
+        // Preserve local edits (e.g. an offline toggle) layered on the temp row.
+        const local = items.value[tempIdx]
+        items.value[tempIdx] = {
+          ...realItem,
+          purchased: local.purchased,
+          is_priority: local.is_priority,
+          name: local.name,
+          category: local.category,
+          quantity: local.quantity
+        }
+      }
+    }
+
+    for (const m of mutationQueue.value) {
+      if (m.payload.itemId === tempId) m.payload.itemId = realItem.shopping_item_id
+    }
+  }
+
   // ============================================================================
   // Sync Engine
   // ============================================================================
@@ -170,15 +300,25 @@ export const useShoppingStore = defineStore('shopping', () => {
 
     try {
       if (mutation.operation === 'create') {
-        const { error } = await supabase
+        const { data, error } = await supabase
           .from('shopping_items')
           .insert({
             name: mutation.payload.name!,
             household_id: householdStore.currentHousehold!.household_id,
-            list_id: mutation.payload.listId!
+            list_id: mutation.payload.listId!,
+            category: mutation.payload.category ?? null,
+            quantity: mutation.payload.quantity ?? 1
           })
+          .select()
+          .single()
 
         if (error) throw error
+
+        // Temp-ID chaining: swap the optimistic temp row for the real one and
+        // rewrite any already-queued follow-up mutations (toggle/edit/delete of
+        // an item created while offline) to the freshly-minted real id.
+        const tempId = mutation.payload.tempId
+        if (tempId && data) reconcileTempId(tempId, data as ShoppingItem)
 
       } else if (mutation.operation === 'update') {
         const { error } = await supabase
@@ -411,7 +551,22 @@ export const useShoppingStore = defineStore('shopping', () => {
 
       if (error) throw error
 
-      items.value = data || []
+      // Reconcile with the server WITHOUT clobbering in-flight optimistic state:
+      // items whose mutation is still queued keep their local (optimistic) copy,
+      // and temp rows for not-yet-synced creates are preserved. Prevents a
+      // concurrent reload (e.g. from another op's sync) from reverting a toggle
+      // that hasn't reached the DB yet.
+      const rows = data || []
+      const pendingIds = new Set(
+        mutationQueue.value.map(m => m.payload.itemId).filter(Boolean) as string[]
+      )
+      const merged = rows.map(row =>
+        pendingIds.has(row.shopping_item_id)
+          ? items.value.find(i => i.shopping_item_id === row.shopping_item_id) ?? row
+          : row
+      )
+      const tempRows = items.value.filter(i => i.shopping_item_id.startsWith('temp_'))
+      items.value = [...merged, ...tempRows]
       console.log('Loaded shopping items:', items.value.length)
 
       loadQueueFromStorage()
@@ -430,7 +585,7 @@ export const useShoppingStore = defineStore('shopping', () => {
     }
   }
 
-  const createItem = async (name: string) => {
+  const createItem = async (name: string, category: string | null = null, quantity = 1) => {
     const householdStore = useHouseholdStore()
     const toastStore = useToastStore()
 
@@ -449,11 +604,19 @@ export const useShoppingStore = defineStore('shopping', () => {
       return null
     }
 
-    const tempItem = createItemOptimistic(name, currentListId.value)
+    const cat = category?.trim() || null
+    const qty = Math.max(1, Math.floor(quantity) || 1)
+    const tempItem = createItemOptimistic(name, currentListId.value, cat, qty)
 
     addToQueue({
       operation: 'create',
-      payload: { name: name.trim(), listId: currentListId.value }
+      payload: {
+        name: name.trim(),
+        listId: currentListId.value,
+        category: cat,
+        quantity: qty,
+        tempId: tempItem.shopping_item_id
+      }
     })
 
     if (navigator.onLine) {
@@ -465,17 +628,33 @@ export const useShoppingStore = defineStore('shopping', () => {
     return tempItem
   }
 
+  /** Edit-modal save: name / category / quantity. Fully offline-capable. */
+  const updateItem = async (
+    itemId: string,
+    patch: { name?: string; category?: string | null; quantity?: number }
+  ) => {
+    const item = items.value.find(i => i.shopping_item_id === itemId)
+    if (!item) return false
+
+    const updates: Partial<ShoppingItem> = {}
+    if (patch.name !== undefined) updates.name = patch.name.trim()
+    if (patch.category !== undefined) updates.category = patch.category?.trim() || null
+    if (patch.quantity !== undefined) updates.quantity = Math.max(1, Math.floor(patch.quantity) || 1)
+    if (Object.keys(updates).length === 0) return false
+
+    updateItemOptimistic(itemId, updates)
+    addToQueue({ operation: 'update', payload: { itemId, updates } })
+
+    if (navigator.onLine) await syncMutations()
+    return true
+  }
+
   const togglePriority = async (itemId: string) => {
     const toastStore = useToastStore()
 
     const item = items.value.find(i => i.shopping_item_id === itemId)
     if (!item) {
       toastStore.showToast('Artikel nicht gefunden', 'error')
-      return false
-    }
-
-    if (isTemporaryId(itemId)) {
-      console.warn('⚠️ Cannot update item with temporary ID, waiting for sync:', itemId)
       return false
     }
 
@@ -507,11 +686,6 @@ export const useShoppingStore = defineStore('shopping', () => {
       return false
     }
 
-    if (isTemporaryId(itemId)) {
-      console.warn('⚠️ Cannot update item with temporary ID, waiting for sync:', itemId)
-      return false
-    }
-
     const now = new Date().toISOString()
     updateItemOptimistic(itemId, {
       purchased: true,
@@ -527,6 +701,7 @@ export const useShoppingStore = defineStore('shopping', () => {
         itemId,
         updates: {
           purchased: true,
+          is_priority: false,
           times_purchased: item.times_purchased + 1,
           last_purchased_at: now,
           last_purchased_by: authStore.user.id
@@ -540,11 +715,6 @@ export const useShoppingStore = defineStore('shopping', () => {
   }
 
   const markUnpurchased = async (itemId: string) => {
-    if (isTemporaryId(itemId)) {
-      console.warn('⚠️ Cannot update item with temporary ID, waiting for sync:', itemId)
-      return false
-    }
-
     updateItemOptimistic(itemId, { purchased: false })
 
     addToQueue({
@@ -574,6 +744,119 @@ export const useShoppingStore = defineStore('shopping', () => {
     }
 
     return true
+  }
+
+  // ============================================================================
+  // Categories (client-only pending buckets + name reuse)
+  // ============================================================================
+
+  /** Register a just-created empty category so its section renders for quick-add. */
+  const addCategory = (name: string) => {
+    if (!currentListId.value) return
+    const trimmed = name.trim()
+    if (!trimmed) return
+    const listId = currentListId.value
+    const existing = pendingCategories.value[listId] ?? []
+    const already = existing.some(c => c.toLowerCase() === trimmed.toLowerCase())
+      || currentListItems.value.some(i => (i.category ?? '').toLowerCase() === trimmed.toLowerCase())
+    if (!already) {
+      pendingCategories.value = { ...pendingCategories.value, [listId]: [...existing, trimmed] }
+    }
+  }
+
+  /**
+   * Distinct (category × source list) across the household, excluding the current
+   * list and the Uncategorized bucket, filtered by query, newest list first.
+   * The picker collapses these to distinct names (shopping reuses only the NAME,
+   * never the source items — those may already be checked off elsewhere).
+   */
+  const categoryImportCandidates = (query: string): ShoppingImportCandidate[] => {
+    const q = query.trim().toLowerCase()
+    const listName = new Map(lists.value.map(l => [l.list_id, l]))
+    const buckets = new Map<string, ShoppingImportCandidate>()
+
+    for (const item of items.value) {
+      if (item.list_id === currentListId.value) continue
+      if (!item.category) continue
+      if (q && !item.category.toLowerCase().includes(q)) continue
+      const list = listName.get(item.list_id)
+      if (!list) continue
+      const key = `${item.list_id}::${item.category}`
+      const existing = buckets.get(key)
+      if (existing) {
+        existing.itemCount++
+      } else {
+        buckets.set(key, {
+          sourceListId: item.list_id,
+          sourceListName: list.name,
+          category: item.category,
+          itemCount: 1,
+          sourceCreatedAt: list.created_at,
+        })
+      }
+    }
+
+    return [...buckets.values()].sort((a, b) =>
+      b.sourceCreatedAt.localeCompare(a.sourceCreatedAt)
+    )
+  }
+
+  /** Rename a category → re-labels every unpurchased item carrying it (offline-capable). */
+  const renameCategory = async (oldName: string, newName: string) => {
+    const toastStore = useToastStore()
+    if (!currentListId.value) return
+    const listId = currentListId.value
+    const trimmed = newName.trim()
+    if (!trimmed || trimmed === oldName) return
+
+    // Rename a client-only pending (empty) category too.
+    const pending = pendingCategories.value[listId] ?? []
+    if (pending.some(c => c.toLowerCase() === oldName.toLowerCase())) {
+      pendingCategories.value = {
+        ...pendingCategories.value,
+        [listId]: pending.map(c => (c.toLowerCase() === oldName.toLowerCase() ? trimmed : c))
+      }
+    }
+
+    const affected = items.value.filter(i => i.list_id === listId && i.category === oldName)
+    for (const item of affected) {
+      updateItemOptimistic(item.shopping_item_id, { category: trimmed })
+      addToQueue({ operation: 'update', payload: { itemId: item.shopping_item_id, updates: { category: trimmed } } })
+    }
+
+    if (navigator.onLine) await syncMutations()
+    toastStore.showToast('Kategorie umbenannt', 'success', 2000)
+  }
+
+  /**
+   * Delete a category's still-to-buy items. Purchased items keep their category
+   * label (they live in the global Gekauft history block) — deleting them here
+   * would silently drop purchase history, so they're left untouched.
+   */
+  const deleteCategory = async (category: string) => {
+    const toastStore = useToastStore()
+    if (!currentListId.value) return
+    const listId = currentListId.value
+
+    // Drop a client-only pending (empty) category.
+    const pending = pendingCategories.value[listId] ?? []
+    if (pending.some(c => c.toLowerCase() === category.toLowerCase())) {
+      pendingCategories.value = {
+        ...pendingCategories.value,
+        [listId]: pending.filter(c => c.toLowerCase() !== category.toLowerCase())
+      }
+    }
+
+    const affected = items.value.filter(
+      i => i.list_id === listId && i.category === category && !i.purchased
+    )
+    for (const item of affected) {
+      deleteItemOptimistic(item.shopping_item_id)
+      addToQueue({ operation: 'delete', payload: { itemId: item.shopping_item_id } })
+    }
+
+    if (navigator.onLine) await syncMutations()
+    toastStore.showToast('Kategorie gelöscht', 'success', 2000)
   }
 
   // ============================================================================
@@ -677,19 +960,28 @@ export const useShoppingStore = defineStore('shopping', () => {
     currentListId,
     isLoading,
     isSyncing,
+    pendingCategories,
     hasPendingMutations,
+    currentListItems,
     unpurchasedItems,
     purchasedItems,
+    itemsByCategory,
+    categoryLabels,
     loadLists,
     createList,
     renameList,
     deleteList,
     loadItems,
     createItem,
+    updateItem,
     togglePriority,
     markPurchased,
     markUnpurchased,
     deleteItem,
+    addCategory,
+    categoryImportCandidates,
+    renameCategory,
+    deleteCategory,
     subscribeToItems,
     unsubscribeFromItems,
     syncMutations

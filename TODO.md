@@ -4,108 +4,112 @@
 
 ---
 
-## 🧳 Packlisten-Redesign (geplant)
+## 🛒 Einkaufsliste-Angleichung + Zentralisierung ✅ (07/2026)
 
-**Ziel:** Von der flachen Liste mit großen Karten → dichte, nach Kategorien gruppierte Ansicht mit Mengen-/Fortschrittstracking, Reise-Notizen und Wiederverwendung über Reisen hinweg. Kernproblem heute: wenige Items pro Screen, keine Struktur, keine Mengen, jede Reise fängt bei Null an.
+**Umgesetzt.** Einkaufsliste an das Packlisten-Redesign angeglichen + gemeinsame
+Bausteine zentralisiert. Details siehe CLAUDE.md (ShoppingView-Abschnitt).
 
-> Design vollständig durchgegrillt (22 Fragen + Zusatzanforderungen). Dies ist die verbindliche Spec.
+- **Geteilte Bausteine** aus PackingView herausgelöst: `composables/useLongPress`,
+  `useGraceWindow`, `useCategoryRail` (Scrollspy-Rail; Gruppierung bleibt store-lokal,
+  da Item-Shapes differieren), `components/ListItemRow` (Shell + Trailing-Slot),
+  `components/CategoryRail` (Bubble-Redesign), `CategorySearchModal` (Prop `importItems`,
+  von packingStore entkoppelt). Packliste darauf umgestellt + regressionsgetestet.
+- **Einkauf**: Migration `shopping_items.category`/`quantity` (prod gepusht), Kategorie-
+  Gruppierung (nur „Zu kaufen"), globaler Gekauft-Block mit Grace-verzögertem Move, ×N-Label,
+  Stern-Highlight (kein Hochsortieren), Top-+Sektion-Add, Long-Press-Edit, Rename/Löschen,
+  Namens-Reuse.
+- **Voll offline**: Temp-ID-Verkettung (`reconcileTempId`) + `loadItems`-Merge, das
+  in-flight-optimistische Items nicht überschreibt.
 
-### Kern-Konzept
+<details><summary>Ursprünglicher Plan (abgehakt)</summary>
 
-**Karten-Anatomie (kompakte Zeilen statt großer Karten):**
-```
-● Kleidung 2/3                                    ← Sektions-Header (Farbpunkt + X/Y)
-  ☐  T-Shirt            [–]  2/5  [＋]            ← qty >1: Stepper beidseitig
-  ☐  Jacke                          ✓            ← qty 1: simple Checkbox
-──────────────────────────────────────
-● Bad 0/2
-  ☐  Zahnbürste                     ✓
-  ┌ + zu Bad… ──────────────── [– 1 +] ┐         ← kontextuelle Add-Zeile
-● Unkategorisiert (muted)                         ← immer vorhanden, unten angepinnt
-  ┌ + hinzufügen… ────────────────────── ┐
-```
+**Ziel:** Die beim Packlisten-Redesign gewonnenen Optimierungen gezielt auf die Einkaufsliste übertragen und die wiederverwertbaren Teile **echt zentralisieren**.
 
-**Interaktionsmodell (bewusst entkoppelt):**
-- **Tap auf Karten-Körper** = `packed` Fertig-Status togglen — **fasst den Zähler NIE an** (Fehler schnell korrigierbar).
-- **Stepper `[–] X/N [＋]`** (nur qty>1) = ändert nur `packed_count`. `[＋]` bis Voll (N/N) → auto-fertig; runterzählen nimmt „fertig" wieder zurück.
-- **Long-Press** (Desktop: Rechtsklick) = öffnet Edit-Modal (Name · Kategorie · Menge · Löschen).
-- Add-UI pro Sektion **klappt ein, sobald das erste Item abgehakt wird**; ein immer sichtbarer **„+ hinzufügen"-Button** klappt wieder auf. Löschen & Menge-Ändern klappen NICHT ein.
+**Ziel:** Die beim Packlisten-Redesign gewonnenen Optimierungen gezielt auf die Einkaufsliste übertragen und die wiederverwertbaren Teile **echt zentralisieren** (Packliste wird auf geteilte Bausteine umgestellt, danach voll neu durchgetestet). Kernnutzen: Kategorien/Aisle-Struktur beim Einkauf, volle Offline-Fähigkeit, eine Quelle der Wahrheit für Rail/Grace/Row/Modals.
 
-**Kategorien:**
-- Frei definierbar **pro Liste**, reine Textlabels, **Farbe automatisch aus Namens-Hash** (keine Kategorie-Tabelle).
-- **Reihenfolge:** Erstellungsreihenfolge; **fertige Kategorien sinken automatisch nach unten** + klappen automatisch zu (`✓ Kleidung 3/3`). Kein manuelles Drag.
-- Offene Sektionen manuell zuklappbar (Session-only State).
-- Gepackte Items bleiben in ihrer Kategorie, durchgestrichen, ans Sektionsende sortiert.
-- **„Unkategorisiert"**: feste, muted, nicht löschbare Sektion in jeder Liste, unten angepinnt. Quick-Add-Landeplatz; existierende Items ohne Kategorie erscheinen hier.
+> Design durchgegrillt (`/grill-me`, 9 Kern-Entscheidungen + 2 Zusatzanforderungen). Dies ist die verbindliche Spec.
 
-**„+ Kategorie" = unified Schnellsuche** (verschmilzt Neu-Erstellen + Import):
-```
-🔍 bad
-  ✚ „bad" — Neu erstellen                        ← immer oberste Option
-  📦 Bad · aus Urlaub 2026 (5 Items)             ← Import-Kandidaten, eine Zeile
-  📦 Bad & Hygiene · aus Wochenende (3 Items)      pro (Kategorie × Quell-Liste),
-                                                    neueste Liste oben
-```
-- Klick auf Import-Kandidat → **Bestätigungsmodal** listet alle Items (mit Menge) vor Übernahme.
-- **Merge** in bestehende Kategorie: exakte Namens-Dubletten (case-insensitive, getrimmt) überspringen, im Modal grau als „bereits vorhanden".
+### Strategie
+- **Gezielt portieren**, nicht voll vereinheitlichen: Einkaufs-Eigenheiten (Priorität, Kauf-Historie, Offline-Queue) bleiben; Pack-Features die passen kommen dazu.
+- **Echt zentralisieren:** Rail + Grace + Kategorie-Gruppierung liegen heute *inline* in `PackingView` → als geteilte Composables/Komponenten herauslösen, beide Views nutzen sie.
 
-**Reise-Notizen:** Freitext-Feld pro Liste (`notes`), ganz oben, einklappbar, im Pack-Zustand standardmäßig zu.
+### Einkauf bekommt
+- **Kategorien** (`category`, nullable): **immer gruppiert** wie Packen, „Unkategorisiert" unten gepinnt. Nur für den „Zu kaufen"-Teil.
+- **Globaler Gekauft-Block** bleibt unten mit Kauf-Historie (`times_purchased` / Datum / Wer) — *kein* per-Kategorie-Collapse.
+- **Menge** (`quantity`): reines **×N-Label** (kein Stepper, kein Teil-Fortschritt; Einkauf ist binär).
+- **Grace + verzögerter Move:** Abgehaktes bleibt ~6 s durchgestrichen **in seiner Kategorie**, wandert *erst nach Ablauf* in den Gekauft-Block. Un-Haken während Grace → bleibt oben.
+- **Long-Press-Edit-Modal:** Name · Kategorie · Menge · Löschen. ⭐-Stern bleibt inline (schneller Toggle), 🗑 wandert ins Modal → ruhigere Zeile.
+- **Kategorie-Rail** (Scrollspy-Schnellnav), sichtbar ab >1 Kategorie.
+- **Kategorie-Rename/Löschen** via `CategoryEditModal` (Item-Count-Warnung).
+- **Kategorie-Namens-Reuse** via `CategorySearchModal` im Modus `importItems:false` → nur Name anlegen/wiederverwenden (Autocomplete über Haushalt), **keine** Item-Übernahme (Items anderer Listen könnten abgehakt sein).
+- **Voll offline:** alle Item-/Kategorie-Aktionen optimistic + Queue, inkl. *offline anlegen → sofort abhaken/bearbeiten* (temp-ID-Verkettung, beim Sync aufgelöst). Listen-CRUD bleibt online.
 
-**Liste kopieren:** Quelle-Dropdown im „Neue Liste"-Modal („Leer" / „Kopieren von…"). Übernimmt Items + Kategorie + Menge, aber `packed_count=0`, `packed=false`.
+### Rail-Redesign (geteilt → wirkt auch beim Packen)
+- Höhere/schönere Bubbles, Label = **erste 4 Buchstaben**, eingefärbt nach `categoryColor(name)`.
+- Bei vielen Kategorien (zu wenig vertikaler Platz) **adaptiv kompakter** (Fallback auf heutige gestauchte Darstellung).
 
-**Gesamt-Fortschritt:** Dezente Leiste oben, `Urlaub 2026 · 12/40 gepackt` + dünner Balken. Zählt Items (voll gepackt / gesamt), konsistent zur `X/Y`-Header-Logik.
-
-**Reset-Button:** setzt `packed_count → 0` UND `packed → false` für alle Items.
-
-### Datenmodell (Migration)
+### Datenmodell (Migration `shopping_items`)
 ```sql
--- packing_items
-ALTER TABLE packing_items ADD COLUMN category text;              -- NULL = Unkategorisiert
-ALTER TABLE packing_items ADD COLUMN quantity int NOT NULL DEFAULT 1;
-ALTER TABLE packing_items ADD COLUMN packed_count int NOT NULL DEFAULT 0;
--- bestehendes packed boolean bleibt (Fertig-Flag, entkoppelt vom Zähler)
-
--- packing_lists
-ALTER TABLE packing_lists ADD COLUMN notes text;
+ALTER TABLE shopping_items ADD COLUMN category text;               -- NULL = Unkategorisiert
+ALTER TABLE shopping_items ADD COLUMN quantity int NOT NULL DEFAULT 1;
+-- KEIN packed_count (Einkauf ist binär, kein Teil-Fortschritt)
 ```
-- Keine Kategorie-Tabelle, keine `category_order`-Spalte (Reihenfolge = Erstellungsreihenfolge, rein clientseitig ableitbar via `created_at` der ersten Items je Kategorie bzw. Insert-Reihenfolge).
-- Bestehende Items: `category = NULL` → landen in „Unkategorisiert".
-- Constraints erwägen: `CHECK (quantity >= 1)`, `CHECK (packed_count >= 0 AND packed_count <= quantity)`, `CHECK (length(category) <= 100)`, `CHECK (length(notes) <= 5000)`.
+- Bestehende Items: `category = NULL` → „Unkategorisiert".
+- Constraints: `CHECK (quantity >= 1)`, `CHECK (length(category) <= 100)`.
+- Index: `(list_id, category)`.
 - RLS: neue Spalten erben bestehende Policies; kein zusätzlicher Policy-Bedarf.
+- **Prod-Push:** wird explizit mit dem User abgestimmt (append-only, nie gepushte Migrations editieren).
 
-### Umsetzung in 3 Phasen
+### Geteilte Bausteine (neu extrahiert)
+- `components/CategoryRail.vue` — Rail + Scrollspy + Redesign (bubbles/4-char/adaptiv).
+- `components/ListItemRow.vue` — Zeilen-Shell (Long-Press-Gesture, Checkbox, Name, packed-Styling, a11y) mit **Trailing-Slot**: Packen = Stepper, Einkauf = ⭐-Stern + ×N-Label.
+- `components/CategoryEditModal.vue` — bereits generisch (category + itemCount + emits), wird geteilt genutzt.
+- `components/CategorySearchModal.vue` — mit `importItems`-Prop (Packen `true`, Einkauf `false`).
+- `composables/useLongPress.ts`, `composables/useGraceWindow.ts`, `composables/useCategorizedList.ts` (Gruppierung/Reihenfolge).
+- `lib/categoryColor.ts` bleibt geteilt.
 
-**Phase 1 — Fundament (Datenmodell + Gruppierung + Mengen/Zähler)** ✅
-- [x] Migration `packing_items` (category, quantity, packed_count) + `packing_lists` (notes) + CHECK-Constraints
-- [x] Types erweitern: `PackingItem` (category, quantity, packed_count), `PackingList` (notes)
-- [x] `packingStore`: Getter `itemsByCategory` (gruppiert, fertige Kategorien nach unten), `overallProgress`; Actions `incrementPacked`/`decrementPacked` (mit Auto-Fertig bei Voll), `togglePacked` (nur `packed`, Zähler unangetastet), `updateItem` (name/category/quantity). (`renameCategory` verworfen → YAGNI, Umkategorisieren via Edit-Modal)
-- [x] `PackingView` neu aufbauen: kompakte Zeilen, Kategorie-Sektionen mit `X/Y`-Header + Farbpunkt (Hash→Farbe via `lib/categoryColor.ts`)
-- [x] Karten-Interaktion: Körper-Tap = togglePacked; Stepper `[–] X/N [＋]` bei qty>1; simple Checkbox bei qty=1
-- [x] „Unkategorisiert"-Sektion (muted, unten angepinnt, immer da)
-- [x] Kontextuelle Add-Zeile pro Sektion (Kategorie aus Kontext) + Einklapp-Logik (erstes Abhaken klappt ein, „+"-Button klappt auf)
-- [x] Fertige Kategorien: auto-sinken + auto-zuklappen; offene manuell zuklappbar (Session-State)
-- [x] Gesamt-Fortschrittsleiste oben
-- [x] Reset-Button auf neues Modell umstellen (`packed_count=0` + `packed=false`)
-- [x] Realtime-Handler auf neue Felder anpassen (Row-Replace, neue Felder fließen durch)
-- [x] Long-Press → Edit-Modal (Name, Menge, Kategorie-Wahl, Löschen); Desktop-Rechtsklick-Mapping; sauberer Touch-Timer (`touchstart`/`touchmove`-Cancel, öffnet auf `touchend` gegen Modal-unter-Finger, Ghost-Click unterdrückt)
-- [x] Browser-Test (Chrome MCP): Abhaken, Zähler, Auto-Fertig, Einklappen, Long-Press ✓
+### Lead-Dev-Defaults (bestätigt)
+- **Add-Wege:** Top-Suchleiste bleibt (schnell → „Unkategorisiert") **plus** per-Sektion-Add-Line je Kategorie.
+- **Priorität + Kategorien:** ⭐ bleibt reines Highlight, **kein** Hochsortieren innerhalb der Kategorie.
+- **Packliste bekommt kein Offline** (bewusst außen vor, YAGNI).
 
-**Phase 2 — Wiederverwendung (Import-Schnellsuche + Liste kopieren)** ✅
-- [x] `packingStore`: `categoryImportCandidates(query)` (DISTINCT Kategorie × Quell-Liste über Haushalt, Item-Count, sortiert neueste Liste oben), `importCategory(...)` mit Dubletten-Skip + Case-insensitivem Merge auf existierende Kategorie-Schreibweise
-- [x] Unified „+ Kategorie"-Schnellsuche-Overlay: „Neu erstellen" oben + Import-Kandidaten darunter
-- [x] Import-Bestätigungsmodal (Item-Liste inkl. Menge, übersprungene Dubletten grau „bereits vorhanden")
-- [x] `copyList(sourceListId, newName)` (Items + Kategorie + Menge, packed/packed_count reset)
-- [x] Quelle-Dropdown im „Neue Liste"-Modal („Leer" / „Kopieren von…")
-- [x] Browser-Test: Kategorie-Import mit Namenskonflikt (Dubletten-Skip), Liste kopieren ✓
+### Bewusst NICHT dabei
+- Listen-Notizen für Einkauf; Listen-Kopie für Einkauf (in Q5 nicht gewählt); voll-Vereinheitlichung; Listen-CRUD offline.
 
-**Phase 3 — Notizen + Politur** ✅
-- [x] Reise-Notizblock (Freitext, einklappbar, oben; Preview im collapsed Zustand) + `updateNotes` (Optimistic, Focus-Guard gegen Realtime-Überschreiben)
-- [x] Farbkontraste (feste 12er-Hash-Palette, Light/Dark lesbar), Empty-States, Keyboard-a11y auf Item-Zeilen (role/aria-checked/tabindex, Enter/Space)
-- [x] `maxlength` auf allen neuen Inputs; CLAUDE.md-Doku aktualisiert (Packlisten-Abschnitt)
+### Umsetzung in 4 Phasen
 
-### Offene Detail-Entscheidungen (beim Bauen final)
-- Hash→Farb-Funktion: fester Palette-Satz (z.B. 8–12 vordefinierte, kontrastgeprüfte Farben) statt beliebigem HSL, damit Light/Dark lesbar bleibt.
-- Long-Press-Schwelle (~450–500 ms) + Bewegungs-Toleranz gegen versehentliches Auslösen beim Scroll.
+**Phase 0 — Zentralisierung (Extraktion aus PackingView)**
+- [x] `useLongPress` aus `PackingItemRow` herauslösen; `PackingItemRow` darauf umstellen
+- [x] `useGraceWindow` aus `PackingView` herauslösen
+- [x] Scrollspy-Rail-State als `useCategoryRail` extrahiert (Gruppierung blieb store-lokal statt `useCategorizedList` — Item-Shapes differieren)
+- [x] `CategoryRail.vue` herausgelöst (+ Bubble-Redesign: 4-char, tinted, adaptiv)
+- [x] `ListItemRow.vue` als Shell mit Trailing-Slot; `PackingView` nutzt es (Stepper im Slot)
+- [x] `CategorySearchModal` um `importItems`-Prop erweitert + von packingStore entkoppelt
+- [x] Regressions-Test Packliste (Chrome MCP)
+
+**Phase 1 — Fundament Einkauf (Migration + Store + Gruppierung)**
+- [x] Migration `shopping_items` (category, quantity) + CHECK-Constraints + Index (prod gepusht)
+- [x] Types: `ShoppingItem` (category, quantity)
+- [x] `shoppingStore`: `itemsByCategory`, `updateItem`, `renameCategory`, `deleteCategory`; Create-Payload erweitert
+- [x] `ShoppingView` auf Kategorie-Gruppierung umgebaut, globaler Gekauft-Block bleibt
+- [x] `ListItemRow` mit ⭐-Stern + ×N-Slot; Long-Press → Edit-Modal
+- [x] Top-Add-Bar (→ Unkategorisiert) + per-Sektion-Add-Line
+
+**Phase 2 — Kategorie-Features + Grace**
+- [x] `CategoryRail` in ShoppingView (ab >1 Kategorie)
+- [x] `CategoryEditModal` (Rename/Löschen) verdrahtet
+- [x] `CategorySearchModal` (`importItems:false`) — Namens-Reuse ohne Item-Import
+- [x] Grace mit verzögertem Move
+
+**Phase 3 — Offline-Ausbau + Politur**
+- [x] `processMutation` create um category/quantity ergänzt
+- [x] Temp-ID-Verkettung (`reconcileTempId`): offline neu angelegte Items sofort abhak-/editierbar
+- [x] Alle neuen Aktionen queue-fähig + optimistic; `loadItems`-Merge gegen Clobber
+- [x] CLAUDE.md-Doku aktualisiert
+- [x] Browser-Test (Chrome MCP): Kategorien, Rail, Grace-Move, Stern, Add-Wege ✓
+- [x] Self-Review + PR
+
+</details>
 
 ---
 
