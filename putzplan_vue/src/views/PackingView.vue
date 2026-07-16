@@ -1,11 +1,12 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted, ref, computed, watch } from 'vue'
+import { onMounted, onUnmounted, ref, computed, watch, nextTick } from 'vue'
 import { usePackingStore, type CategoryGroup } from '@/stores/packingStore'
 import { categoryColor } from '@/lib/categoryColor'
 import type { PackingItem } from '@/types/PackingItem'
 import ListEditModal from '@/components/ListEditModal.vue'
 import PackingItemEditModal from '@/components/PackingItemEditModal.vue'
 import CategorySearchModal from '@/components/CategorySearchModal.vue'
+import CategoryEditModal from '@/components/CategoryEditModal.vue'
 
 const packingStore = usePackingStore()
 
@@ -18,11 +19,17 @@ const editingList = ref<{ list_id: string; name: string } | null>(null)
 const showResetConfirm = ref(false)
 const showCategorySearch = ref(false)
 const editingItem = ref<PackingItem | null>(null)
+const editingCategory = ref<{ name: string; count: number } | null>(null)
 
 // --- Per-section UI state (session-only, reset on list switch) ---------------
 const addDraft = ref<Record<string, string>>({})
+const addQty = ref<Record<string, number>>({})
+const qtyFieldOpen = ref<Set<string>>(new Set())
 const forcedAddOpen = ref<Set<string>>(new Set())
 const sectionOverride = ref<Map<string, boolean>>(new Map())
+
+// Focus the number field the moment it appears.
+const vFocus = { mounted: (el: HTMLElement) => el.focus() }
 
 // --- Notes ------------------------------------------------------------------
 const notesOpen = ref(false)
@@ -33,6 +40,9 @@ watch(
   () => packingStore.currentListId,
   () => {
     addDraft.value = {}
+    addQty.value = {}
+    qtyFieldOpen.value = new Set()
+    suggestFocusKey.value = null
     forcedAddOpen.value = new Set()
     sectionOverride.value = new Map()
     notesDraft.value = packingStore.currentList?.notes ?? ''
@@ -71,11 +81,54 @@ const openAddLine = (group: CategoryGroup) => {
   forcedAddOpen.value.add(group.key)
 }
 
+// --- Name suggestions (from all items across the household's lists) ---------
+const suggestFocusKey = ref<string | null>(null)
+
+const suggestionsFor = (group: CategoryGroup): string[] => {
+  const q = (addDraft.value[group.key] ?? '').trim().toLowerCase()
+  if (!q) return []
+  const inSection = new Set(group.items.map(i => i.name.trim().toLowerCase()))
+  const seen = new Set<string>()
+  const out: string[] = []
+  for (const it of packingStore.items) {
+    const name = it.name.trim()
+    const lower = name.toLowerCase()
+    if (!lower.includes(q) || inSection.has(lower) || seen.has(lower)) continue
+    seen.add(lower)
+    out.push(name)
+    if (out.length >= 5) break
+  }
+  return out
+}
+
+const onAddFocus = (key: string) => { suggestFocusKey.value = key }
+const onAddBlur = () => { setTimeout(() => { suggestFocusKey.value = null }, 200) }
+
+const selectSuggestion = (group: CategoryGroup, name: string) => {
+  addDraft.value[group.key] = name
+  suggestFocusKey.value = null
+  handleSectionAdd(group)
+}
+
+const openQtyField = (key: string) => {
+  if (!addQty.value[key]) addQty.value[key] = 1
+  qtyFieldOpen.value.add(key)
+}
+
+const closeQtyField = (key: string) => {
+  const qty = Math.max(1, Math.floor(Number(addQty.value[key]) || 1))
+  addQty.value[key] = qty
+  qtyFieldOpen.value.delete(key)
+}
+
 const handleSectionAdd = async (group: CategoryGroup) => {
   const name = (addDraft.value[group.key] ?? '').trim()
   if (!name) return
-  await packingStore.addItem(name, group.category)
+  const qty = Math.max(1, Math.floor(Number(addQty.value[group.key]) || 1))
+  await packingStore.addItem(name, group.category, qty)
   addDraft.value[group.key] = ''
+  addQty.value[group.key] = 1
+  qtyFieldOpen.value.delete(group.key)
 }
 
 // --- Item interactions ------------------------------------------------------
@@ -210,6 +263,21 @@ const handleCreateCategory = (name: string) => {
   packingStore.addCategory(name)
 }
 
+const openCategoryEdit = (group: CategoryGroup) => {
+  if (!group.category) return
+  editingCategory.value = { name: group.category, count: group.total }
+}
+
+const handleCategoryRename = async (oldName: string, newName: string) => {
+  await packingStore.renameCategory(oldName, newName)
+  editingCategory.value = null
+}
+
+const handleCategoryDelete = async (name: string) => {
+  await packingStore.deleteCategory(name)
+  editingCategory.value = null
+}
+
 // --- Notes ------------------------------------------------------------------
 const saveNotes = () => {
   notesFocused.value = false
@@ -224,15 +292,75 @@ const hasPacked = computed(() =>
   packingStore.currentListItems.some(i => i.packed || i.packed_count > 0)
 )
 
+// --- Right-side category quick-nav rail --------------------------------------
+const activeCatKey = ref<string | null>(null)
+const sectionEls = new Map<string, HTMLElement>()
+
+// Only worth showing once there's more than the single Unkategorisiert bucket.
+const showRail = computed(() => packingStore.itemsByCategory.length > 1)
+
+// Collapsible rail (persisted).
+const RAIL_STORAGE_KEY = 'putzplan_packing_rail_collapsed'
+const railCollapsed = ref(localStorage.getItem(RAIL_STORAGE_KEY) === '1')
+const setRailCollapsed = (v: boolean) => {
+  railCollapsed.value = v
+  localStorage.setItem(RAIL_STORAGE_KEY, v ? '1' : '0')
+}
+
+const setSectionEl = (key: string, el: unknown) => {
+  if (el instanceof HTMLElement) sectionEls.set(key, el)
+  else sectionEls.delete(key)
+}
+
+// Scrollspy: the active chip is the last section whose top has crossed the
+// active line (~120px below the viewport top). Deterministic and cheap.
+const ACTIVE_LINE = 120
+const refreshActiveCat = () => {
+  const groups = packingStore.itemsByCategory
+  let current: string | null = groups[0]?.key ?? null
+  for (const g of groups) {
+    const el = sectionEls.get(g.key)
+    if (!el) continue
+    if (el.getBoundingClientRect().top <= ACTIVE_LINE) current = g.key
+    else break
+  }
+  activeCatKey.value = current
+}
+
+let scrollRaf = 0
+const onScroll = () => {
+  if (scrollRaf) return
+  scrollRaf = requestAnimationFrame(() => {
+    scrollRaf = 0
+    refreshActiveCat()
+  })
+}
+
+const scrollToCategory = (key: string) => {
+  activeCatKey.value = key
+  sectionEls.get(key)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+}
+
+// Recompute the highlight when the category set changes (list switch, add/delete).
+watch(
+  () => packingStore.itemsByCategory.map(g => g.key).join('|'),
+  () => nextTick(refreshActiveCat)
+)
+
 onMounted(async () => {
   await packingStore.loadLists()
   await packingStore.loadItems()
   notesDraft.value = packingStore.currentList?.notes ?? ''
   packingStore.subscribe()
+  window.addEventListener('scroll', onScroll, { passive: true })
+  await nextTick()
+  refreshActiveCat()
 })
 
 onUnmounted(() => {
   packingStore.unsubscribe()
+  window.removeEventListener('scroll', onScroll)
+  if (scrollRaf) cancelAnimationFrame(scrollRaf)
 })
 </script>
 
@@ -327,26 +455,47 @@ onUnmounted(() => {
           <div class="skeleton-card" style="height: 60px;"></div>
         </div>
 
-        <!-- Kategorie-Sektionen -->
+        <!-- Kategorie-Sektionen + rechte Schnellnav -->
         <template v-else>
+        <div class="packing-body" :class="{ 'rail-open': showRail && !railCollapsed }">
+          <div class="cat-column">
           <div
             v-for="group in packingStore.itemsByCategory"
             :key="group.key"
+            :ref="(el) => setSectionEl(group.key, el)"
+            :data-cat-key="group.key"
             class="cat-section"
             :class="{ 'cat-uncategorized': group.isUncategorized, 'cat-complete': group.isComplete }"
           >
-            <button class="cat-header" @click="toggleSection(group)">
+            <div
+              class="cat-header"
+              role="button"
+              tabindex="0"
+              @click="toggleSection(group)"
+              @keydown.enter.prevent="toggleSection(group)"
+              @keydown.space.prevent="toggleSection(group)"
+            >
               <span class="cat-dot" :style="{ background: categoryColor(group.category) }"></span>
               <span class="cat-name">{{ group.label }}</span>
-              <span class="cat-count" v-if="group.total > 0">
-                <i v-if="group.isComplete" class="bi bi-check-circle-fill cat-complete-icon"></i>
-                {{ group.packedCount }}/{{ group.total }}
-              </span>
-              <i
-                class="bi cat-chevron ms-auto"
-                :class="isSectionOpen(group) ? 'bi-chevron-up' : 'bi-chevron-down'"
-              ></i>
-            </button>
+              <div class="cat-header-right">
+                <span class="cat-count" v-if="group.total > 0">
+                  <i v-if="group.isComplete" class="bi bi-check-circle-fill cat-complete-icon"></i>
+                  {{ group.packedCount }}/{{ group.total }}
+                </span>
+                <button
+                  v-if="!group.isUncategorized"
+                  class="cat-edit-btn"
+                  @click.stop="openCategoryEdit(group)"
+                  title="Kategorie bearbeiten"
+                >
+                  <i class="bi bi-pencil"></i>
+                </button>
+                <i
+                  class="bi cat-chevron"
+                  :class="isSectionOpen(group) ? 'bi-chevron-up' : 'bi-chevron-down'"
+                ></i>
+              </div>
+            </div>
 
             <div v-if="isSectionOpen(group)" class="cat-body">
               <div
@@ -394,14 +543,51 @@ onUnmounted(() => {
 
               <!-- Kontextuelle Add-Zeile -->
               <div v-if="isAddOpen(group)" class="add-line">
+                <div class="add-input-wrap">
+                  <input
+                    v-model="addDraft[group.key]"
+                    type="text"
+                    class="add-input"
+                    :placeholder="group.isUncategorized ? '+ hinzufügen…' : `+ zu ${group.label}…`"
+                    maxlength="200"
+                    @focus="onAddFocus(group.key)"
+                    @blur="onAddBlur"
+                    @keyup.enter="handleSectionAdd(group)"
+                  />
+                  <div
+                    v-if="suggestFocusKey === group.key && suggestionsFor(group).length > 0"
+                    class="suggestions-dropdown"
+                  >
+                    <button
+                      v-for="s in suggestionsFor(group)"
+                      :key="s"
+                      class="suggestion-item"
+                      @mousedown.prevent="selectSuggestion(group, s)"
+                    >
+                      {{ s }}
+                    </button>
+                  </div>
+                </div>
                 <input
-                  v-model="addDraft[group.key]"
-                  type="text"
-                  class="add-input"
-                  :placeholder="group.isUncategorized ? '+ hinzufügen…' : `+ zu ${group.label}…`"
-                  maxlength="200"
+                  v-if="qtyFieldOpen.has(group.key)"
+                  v-focus
+                  v-model.number="addQty[group.key]"
+                  type="number"
+                  class="add-qty-input"
+                  min="1"
+                  max="999"
                   @keyup.enter="handleSectionAdd(group)"
+                  @blur="closeQtyField(group.key)"
                 />
+                <button
+                  v-else
+                  class="add-qty-toggle"
+                  :class="{ active: (addQty[group.key] || 1) > 1 }"
+                  @click="openQtyField(group.key)"
+                  title="Anzahl festlegen"
+                >
+                  ×{{ addQty[group.key] || 1 }}
+                </button>
                 <button
                   class="add-confirm"
                   @click="handleSectionAdd(group)"
@@ -421,6 +607,37 @@ onUnmounted(() => {
           <button class="add-category-btn" @click="showCategorySearch = true">
             <i class="bi bi-plus-lg me-1"></i> Kategorie
           </button>
+          </div>
+
+          <!-- Rechte Kategorie-Schnellnav (einklappbar) -->
+          <nav
+            v-if="showRail"
+            class="cat-rail"
+            :class="{ 'rail-collapsed': railCollapsed }"
+            aria-label="Kategorie-Schnellzugriff"
+          >
+            <template v-if="!railCollapsed">
+              <button
+                v-for="group in packingStore.itemsByCategory"
+                :key="group.key"
+                class="rail-chip"
+                :class="{ active: activeCatKey === group.key, uncat: group.isUncategorized }"
+                :title="group.label"
+                @click="scrollToCategory(group.key)"
+              >
+                <span class="rail-dot" :style="{ background: categoryColor(group.category) }"></span>
+                <span class="rail-label">{{ group.label }}</span>
+              </button>
+            </template>
+            <button
+              class="rail-toggle"
+              :title="railCollapsed ? 'Kategorien einblenden' : 'Ausblenden'"
+              @click="setRailCollapsed(!railCollapsed)"
+            >
+              <i class="bi" :class="railCollapsed ? 'bi-chevron-left' : 'bi-chevron-right'"></i>
+            </button>
+          </nav>
+        </div>
         </template>
       </template>
     </div>
@@ -441,6 +658,16 @@ onUnmounted(() => {
     v-if="showCategorySearch"
     @create="handleCreateCategory"
     @close="showCategorySearch = false"
+  />
+
+  <!-- Kategorie bearbeiten / löschen -->
+  <CategoryEditModal
+    v-if="editingCategory"
+    :category="editingCategory.name"
+    :item-count="editingCategory.count"
+    @rename="handleCategoryRename"
+    @delete="handleCategoryDelete"
+    @close="editingCategory = null"
   />
 
   <!-- Liste bearbeiten Modal -->
@@ -636,12 +863,106 @@ onUnmounted(() => {
 }
 .notes-body { padding: 0 var(--spacing-md) var(--spacing-md); }
 
+/* ---- Body + fixed bottom-right quick-nav rail ---- */
+.packing-body {
+  position: relative;
+}
+.cat-column {
+  min-width: 0;
+}
+/* Reserve space so cards never slide under the fixed rail while it's open. */
+.packing-body.rail-open .cat-column {
+  padding-right: calc(20vw + 12px);
+  max-width: 100%;
+}
+@media (min-width: 480px) {
+  .packing-body.rail-open .cat-column { padding-right: 96px; }
+}
+
+.cat-rail {
+  position: fixed;
+  right: 8px;
+  bottom: 76px; /* clear the bottom navigation */
+  z-index: 900;
+  width: 20vw;
+  max-width: 84px;
+  min-width: 64px;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
+  max-height: calc(100vh - 150px);
+  overflow-y: auto;
+  scrollbar-width: none;
+}
+.cat-rail::-webkit-scrollbar { display: none; }
+.cat-rail.rail-collapsed {
+  width: auto;
+  min-width: 0;
+  max-width: none;
+}
+
+.rail-toggle {
+  align-self: flex-end;
+  flex-shrink: 0;
+  width: 34px;
+  height: 34px;
+  border: 1px solid var(--color-border);
+  background: var(--color-background-elevated);
+  border-radius: 50%;
+  color: var(--color-text-secondary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: var(--shadow-sm);
+  -webkit-tap-highlight-color: transparent;
+  margin-top: 2px;
+}
+.rail-toggle:hover { color: var(--color-primary); border-color: var(--color-primary); }
+
+.rail-chip {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  width: 100%;
+  padding: 5px 7px;
+  background: var(--color-background);
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  color: var(--color-text-secondary);
+  font-size: var(--font-xs);
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+  -webkit-tap-highlight-color: transparent;
+}
+.rail-chip:hover { border-color: var(--color-primary); color: var(--color-text-primary); }
+.rail-chip.active {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+  background: var(--color-background-elevated);
+  box-shadow: inset 2px 0 0 var(--color-primary);
+}
+.rail-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.rail-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.rail-chip.uncat .rail-label { color: var(--color-text-muted); font-weight: 500; }
+
 /* ---- Category Section ---- */
 .cat-section {
   background: var(--color-background-elevated);
   border-radius: var(--radius-md);
   margin-bottom: var(--spacing-sm);
-  overflow: hidden;
+  scroll-margin-top: 72px;
 }
 .cat-uncategorized { opacity: 0.92; }
 .cat-complete .cat-header { opacity: 0.7; }
@@ -658,7 +979,32 @@ onUnmounted(() => {
   text-align: left;
   color: var(--color-text-primary);
   min-height: var(--touch-target-min);
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
 }
+.cat-header:focus-visible { outline: 2px solid var(--color-primary); outline-offset: -2px; }
+
+.cat-header-right {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  flex-shrink: 0;
+}
+
+.cat-edit-btn {
+  background: none;
+  border: none;
+  padding: 4px;
+  cursor: pointer;
+  color: var(--color-text-muted);
+  opacity: 0.6;
+  display: flex;
+  align-items: center;
+  font-size: var(--font-sm);
+  border-radius: var(--radius-sm);
+}
+.cat-edit-btn:hover { opacity: 1; color: var(--color-primary); }
 .cat-dot {
   display: inline-block;
   width: 10px;
@@ -764,9 +1110,13 @@ onUnmounted(() => {
   gap: var(--spacing-sm);
   padding: 2px 0;
 }
-.add-input {
+.add-input-wrap {
+  position: relative;
   flex: 1;
   min-width: 0;
+}
+.add-input {
+  width: 100%;
   border: 1px dashed var(--color-border-hover);
   background: transparent;
   border-radius: var(--radius-sm);
@@ -775,6 +1125,71 @@ onUnmounted(() => {
   color: var(--color-text-primary);
 }
 .add-input:focus { outline: none; border-color: var(--color-primary); border-style: solid; }
+
+.suggestions-dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  margin-top: 4px;
+  background: var(--color-background-elevated);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+  z-index: 1000;
+  max-height: 200px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+.suggestion-item {
+  padding: var(--spacing-sm) var(--spacing-md);
+  background: none;
+  border: none;
+  border-bottom: 1px solid var(--color-border);
+  text-align: left;
+  font-size: var(--font-base);
+  color: var(--color-text-primary);
+  cursor: pointer;
+  transition: background-color 0.15s;
+}
+.suggestion-item:last-child { border-bottom: none; }
+.suggestion-item:hover { background: var(--color-background); }
+.add-qty-toggle {
+  flex-shrink: 0;
+  min-width: 36px;
+  height: 36px;
+  padding: 0 8px;
+  border: 1px dashed var(--color-border-hover);
+  background: transparent;
+  border-radius: var(--radius-sm);
+  color: var(--color-text-muted);
+  font-size: var(--font-sm);
+  font-weight: 600;
+  cursor: pointer;
+  font-variant-numeric: tabular-nums;
+}
+.add-qty-toggle:hover { border-color: var(--color-primary); color: var(--color-primary); }
+.add-qty-toggle.active {
+  border-style: solid;
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+}
+
+.add-qty-input {
+  flex-shrink: 0;
+  width: 56px;
+  height: 36px;
+  text-align: center;
+  border: 1px solid var(--color-primary);
+  border-radius: var(--radius-sm);
+  background: var(--color-background);
+  color: var(--color-text-primary);
+  font-size: var(--font-base);
+  font-variant-numeric: tabular-nums;
+}
+.add-qty-input:focus { outline: none; }
+
 .add-confirm {
   flex-shrink: 0;
   width: 36px;

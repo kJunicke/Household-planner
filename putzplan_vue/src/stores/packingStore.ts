@@ -452,6 +452,90 @@ export const usePackingStore = defineStore('packing', () => {
     }
   }
 
+  /** Rename a category → re-labels every item carrying it in the current list. */
+  const renameCategory = async (oldName: string, newName: string) => {
+    const toastStore = useToastStore()
+    if (!currentListId.value) return
+    const listId = currentListId.value
+    const trimmed = newName.trim()
+    if (!trimmed || trimmed === oldName) return
+
+    // Rename a client-only pending (empty) category too.
+    const pending = pendingCategories.value[listId] ?? []
+    if (pending.some(c => c.toLowerCase() === oldName.toLowerCase())) {
+      pendingCategories.value = {
+        ...pendingCategories.value,
+        [listId]: pending.map(c => (c.toLowerCase() === oldName.toLowerCase() ? trimmed : c))
+      }
+    }
+
+    const affected = items.value.filter(i => i.list_id === listId && i.category === oldName)
+    if (affected.length === 0) {
+      toastStore.showToast('Kategorie umbenannt', 'success', 2000)
+      return
+    }
+
+    const prev = new Map(affected.map(i => [i.item_id, i.category]))
+    items.value = items.value.map(i =>
+      i.list_id === listId && i.category === oldName ? { ...i, category: trimmed } : i
+    )
+
+    try {
+      const { error } = await supabase
+        .from('packing_items')
+        .update({ category: trimmed })
+        .eq('list_id', listId)
+        .eq('category', oldName)
+      if (error) throw error
+      toastStore.showToast('Kategorie umbenannt', 'success', 2000)
+    } catch (error) {
+      console.error('Error renaming category:', error)
+      items.value = items.value.map(i =>
+        prev.has(i.item_id) ? { ...i, category: prev.get(i.item_id)! } : i
+      )
+      toastStore.showToast('Fehler beim Umbenennen der Kategorie', 'error')
+    }
+  }
+
+  /** Delete a category and all its items in the current list. */
+  const deleteCategory = async (category: string) => {
+    const toastStore = useToastStore()
+    if (!currentListId.value) return
+    const listId = currentListId.value
+
+    // Drop a client-only pending (empty) category.
+    const pending = pendingCategories.value[listId] ?? []
+    if (pending.some(c => c.toLowerCase() === category.toLowerCase())) {
+      pendingCategories.value = {
+        ...pendingCategories.value,
+        [listId]: pending.filter(c => c.toLowerCase() !== category.toLowerCase())
+      }
+    }
+
+    const affected = items.value.filter(i => i.list_id === listId && i.category === category)
+    if (affected.length === 0) {
+      toastStore.showToast('Kategorie gelöscht', 'success', 2000)
+      return
+    }
+
+    const prev = items.value
+    items.value = items.value.filter(i => !(i.list_id === listId && i.category === category))
+
+    try {
+      const { error } = await supabase
+        .from('packing_items')
+        .delete()
+        .eq('list_id', listId)
+        .eq('category', category)
+      if (error) throw error
+      toastStore.showToast('Kategorie gelöscht', 'success', 2000)
+    } catch (error) {
+      console.error('Error deleting category:', error)
+      items.value = prev
+      toastStore.showToast('Fehler beim Löschen der Kategorie', 'error')
+    }
+  }
+
   // ============================================================================
   // Items
   // ============================================================================
@@ -752,6 +836,8 @@ export const usePackingStore = defineStore('packing', () => {
     categoryImportCandidates,
     importPreview,
     importCategory,
+    renameCategory,
+    deleteCategory,
     loadItems,
     addItem,
     togglePacked,
