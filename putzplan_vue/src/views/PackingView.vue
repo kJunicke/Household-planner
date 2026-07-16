@@ -5,6 +5,7 @@ import { categoryColor } from '@/lib/categoryColor'
 import type { PackingItem } from '@/types/PackingItem'
 import ListEditModal from '@/components/ListEditModal.vue'
 import PackingItemEditModal from '@/components/PackingItemEditModal.vue'
+import PackingItemRow from '@/components/PackingItemRow.vue'
 import CategorySearchModal from '@/components/CategorySearchModal.vue'
 import CategoryEditModal from '@/components/CategoryEditModal.vue'
 
@@ -45,6 +46,8 @@ watch(
     suggestFocusKey.value = null
     forcedAddOpen.value = new Set()
     sectionOverride.value = new Map()
+    doneOpen.value = new Set()
+    clearAllGrace()
     notesDraft.value = packingStore.currentList?.notes ?? ''
     notesOpen.value = false
   }
@@ -132,11 +135,6 @@ const handleSectionAdd = async (group: CategoryGroup) => {
 }
 
 // --- Item interactions ------------------------------------------------------
-const onItemClick = (item: PackingItem) => {
-  if (longPressFired) { longPressFired = false; return }
-  packingStore.togglePacked(item.item_id)
-}
-
 const openItemEdit = (item: PackingItem) => {
   editingItem.value = item
 }
@@ -150,70 +148,74 @@ const handleItemSave = async (
 }
 
 const handleItemDelete = async (itemId: string) => {
+  clearGrace(itemId)
   await packingStore.removeItem(itemId)
   editingItem.value = null
 }
 
-// --- Long-press gesture (touch) + right-click (desktop) ---------------------
-const LONG_PRESS_MS = 480
-const MOVE_TOLERANCE = 10
-let pressTimer: number | null = null
-let pressStartX = 0
-let pressStartY = 0
-let longPressArmed = false // threshold elapsed → open on release
-let longPressFired = false // opened → swallow the trailing click
-let pressedItem: PackingItem | null = null
+// --- Grace window for freshly-checked items ---------------------------------
+// Just-packed items stay visible (struck-through) for a moment so a mis-check
+// can be undone quickly, before they fold into the collapsed "erledigt" group.
+const GRACE_MS = 6000
+const graceIds = ref<Set<string>>(new Set())
+const graceTimers = new Map<string, number>()
 
-const isControl = (target: EventTarget | null) =>
-  target instanceof HTMLElement && !!target.closest('.pack-stepper, button')
-
-const clearPress = () => {
-  if (pressTimer !== null) {
-    clearTimeout(pressTimer)
-    pressTimer = null
-  }
+const markGrace = (id: string) => {
+  graceIds.value.add(id)
+  const existing = graceTimers.get(id)
+  if (existing) clearTimeout(existing)
+  graceTimers.set(id, window.setTimeout(() => {
+    graceIds.value.delete(id)
+    graceTimers.delete(id)
+  }, GRACE_MS))
 }
 
-const onItemTouchStart = (e: TouchEvent, item: PackingItem) => {
-  if (isControl(e.target)) return
-  longPressArmed = false
-  longPressFired = false
-  pressedItem = item
-  const t = e.touches[0]
-  pressStartX = t.clientX
-  pressStartY = t.clientY
-  clearPress()
-  // Only ARM here — the modal opens on touchend so it never appears under
-  // the still-pressed finger (and can't eat a backdrop tap).
-  pressTimer = window.setTimeout(() => { longPressArmed = true }, LONG_PRESS_MS)
+const clearGrace = (id: string) => {
+  graceIds.value.delete(id)
+  const existing = graceTimers.get(id)
+  if (existing) { clearTimeout(existing); graceTimers.delete(id) }
 }
 
-const onItemTouchMove = (e: TouchEvent) => {
-  const t = e.touches[0]
-  if (
-    Math.abs(t.clientX - pressStartX) > MOVE_TOLERANCE ||
-    Math.abs(t.clientY - pressStartY) > MOVE_TOLERANCE
-  ) {
-    clearPress()
-    longPressArmed = false
-  }
+const clearAllGrace = () => {
+  graceTimers.forEach(t => clearTimeout(t))
+  graceTimers.clear()
+  graceIds.value = new Set()
 }
 
-const onItemTouchEnd = (e: TouchEvent) => {
-  clearPress()
-  if (longPressArmed && pressedItem) {
-    // Suppress the synthetic click so it neither toggles nor hits the modal.
-    e.preventDefault()
-    longPressFired = true
-    openItemEdit(pressedItem)
-  }
-  longPressArmed = false
+const onItemToggle = (item: PackingItem) => {
+  const willPack = !item.packed
+  packingStore.togglePacked(item.item_id)
+  if (willPack) markGrace(item.item_id)
+  else clearGrace(item.item_id)
 }
 
-const onItemContextMenu = (e: Event, item: PackingItem) => {
-  if (isControl(e.target)) return
-  e.preventDefault()
-  openItemEdit(item)
+const onItemIncrement = (item: PackingItem) => {
+  const willComplete = !item.packed && item.packed_count + 1 >= item.quantity
+  packingStore.incrementPacked(item.item_id)
+  if (willComplete) markGrace(item.item_id)
+}
+
+const onItemDecrement = (item: PackingItem) => {
+  const wasPacked = item.packed
+  packingStore.decrementPacked(item.item_id)
+  if (wasPacked) clearGrace(item.item_id)
+}
+
+// --- Per-category done grouping ---------------------------------------------
+// Rows shown in the open part: unpacked first, then still-in-grace packed ones.
+const openRows = (group: CategoryGroup): PackingItem[] => [
+  ...group.items.filter(i => !i.packed),
+  ...group.items.filter(i => i.packed && graceIds.value.has(i.item_id))
+]
+// Packed items past their grace window → collapsed into the "erledigt" group.
+const doneRows = (group: CategoryGroup): PackingItem[] =>
+  group.items.filter(i => i.packed && !graceIds.value.has(i.item_id))
+
+const doneOpen = ref<Set<string>>(new Set())
+const isDoneOpen = (key: string) => doneOpen.value.has(key)
+const toggleDone = (key: string) => {
+  if (doneOpen.value.has(key)) doneOpen.value.delete(key)
+  else doneOpen.value.add(key)
 }
 
 // --- List CRUD --------------------------------------------------------------
@@ -255,6 +257,7 @@ const handleCreateList = async () => {
 
 const handleReset = async () => {
   if (!packingStore.currentListId) return
+  clearAllGrace()
   await packingStore.resetAllUnpacked(packingStore.currentListId)
   showResetConfirm.value = false
 }
@@ -498,48 +501,39 @@ onUnmounted(() => {
             </div>
 
             <div v-if="isSectionOpen(group)" class="cat-body">
-              <div
-                v-for="item in group.items"
+              <!-- Offen: noch nicht gepackt + gerade abgehakt (Grace) -->
+              <PackingItemRow
+                v-for="item in openRows(group)"
                 :key="item.item_id"
-                class="pack-row"
-                :class="{ packed: item.packed }"
-                role="checkbox"
-                :aria-checked="item.packed"
-                tabindex="0"
-                @click="onItemClick(item)"
-                @keydown.enter.prevent="packingStore.togglePacked(item.item_id)"
-                @keydown.space.prevent="packingStore.togglePacked(item.item_id)"
-                @touchstart.passive="onItemTouchStart($event, item)"
-                @touchmove.passive="onItemTouchMove($event)"
-                @touchend="onItemTouchEnd($event)"
-                @touchcancel="clearPress"
-                @contextmenu="onItemContextMenu($event, item)"
-              >
-                <span class="pack-check" :class="{ on: item.packed }">
-                  <i v-if="item.packed" class="bi bi-check-lg"></i>
-                </span>
-                <span class="pack-name">{{ item.name }}</span>
+                :item="item"
+                @toggle="onItemToggle(item)"
+                @increment="onItemIncrement(item)"
+                @decrement="onItemDecrement(item)"
+                @edit="openItemEdit(item)"
+              />
 
-                <div v-if="item.quantity > 1" class="pack-stepper" @click.stop>
-                  <button
-                    class="step-btn"
-                    @click="packingStore.decrementPacked(item.item_id)"
-                    :disabled="item.packed_count <= 0"
-                    title="Weniger"
-                  >
-                    <i class="bi bi-dash"></i>
-                  </button>
-                  <span class="step-count">{{ item.packed_count }}/{{ item.quantity }}</span>
-                  <button
-                    class="step-btn"
-                    @click="packingStore.incrementPacked(item.item_id)"
-                    :disabled="item.packed_count >= item.quantity"
-                    title="Mehr"
-                  >
-                    <i class="bi bi-plus"></i>
-                  </button>
-                </div>
-              </div>
+              <!-- Erledigt (einklappbar) -->
+              <template v-if="doneRows(group).length > 0">
+                <button class="done-toggle" @click="toggleDone(group.key)">
+                  <i class="bi bi-check2-circle done-check"></i>
+                  <span>{{ doneRows(group).length }} erledigt</span>
+                  <i
+                    class="bi ms-auto"
+                    :class="isDoneOpen(group.key) ? 'bi-chevron-up' : 'bi-chevron-down'"
+                  ></i>
+                </button>
+                <template v-if="isDoneOpen(group.key)">
+                  <PackingItemRow
+                    v-for="item in doneRows(group)"
+                    :key="item.item_id"
+                    :item="item"
+                    @toggle="onItemToggle(item)"
+                    @increment="onItemIncrement(item)"
+                    @decrement="onItemDecrement(item)"
+                    @edit="openItemEdit(item)"
+                  />
+                </template>
+              </template>
 
               <!-- Kontextuelle Add-Zeile -->
               <div v-if="isAddOpen(group)" class="add-line">
@@ -1032,76 +1026,23 @@ onUnmounted(() => {
 }
 
 /* ---- Item Row ---- */
-.pack-row {
+/* ---- "erledigt" collapse toggle ---- */
+.done-toggle {
   display: flex;
   align-items: center;
-  gap: var(--spacing-sm);
-  padding: var(--spacing-sm) var(--spacing-sm);
-  background: var(--color-background);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-  user-select: none;
-  -webkit-tap-highlight-color: transparent;
-  min-height: 44px;
-  transition: background 0.15s, opacity 0.15s;
-}
-.pack-row:hover { border-color: var(--color-border-hover); }
-.pack-row:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 2px; }
-.pack-row.packed { opacity: 0.55; }
-.pack-row.packed .pack-name { text-decoration: line-through; color: var(--color-text-muted); }
-
-.pack-check {
-  flex-shrink: 0;
-  width: 22px;
-  height: 22px;
-  border: 2px solid var(--color-border-hover);
-  border-radius: 6px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: white;
-  font-size: 14px;
-}
-.pack-check.on { background: var(--color-success); border-color: var(--color-success); }
-
-.pack-name {
-  flex: 1;
-  min-width: 0;
-  font-size: var(--font-base);
-  overflow-wrap: anywhere;
-}
-
-/* ---- Stepper ---- */
-.pack-stepper {
-  display: flex;
-  align-items: center;
-  gap: 2px;
-  flex-shrink: 0;
-}
-.step-btn {
-  width: 32px;
-  height: 32px;
-  border: 1px solid var(--color-border);
-  background: var(--color-background-elevated);
-  border-radius: var(--radius-sm);
-  color: var(--color-text-primary);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  font-size: var(--font-base);
-}
-.step-btn:hover:not(:disabled) { border-color: var(--color-primary); color: var(--color-primary); }
-.step-btn:disabled { opacity: 0.35; cursor: not-allowed; }
-.step-count {
-  min-width: 40px;
-  text-align: center;
+  gap: 6px;
+  width: 100%;
+  padding: 6px var(--spacing-sm);
+  background: none;
+  border: none;
+  color: var(--color-text-muted);
   font-size: var(--font-sm);
-  font-weight: 600;
-  color: var(--color-text-secondary);
-  font-variant-numeric: tabular-nums;
+  font-weight: 500;
+  cursor: pointer;
+  text-align: left;
 }
+.done-toggle:hover { color: var(--color-text-secondary); }
+.done-check { color: var(--color-success); }
 
 /* ---- Add line ---- */
 .add-line {
