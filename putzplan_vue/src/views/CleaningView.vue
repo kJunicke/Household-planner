@@ -7,6 +7,7 @@ import QuickTaskModal from '../components/QuickTaskModal.vue';
 import { useTaskStore } from "../stores/taskStore";
 import { useHouseholdStore } from "../stores/householdStore";
 import type { Task } from '@/types/Task';
+import { scheduleOf } from '@/lib/taskSchedule';
 
 const taskStore = useTaskStore()
 const householdStore = useHouseholdStore()
@@ -98,6 +99,14 @@ const categoryConfig: Record<TaskCategory, { label: string; icon: string }> = {
   completed: { label: 'Erledigt', icon: 'bi-check-circle' }
 }
 
+// Dringendste zuerst. Über den Gleichheits-Zweig, weil `urgency` für nie erledigte
+// Aufgaben Infinity ist und Infinity - Infinity = NaN einen Komparator zerstört.
+const byUrgency = (a: Task, b: Task): number => {
+  const ua = scheduleOf(a).urgency
+  const ub = scheduleOf(b).urgency
+  return ua === ub ? 0 : ub - ua
+}
+
 // Helper functions for task filtering and sorting (copied from TaskList logic)
 const getDaysOverdue = (task: Task): number => {
   if (!task.last_completed_at) return Infinity
@@ -152,21 +161,6 @@ const getTasksForCategory = (category: TaskCategory): Task[] => {
     // Alphabetisch sortieren (stabile Reihenfolge)
     tasks.sort((a, b) => a.title.localeCompare(b.title, 'de'))
 
-  } else if (category === 'recurring') {
-    // Recurring tasks (not completed)
-    tasks = taskStore.tasks.filter((task: Task) =>
-      !task.completed &&
-      task.parent_task_id === null &&
-      task.task_type === 'recurring'
-    )
-    // Sort by urgency (most overdue first)
-    tasks.sort((a, b) => {
-      if (!a.last_completed_at && !b.last_completed_at) return 0
-      if (!a.last_completed_at) return -1
-      if (!b.last_completed_at) return 1
-      return getDaysOverdue(b) - getDaysOverdue(a)
-    })
-
   } else if (category === 'project') {
     // Projects (not completed)
     tasks = taskStore.tasks.filter((task: Task) =>
@@ -179,23 +173,32 @@ const getTasksForCategory = (category: TaskCategory): Task[] => {
   return tasks
 }
 
-// Überfällige Aufgaben (recurring, deren Kadenz abgelaufen ist).
-// Werden im Dashboard nach oben gezogen ("Jetzt dran") und unten aus der
-// regulären Putzaufgaben-Gruppe entfernt, damit nichts doppelt erscheint.
-const isOverdue = (task: Task): boolean =>
+// "Jetzt dran": jede offene wiederkehrende Aufgabe.
+// Ob eine Aufgabe dran ist, entscheidet allein `completed` aus der Datenbank —
+// die Kadenz-Grenze wird hier NICHT ausgewertet, siehe
+// docs/adr/0001-completed-ist-zustand-keine-ableitung.md. Damit erscheint auch
+// eine manuell als "wieder dreckig" markierte Aufgabe hier, obwohl ihr Intervall
+// noch läuft. Die Sektion ersetzt die reguläre Putzaufgaben-Gruppe vollständig.
+const isDue = (task: Task): boolean =>
   task.task_type === 'recurring' &&
   !task.completed &&
-  task.parent_task_id === null &&
-  !!task.last_completed_at &&
-  getDaysUntilDue(task) < 0
+  task.parent_task_id === null
 
-const overdueTasks = computed((): Task[] => {
+const dueTasks = computed((): Task[] => {
   // Nur zeigen, wenn die Kategorie 'recurring' im aktuellen Filter sichtbar ist
   if (!selectedCategories.value.includes('recurring')) return []
   return taskStore.tasks
-    .filter(isOverdue)
-    .sort((a, b) => getDaysOverdue(b) - getDaysOverdue(a))
+    .filter(isDue)
+    .sort(byUrgency)
 })
+
+// Für die Status-Zeile: nur die, die ihre Kadenz wirklich gerissen haben.
+const overdueCount = computed((): number =>
+  dueTasks.value.filter(t => {
+    const status = scheduleOf(t).status
+    return status === 'overdue' || status === 'never-done'
+  }).length
+)
 
 // Status-Zeile: definierte, vorhandene Daten (keine neuen Tabellen).
 // Daily-Aufgaben sind immer sichtbar/resetten täglich → kein "offener Rückstand",
@@ -217,17 +220,14 @@ interface TaskGroup {
 }
 
 const groupedTasks = computed((): TaskGroup[] => {
-  const order: TaskCategory[] = ['daily', 'recurring', 'project', 'completed']
+  // 'recurring' fehlt bewusst: offene Putzaufgaben stehen vollständig in der
+  // "Jetzt dran"-Sektion, eine zweite Gruppe wäre immer leer.
+  const order: TaskCategory[] = ['daily', 'project', 'completed']
   const groups: TaskGroup[] = []
-  const overdueIds = new Set(overdueTasks.value.map(t => t.task_id))
 
   for (const cat of order) {
     if (selectedCategories.value.includes(cat)) {
-      let tasks = getTasksForCategory(cat)
-      // Überfällige sind bereits in der "Jetzt dran"-Sektion oben
-      if (cat === 'recurring') {
-        tasks = tasks.filter(t => !overdueIds.has(t.task_id))
-      }
+      const tasks = getTasksForCategory(cat)
       if (tasks.length > 0) {
         groups.push({
           category: cat,
@@ -345,9 +345,9 @@ onUnmounted(() => {
             <i class="bi bi-list-task"></i>
             Offen: <strong>{{ openTasksCount }}</strong>
           </span>
-          <span v-if="overdueTasks.length" class="status-item status-overdue">
+          <span v-if="overdueCount" class="status-item status-overdue">
             <i class="bi bi-exclamation-triangle-fill"></i>
-            {{ overdueTasks.length }} überfällig
+            {{ overdueCount }} überfällig
           </span>
           <span class="status-item">
             <i class="bi bi-check2-circle"></i>
@@ -355,16 +355,16 @@ onUnmounted(() => {
           </span>
         </div>
 
-        <!-- Jetzt dran: überfällige Aufgaben nach oben gezogen -->
-        <section v-if="overdueTasks.length" class="task-section section-overdue">
+        <!-- Jetzt dran: alle offenen Putzaufgaben, dringendste zuerst -->
+        <section v-if="dueTasks.length" class="task-section section-overdue">
           <div class="category-header category-header-overdue">
             <i class="bi bi-exclamation-triangle-fill"></i>
             <span class="category-label">Jetzt dran</span>
-            <span class="task-count">{{ overdueTasks.length }}</span>
+            <span class="task-count">{{ dueTasks.length }}</span>
           </div>
           <div class="task-list">
             <TaskCard
-              v-for="task in overdueTasks"
+              v-for="task in dueTasks"
               :key="task.task_id"
               :task="task"
             />
@@ -372,7 +372,7 @@ onUnmounted(() => {
         </section>
 
         <!-- Empty State when no active categories have tasks -->
-        <div v-if="groupedTasks.length === 0 && overdueTasks.length === 0" class="empty-state">
+        <div v-if="groupedTasks.length === 0 && dueTasks.length === 0" class="empty-state">
           <i class="bi bi-check-circle"></i>
           <p>Keine Aufgaben in den ausgewählten Kategorien</p>
         </div>
