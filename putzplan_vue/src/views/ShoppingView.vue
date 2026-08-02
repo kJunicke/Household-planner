@@ -40,7 +40,7 @@ const showCreateListModal = ref(false)
 const newListName = ref('')
 const editingList = ref<{ list_id: string; name: string } | null>(null)
 const editingItem = ref<ShoppingItem | null>(null)
-const editingCategory = ref<{ name: string; count: number } | null>(null)
+const editingCategory = ref<{ name: string; count: number; purchasedCount: number } | null>(null)
 const showCategoryCreate = ref(false)
 
 // --- Per-section UI state (session-only, reset on list switch) ---------------
@@ -139,15 +139,7 @@ const toggleSection = (group: ShoppingCategoryGroup) => {
  * Add-Zeile weg: beim Einkaufen zählt die Liste, nicht das Eintragen. Das Plus
  * in der Kopfzeile holt sie zurück (Muster aus der Packliste).
  */
-const purchasedPerCategory = computed(() => {
-  const counts = new Map<string, number>()
-  for (const item of shoppingStore.currentListItems) {
-    if (!item.purchased) continue
-    const key = categoryKey(item.category)
-    counts.set(key, (counts.get(key) ?? 0) + 1)
-  }
-  return counts
-})
+const purchasedPerCategory = computed(() => shoppingStore.purchasedPerCategory)
 
 const isAddOpen = (group: ShoppingCategoryGroup): boolean =>
   forcedAddOpen.value.has(group.key) || !purchasedPerCategory.value.get(group.key)
@@ -330,7 +322,14 @@ const handleCreateCategory = async (name: string, itemIds: string[]) => {
 
 const openCategoryEdit = (group: ShoppingCategoryGroup) => {
   if (!group.category) return
-  editingCategory.value = { name: group.category, count: group.total }
+  // Die gekauften Produkte zählen mit: sie tragen die Kategorie weiter und
+  // verlieren beim Löschen ihre Zuordnung. Eine Kategorie mit gekauften
+  // Produkten ist also nicht „leer" und darf nicht ohne Rückfrage weg.
+  editingCategory.value = {
+    name: group.category,
+    count: group.total,
+    purchasedCount: purchasedPerCategory.value.get(group.key) ?? 0,
+  }
 }
 const handleCategoryRename = async (oldName: string, newName: string) => {
   await shoppingStore.renameCategory(oldName, newName)
@@ -346,10 +345,20 @@ const handleCategoryDelete = async (name: string, withItems: boolean) => {
  * Der Container trägt den Kategorienamen, nicht den Sektionsschlüssel: der
  * Schlüssel ist kleingeschrieben und taugt nicht als Wert für das Textfeld.
  */
+/** Kurz nach dem Ablegen hervorgehoben, damit der Sprung an den alphabetischen
+ *  Platz nachvollziehbar bleibt. */
+const justMovedId = ref<string | null>(null)
+let moveHighlightTimer: number | null = null
+
 const { bind: bindDrag } = useCategoryDrag({
   group: 'shopping-items',
   categoryOf: (el) => el.dataset.catName || null,
-  onMove: (itemId, category) => shoppingStore.updateItem(itemId, { category }),
+  onMove: (itemId, category) => {
+    justMovedId.value = itemId
+    if (moveHighlightTimer !== null) clearTimeout(moveHighlightTimer)
+    moveHighlightTimer = window.setTimeout(() => { justMovedId.value = null }, 600)
+    shoppingStore.updateItem(itemId, { category })
+  },
 })
 
 const setDropEl = (key: string, el: unknown) => {
@@ -563,8 +572,12 @@ onUnmounted(() => {
                 class="cat-section"
                 :class="{ 'cat-uncategorized': group.isUncategorized }"
               >
+                <!-- Die Kopfzeile ist selbst Ablageziel: eine eingeklappte
+                     Kategorie hat sonst keine Fläche zum Hineinziehen. -->
                 <div
                   class="cat-header"
+                  :ref="(el) => setDropEl(`${group.key}::head`, el)"
+                  :data-cat-name="group.category ?? ''"
                   role="button"
                   tabindex="0"
                   @click="toggleSection(group)"
@@ -607,10 +620,13 @@ onUnmounted(() => {
                   <ListItemRow
                     v-for="item in group.items"
                     :key="item.shopping_item_id"
-                    :data-item-id="item.shopping_item_id"
+                    :data-item-id="item.purchased ? null : item.shopping_item_id"
                     :checked="item.purchased"
                     :name="item.name"
-                    :class="{ 'row-priority': item.is_priority && !item.purchased }"
+                    :class="{
+                      'row-priority': item.is_priority && !item.purchased,
+                      'row-moved': item.shopping_item_id === justMovedId,
+                    }"
                     @toggle="onItemToggle(item)"
                     @edit="openItemEdit(item)"
                   >
@@ -686,14 +702,6 @@ onUnmounted(() => {
                   </div>
                 </div>
 
-                <!-- Eingeklappt: schmale Ablagefläche, damit auch leere
-                     Kategorien ein Ziel zum Hineinziehen haben. -->
-                <div
-                  v-else
-                  :ref="(el) => setDropEl(group.key, el)"
-                  :data-cat-name="group.category ?? ''"
-                  class="cat-dropzone"
-                ></div>
               </div>
 
               <!-- Gekauft (globaler Block, mit Kauf-Historie) -->
@@ -780,6 +788,7 @@ onUnmounted(() => {
     v-if="editingCategory"
     :category="editingCategory.name"
     :item-count="editingCategory.count"
+    :purchased-count="editingCategory.purchasedCount"
     variants
     @rename="handleCategoryRename"
     @delete="handleCategoryDelete"
@@ -998,9 +1007,9 @@ onUnmounted(() => {
 .cat-header {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--spacing-xs);
   width: 100%;
-  padding: 4px var(--spacing-md);
+  padding: var(--spacing-xs) var(--spacing-md);
   background: none;
   border: none;
   cursor: pointer;
@@ -1015,13 +1024,14 @@ onUnmounted(() => {
   margin-left: auto;
   display: flex;
   align-items: center;
-  gap: 2px;
+  gap: var(--spacing-xs);
   flex-shrink: 0;
 }
 .cat-icon-btn {
+  position: relative;
   background: none;
   border: none;
-  padding: 6px;
+  padding: var(--spacing-xs);
   cursor: pointer;
   color: var(--color-text-muted);
   opacity: 0.6;
@@ -1030,6 +1040,13 @@ onUnmounted(() => {
   font-size: var(--font-sm);
   border-radius: var(--radius-sm);
 }
+/* Die Trefferfläche wächst über den Knopf hinaus auf --touch-target-dense,
+   ohne die schlanke Kopfzeile wieder auseinanderzuziehen. */
+.cat-icon-btn::after {
+  content: '';
+  position: absolute;
+  inset: -7px -5px;
+}
 .cat-icon-btn:hover { opacity: 1; color: var(--color-primary); }
 .cat-dot {
   display: inline-block;
@@ -1037,6 +1054,13 @@ onUnmounted(() => {
   height: 8px;
   border-radius: 50%;
   flex-shrink: 0;
+}
+/* Frisch verschobenes Produkt kurz hervorheben: es springt nach dem Loslassen
+   an seinen alphabetischen Platz, der Sprung soll nachvollziehbar bleiben. */
+.row-moved { animation: row-moved 600ms ease-out; }
+@keyframes row-moved {
+  from { background: var(--color-primary-subtle, rgba(99, 102, 241, 0.18)); }
+  to { background: transparent; }
 }
 .cat-name { font-weight: 600; font-size: var(--font-sm); }
 .cat-uncategorized .cat-name { color: var(--color-text-muted); font-weight: 500; }
@@ -1056,10 +1080,6 @@ onUnmounted(() => {
   flex-direction: column;
   gap: 4px;
 }
-/* Unsichtbar, solange nichts gezogen wird — sie kostet nur die paar Pixel,
-   die eine eingeklappte Sektion als Ziel braucht. */
-.cat-dropzone { min-height: 10px; }
-
 /* Ziehen: die Vorschau bleibt blass an der alten Stelle, das aufgenommene
    Produkt hebt sich ab. */
 .drag-ghost { opacity: 0.35; }

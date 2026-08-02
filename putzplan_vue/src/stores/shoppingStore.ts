@@ -209,6 +209,21 @@ export const useShoppingStore = defineStore('shopping', () => {
   })
 
   /**
+   * Gekaufte Produkte je Sektionsschlüssel. `itemsByCategory` zählt nur die
+   * offenen — für „in dieser Kategorie wurde schon eingekauft" und für die
+   * Frage, ob eine Kategorie wirklich leer ist, braucht es die gekauften.
+   */
+  const purchasedPerCategory = computed(() => {
+    const counts = new Map<string, number>()
+    for (const item of currentListItems.value) {
+      if (!item.purchased) continue
+      const key = categoryKey(item.category)
+      counts.set(key, (counts.get(key) ?? 0) + 1)
+    }
+    return counts
+  })
+
+  /**
    * Vorschläge für die Kategorie-Combobox: alle Listen des Haushalts, die der
    * aktuellen Liste zuerst. Ein Name, den es hier schon gibt, verdrängt den
    * gleichnamigen Treffer aus einer fremden Liste — sonst stünde derselbe Name
@@ -1186,6 +1201,7 @@ export const useShoppingStore = defineStore('shopping', () => {
     unpurchasedItems,
     purchasedItems,
     itemsByCategory,
+    purchasedPerCategory,
     categorySuggestions,
     loadLists,
     createList,

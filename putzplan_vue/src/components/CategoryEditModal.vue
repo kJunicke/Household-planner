@@ -5,7 +5,13 @@ import { categoryColor } from '@/lib/categoryColor'
 const props = withDefaults(
   defineProps<{
     category: string
+    /** Noch nicht gekaufte Produkte — sie werden gelöscht oder verschoben. */
     itemCount: number
+    /**
+     * Bereits gekaufte Produkte dieser Kategorie. Sie verlieren in beiden
+     * Varianten ihre Zuordnung, zählen also gegen „leer".
+     */
+    purchasedCount?: number
     /**
      * Einkaufsliste: beide Löschvarianten anbieten und eine leere Kategorie
      * ohne Rückfrage löschen. Die Packliste kennt die Varianten noch nicht und
@@ -13,7 +19,7 @@ const props = withDefaults(
      */
     variants?: boolean
   }>(),
-  { variants: false }
+  { variants: false, purchasedCount: 0 }
 )
 
 const emit = defineEmits<{
@@ -34,7 +40,8 @@ const handleRename = () => {
 
 /** Leer heißt: nichts zu verlieren — dann ist die Rückfrage nur im Weg. */
 const onDeleteClick = () => {
-  if (props.variants && props.itemCount === 0) emit('delete', props.category, false)
+  const isEmpty = props.itemCount === 0 && props.purchasedCount === 0
+  if (props.variants && isEmpty) emit('delete', props.category, false)
   else showDeleteConfirm.value = true
 }
 </script>
@@ -79,12 +86,26 @@ const onDeleteClick = () => {
             <button class="btn btn-sm btn-outline-danger" @click="emit('delete', category, false)">
               Nur Kategorie löschen
               <small class="d-block text-muted">
-                {{ itemCount }} {{ itemCount === 1 ? 'Produkt wandert' : 'Produkte wandern' }}
-                nach „Unkategorisiert"
+                <template v-if="itemCount > 0">
+                  {{ itemCount }} {{ itemCount === 1 ? 'Produkt wandert' : 'Produkte wandern' }}
+                  nach „Unkategorisiert"
+                </template>
+                <template v-else>
+                  {{ purchasedCount }} gekaufte
+                  {{ purchasedCount === 1 ? 'Produkt verliert' : 'Produkte verlieren' }}
+                  die Zuordnung
+                </template>
               </small>
             </button>
-            <button class="btn btn-sm btn-danger" @click="emit('delete', category, true)">
+            <button
+              v-if="itemCount > 0"
+              class="btn btn-sm btn-danger"
+              @click="emit('delete', category, true)"
+            >
               Kategorie + {{ itemCount }} {{ itemCount === 1 ? 'Produkt' : 'Produkte' }} löschen
+              <small v-if="purchasedCount > 0" class="d-block">
+                {{ purchasedCount }} gekaufte bleiben, ohne Kategorie
+              </small>
             </button>
             <button class="btn btn-sm btn-secondary" @click="showDeleteConfirm = false">
               Abbrechen

@@ -48,6 +48,9 @@ export function useCategoryDrag(options: {
         delay: 200,
         delayOnTouchOnly: true,
         touchStartThreshold: 8,
+        // Mit der Maus greift die Haltezeit nicht — ohne Toleranz würde schon
+        // ein Wackeln beim Klicken ein Ziehen auslösen und das Abhaken fressen.
+        fallbackTolerance: 8,
         animation: 150,
         // Ohne den Fallback benutzt die Bibliothek am Desktop das native
         // HTML5-Ziehen und verhält sich dort anders als auf dem Handy — eine
