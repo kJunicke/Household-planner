@@ -62,25 +62,6 @@ export const useTaskStore = defineStore('tasks', () => {
             isLoading.value = false
         }
     }
-    const toggleTask = async (taskId:string) => {
-        const toastStore = useToastStore()
-        const task = tasks.value.find(t => t.task_id === taskId)
-        if(!task) return
-        const newState = !task.completed
-        task.completed = newState
-
-        const {error} = await supabase.
-        from('tasks')
-        .update({completed: newState})
-        .eq('task_id', taskId)
-
-        if (error) {
-            console.error('Error updating task:', error)
-            toastStore.showToast('Fehler beim Aktualisieren der Aufgabe', 'error')
-            return
-        }
-
-    }
 
     // COMPLETE - Task als erledigt markieren (via Edge Function)
     // Edge Function schreibt in task_completions Historie UND setzt tasks.completed = TRUE + last_completed_at
@@ -774,7 +755,6 @@ export const useTaskStore = defineStore('tasks', () => {
         completions,
         isLoading,
         loadTasks,
-        toggleTask,
         completeTask,
         markAsDirty,
         skipTask,
