@@ -2,7 +2,12 @@
 import { ref, onMounted, onUnmounted } from 'vue'
 import { useTaskStore } from '../stores/taskStore'
 import { useHouseholdStore } from '../stores/householdStore'
-import { useHistoryGroups, type HistoryEntry } from '@/composables/useHistoryGroups'
+import {
+  useHistoryGroups,
+  type HistoryEntry,
+  type HistoryFoldRow
+} from '@/composables/useHistoryGroups'
+import HistoryRow from '@/components/HistoryRow.vue'
 
 const taskStore = useTaskStore()
 const householdStore = useHouseholdStore()
@@ -21,16 +26,9 @@ const now = ref(new Date())
 const { entries: completions, dayGroups: groupedCompletions } = useHistoryGroups(
   () => taskStore.completions,
   () => householdStore.householdMembers,
-  now
+  now,
+  () => taskStore.tasks
 )
-
-// Only the time per row — the day is shown once in the group header below.
-const formatTime = (dateString: string) => {
-  return new Date(dateString).toLocaleTimeString('de-DE', {
-    hour: '2-digit',
-    minute: '2-digit'
-  })
-}
 
 const openDeleteModal = (completion: HistoryEntry) => {
   completionToDelete.value = completion
@@ -62,20 +60,24 @@ const confirmDeleteAll = async () => {
   closeDeleteAllModal()
 }
 
-// Notizen sind ausgeklappter Ansichtszustand, nicht persistiert.
-const expandedNotes = ref<Set<string>>(new Set())
+// Aufgeklappte Notizen und Faltgruppen sind reiner Ansichtszustand, nicht persistiert.
+const expanded = ref<Set<string>>(new Set())
+
+const toggleExpanded = (id: string) => {
+  const open = new Set(expanded.value)
+  if (!open.delete(id)) open.add(id)
+  expanded.value = open
+}
 
 const toggleNote = (completion: HistoryEntry) => {
   if (!completion.completion_note) return
-  const open = new Set(expandedNotes.value)
-  if (!open.delete(completion.completion_id)) open.add(completion.completion_id)
-  expandedNotes.value = open
+  toggleExpanded(completion.completion_id)
 }
 
-// Farbe allein darf die Person nicht tragen — Screenreader bekommen sie im Label nach.
-const rowLabel = (completion: HistoryEntry) =>
-  `${completion.tasks?.title || 'Unbekannte Aufgabe'}, ${completion.household_members.display_name}, ` +
-  `${formatTime(completion.completed_at)}, ${completion.points} Punkte`
+// Farbe allein darf die Beteiligten nicht tragen — Screenreader bekommen sie im Label nach.
+const foldLabel = (row: HistoryFoldRow) =>
+  `${row.parentTitle}, ${row.children.length} ${row.children.length === 1 ? 'Subtask' : 'Subtasks'} von ` +
+  `${row.people.map(p => p.display_name).join(', ')}, ${row.points} Punkte`
 
 // Close dropdown when clicking outside
 const handleClickOutside = (event: MouseEvent) => {
@@ -161,48 +163,48 @@ onUnmounted(() => {
               </span>
             </span>
           </div>
-          <div
-            v-for="completion in group.items"
-            :key="completion.completion_id"
-            class="completion-row-wrapper"
-          >
-            <div
-              class="completion-row"
-              :class="{ 'is-expandable': !!completion.completion_note }"
-              :aria-label="rowLabel(completion)"
-              @click="toggleNote(completion)"
-            >
-              <span class="row-time">{{ formatTime(completion.completed_at) }}</span>
-              <!-- Quick-Aufgaben tragen technisch auch deleted_at — sie sind aber kein
-                   gelöschter Task, sondern werden am Blitz erkannt. -->
-              <span
-                class="row-title"
-                :class="{ 'is-deleted': completion.isDeleted && !completion.isQuick }"
+          <template v-for="row in group.rows" :key="row.id">
+            <!-- Einzelne Completion -->
+            <HistoryRow
+              v-if="row.kind === 'entry'"
+              :completion="row.entry"
+              :note-expanded="expanded.has(row.entry.completion_id)"
+              @toggle-note="toggleNote(row.entry)"
+              @delete="openDeleteModal(row.entry)"
+            />
+            <!-- Subtask-Completions eines Parent-Tasks, zu einer Zeile gefaltet -->
+            <template v-else>
+              <div
+                class="fold-row"
+                :aria-label="foldLabel(row)"
+                :aria-expanded="expanded.has(row.id)"
+                @click="toggleExpanded(row.id)"
               >
-                <i v-if="completion.isQuick" class="bi bi-lightning-charge-fill row-quick"></i>
-                {{ completion.tasks?.title || 'Unbekannte Aufgabe' }}
-              </span>
-              <i v-if="completion.completion_note" class="bi bi-sticky row-note-icon"></i>
-              <span
-                class="user-dot"
-                :style="{ background: completion.household_members.user_color }"
-              ></span>
-              <span class="row-points">{{ completion.points }}</span>
-              <button
-                @click.stop="openDeleteModal(completion)"
-                class="btn btn-sm btn-delete-ghost row-delete"
-                title="Eintrag löschen"
-              >
-                <i class="bi bi-trash"></i>
-              </button>
-            </div>
-            <div
-              v-if="completion.completion_note && expandedNotes.has(completion.completion_id)"
-              class="row-note"
-            >
-              {{ completion.completion_note }}
-            </div>
-          </div>
+                <i
+                  class="bi row-chevron"
+                  :class="expanded.has(row.id) ? 'bi-chevron-down' : 'bi-chevron-right'"
+                ></i>
+                <span class="row-title">{{ row.parentTitle }}</span>
+                <span class="fold-count">{{ row.children.length }}&times;</span>
+                <span
+                  v-for="person in row.people"
+                  :key="person.user_id"
+                  class="user-dot"
+                  :style="{ background: person.user_color }"
+                ></span>
+                <span class="row-points">{{ row.points }}</span>
+              </div>
+              <HistoryRow
+                v-for="child in expanded.has(row.id) ? row.children : []"
+                :key="child.completion_id"
+                :completion="child"
+                :note-expanded="expanded.has(child.completion_id)"
+                indented
+                @toggle-note="toggleNote(child)"
+                @delete="openDeleteModal(child)"
+              />
+            </template>
+          </template>
         </div>
       </div>
     </div>
@@ -336,24 +338,21 @@ onUnmounted(() => {
   border-radius: 50%;
 }
 
-/* Dichte Zeile: alles auf einer Höhe, damit die Liste scannbar bleibt. */
-.completion-row {
+/* Faltzeile: Subtasks eines Parent-Tasks an einem Tag, auf Zeilenhöhe wie alle anderen. */
+.fold-row {
   display: flex;
   align-items: center;
   gap: 0.5rem;
   min-height: 40px;
   padding: 0 0.125rem;
   border-bottom: 1px solid var(--color-border);
-}
-
-.completion-row.is-expandable {
   cursor: pointer;
 }
 
-.row-time {
+.row-chevron {
   flex-shrink: 0;
+  width: 1.25rem;
   font-size: 0.75rem;
-  font-variant-numeric: tabular-nums;
   color: var(--color-text-muted);
 }
 
@@ -367,20 +366,10 @@ onUnmounted(() => {
   color: var(--color-text-primary);
 }
 
-/* Gelöschter Task: abgeschwächt statt Badge. */
-.row-title.is-deleted {
-  color: var(--color-text-muted);
-  font-style: italic;
-}
-
-.row-quick {
-  color: var(--color-warning);
-  font-size: 0.75rem;
-}
-
-.row-note-icon {
+.fold-count {
   flex-shrink: 0;
   font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
   color: var(--color-text-muted);
 }
 
@@ -392,18 +381,6 @@ onUnmounted(() => {
   font-weight: 600;
   font-variant-numeric: tabular-nums;
   color: var(--color-text-secondary);
-}
-
-.row-delete {
-  flex-shrink: 0;
-}
-
-.row-note {
-  padding: 0.5rem 0.125rem 0.625rem 3rem;
-  font-size: 0.8125rem;
-  line-height: 1.4;
-  color: var(--color-text-secondary);
-  border-bottom: 1px solid var(--color-border);
 }
 
 .dropdown {

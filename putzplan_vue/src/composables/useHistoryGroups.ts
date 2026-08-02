@@ -1,5 +1,5 @@
 import { computed, toValue, type MaybeRefOrGetter } from 'vue'
-import type { EnrichedCompletion, TaskCompletion } from '@/types/Task'
+import type { EnrichedCompletion, Task, TaskCompletion } from '@/types/Task'
 import type { HouseholdMember } from '@/types/households'
 
 /**
@@ -30,11 +30,37 @@ export interface HistoryDayPerson {
   points: number
 }
 
+/** Eine Completion, die für sich allein steht. */
+export interface HistorySingleRow {
+  kind: 'entry'
+  id: string
+  sortTime: number
+  entry: HistoryEntry
+}
+
+/**
+ * Alle Subtask-Completions eines Parent-Tasks an einem Kalendertag, zu einer Zeile
+ * gefaltet. Entsteht immer — auch bei genau einem Subtask und auch dann, wenn der
+ * Parent an diesem Tag gar nicht abgeschlossen wurde (z.B. Bonus-Subtasks an einem
+ * Daily-Task). Die Completion des Parents selbst ist kein Kind der Gruppe.
+ */
+export interface HistoryFoldRow {
+  kind: 'group'
+  id: string
+  sortTime: number
+  parentTitle: string
+  children: HistoryEntry[]
+  points: number
+  people: HistoryDayPerson[]
+}
+
+export type HistoryRow = HistorySingleRow | HistoryFoldRow
+
 /** Alle Completions eines Kalendertages. */
 export interface HistoryDayGroup {
   key: string
   label: string
-  items: HistoryEntry[]
+  rows: HistoryRow[]
   /** Beteiligte des Tages, absteigend nach Punkten — Tagesüberblick und Farblegende in einem. */
   people: HistoryDayPerson[]
 }
@@ -86,10 +112,60 @@ const summarizePeople = (items: HistoryEntry[]): HistoryDayPerson[] => {
   )
 }
 
+/**
+ * Faltet die Subtask-Completions eines Tages zu Gruppen und lässt alles andere als
+ * Einzelzeile stehen. Für Completions gelöschter Tasks ist die Parent-Beziehung
+ * nicht mehr auflösbar — sie bleiben bewusst Einzelzeilen.
+ */
+const foldRows = (items: HistoryEntry[], tasks: Task[]): HistoryRow[] => {
+  const byTaskId = new Map(tasks.map(task => [task.task_id, task]))
+  const singles: HistoryRow[] = []
+  const folds = new Map<string, HistoryFoldRow>()
+
+  for (const entry of items) {
+    const task = entry.isDeleted ? undefined : byTaskId.get(entry.task_id)
+    const parentId = task?.parent_task_id
+    const time = new Date(entry.completed_at).getTime()
+
+    if (!parentId) {
+      singles.push({ kind: 'entry', id: entry.completion_id, sortTime: time, entry })
+      continue
+    }
+
+    const existing = folds.get(parentId)
+    if (existing) {
+      existing.children.push(entry)
+      existing.points += entry.points
+      existing.sortTime = Math.max(existing.sortTime, time)
+      continue
+    }
+
+    folds.set(parentId, {
+      kind: 'group',
+      id: `${parentId}-${entry.completion_id}`,
+      sortTime: time,
+      parentTitle: byTaskId.get(parentId)?.title || FALLBACK_TITLE,
+      children: [entry],
+      points: entry.points,
+      people: []
+    })
+  }
+
+  for (const fold of folds.values()) {
+    fold.children.sort(
+      (a, b) => new Date(b.completed_at).getTime() - new Date(a.completed_at).getTime()
+    )
+    fold.people = summarizePeople(fold.children)
+  }
+
+  return [...singles, ...folds.values()].sort((a, b) => b.sortTime - a.sortTime)
+}
+
 export function useHistoryGroups(
   completions: MaybeRefOrGetter<(TaskCompletion | EnrichedCompletion)[]>,
   members: MaybeRefOrGetter<HouseholdMember[]>,
-  referenceDate: MaybeRefOrGetter<Date>
+  referenceDate: MaybeRefOrGetter<Date>,
+  tasks: MaybeRefOrGetter<Task[]>
 ) {
   // Completions aus Realtime sind evtl. nicht angereichert — daher überall Fallbacks.
   const entries = computed((): HistoryEntry[] => {
@@ -118,24 +194,28 @@ export function useHistoryGroups(
 
   const dayGroups = computed((): HistoryDayGroup[] => {
     const now = toValue(referenceDate)
-    const groups: HistoryDayGroup[] = []
-    let current: HistoryDayGroup | null = null
+    const taskList = toValue(tasks)
+    const days: { key: string; label: string; items: HistoryEntry[] }[] = []
+    let current: { key: string; label: string; items: HistoryEntry[] } | null = null
 
     for (const entry of entries.value) {
       const date = new Date(entry.completed_at)
       const key = dayKey(date)
       if (!current || current.key !== key) {
-        current = { key, label: dayLabel(date, now), items: [], people: [] }
-        groups.push(current)
+        current = { key, label: dayLabel(date, now), items: [] }
+        days.push(current)
       }
       current.items.push(entry)
     }
 
-    for (const group of groups) {
-      group.people = summarizePeople(group.items)
-    }
-
-    return groups
+    // Die Tagessummen zählen alle Completions des Tages — auch die, die anschließend
+    // in eine Faltgruppe wandern.
+    return days.map(day => ({
+      key: day.key,
+      label: day.label,
+      rows: foldRows(day.items, taskList),
+      people: summarizePeople(day.items)
+    }))
   })
 
   return { entries, dayGroups }
