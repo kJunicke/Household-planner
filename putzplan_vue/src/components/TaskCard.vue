@@ -2,6 +2,7 @@
 import type { Task } from '@/types/Task'
 import { useTaskStore } from '@/stores/taskStore'
 import { useHouseholdStore } from '@/stores/householdStore'
+import { scheduleOf } from '@/lib/taskSchedule'
 import { ref, computed } from "vue";
 import TaskCompletionModal from './TaskCompletionModal.vue'
 import TaskAssignmentModal from './TaskAssignmentModal.vue'
@@ -116,75 +117,30 @@ const handleCustomCompletion = async (effortOverride: number, note: string) => {
      // If failed, modal stays open so user can retry
 }
 
-// Berechnet Tage bis Task wieder fällig ist (nur für wiederkehrende Tasks die completed sind)
-// Verwendet CALENDAR DAYS (nicht 24h-Perioden), konsistent mit Backend-Cron-Logik
-// Daily tasks zeigen keine Fälligkeitsdaten
-const daysUntilDue = computed(() => {
-     // Nur für wiederkehrende Tasks die completed sind
-     if (props.task.task_type !== 'recurring' || props.task.recurrence_days === 0 || !props.task.completed || !props.task.last_completed_at) {
-          return null
-     }
+// Fälligkeit und Dringlichkeit kommen aus dem taskSchedule-module — die Karte
+// rechnet selbst nicht mehr mit Datumsdifferenzen, sie formuliert nur noch.
+const schedule = computed(() => scheduleOf(props.task))
 
-     const lastCompleted = new Date(props.task.last_completed_at)
-     const today = new Date()
+// Deckel des Rot-Gradienten: ab 14 Tagen Verzug volle Färbung. Reine Darstellung,
+// deshalb hier und nicht im module. `Infinity / 14` ergibt für nie gemachte
+// Aufgaben ohne Sonderfall volles Rot.
+const OVERDUE_COLOR_CAP_DAYS = 14
 
-     // Calendar days: Nur Datum vergleichen, keine Uhrzeit
-     // Setzt Zeit auf 00:00:00 für beide Daten
-     const lastCompletedDate = new Date(lastCompleted.getFullYear(), lastCompleted.getMonth(), lastCompleted.getDate())
-     const todayDate = new Date(today.getFullYear(), today.getMonth(), today.getDate())
+// Text für Überfälligkeit (null = kein Überfällig-Badge)
+const overdueLabel = computed(() => {
+     if (schedule.value.status === 'never-done') return 'Noch nie gemacht'
+     if (schedule.value.status !== 'overdue') return null
 
-     // Berechne vergangene Tage (in ganzen Kalendertagen)
-     const daysPassed = Math.floor((todayDate.getTime() - lastCompletedDate.getTime()) / (1000 * 60 * 60 * 24))
-
-     // Verbleibende Tage bis zum Reset
-     const daysRemaining = props.task.recurrence_days - daysPassed
-
-     return daysRemaining
-})
-
-// Berechnet wie viele Tage ein Task bereits überfällig ist (nur für recurring dirty tasks)
-// Returns numeric value for color calculation
-const daysOverdueNumeric = computed((): number | null => {
-     // Nur für wiederkehrende Tasks die NICHT completed sind
-     if (props.task.task_type !== 'recurring' || props.task.completed) {
-          return null
-     }
-
-     // Task wurde noch nie gemacht = max urgency
-     if (!props.task.last_completed_at) {
-          return 14
-     }
-
-     const lastCompleted = new Date(props.task.last_completed_at)
-     const today = new Date()
-
-     // Calendar days: Nur Datum vergleichen, keine Uhrzeit
-     const lastCompletedDate = new Date(lastCompleted.getFullYear(), lastCompleted.getMonth(), lastCompleted.getDate())
-     const todayDate = new Date(today.getFullYear(), today.getMonth(), today.getDate())
-
-     // Berechne vergangene Tage
-     return Math.floor((todayDate.getTime() - lastCompletedDate.getTime()) / (1000 * 60 * 60 * 24))
-})
-
-// Text für Überfälligkeit
-const daysOverdue = computed(() => {
-     if (daysOverdueNumeric.value === null) return null
-
-     if (!props.task.last_completed_at) {
-          return 'Noch nie gemacht'
-     }
-
-     const days = daysOverdueNumeric.value
+     const days = schedule.value.daysOverdue
+     if (days === 0) return 'Heute fällig'
      return `${days} ${days === 1 ? 'Tag' : 'Tage'} überfällig`
 })
 
 // Farbgradient für Überfälligkeit: 0 Tage = neutral, 14+ Tage = full red
 const overdueColorStyle = computed(() => {
-     if (daysOverdueNumeric.value === null) return null
+     if (!overdueLabel.value) return null
 
-     const days = daysOverdueNumeric.value
-     // Linear interpolation: 0 days = 0%, 14 days = 100%
-     const intensity = Math.min(days / 14, 1)
+     const intensity = Math.min(schedule.value.daysOverdue / OVERDUE_COLOR_CAP_DAYS, 1)
 
      // Color gradient from light red to strong red
      // alpha: 0.1 to 0.5
@@ -199,18 +155,15 @@ const overdueColorStyle = computed(() => {
      }
 })
 
-// Berechnet Fälligkeits- oder Completion-Info für completed tasks
+// Fälligkeits- oder Completion-Info für erledigte Tasks
 const dueInDays = computed(() => {
-     // Nur für completed tasks
      if (!props.task.completed || !props.task.last_completed_at) {
           return null
      }
 
-     const lastCompleted = new Date(props.task.last_completed_at)
-
      // ONE-TIME TASKS: Zeige Completion-Datum
      if (props.task.task_type === 'one-time') {
-          const dateStr = lastCompleted.toLocaleDateString('de-DE', {
+          const dateStr = new Date(props.task.last_completed_at).toLocaleDateString('de-DE', {
                day: '2-digit',
                month: '2-digit',
                year: 'numeric'
@@ -219,31 +172,15 @@ const dueInDays = computed(() => {
      }
 
      // RECURRING TASKS: Zeige wann wieder fällig
-     if (props.task.task_type === 'recurring' && props.task.recurrence_days > 0) {
-          const today = new Date()
+     if (schedule.value.status !== 'upcoming') return null
 
-          // Calendar days: Nur Datum vergleichen, keine Uhrzeit
-          const lastCompletedDate = new Date(lastCompleted.getFullYear(), lastCompleted.getMonth(), lastCompleted.getDate())
-          const todayDate = new Date(today.getFullYear(), today.getMonth(), today.getDate())
+     const daysRemaining = schedule.value.daysUntilDue ?? 0
 
-          // Berechne vergangene Tage seit letzter Completion
-          const daysPassed = Math.floor((todayDate.getTime() - lastCompletedDate.getTime()) / (1000 * 60 * 60 * 24))
-
-          // Verbleibende Tage bis zum Reset
-          const daysRemaining = props.task.recurrence_days - daysPassed
-
-          if (daysRemaining < 0) {
-               return 'Überfällig' // Sollte nicht vorkommen (completed sollte false sein), aber Fallback
-          } else if (daysRemaining === 0) {
-               return 'Heute fällig'
-          } else if (daysRemaining === 1) {
-               return 'Morgen fällig'
-          } else {
-               return `Fällig in ${daysRemaining} Tagen`
-          }
-     }
-
-     return null
+     // <= 0 heißt: die Kadenz ist durch, der nächtliche Cron war nur noch nicht dran.
+     // Die Anzeige darf dann veraltet sein, aber nicht der DB widersprechen.
+     if (daysRemaining <= 0) return 'Heute fällig'
+     if (daysRemaining === 1) return 'Morgen fällig'
+     return `Fällig in ${daysRemaining} Tagen`
 })
 
 // Assignment Badge - Zeigt Initialen und Namen des zugewiesenen Members
@@ -466,14 +403,9 @@ const handleCompleteProject = async () => {
                                    <i :class="subtasksExpanded ? 'bi bi-chevron-up' : 'bi bi-chevron-down'"></i>
                               </button>
 
-                              <!-- Due Date (wenn vorhanden) -->
-                              <span v-if="daysUntilDue !== null" class="meta-badge due-badge">
-                                   {{ daysUntilDue }}d
-                              </span>
-
                               <!-- Overdue indicator with color gradient (only for recurring dirty tasks) -->
-                              <span v-if="daysOverdue" class="overdue-badge" :style="overdueColorStyle">
-                                   {{ daysOverdueNumeric }}d
+                              <span v-if="overdueLabel" class="overdue-badge" :style="overdueColorStyle">
+                                   {{ overdueLabel }}
                               </span>
 
                               <!-- Due in X days (only for recurring completed tasks) -->
@@ -789,7 +721,7 @@ const handleCompleteProject = async () => {
      font-size: 0.6875rem;
      font-weight: 700;
      color: #991b1b;
-     min-width: 28px;
+     white-space: nowrap;
      transition: all var(--transition-base);
 }
 
@@ -859,11 +791,6 @@ const handleCompleteProject = async () => {
 
 .subtask-toggle i {
      font-size: 0.7rem;
-}
-
-.due-badge {
-     background: var(--color-warning-light);
-     color: white;
 }
 
 /* Right Side: Edit Icon + Action Buttons */
