@@ -12,8 +12,6 @@ import HistoryRow from '@/components/HistoryRow.vue'
 const taskStore = useTaskStore()
 const householdStore = useHouseholdStore()
 
-const showDeleteModal = ref(false)
-const completionToDelete = ref<HistoryEntry | null>(null)
 const showDeleteAllModal = ref(false)
 const showOptionsDropdown = ref(false)
 const isLoading = ref(true)
@@ -30,23 +28,10 @@ const { entries: completions, dayGroups: groupedCompletions } = useHistoryGroups
   () => taskStore.tasks
 )
 
-const openDeleteModal = (completion: HistoryEntry) => {
-  completionToDelete.value = completion
-  showDeleteModal.value = true
-}
-
-const closeDeleteModal = () => {
-  showDeleteModal.value = false
-  completionToDelete.value = null
-  // Mit dem Dialog geht auch die aufgewischte Zeile wieder zu.
+// Keine Rückfrage: der Wisch legt das Löschen erst frei, das ist die Absicht.
+const deleteCompletion = async (completion: HistoryEntry) => {
   swipeOpenId.value = null
-}
-
-const confirmDelete = async () => {
-  if (!completionToDelete.value) return
-
-  await taskStore.deleteCompletion(completionToDelete.value.completion_id)
-  closeDeleteModal()
+  await taskStore.deleteCompletion(completion.completion_id)
 }
 
 const openDeleteAllModal = () => {
@@ -201,7 +186,7 @@ onUnmounted(() => {
               :swipe-open-id="swipeOpenId"
               @toggle-note="toggleNote(row.entry)"
               @reveal="swipeOpenId = row.entry.completion_id"
-              @delete="openDeleteModal(row.entry)"
+              @delete="deleteCompletion(row.entry)"
             />
             <!-- Subtask-Completions eines Parent-Tasks, zu einer Zeile gefaltet -->
             <template v-else>
@@ -236,44 +221,13 @@ onUnmounted(() => {
                 indented
                 @toggle-note="toggleNote(child)"
                 @reveal="swipeOpenId = child.completion_id"
-                @delete="openDeleteModal(child)"
+                @delete="deleteCompletion(child)"
               />
             </template>
           </template>
         </div>
       </div>
     </div>
-
-    <!-- Delete Single Entry Modal -->
-    <Teleport to="body">
-      <div v-if="showDeleteModal" class="modal-overlay" @click="closeDeleteModal">
-        <div class="modal-content" @click.stop>
-          <div class="modal-header">
-            <h3 class="modal-title">Eintrag löschen</h3>
-            <button @click="closeDeleteModal" class="btn-close" aria-label="Schließen">
-              <i class="bi bi-x-lg"></i>
-            </button>
-          </div>
-          <div class="modal-body">
-            <p>
-              Möchtest du diesen Eintrag wirklich löschen?
-            </p>
-            <p class="text-muted mb-0">
-              <strong>{{ completionToDelete?.tasks?.title }}</strong> von
-              <strong>{{ completionToDelete?.household_members?.display_name }}</strong>
-            </p>
-          </div>
-          <div class="modal-footer">
-            <button @click="closeDeleteModal" class="btn btn-secondary">
-              Abbrechen
-            </button>
-            <button @click="confirmDelete" class="btn btn-danger">
-              <i class="bi bi-trash"></i> Löschen
-            </button>
-          </div>
-        </div>
-      </div>
-    </Teleport>
 
     <!-- Delete All Modal -->
     <Teleport to="body">
@@ -317,7 +271,7 @@ onUnmounted(() => {
 .completions-list {
   display: flex;
   flex-direction: column;
-  gap: 1.25rem;
+  gap: 0.5rem;
 }
 
 .completion-group {
@@ -340,8 +294,7 @@ onUnmounted(() => {
   letter-spacing: 0.04em;
   color: var(--color-text-muted);
   background: var(--color-background);
-  padding: 0.375rem 0.125rem 0.25rem;
-  margin-bottom: 0.25rem;
+  padding: 0.25rem 0.125rem 0.1875rem;
   border-bottom: 1px solid var(--color-border);
 }
 
