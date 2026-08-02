@@ -61,8 +61,10 @@
   --font-lg: 1rem;        /* 16px */
   --font-xl: 1.125rem;    /* 18px */
 
-  /* Touch Targets - Android Standard (48px) als Minimum */
+  /* Touch Targets - Android Standard (48px) für freistehende Buttons,
+     40px für dichte Listenzeilen, die über die volle Breite treffbar sind */
   --touch-target-min: 48px;
+  --touch-target-dense: 40px;
 }
 
 *,

@@ -2,6 +2,9 @@
 
 **Putzplan** — gamifizierte Shared-Household Task-App mit Vue 3 + Supabase.
 
+## General
+- Antworte extrem kurz, lege mehr Wert auf Übersichtlichkeit statt Grammatik
+
 ## Arbeitsweise
 
 - **Arbeitsverzeichnis**: `putzplan_vue/`
@@ -19,9 +22,6 @@
 - Offene Aufgaben: [TODO.md](TODO.md)
 
 ## Entwicklungsprinzipien
-
-**YAGNI — essenziell.** Nur implementieren, was JETZT gebraucht wird. Keine Features „für
-später". Nicht genutzten Code rauswerfen. MVP-First: erst funktionsfähig, dann perfekt.
 
 **Vue 3 Patterns.** Composition API (`<script setup>`), Pinia direkt in Components
 (`taskStore.deleteTask(id)`) — kein „props down, events up" bei zentralem Store.

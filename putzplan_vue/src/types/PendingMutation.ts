@@ -12,6 +12,8 @@ export interface PendingMutation {
 
   // Daten für die Operation
   payload: {
+    /** Zieltabelle. Fehlt sie, ist es ein Artikel — so bleiben alte Queues gültig. */
+    entity?: 'item' | 'category'
     itemId?: string // Für update/delete
     name?: string // Für create
     listId?: string // Für create (shopping list)
@@ -20,6 +22,10 @@ export interface PendingMutation {
     updates?: Record<string, unknown> // Für update (purchased, is_priority, etc.)
     /** Für create: temp-ID des optimistischen Items → Verkettung von Folge-Mutationen. */
     tempId?: string
+    categoryId?: string // Für update/delete auf shopping_categories
+    sortOrder?: number // Für create (Kategorie)
+    /** Für create (Kategorie): temp-ID der optimistischen Zeile. */
+    tempCategoryId?: string
   }
 
   // Metadaten für Retry-Logik

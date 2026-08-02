@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { watch } from 'vue'
+import { computed, watch } from 'vue'
 import type { HistoryEntry } from '@/composables/useHistoryGroups'
 import { useSwipeAction } from '@/composables/useSwipeAction'
 
@@ -17,13 +17,15 @@ const props = defineProps<{
 const emit = defineEmits<{
   toggleNote: []
   delete: []
-  reveal: []
+  swipeStart: []
+  swipeEnd: []
 }>()
 
 const { offset, revealed, hide, onPointerDown, onPointerMove, onPointerUp, onClick } =
   useSwipeAction({
     onTap: () => props.completion.completion_note && emit('toggleNote'),
-    onReveal: () => emit('reveal')
+    onSwipeStart: () => emit('swipeStart'),
+    onHide: () => emit('swipeEnd')
   })
 
 // Wischt woanders eine Zeile auf, schließt sich diese hier.
@@ -37,11 +39,22 @@ watch(
 const formatTime = (dateString: string) =>
   new Date(dateString).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })
 
+// Nur Zeilen mit Notiz klappen auf — nur die sind Buttons und tastaturerreichbar.
+const isExpandable = computed(() => !!props.completion.completion_note)
+
 // Farbe allein darf die Person nicht tragen — Screenreader bekommen sie im Label nach.
-const label = () =>
-  `${props.completion.tasks?.title || 'Unbekannte Aufgabe'}, ` +
-  `${props.completion.household_members.display_name}, ` +
-  `${formatTime(props.completion.completed_at)}, ${props.completion.points} Punkte`
+const ariaLabel = computed(
+  () =>
+    `${props.completion.tasks?.title || 'Unbekannte Aufgabe'}, ` +
+    `${props.completion.household_members.display_name}, ` +
+    `${formatTime(props.completion.completed_at)}, ${props.completion.points} Punkte`
+)
+
+const onKeydown = (e: KeyboardEvent) => {
+  if (e.key !== 'Enter' && e.key !== ' ') return
+  e.preventDefault()
+  emit('toggleNote')
+}
 </script>
 
 <template>
@@ -58,20 +71,24 @@ const label = () =>
       </button>
       <div
         class="completion-row"
-        :class="{ 'is-expandable': !!completion.completion_note }"
+        :class="{ 'is-expandable': isExpandable }"
+        :role="isExpandable ? 'button' : undefined"
+        :tabindex="isExpandable ? 0 : undefined"
+        :aria-expanded="isExpandable ? noteExpanded : undefined"
+        :aria-label="isExpandable ? ariaLabel : undefined"
         :style="{ transform: `translateX(${offset}px)` }"
-        :aria-label="label()"
         @pointerdown="onPointerDown"
         @pointermove="onPointerMove"
         @pointerup="onPointerUp"
         @pointercancel="onPointerUp"
         @click="onClick"
+        @keydown="isExpandable && onKeydown($event)"
       >
         <span class="row-time">{{ formatTime(completion.completed_at) }}</span>
         <!-- Quick-Aufgaben tragen technisch auch deleted_at — sie sind aber kein
              gelöschter Task, sondern werden am Blitz erkannt. -->
         <span
-          class="row-title"
+          class="dense-row-title"
           :class="{ 'is-deleted': completion.isDeleted && !completion.isQuick }"
         >
           <i v-if="completion.isQuick" class="bi bi-lightning-charge-fill row-quick"></i>
@@ -82,7 +99,9 @@ const label = () =>
           class="user-dot"
           :style="{ background: completion.household_members.user_color }"
         ></span>
-        <span class="row-points">{{ completion.points }}</span>
+        <!-- Die Farbe trägt die Person nur visuell; vorgelesen wird der Name. -->
+        <span class="visually-hidden">{{ completion.household_members.display_name }}</span>
+        <span class="dense-row-points">{{ completion.points }}</span>
       </div>
     </div>
     <div v-if="completion.completion_note && noteExpanded" class="row-note">
@@ -115,7 +134,7 @@ const label = () =>
   border: none;
   background: var(--bs-danger, #dc3545);
   color: #fff;
-  font-size: 1rem;
+  font-size: var(--font-lg);
 }
 
 /* Dichte Zeile: alles auf einer Höhe, damit die Liste scannbar bleibt.
@@ -125,7 +144,7 @@ const label = () =>
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  min-height: 40px;
+  min-height: var(--touch-target-dense);
   padding: 0 0.5rem 0 0.125rem;
   background: var(--color-background);
   border-bottom: 1px solid var(--color-border);
@@ -137,66 +156,44 @@ const label = () =>
   cursor: pointer;
 }
 
+.completion-row:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: -2px;
+}
+
 .row-swipe.is-child .completion-row {
   padding-left: 0.5rem;
 }
 
 .row-time {
   flex-shrink: 0;
-  font-size: 0.75rem;
+  font-size: var(--font-sm);
   font-variant-numeric: tabular-nums;
   color: var(--color-text-muted);
 }
 
-.row-title {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: 0.875rem;
-  color: var(--color-text-primary);
-}
-
 /* Gelöschter Task: abgeschwächt statt Badge. */
-.row-title.is-deleted {
+.dense-row-title.is-deleted {
   color: var(--color-text-muted);
   font-style: italic;
 }
 
 .row-quick {
   color: var(--color-warning);
-  font-size: 0.75rem;
+  font-size: var(--font-sm);
 }
 
 .row-note-icon {
   flex-shrink: 0;
-  font-size: 0.75rem;
+  font-size: var(--font-sm);
   color: var(--color-text-muted);
-}
-
-.row-points {
-  flex-shrink: 0;
-  min-width: 1.25rem;
-  text-align: right;
-  font-size: 0.875rem;
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-  color: var(--color-text-secondary);
 }
 
 .row-note {
   padding: 0.5rem 0.125rem 0.625rem 3rem;
-  font-size: 0.8125rem;
+  font-size: var(--font-sm);
   line-height: 1.4;
   color: var(--color-text-secondary);
   border-bottom: 1px solid var(--color-border);
-}
-
-.user-dot {
-  flex-shrink: 0;
-  width: 0.5rem;
-  height: 0.5rem;
-  border-radius: 50%;
 }
 </style>

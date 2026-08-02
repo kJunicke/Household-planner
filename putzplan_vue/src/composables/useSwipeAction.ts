@@ -1,5 +1,8 @@
 import { ref } from 'vue'
 
+/** Ab dieser Distanz zählt ein Zug als Wisch statt als Tap. */
+const SWIPE_THRESHOLD = 12
+
 /**
  * Wisch nach links → eine Aktion hinter der Zeile freilegen (z.B. Löschen).
  *
@@ -13,19 +16,21 @@ import { ref } from 'vue'
  * `actionWidth: 0` bedeutet: keine Aktion freilegen, nur horizontale Züge vom
  * Tap trennen — für Zeilen, die sich zwar aufklappen, aber nichts freigeben.
  *
+ * `onSwipeStart` feuert, sobald die Geste als horizontal erkannt ist — also
+ * bevor sie einrastet. Nur so schließt ein Wisch anderswo die offene Zeile
+ * auch dann, wenn er auf halber Strecke wieder zurückschnappt.
+ *
  * Handler auf der Zeile binden:
  *   @pointerdown @pointermove @pointerup @pointercancel @click
  */
 export function useSwipeAction(options: {
   onTap?: () => void
+  onSwipeStart?: () => void
   onReveal?: () => void
+  onHide?: () => void
   actionWidth?: number
-  /** Mindestdistanz, ab der ein Zug als Wisch zählt statt als Tap. */
-  threshold?: number
-  isControl?: (t: EventTarget | null) => boolean
 }) {
   const actionWidth = options.actionWidth ?? 80
-  const threshold = options.threshold ?? 12
 
   const offset = ref(0)
   const revealed = ref(false)
@@ -39,10 +44,10 @@ export function useSwipeAction(options: {
   const hide = () => {
     offset.value = 0
     revealed.value = false
+    options.onHide?.()
   }
 
   const onPointerDown = (e: PointerEvent) => {
-    if (options.isControl?.(e.target)) return
     tracking = true
     axis = null
     swiped = false
@@ -62,8 +67,9 @@ export function useSwipeAction(options: {
         axis = 'y'
         return
       }
-      if (Math.abs(dx) < threshold) return
+      if (Math.abs(dx) < SWIPE_THRESHOLD) return
       axis = 'x'
+      options.onSwipeStart?.()
     }
 
     swiped = true
@@ -75,7 +81,7 @@ export function useSwipeAction(options: {
     if (!tracking) return
     tracking = false
     if (axis !== 'x') return
-    if (offset.value < -actionWidth / 2) {
+    if (actionWidth > 0 && offset.value < -actionWidth / 2) {
       offset.value = -actionWidth
       revealed.value = true
       options.onReveal?.()

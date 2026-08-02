@@ -2,6 +2,7 @@ import { ref, computed, watch } from 'vue'
 import { defineStore } from 'pinia'
 import type { ShoppingItem } from '@/types/ShoppingItem'
 import type { ShoppingList } from '@/types/ShoppingList'
+import type { ShoppingCategory } from '@/types/ShoppingCategory'
 import type { PendingMutation } from '@/types/PendingMutation'
 import { supabase } from '@/lib/supabase'
 import { useHouseholdStore } from './householdStore'
@@ -27,6 +28,27 @@ export interface ShoppingCategoryGroup {
   items: ShoppingItem[]
   total: number
   isUncategorized: boolean
+  /** Position aus der Kategorientabelle; Altdaten ohne Zeile landen hinten. */
+  sortOrder: number
+}
+
+/** Namensvergleich wie der eindeutige Index aus der Migration: getrimmt, case-insensitiv. */
+export const normalizeCategoryName = (name: string) => name.trim().toLowerCase()
+
+/**
+ * Reihenfolge der Sektionen: gefüllte benannte Kategorien nach sort_order →
+ * gefülltes „Unkategorisiert" → leere benannte Kategorien → leeres
+ * „Unkategorisiert". Leer heißt: gerade keine sichtbaren Produkte — deshalb
+ * muss die Ansicht *nach* dem Einblenden der Produkte im Rückgängig-Fenster
+ * erneut hiermit sortieren, statt die Regel nachzubauen.
+ */
+export const compareCategoryGroups = (a: ShoppingCategoryGroup, b: ShoppingCategoryGroup) => {
+  const rank = (g: ShoppingCategoryGroup) =>
+    (g.items.length > 0 ? 0 : 2) + (g.isUncategorized ? 1 : 0)
+  const byRank = rank(a) - rank(b)
+  if (byRank !== 0) return byRank
+  if (a.sortOrder !== b.sortOrder) return a.sortOrder - b.sortOrder
+  return a.label.localeCompare(b.label)
 }
 
 export interface ShoppingImportCandidate {
@@ -47,16 +69,13 @@ export const useShoppingStore = defineStore('shopping', () => {
   const mutationQueue = ref<PendingMutation[]>([])
   const isSyncing = ref(false)
 
-  /**
-   * Client-only empty categories the user just created via "+ Kategorie".
-   * Keyed by list_id. They vanish on reload once they still have no items,
-   * which is fine — an empty category carries no data (no category table).
-   */
-  const pendingCategories = ref<Record<string, string[]>>({})
+  /** Kategorien des Haushalts — eigenständige Zeilen, auch ohne Produkte. */
+  const categories = ref<ShoppingCategory[]>([])
 
   // Realtime subscription channels
   let realtimeChannel: RealtimeChannel | null = null
   let realtimeListsChannel: RealtimeChannel | null = null
+  let realtimeCategoriesChannel: RealtimeChannel | null = null
 
   // ============================================================================
   // localStorage Helpers

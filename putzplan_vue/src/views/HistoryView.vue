@@ -4,10 +4,10 @@ import { useTaskStore } from '../stores/taskStore'
 import { useHouseholdStore } from '../stores/householdStore'
 import {
   useHistoryGroups,
-  type HistoryEntry,
-  type HistoryFoldRow
+  type HistoryEntry
 } from '@/composables/useHistoryGroups'
 import HistoryRow from '@/components/HistoryRow.vue'
+import HistoryFoldRow from '@/components/HistoryFoldRow.vue'
 
 const taskStore = useTaskStore()
 const householdStore = useHouseholdStore()
@@ -64,29 +64,10 @@ const toggleNote = (completion: HistoryEntry) => {
 // Es ist immer nur eine Zeile aufgewischt.
 const swipeOpenId = ref<string | null>(null)
 
-// Faltzeilen geben nichts frei, dürfen aber genauso wenig auf einen horizontalen
-// Zug hin auf- oder zuklappen.
-let foldStartX = 0
-let foldDragged = false
-
-const onFoldPointerDown = (e: PointerEvent) => {
-  foldStartX = e.clientX
-  foldDragged = false
+// Die Zeile meldet ihr Zurückschnappen — nur die aktuell offene darf zumachen.
+const closeSwipe = (id: string) => {
+  if (swipeOpenId.value === id) swipeOpenId.value = null
 }
-
-const onFoldPointerMove = (e: PointerEvent) => {
-  if (Math.abs(e.clientX - foldStartX) > 12) foldDragged = true
-}
-
-const onFoldClick = (id: string) => {
-  if (foldDragged) return
-  toggleExpanded(id)
-}
-
-// Farbe allein darf die Beteiligten nicht tragen — Screenreader bekommen sie im Label nach.
-const foldLabel = (row: HistoryFoldRow) =>
-  `${row.parentTitle}, ${row.children.length} ${row.children.length === 1 ? 'Subtask' : 'Subtasks'} von ` +
-  `${row.people.map(p => p.display_name).join(', ')}, ${row.points} Punkte`
 
 // Close dropdown when clicking outside
 const handleClickOutside = (event: MouseEvent) => {
@@ -185,33 +166,17 @@ onUnmounted(() => {
               :note-expanded="expanded.has(row.entry.completion_id)"
               :swipe-open-id="swipeOpenId"
               @toggle-note="toggleNote(row.entry)"
-              @reveal="swipeOpenId = row.entry.completion_id"
+              @swipe-start="swipeOpenId = row.entry.completion_id"
+              @swipe-end="closeSwipe(row.entry.completion_id)"
               @delete="deleteCompletion(row.entry)"
             />
             <!-- Subtask-Completions eines Parent-Tasks, zu einer Zeile gefaltet -->
             <template v-else>
-              <div
-                class="fold-row"
-                :aria-label="foldLabel(row)"
-                :aria-expanded="expanded.has(row.id)"
-                @pointerdown="onFoldPointerDown"
-                @pointermove="onFoldPointerMove"
-                @click="onFoldClick(row.id)"
-              >
-                <i
-                  class="bi row-chevron"
-                  :class="expanded.has(row.id) ? 'bi-chevron-down' : 'bi-chevron-right'"
-                ></i>
-                <span class="row-title">{{ row.parentTitle }}</span>
-                <span class="fold-count">{{ row.children.length }}&times;</span>
-                <span
-                  v-for="person in row.people"
-                  :key="person.user_id"
-                  class="user-dot"
-                  :style="{ background: person.user_color }"
-                ></span>
-                <span class="row-points">{{ row.points }}</span>
-              </div>
+              <HistoryFoldRow
+                :row="row"
+                :expanded="expanded.has(row.id)"
+                @toggle="toggleExpanded(row.id)"
+              />
               <HistoryRow
                 v-for="child in expanded.has(row.id) ? row.children : []"
                 :key="child.completion_id"
@@ -220,7 +185,8 @@ onUnmounted(() => {
                 :swipe-open-id="swipeOpenId"
                 indented
                 @toggle-note="toggleNote(child)"
-                @reveal="swipeOpenId = child.completion_id"
+                @swipe-start="swipeOpenId = child.completion_id"
+                @swipe-end="closeSwipe(child.completion_id)"
                 @delete="deleteCompletion(child)"
               />
             </template>
@@ -288,7 +254,7 @@ onUnmounted(() => {
   align-items: baseline;
   justify-content: space-between;
   gap: 0.25rem 0.75rem;
-  font-size: 0.75rem;
+  font-size: var(--font-sm);
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.04em;
@@ -316,58 +282,6 @@ onUnmounted(() => {
 }
 
 .day-person strong {
-  color: var(--color-text-secondary);
-}
-
-.user-dot {
-  flex-shrink: 0;
-  width: 0.5rem;
-  height: 0.5rem;
-  border-radius: 50%;
-}
-
-/* Faltzeile: Subtasks eines Parent-Tasks an einem Tag, auf Zeilenhöhe wie alle anderen. */
-.fold-row {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  min-height: 40px;
-  padding: 0 0.125rem;
-  border-bottom: 1px solid var(--color-border);
-  cursor: pointer;
-}
-
-.row-chevron {
-  flex-shrink: 0;
-  width: 1.25rem;
-  font-size: 0.75rem;
-  color: var(--color-text-muted);
-}
-
-.row-title {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: 0.875rem;
-  color: var(--color-text-primary);
-}
-
-.fold-count {
-  flex-shrink: 0;
-  font-size: 0.75rem;
-  font-variant-numeric: tabular-nums;
-  color: var(--color-text-muted);
-}
-
-.row-points {
-  flex-shrink: 0;
-  min-width: 1.25rem;
-  text-align: right;
-  font-size: 0.875rem;
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
   color: var(--color-text-secondary);
 }
 

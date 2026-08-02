@@ -17,7 +17,8 @@
 - **Design System**: CSS Variables in `base.css`
   - Farben, Spacing, Shadows, Border-Radius, Transitions
   - **Font Sizes**: `--font-xs` bis `--font-xl` (10px–18px)
-  - **Touch Targets**: `--touch-target-min: 48px` (Android Standard)
+  - **Touch Targets**: `--touch-target-min: 48px` (Android Standard),
+    `--touch-target-dense: 40px` für dichte Listen
 - **Bootstrap Overrides**: zentrale Button/Card/Form-Styles in `base.css`
 - **Utility Classes**: wiederverwendbare Patterns in `utilities.css`
   - Auth-Container Pattern (Login/Register/HouseholdSetup)
@@ -28,4 +29,6 @@
   - Form-Group Utility
   - **Icon Button Utility** (`.btn-icon`) — 48px quadratische Touch-Buttons
 - **Component Styles**: nur component-spezifische Styles in `<style scoped>`
-- **Mobile-First Touch Targets**: alle interaktiven Buttons min. 48×48px
+- **Mobile-First Touch Targets**: freistehende Buttons min. 48×48px. In dichten,
+  scannbaren Listen (Verlauf) sind 40px erlaubt — die Zeile selbst ist dort das
+  Ziel und über die volle Breite treffbar.
