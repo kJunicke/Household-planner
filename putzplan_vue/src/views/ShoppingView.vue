@@ -10,6 +10,7 @@ import { useHouseholdStore } from '@/stores/householdStore'
 import { useNetworkStatus } from '@/composables/useNetworkStatus'
 import { useGraceWindow } from '@/composables/useGraceWindow'
 import { useCategoryRail } from '@/composables/useCategoryRail'
+import { useCategoryDrag } from '@/composables/useCategoryDrag'
 import { categoryColor } from '@/lib/categoryColor'
 import type { ShoppingItem } from '@/types/ShoppingItem'
 import ListEditModal from '@/components/ListEditModal.vue'
@@ -340,6 +341,21 @@ const handleCategoryDelete = async (name: string, withItems: boolean) => {
   editingCategory.value = null
 }
 
+// --- Ziehen zwischen Kategorien ---------------------------------------------
+/**
+ * Der Container trägt den Kategorienamen, nicht den Sektionsschlüssel: der
+ * Schlüssel ist kleingeschrieben und taugt nicht als Wert für das Textfeld.
+ */
+const { bind: bindDrag } = useCategoryDrag({
+  group: 'shopping-items',
+  categoryOf: (el) => el.dataset.catName || null,
+  onMove: (itemId, category) => shoppingStore.updateItem(itemId, { category }),
+})
+
+const setDropEl = (key: string, el: unknown) => {
+  bindDrag(key, el instanceof HTMLElement ? el : null)
+}
+
 // --- Right-side category quick-nav rail --------------------------------------
 const {
   activeKey: activeCatKey,
@@ -582,10 +598,16 @@ onUnmounted(() => {
                   </div>
                 </div>
 
-                <div v-if="isSectionOpen(group)" class="cat-body">
+                <div
+                  v-if="isSectionOpen(group)"
+                  :ref="(el) => setDropEl(group.key, el)"
+                  :data-cat-name="group.category ?? ''"
+                  class="cat-body"
+                >
                   <ListItemRow
                     v-for="item in group.items"
                     :key="item.shopping_item_id"
+                    :data-item-id="item.shopping_item_id"
                     :checked="item.purchased"
                     :name="item.name"
                     :class="{ 'row-priority': item.is_priority && !item.purchased }"
@@ -663,6 +685,15 @@ onUnmounted(() => {
                     </button>
                   </div>
                 </div>
+
+                <!-- Eingeklappt: schmale Ablagefläche, damit auch leere
+                     Kategorien ein Ziel zum Hineinziehen haben. -->
+                <div
+                  v-else
+                  :ref="(el) => setDropEl(group.key, el)"
+                  :data-cat-name="group.category ?? ''"
+                  class="cat-dropzone"
+                ></div>
               </div>
 
               <!-- Gekauft (globaler Block, mit Kauf-Historie) -->
@@ -1025,6 +1056,14 @@ onUnmounted(() => {
   flex-direction: column;
   gap: 4px;
 }
+/* Unsichtbar, solange nichts gezogen wird — sie kostet nur die paar Pixel,
+   die eine eingeklappte Sektion als Ziel braucht. */
+.cat-dropzone { min-height: 10px; }
+
+/* Ziehen: die Vorschau bleibt blass an der alten Stelle, das aufgenommene
+   Produkt hebt sich ab. */
+.drag-ghost { opacity: 0.35; }
+.drag-chosen { border-color: var(--color-primary); }
 
 /* Priority highlight (no re-sorting — pure visual cue). */
 .row-priority { border-color: var(--color-warning) !important; }
