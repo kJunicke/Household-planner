@@ -197,6 +197,38 @@ darin, dass nicht alle Aufrufer mitgezogen wurden.
 
 ---
 
+## 🐛 Bug #5: Eingabefeld überlebt den Listenwechsel (03.08.2026)
+
+### Problem
+Nach dem Umbau der oberen Leiste der Einkaufsliste (Produktname · Menge · Zielkategorie)
+blieb deren Inhalt beim Wechsel von „Einkauf" auf „Asia markt" stehen. Tippen hängte an
+den alten Namen an („JoghurtSojasauce"), und die stehengebliebene Zielkategorie hätte beim
+Hinzufügen in der neuen Liste eine gleichnamige Kategorie angelegt.
+
+### Root Cause
+Der Watcher auf `currentListId` in `ShoppingView.vue` räumte die Zustände der Sektionen auf
+(Entwürfe, Mengen, Grace), kannte die neue obere Leiste aber nicht. Der Umbau hat Zustand
+hinzugefügt, ohne die vorhandene Aufräumstelle mitzuziehen.
+
+### Symptome
+- Produktname der alten Liste steht nach dem Wechsel noch im Feld
+- Kategorie-Chip zeigt eine Kategorie, die es in der neuen Liste gar nicht gibt
+
+### Lösung
+`resetTopBar()` im Listenwechsel-Watcher aufrufen — dieselbe Stelle, die schon die
+Sektionsfelder leert.
+
+### Prävention
+Neuer Ansichtszustand, der zu *einer Liste* gehört, gehört in denselben Reset wie der alte.
+Beim Anlegen eines `ref` in einer View die Frage stellen: Was passiert damit beim Wechsel
+der Liste? Wenn die Antwort „nichts" ist, ist das fast immer ein Fehler.
+
+### Related Patterns
+Bug #2 — auch hier war nicht die neue Zeile falsch, sondern die alte Stelle, die nicht
+mitgezogen wurde.
+
+---
+
 ## 📝 Template für neue Bug-Einträge
 
 ```markdown

@@ -44,34 +44,62 @@ Zwei Subtabs: **Einkauf** (ShoppingView) & **Packlisten** (PackingView).
 
 ### ShoppingView
 
-Einkaufsliste, an das Packlisten-Redesign angeglichen (07/2026):
+Einkaufsliste mit dauerhaften Kategorien (Umbau 08/2026):
 
-- **Kategorien** (`shopping_items.category`, nullable): nur „Zu kaufen" wird gruppiert,
-  „Unkategorisiert" unten gepinnt. Farbe deterministisch aus `lib/categoryColor.ts`.
+- **Kategorien** sind eigene Zeilen in `shopping_categories` (je Liste, Name eindeutig
+  groß-/kleinschreibungsunabhängig). Die Verknüpfung läuft weiter über den **Namen** in
+  `shopping_items.category` (nullable = „Unkategorisiert"), nicht über einen Fremdschlüssel —
+  jede schreibende Stelle muss deshalb getrimmt und case-insensitiv vergleichen
+  (`normalizeCategoryName`). Eine Kategorie bleibt bestehen, bis sie gelöscht wird, auch leer.
+- **Sortierung der Sektionen** (`compareCategoryGroups`): gefüllte benannte Kategorien nach
+  `sort_order` → gefülltes „Unkategorisiert" → leere benannte → leeres „Unkategorisiert".
+  Die Ansicht sortiert **nach** dem Einblenden der Grace-Produkte erneut, damit eine Sektion
+  erst nach Ablauf des Rückgängig-Fensters nach unten wandert.
+- **Sektionen kompakt**: Kopfzeile ~34 px (Anzahl als Badge). Die Add-Zeile ist sichtbar,
+  solange in der Kategorie nichts gekauft wurde, danach eingeklappt und über das Plus im Kopf
+  zurückholbar. Leere Kategorien starten eingeklappt.
 - **Menge** (`shopping_items.quantity`, >=1): reines ×N-Label (kein Stepper — Kauf ist ein
   einzelner Fertig-Flip).
 - **Gekauft**: globaler Block unten mit Kauf-Historie (`times_purchased`, letzter Kauf/Käufer),
   NICHT per Kategorie gruppiert. Grace (~6 s, `useGraceWindow`): frisch Gekauftes bleibt
   durchgestrichen in seiner Kategorie, wandert erst nach Ablauf in den Gekauft-Block.
 - **Priorität**: ⭐ inline als reines Highlight (kein Hochsortieren). Sortierung nach Name.
-- **Add-Wege**: Top-Suchleiste (→ Unkategorisiert, mit Autocomplete) + per-Sektion-Add-Line.
-  Long-Press / Rechtsklick öffnet `ShoppingItemEditModal` (Name · Kategorie · Menge · Löschen).
-- **Kategorie-Reuse**: `CategorySearchModal` mit `importItems:false` — übernimmt nur den
-  NAMEN aus anderen Listen (keine Items, die könnten anderswo schon abgehakt sein).
-  Rename/Löschen via `CategoryEditModal`.
-- **Voll offline**: optimistische Updates + Mutation-Queue (`shopping_mutation_queue`).
-  Offline angelegte Items sind sofort abhak-/editierbar — nach dem Create-Sync werden ihre
-  Folge-Mutationen per Temp-ID-Verkettung (`reconcileTempId`) auf die echte ID umgehängt.
+- **Obere Leiste**, einzeilig bis 360 px: Produktfeld (Autocomplete) · ×N · Kategorie-Combobox ·
+  Hinzufügen · Kategorie anlegen. Die Zielkategorie wird beim Tippen aus der Kaufhistorie
+  vorbelegt (`suggestCategoryFor`: erst aktuelle Liste, dann die übrigen) und überschreibt
+  eine Wahl von Hand nie. Beim Listenwechsel wird die Leiste zurückgesetzt.
+- **Kategorie-Combobox** (`components/CategoryCombobox.vue`, auch im Artikel- und im
+  Anlegen-Modal): Vorschläge aus allen Listen des Haushalts (eigene zuerst, fremde mit
+  Herkunft), darunter beschriftete Trennlinie und „«Eingabe» neu anlegen" — die Liste ist nie
+  leer. Ein unbekannter Name wird beim Speichern angelegt (Toast „Kategorie ‚X' angelegt"); ein
+  Treffer aus einer fremden Liste übernimmt nur den Namen, nie deren Produkte.
+- **Kategorie anlegen**: `ShoppingCategoryCreateModal` — Name plus Ankreuzliste aller Produkte
+  der Liste (mit ihrer bisherigen Zugehörigkeit, gekaufte eingeschlossen); Anlegen und
+  Umhängen laufen als ein Store-Aufruf.
+- **Löschen** über `CategoryEditModal` (Prop `variants`): bei nicht leerer Kategorie beide
+  Wege mit konkreter Zahl („nur Kategorie" → Produkte nach Unkategorisiert / „mit Produkten"),
+  leere Kategorie ohne Rückfrage. Umbenennen fasst auch gekaufte Produkte an.
+- **Ziehen** (`composables/useCategoryDrag.ts`, SortableJS direkt, `forceFallback`): Halten mit
+  Bewegungsschwelle verschiebt ein Produkt zwischen Kategorien, auch in „Unkategorisiert" und
+  in leere eingeklappte Sektionen (schmale Ablagefläche). Der Drop wird im DOM zurückgerollt,
+  geschrieben wird nur die Zielkategorie; innerhalb der Kategorie bleibt es alphabetisch.
+  Kein Ziehen in oder aus dem Gekauft-Block. Bearbeiten läuft über den Stift in der Zeile.
+- **Voll offline**: optimistische Updates + Mutation-Queue (`shopping_mutation_queue`), auch
+  für Kategorie-Mutationen; eine Verletzung der Namens-Eindeutigkeit beim Sync gilt als Erfolg
+  (Verschmelzen). Offline angelegte Items sind sofort abhak-/editierbar — nach dem Create-Sync
+  werden ihre Folge-Mutationen per Temp-ID-Verkettung (`reconcileTempId`) umgehängt.
   `loadItems` merged Server-Rows ohne in-flight-optimistische Items zu überschreiben.
-- Store: `useShoppingStore` — Getter `itemsByCategory`, `categoryLabels`; Actions
-  `createItem(name, category, quantity)`, `updateItem`, `addCategory`, `renameCategory`/
-  `deleteCategory`, `categoryImportCandidates`, `togglePriority`, `markPurchased`/`markUnpurchased`.
+- Store: `useShoppingStore` — Getter `itemsByCategory`, `currentListCategories`,
+  `categorySuggestions`; Actions `createItem(name, category, quantity)`, `updateItem`,
+  `createCategory(name, itemIds?)`, `renameCategory`, `deleteCategory(name, { withItems })`,
+  `suggestCategoryFor`, `togglePriority`, `markPurchased`/`markUnpurchased`. Eigener
+  Realtime-Kanal für `shopping_categories`.
 
 **Geteilte Bausteine** (auch von PackingView genutzt): `components/ListItemRow.vue`
 (Zeilen-Shell + Trailing-Slot), `components/CategoryRail.vue` (Rail mit Bubble-Redesign:
 höher, farbig, 4-Buchstaben-Label, ab >8 Kategorien dichter), `components/CategoryEditModal.vue`,
-`components/CategorySearchModal.vue` (Prop `importItems`), `composables/useLongPress.ts`,
-`composables/useGraceWindow.ts`, `composables/useCategoryRail.ts`.
+`components/CategorySearchModal.vue` (Prop `importItems`, nur noch Packliste),
+`composables/useLongPress.ts`, `composables/useGraceWindow.ts`, `composables/useCategoryRail.ts`.
 
 ### PackingView
 

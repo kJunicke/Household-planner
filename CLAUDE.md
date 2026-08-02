@@ -65,7 +65,8 @@ Detailverhalten je View → [docs/features.md](docs/features.md)
 
 Supabase-Schema ist Source of Truth. PKs heißen **nicht** `id` — wichtig für `.eq()`:
 `households.household_id`, `household_members.user_id`, `tasks.task_id`,
-`task_completions.completion_id`, `shopping_items.shopping_item_id`, `notes.note_id`.
+`task_completions.completion_id`, `shopping_items.shopping_item_id`,
+`shopping_categories.category_id`, `notes.note_id`.
 
 - `tasks` nutzt **Soft Delete** (`deleted_at`) — Historie bleibt erhalten
 - `task_completions` ist append-only und die **Single Source of Truth** für Punkte
