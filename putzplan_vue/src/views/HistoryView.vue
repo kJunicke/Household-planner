@@ -38,6 +38,8 @@ const openDeleteModal = (completion: HistoryEntry) => {
 const closeDeleteModal = () => {
   showDeleteModal.value = false
   completionToDelete.value = null
+  // Mit dem Dialog geht auch die aufgewischte Zeile wieder zu.
+  swipeOpenId.value = null
 }
 
 const confirmDelete = async () => {
@@ -74,6 +76,28 @@ const toggleNote = (completion: HistoryEntry) => {
   toggleExpanded(completion.completion_id)
 }
 
+// Es ist immer nur eine Zeile aufgewischt.
+const swipeOpenId = ref<string | null>(null)
+
+// Faltzeilen geben nichts frei, dürfen aber genauso wenig auf einen horizontalen
+// Zug hin auf- oder zuklappen.
+let foldStartX = 0
+let foldDragged = false
+
+const onFoldPointerDown = (e: PointerEvent) => {
+  foldStartX = e.clientX
+  foldDragged = false
+}
+
+const onFoldPointerMove = (e: PointerEvent) => {
+  if (Math.abs(e.clientX - foldStartX) > 12) foldDragged = true
+}
+
+const onFoldClick = (id: string) => {
+  if (foldDragged) return
+  toggleExpanded(id)
+}
+
 // Farbe allein darf die Beteiligten nicht tragen — Screenreader bekommen sie im Label nach.
 const foldLabel = (row: HistoryFoldRow) =>
   `${row.parentTitle}, ${row.children.length} ${row.children.length === 1 ? 'Subtask' : 'Subtasks'} von ` +
@@ -84,6 +108,11 @@ const handleClickOutside = (event: MouseEvent) => {
   const target = event.target as HTMLElement
   if (!target.closest('.dropdown')) {
     showOptionsDropdown.value = false
+  }
+  // Ein Tap außerhalb schließt die aufgewischte Zeile. Der Klick nach einem Wisch
+  // kommt hier nicht an — die Geste hält ihn zurück.
+  if (!target.closest('.row-swipe-delete')) {
+    swipeOpenId.value = null
   }
 }
 
@@ -169,7 +198,9 @@ onUnmounted(() => {
               v-if="row.kind === 'entry'"
               :completion="row.entry"
               :note-expanded="expanded.has(row.entry.completion_id)"
+              :swipe-open-id="swipeOpenId"
               @toggle-note="toggleNote(row.entry)"
+              @reveal="swipeOpenId = row.entry.completion_id"
               @delete="openDeleteModal(row.entry)"
             />
             <!-- Subtask-Completions eines Parent-Tasks, zu einer Zeile gefaltet -->
@@ -178,7 +209,9 @@ onUnmounted(() => {
                 class="fold-row"
                 :aria-label="foldLabel(row)"
                 :aria-expanded="expanded.has(row.id)"
-                @click="toggleExpanded(row.id)"
+                @pointerdown="onFoldPointerDown"
+                @pointermove="onFoldPointerMove"
+                @click="onFoldClick(row.id)"
               >
                 <i
                   class="bi row-chevron"
@@ -199,8 +232,10 @@ onUnmounted(() => {
                 :key="child.completion_id"
                 :completion="child"
                 :note-expanded="expanded.has(child.completion_id)"
+                :swipe-open-id="swipeOpenId"
                 indented
                 @toggle-note="toggleNote(child)"
+                @reveal="swipeOpenId = child.completion_id"
                 @delete="openDeleteModal(child)"
               />
             </template>

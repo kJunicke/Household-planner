@@ -1,18 +1,38 @@
 <script setup lang="ts">
+import { watch } from 'vue'
 import type { HistoryEntry } from '@/composables/useHistoryGroups'
+import { useSwipeAction } from '@/composables/useSwipeAction'
 
 // Eine Completion als dichte Zeile — im Verlauf entweder für sich stehend oder
-// eingerückt als Kind einer aufgeklappten Subtask-Faltgruppe.
+// eingerückt als Kind einer aufgeklappten Subtask-Faltgruppe. Ein Wisch nach links
+// legt das Löschen frei; im Ruhezustand bleibt die Zeile ruhig.
 const props = defineProps<{
   completion: HistoryEntry
   noteExpanded: boolean
+  /** Zeile, die aktuell aufgewischt ist — es ist immer nur eine offen. */
+  swipeOpenId: string | null
   indented?: boolean
 }>()
 
-defineEmits<{
+const emit = defineEmits<{
   toggleNote: []
   delete: []
+  reveal: []
 }>()
+
+const { offset, revealed, hide, onPointerDown, onPointerMove, onPointerUp, onClick } =
+  useSwipeAction({
+    onTap: () => props.completion.completion_note && emit('toggleNote'),
+    onReveal: () => emit('reveal')
+  })
+
+// Wischt woanders eine Zeile auf, schließt sich diese hier.
+watch(
+  () => props.swipeOpenId,
+  id => {
+    if (revealed.value && id !== props.completion.completion_id) hide()
+  }
+)
 
 const formatTime = (dateString: string) =>
   new Date(dateString).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })
@@ -26,29 +46,44 @@ const label = () =>
 
 <template>
   <div>
-    <div
-      class="completion-row"
-      :class="{ 'is-expandable': !!completion.completion_note, 'is-child': indented }"
-      :aria-label="label()"
-      @click="completion.completion_note && $emit('toggleNote')"
-    >
-      <span class="row-time">{{ formatTime(completion.completed_at) }}</span>
-      <!-- Quick-Aufgaben tragen technisch auch deleted_at — sie sind aber kein
-           gelöschter Task, sondern werden am Blitz erkannt. -->
-      <span class="row-title" :class="{ 'is-deleted': completion.isDeleted && !completion.isQuick }">
-        <i v-if="completion.isQuick" class="bi bi-lightning-charge-fill row-quick"></i>
-        {{ completion.tasks?.title || 'Unbekannte Aufgabe' }}
-      </span>
-      <i v-if="completion.completion_note" class="bi bi-sticky row-note-icon"></i>
-      <span class="user-dot" :style="{ background: completion.household_members.user_color }"></span>
-      <span class="row-points">{{ completion.points }}</span>
+    <div class="row-swipe" :class="{ 'is-child': indented }">
       <button
-        @click.stop="$emit('delete')"
-        class="btn btn-sm btn-delete-ghost row-delete"
+        class="row-swipe-delete"
+        :tabindex="revealed ? 0 : -1"
+        :aria-hidden="!revealed"
         title="Eintrag löschen"
+        @click="$emit('delete')"
       >
         <i class="bi bi-trash"></i>
       </button>
+      <div
+        class="completion-row"
+        :class="{ 'is-expandable': !!completion.completion_note }"
+        :style="{ transform: `translateX(${offset}px)` }"
+        :aria-label="label()"
+        @pointerdown="onPointerDown"
+        @pointermove="onPointerMove"
+        @pointerup="onPointerUp"
+        @pointercancel="onPointerUp"
+        @click="onClick"
+      >
+        <span class="row-time">{{ formatTime(completion.completed_at) }}</span>
+        <!-- Quick-Aufgaben tragen technisch auch deleted_at — sie sind aber kein
+             gelöschter Task, sondern werden am Blitz erkannt. -->
+        <span
+          class="row-title"
+          :class="{ 'is-deleted': completion.isDeleted && !completion.isQuick }"
+        >
+          <i v-if="completion.isQuick" class="bi bi-lightning-charge-fill row-quick"></i>
+          {{ completion.tasks?.title || 'Unbekannte Aufgabe' }}
+        </span>
+        <i v-if="completion.completion_note" class="bi bi-sticky row-note-icon"></i>
+        <span
+          class="user-dot"
+          :style="{ background: completion.household_members.user_color }"
+        ></span>
+        <span class="row-points">{{ completion.points }}</span>
+      </div>
     </div>
     <div v-if="completion.completion_note && noteExpanded" class="row-note">
       {{ completion.completion_note }}
@@ -57,25 +92,53 @@ const label = () =>
 </template>
 
 <style scoped>
-/* Dichte Zeile: alles auf einer Höhe, damit die Liste scannbar bleibt. */
+/* Die Löschfläche liegt hinter der Zeile und wird vom Wisch freigelegt. */
+.row-swipe {
+  position: relative;
+  overflow: hidden;
+}
+
+.row-swipe.is-child {
+  margin-left: 1rem;
+  border-left: 2px solid var(--color-border);
+}
+
+.row-swipe-delete {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 80px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: var(--bs-danger, #dc3545);
+  color: #fff;
+  font-size: 1rem;
+}
+
+/* Dichte Zeile: alles auf einer Höhe, damit die Liste scannbar bleibt.
+   pan-y überlässt dem Browser das vertikale Scrollen. */
 .completion-row {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 0.5rem;
   min-height: 40px;
-  padding: 0 0.125rem;
+  padding: 0 0.5rem 0 0.125rem;
+  background: var(--color-background);
   border-bottom: 1px solid var(--color-border);
+  touch-action: pan-y;
+  transition: transform 0.18s ease;
 }
 
 .completion-row.is-expandable {
   cursor: pointer;
 }
 
-/* Kindzeile einer Faltgruppe: eingerückt und als zugehörig erkennbar. */
-.completion-row.is-child {
-  margin-left: 1rem;
+.row-swipe.is-child .completion-row {
   padding-left: 0.5rem;
-  border-left: 2px solid var(--color-border);
 }
 
 .row-time {
@@ -120,14 +183,6 @@ const label = () =>
   font-weight: 600;
   font-variant-numeric: tabular-nums;
   color: var(--color-text-secondary);
-}
-
-/* Höhe gedeckelt, damit die Zeile nicht über 40px wächst (der Button weicht in 04
-   ohnehin der Wischgeste). */
-.row-delete {
-  flex-shrink: 0;
-  padding: 0 0.5rem;
-  line-height: 1;
 }
 
 .row-note {
