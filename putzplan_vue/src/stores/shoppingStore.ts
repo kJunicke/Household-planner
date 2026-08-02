@@ -36,6 +36,13 @@ export interface ShoppingCategoryGroup {
 export const normalizeCategoryName = (name: string) => name.trim().toLowerCase()
 
 /**
+ * Schlüssel einer Sektion. Muss überall gleich gebildet werden, sonst laufen
+ * Gruppierung und Ansicht auseinander und dieselbe Kategorie erscheint doppelt.
+ */
+export const categoryKey = (label: string | null) =>
+  label === null ? UNCATEGORIZED : normalizeCategoryName(label)
+
+/**
  * Reihenfolge der Sektionen: gefüllte benannte Kategorien nach sort_order →
  * gefülltes „Unkategorisiert" → leere benannte Kategorien → leeres
  * „Unkategorisiert". Leer heißt: gerade keine sichtbaren Produkte — deshalb
@@ -152,65 +159,64 @@ export const useShoppingStore = defineStore('shopping', () => {
       .sort((a, b) => b.times_purchased - a.times_purchased)
   })
 
+  /** Kategorienzeilen der aktuellen Liste, in ihrer gespeicherten Reihenfolge. */
+  const currentListCategories = computed(() => {
+    if (!currentListId.value) return []
+    return categories.value
+      .filter(c => c.list_id === currentListId.value)
+      .sort((a, b) => a.sort_order - b.sort_order || a.name.localeCompare(b.name))
+  })
+
   /**
    * Unpurchased items grouped into category sections (the "Zu kaufen" area).
    * Purchased items are NOT grouped — they live in the global Gekauft block.
-   * Ordering: named categories (creation order) → "Unkategorisiert" (always
-   * last, always present). Within a section: by name. Priority is a visual
-   * highlight only — it does not re-sort items to the top.
+   * Die Sektionen kommen aus der Kategorientabelle; Produkte mit einem Namen
+   * ohne passende Zeile (Altdaten, Wettlauf beim Sync) bekommen trotzdem eine
+   * Sektion, damit nichts unsichtbar wird. Within a section: by name. Priority
+   * is a visual highlight only — it does not re-sort items to the top.
    */
   const itemsByCategory = computed<ShoppingCategoryGroup[]>(() => {
     const list = currentListItems.value.filter(i => !i.purchased)
-    const groups = new Map<string, ShoppingItem[]>()
-    const firstSeen = new Map<string, number>()
+    const groups = new Map<string, ShoppingCategoryGroup>()
 
+    const bucket = (label: string | null, sortOrder: number) => {
+      const isUncategorized = label === null
+      const key = categoryKey(label)
+      let group = groups.get(key)
+      if (!group) {
+        group = {
+          category: label,
+          key,
+          label: label ?? 'Unkategorisiert',
+          items: [],
+          total: 0,
+          isUncategorized,
+          sortOrder,
+        }
+        groups.set(key, group)
+      }
+      return group
+    }
+
+    // Unkategorisiert ist immer vorhanden; die Rangfolge kommt aus dem Vergleicher.
+    bucket(null, 0)
+    currentListCategories.value.forEach(c => bucket(c.name, c.sort_order))
+
+    // Altdaten hinten anstellen, damit sie bekannte Kategorien nicht verdrängen.
+    const ORPHAN_BASE = Number.MAX_SAFE_INTEGER - list.length
     list.forEach((it, idx) => {
-      const key = it.category ?? UNCATEGORIZED
-      if (!groups.has(key)) {
-        groups.set(key, [])
-        firstSeen.set(key, idx)
-      }
-      groups.get(key)!.push(it)
+      const group = bucket(it.category ?? null, ORPHAN_BASE + idx)
+      group.items.push(it)
+      group.total++
     })
 
-    // Merge in client-only empty categories the user just created.
-    const pending = currentListId.value ? pendingCategories.value[currentListId.value] ?? [] : []
-    pending.forEach((cat, i) => {
-      if (!groups.has(cat)) {
-        groups.set(cat, [])
-        firstSeen.set(cat, list.length + i)
-      }
-    })
-
-    // Uncategorized is always present.
-    if (!groups.has(UNCATEGORIZED)) {
-      groups.set(UNCATEGORIZED, [])
-      firstSeen.set(UNCATEGORIZED, Number.MAX_SAFE_INTEGER)
-    }
-
-    const result: ShoppingCategoryGroup[] = []
-    for (const [key, its] of groups) {
-      const sorted = [...its].sort((a, b) => a.name.localeCompare(b.name))
-      const isUncategorized = key === UNCATEGORIZED
-      result.push({
-        category: isUncategorized ? null : key,
-        key,
-        label: isUncategorized ? 'Unkategorisiert' : key,
-        items: sorted,
-        total: its.length,
-        isUncategorized,
-      })
-    }
-
-    result.sort((a, b) => {
-      if (a.isUncategorized) return 1
-      if (b.isUncategorized) return -1
-      return (firstSeen.get(a.key) ?? 0) - (firstSeen.get(b.key) ?? 0)
-    })
+    const result = [...groups.values()]
+    result.forEach(g => g.items.sort((a, b) => a.name.localeCompare(b.name)))
+    result.sort(compareCategoryGroups)
     return result
   })
 
-  /** Category labels present in the current list (named only, for the edit modal). */
+  /** Category labels of the current list (named only, for the edit modal). */
   const categoryLabels = computed(() =>
     itemsByCategory.value.filter(g => !g.isUncategorized).map(g => g.label)
   )
@@ -314,10 +320,92 @@ export const useShoppingStore = defineStore('shopping', () => {
   // Sync Engine
   // ============================================================================
 
+  /**
+   * Nach dem Sync die optimistische Kategorienzeile durch die echte ersetzen und
+   * alle noch wartenden Mutationen auf die neue ID umbiegen.
+   */
+  const reconcileTempCategory = (tempId: string, real: ShoppingCategory) => {
+    const realExists = categories.value.some(c => c.category_id === real.category_id)
+    categories.value = categories.value.filter(
+      c => c.category_id !== tempId && (!realExists || c.category_id !== real.category_id)
+    )
+    categories.value.push(real)
+
+    for (const m of mutationQueue.value) {
+      if (m.payload.categoryId === tempId) m.payload.categoryId = real.category_id
+    }
+  }
+
+  /**
+   * Kategorien-Mutationen. Ein Verstoß gegen die Namens-Eindeutigkeit gilt als
+   * Erfolg: Es gibt die Kategorie bereits (zweites Gerät, doppelter Offline-Sync),
+   * also still mit der bestehenden Zeile verschmelzen statt zu meckern.
+   */
+  const processCategoryMutation = async (mutation: PendingMutation): Promise<boolean> => {
+    const householdStore = useHouseholdStore()
+    const { categoryId, tempCategoryId } = mutation.payload
+
+    if (mutation.operation === 'create') {
+      const listId = mutation.payload.listId!
+      const name = mutation.payload.name!
+      const { data, error } = await supabase
+        .from('shopping_categories')
+        .insert({
+          household_id: householdStore.currentHousehold!.household_id,
+          list_id: listId,
+          name,
+          sort_order: mutation.payload.sortOrder ?? 0,
+        })
+        .select()
+        .single()
+
+      if (error) {
+        if (error.code !== '23505') throw error
+        const { data: existing } = await supabase
+          .from('shopping_categories')
+          .select('*')
+          .eq('list_id', listId)
+          .ilike('name', name)
+          .single()
+        if (existing && tempCategoryId) reconcileTempCategory(tempCategoryId, existing)
+        return true
+      }
+
+      if (tempCategoryId && data) reconcileTempCategory(tempCategoryId, data)
+      return true
+    }
+
+    if (mutation.operation === 'update') {
+      const { error } = await supabase
+        .from('shopping_categories')
+        .update(mutation.payload.updates!)
+        .eq('category_id', categoryId!)
+      if (error && error.code !== '23505') throw error
+      return true
+    }
+
+    const { error } = await supabase
+      .from('shopping_categories')
+      .delete()
+      .eq('category_id', categoryId!)
+    if (error) throw error
+    return true
+  }
+
   const processMutation = async (mutation: PendingMutation): Promise<boolean> => {
     const householdStore = useHouseholdStore()
 
     try {
+      if (mutation.payload.entity === 'category') {
+        // Noch eine temp-ID heißt: das zugehörige Anlegen steht in derselben
+        // Warteschlange und ist noch nicht durch. In der Queue lassen, ohne einen
+        // Fehlversuch zu zählen — das Anlegen biegt die ID gleich um.
+        if (mutation.payload.categoryId?.startsWith('temp_')) return false
+        const ok = await processCategoryMutation(mutation)
+        console.log('✅ Synced category mutation:', mutation.operation, mutation.payload)
+        return ok
+      }
+
       if (mutation.operation === 'create') {
         const { data, error } = await supabase
           .from('shopping_items')
@@ -404,6 +492,7 @@ export const useShoppingStore = defineStore('shopping', () => {
 
     if (mutationQueue.value.length === 0) {
       await loadItems()
+      await loadCategories()
     }
   }
 
@@ -766,21 +855,80 @@ export const useShoppingStore = defineStore('shopping', () => {
   }
 
   // ============================================================================
-  // Categories (client-only pending buckets + name reuse)
+  // Categories
   // ============================================================================
 
-  /** Register a just-created empty category so its section renders for quick-add. */
-  const addCategory = (name: string) => {
-    if (!currentListId.value) return
-    const trimmed = name.trim()
-    if (!trimmed) return
-    const listId = currentListId.value
-    const existing = pendingCategories.value[listId] ?? []
-    const already = existing.some(c => c.toLowerCase() === trimmed.toLowerCase())
-      || currentListItems.value.some(i => (i.category ?? '').toLowerCase() === trimmed.toLowerCase())
-    if (!already) {
-      pendingCategories.value = { ...pendingCategories.value, [listId]: [...existing, trimmed] }
+  const loadCategories = async () => {
+    const householdStore = useHouseholdStore()
+    if (!householdStore.currentHousehold) {
+      categories.value = []
+      return
     }
+
+    try {
+      const { data, error } = await supabase
+        .from('shopping_categories')
+        .select('*')
+        .eq('household_id', householdStore.currentHousehold.household_id)
+        .order('sort_order', { ascending: true })
+
+      if (error) throw error
+
+      // Noch nicht synchronisierte Zeilen überleben den Neuabgleich.
+      const pending = categories.value.filter(c => c.category_id.startsWith('temp_'))
+      categories.value = [...(data ?? []), ...pending]
+
+    } catch (error) {
+      console.error('Error loading shopping categories:', error)
+    }
+  }
+
+  const findCategoryRow = (name: string) => {
+    const key = normalizeCategoryName(name)
+    return currentListCategories.value.find(c => normalizeCategoryName(c.name) === key) ?? null
+  }
+
+  /**
+   * Kategorie anlegen, optional mit Produkten, die im selben Zug umgehängt werden.
+   * Die Zuordnung läuft über den Namen — deshalb braucht das Umhängen keine
+   * fertige Kategorie-ID und funktioniert auch offline.
+   */
+  const createCategory = async (name: string, itemIds: string[] = []) => {
+    if (!currentListId.value) return null
+    const householdStore = useHouseholdStore()
+    if (!householdStore.currentHousehold) return null
+
+    const trimmed = name.trim()
+    if (!trimmed) return null
+
+    const listId = currentListId.value
+    const existing = findCategoryRow(trimmed)
+    const target = existing?.name ?? trimmed
+
+    if (!existing) {
+      const tempId = `temp_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+      const sortOrder = currentListCategories.value.length
+      categories.value.push({
+        category_id: tempId,
+        household_id: householdStore.currentHousehold.household_id,
+        list_id: listId,
+        name: trimmed,
+        sort_order: sortOrder,
+        created_at: new Date().toISOString(),
+      })
+      addToQueue({
+        operation: 'create',
+        payload: { entity: 'category', listId, name: trimmed, sortOrder, tempCategoryId: tempId },
+      })
+    }
+
+    for (const itemId of itemIds) {
+      updateItemOptimistic(itemId, { category: target })
+      addToQueue({ operation: 'update', payload: { itemId, updates: { category: target } } })
+    }
+
+    if (navigator.onLine) await syncMutations()
+    return target
   }
 
   /**
@@ -820,25 +968,36 @@ export const useShoppingStore = defineStore('shopping', () => {
     )
   }
 
-  /** Rename a category → re-labels every unpurchased item carrying it (offline-capable). */
+  /** Produkte der aktuellen Liste, die diesen Kategorienamen tragen — gekaufte eingeschlossen. */
+  const itemsInCategory = (category: string) => {
+    const key = normalizeCategoryName(category)
+    return items.value.filter(
+      i => i.list_id === currentListId.value && normalizeCategoryName(i.category ?? '') === key
+    )
+  }
+
+  /**
+   * Kategorie umbenennen: die Zeile und alle Produkte der Liste mit dem alten
+   * Namen — die bereits gekauften eingeschlossen, sonst taucht die alte Sektion
+   * beim Zurücksetzen wieder auf.
+   */
   const renameCategory = async (oldName: string, newName: string) => {
     const toastStore = useToastStore()
     if (!currentListId.value) return
-    const listId = currentListId.value
     const trimmed = newName.trim()
-    if (!trimmed || trimmed === oldName) return
+    if (!trimmed || normalizeCategoryName(trimmed) === normalizeCategoryName(oldName)) return
 
-    // Rename a client-only pending (empty) category too.
-    const pending = pendingCategories.value[listId] ?? []
-    if (pending.some(c => c.toLowerCase() === oldName.toLowerCase())) {
-      pendingCategories.value = {
-        ...pendingCategories.value,
-        [listId]: pending.map(c => (c.toLowerCase() === oldName.toLowerCase() ? trimmed : c))
-      }
+    const row = findCategoryRow(oldName)
+    if (row) {
+      const idx = categories.value.findIndex(c => c.category_id === row.category_id)
+      if (idx !== -1) categories.value[idx] = { ...categories.value[idx], name: trimmed }
+      addToQueue({
+        operation: 'update',
+        payload: { entity: 'category', categoryId: row.category_id, updates: { name: trimmed } },
+      })
     }
 
-    const affected = items.value.filter(i => i.list_id === listId && i.category === oldName)
-    for (const item of affected) {
+    for (const item of itemsInCategory(oldName)) {
       updateItemOptimistic(item.shopping_item_id, { category: trimmed })
       addToQueue({ operation: 'update', payload: { itemId: item.shopping_item_id, updates: { category: trimmed } } })
     }
@@ -848,34 +1007,56 @@ export const useShoppingStore = defineStore('shopping', () => {
   }
 
   /**
-   * Delete a category's still-to-buy items. Purchased items keep their category
-   * label (they live in the global Gekauft history block) — deleting them here
-   * would silently drop purchase history, so they're left untouched.
+   * Kategorie löschen — in zwei Varianten. Gekaufte Produkte werden nie gelöscht
+   * (das wäre stillschweigend weggeworfene Kaufhistorie), verlieren aber in beiden
+   * Fällen ihre Zuordnung: sonst kehrt die Sektion beim nächsten Zurücksetzen als
+   * verwaiste Gruppe zurück.
    */
-  const deleteCategory = async (category: string) => {
+  const deleteCategory = async (category: string, options: { withItems?: boolean } = {}) => {
     const toastStore = useToastStore()
     if (!currentListId.value) return
-    const listId = currentListId.value
 
-    // Drop a client-only pending (empty) category.
-    const pending = pendingCategories.value[listId] ?? []
-    if (pending.some(c => c.toLowerCase() === category.toLowerCase())) {
-      pendingCategories.value = {
-        ...pendingCategories.value,
-        [listId]: pending.filter(c => c.toLowerCase() !== category.toLowerCase())
-      }
+    const row = findCategoryRow(category)
+    if (row) {
+      categories.value = categories.value.filter(c => c.category_id !== row.category_id)
+      addToQueue({
+        operation: 'delete',
+        payload: { entity: 'category', categoryId: row.category_id },
+      })
     }
 
-    const affected = items.value.filter(
-      i => i.list_id === listId && i.category === category && !i.purchased
-    )
-    for (const item of affected) {
-      deleteItemOptimistic(item.shopping_item_id)
-      addToQueue({ operation: 'delete', payload: { itemId: item.shopping_item_id } })
+    for (const item of itemsInCategory(category)) {
+      if (options.withItems && !item.purchased) {
+        deleteItemOptimistic(item.shopping_item_id)
+        addToQueue({ operation: 'delete', payload: { itemId: item.shopping_item_id } })
+      } else {
+        updateItemOptimistic(item.shopping_item_id, { category: null })
+        addToQueue({ operation: 'update', payload: { itemId: item.shopping_item_id, updates: { category: null } } })
+      }
     }
 
     if (navigator.onLine) await syncMutations()
     toastStore.showToast('Kategorie gelöscht', 'success', 2000)
+  }
+
+  /**
+   * Vorschlag für die Zielkategorie eines Produktnamens: jüngste Verwendung
+   * desselben Namens in der aktuellen Liste, sonst in den übrigen Listen des
+   * Haushalts, sonst keiner.
+   */
+  const suggestCategoryFor = (productName: string): string | null => {
+    const key = normalizeCategoryName(productName)
+    if (!key) return null
+
+    const byRecency = (a: ShoppingItem, b: ShoppingItem) =>
+      (b.last_purchased_at ?? b.created_at).localeCompare(a.last_purchased_at ?? a.created_at)
+
+    const matches = items.value
+      .filter(i => normalizeCategoryName(i.name) === key && i.category)
+      .sort(byRecency)
+
+    const inCurrentList = matches.find(i => i.list_id === currentListId.value)
+    return (inCurrentList ?? matches[0])?.category ?? null
   }
 
   // ============================================================================
@@ -892,8 +1073,38 @@ export const useShoppingStore = defineStore('shopping', () => {
 
     if (realtimeChannel) supabase.removeChannel(realtimeChannel)
     if (realtimeListsChannel) supabase.removeChannel(realtimeListsChannel)
+    if (realtimeCategoriesChannel) supabase.removeChannel(realtimeCategoriesChannel)
 
     const hhId = householdStore.currentHousehold.household_id
+
+    realtimeCategoriesChannel = supabase
+      .channel(`shopping-categories-changes-${Date.now()}`)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'shopping_categories', filter: `household_id=eq.${hhId}` },
+        (payload) => {
+          console.log('📡 Realtime shopping categories event:', payload)
+
+          if (payload.eventType === 'INSERT') {
+            const row = payload.new as ShoppingCategory
+            if (!categories.value.some(c => c.category_id === row.category_id)) {
+              categories.value.push(row)
+            }
+          }
+
+          if (payload.eventType === 'UPDATE') {
+            const row = payload.new as ShoppingCategory
+            const index = categories.value.findIndex(c => c.category_id === row.category_id)
+            if (index !== -1) categories.value[index] = row
+          }
+
+          if (payload.eventType === 'DELETE') {
+            const row = payload.old as ShoppingCategory
+            categories.value = categories.value.filter(c => c.category_id !== row.category_id)
+          }
+        }
+      )
+      .subscribe()
 
     realtimeChannel = supabase
       .channel(`shopping-items-changes-${Date.now()}`)
@@ -967,6 +1178,10 @@ export const useShoppingStore = defineStore('shopping', () => {
       supabase.removeChannel(realtimeListsChannel)
       realtimeListsChannel = null
     }
+    if (realtimeCategoriesChannel) {
+      supabase.removeChannel(realtimeCategoriesChannel)
+      realtimeCategoriesChannel = null
+    }
   }
 
   // ============================================================================
@@ -979,9 +1194,10 @@ export const useShoppingStore = defineStore('shopping', () => {
     currentListId,
     isLoading,
     isSyncing,
-    pendingCategories,
+    categories,
     hasPendingMutations,
     currentListItems,
+    currentListCategories,
     unpurchasedItems,
     purchasedItems,
     itemsByCategory,
@@ -997,10 +1213,12 @@ export const useShoppingStore = defineStore('shopping', () => {
     markPurchased,
     markUnpurchased,
     deleteItem,
-    addCategory,
+    loadCategories,
+    createCategory,
     categoryImportCandidates,
     renameCategory,
     deleteCategory,
+    suggestCategoryFor,
     subscribeToItems,
     unsubscribeFromItems,
     syncMutations

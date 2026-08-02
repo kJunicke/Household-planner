@@ -1,6 +1,11 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted, ref, computed, watch } from 'vue'
-import { useShoppingStore, UNCATEGORIZED, type ShoppingCategoryGroup } from '@/stores/shoppingStore'
+import {
+  useShoppingStore,
+  categoryKey,
+  compareCategoryGroups,
+  type ShoppingCategoryGroup,
+} from '@/stores/shoppingStore'
 import { useHouseholdStore } from '@/stores/householdStore'
 import { useNetworkStatus } from '@/composables/useNetworkStatus'
 import { useGraceWindow } from '@/composables/useGraceWindow'
@@ -77,7 +82,7 @@ const displaySections = computed<ShoppingCategoryGroup[]>(() => {
     i => i.purchased && graceIds.value.has(i.shopping_item_id)
   )
   for (const it of inGrace) {
-    const key = it.category ?? UNCATEGORIZED
+    const key = categoryKey(it.category)
     let group = byKey.get(key)
     if (!group) {
       group = {
@@ -87,6 +92,7 @@ const displaySections = computed<ShoppingCategoryGroup[]>(() => {
         items: [],
         total: 0,
         isUncategorized: !it.category,
+        sortOrder: Number.MAX_SAFE_INTEGER,
       }
       byKey.set(key, group)
       base.push(group)
@@ -95,8 +101,9 @@ const displaySections = computed<ShoppingCategoryGroup[]>(() => {
     group.total++
   }
 
-  // Keep "Unkategorisiert" pinned last (stable-sort preserves the rest).
-  base.sort((a, b) => (a.isUncategorized ? 1 : b.isUncategorized ? -1 : 0))
+  // Erst jetzt sortieren: eine Sektion, die nur noch Produkte im Rückgängig-Fenster
+  // hält, gilt als gefüllt und darf nicht schon ans Ende gerutscht sein.
+  base.sort(compareCategoryGroups)
   return base
 })
 
@@ -244,8 +251,8 @@ const handleItemDelete = async (itemId: string) => {
 // --- Categories -------------------------------------------------------------
 const importCandidates = computed(() => shoppingStore.categoryImportCandidates(''))
 
-const handleCreateCategory = (name: string) => {
-  shoppingStore.addCategory(name)
+const handleCreateCategory = async (name: string) => {
+  await shoppingStore.createCategory(name)
 }
 
 const openCategoryEdit = (group: ShoppingCategoryGroup) => {
@@ -257,7 +264,9 @@ const handleCategoryRename = async (oldName: string, newName: string) => {
   editingCategory.value = null
 }
 const handleCategoryDelete = async (name: string) => {
-  await shoppingStore.deleteCategory(name)
+  // Bis Ticket 06 die Rückfrage bringt, bleibt es beim bisherigen Verhalten:
+  // die noch offenen Produkte gehen mit.
+  await shoppingStore.deleteCategory(name, { withItems: true })
   editingCategory.value = null
 }
 
@@ -314,6 +323,7 @@ const handleCreateList = async () => {
 onMounted(async () => {
   await shoppingStore.loadLists()
   await shoppingStore.loadItems()
+  await shoppingStore.loadCategories()
   shoppingStore.subscribeToItems()
 })
 
