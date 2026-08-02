@@ -13,7 +13,14 @@ const emit = defineEmits<{
 </script>
 
 <template>
-  <ListItemRow :checked="item.packed" :name="item.name" @toggle="emit('toggle')" @edit="emit('edit')">
+  <!-- Packing keeps long-press-to-edit until stage 2 replaces it with dragging. -->
+  <ListItemRow
+    :checked="item.packed"
+    :name="item.name"
+    edit-on-long-press
+    @toggle="emit('toggle')"
+    @edit="emit('edit')"
+  >
     <template #trailing>
       <div v-if="item.quantity > 1" class="pack-stepper">
         <button
