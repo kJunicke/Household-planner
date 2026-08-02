@@ -308,10 +308,8 @@ const handleCategoryRename = async (oldName: string, newName: string) => {
   await shoppingStore.renameCategory(oldName, newName)
   editingCategory.value = null
 }
-const handleCategoryDelete = async (name: string) => {
-  // Bis Ticket 06 die Rückfrage bringt, bleibt es beim bisherigen Verhalten:
-  // die noch offenen Produkte gehen mit.
-  await shoppingStore.deleteCategory(name, { withItems: true })
+const handleCategoryDelete = async (name: string, withItems: boolean) => {
+  await shoppingStore.deleteCategory(name, { withItems })
   editingCategory.value = null
 }
 
@@ -716,6 +714,7 @@ onUnmounted(() => {
     v-if="editingCategory"
     :category="editingCategory.name"
     :item-count="editingCategory.count"
+    variants
     @rename="handleCategoryRename"
     @delete="handleCategoryDelete"
     @close="editingCategory = null"
