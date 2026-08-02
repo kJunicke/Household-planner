@@ -22,11 +22,21 @@ export interface HistoryEntry extends EnrichedCompletion {
   points: number
 }
 
+/** Eine an einem Tag beteiligte Person mit ihrer Tagesausbeute. */
+export interface HistoryDayPerson {
+  user_id: string
+  display_name: string
+  user_color: string
+  points: number
+}
+
 /** Alle Completions eines Kalendertages. */
 export interface HistoryDayGroup {
   key: string
   label: string
   items: HistoryEntry[]
+  /** Beteiligte des Tages, absteigend nach Punkten — Tagesüberblick und Farblegende in einem. */
+  people: HistoryDayPerson[]
 }
 
 const FALLBACK_NAME = 'Unbekannt'
@@ -51,6 +61,29 @@ const dayLabel = (date: Date, now: Date): string => {
     month: '2-digit',
     year: 'numeric'
   })
+}
+
+// Tagessummen je Person — zählt jede Completion des Tages, auch die zu gelöschten Tasks.
+const summarizePeople = (items: HistoryEntry[]): HistoryDayPerson[] => {
+  const byUser = new Map<string, HistoryDayPerson>()
+
+  for (const item of items) {
+    const existing = byUser.get(item.user_id)
+    if (existing) {
+      existing.points += item.points
+      continue
+    }
+    byUser.set(item.user_id, {
+      user_id: item.user_id,
+      display_name: item.household_members.display_name,
+      user_color: item.household_members.user_color,
+      points: item.points
+    })
+  }
+
+  return [...byUser.values()].sort(
+    (a, b) => b.points - a.points || a.display_name.localeCompare(b.display_name, 'de')
+  )
 }
 
 export function useHistoryGroups(
@@ -92,10 +125,14 @@ export function useHistoryGroups(
       const date = new Date(entry.completed_at)
       const key = dayKey(date)
       if (!current || current.key !== key) {
-        current = { key, label: dayLabel(date, now), items: [] }
+        current = { key, label: dayLabel(date, now), items: [], people: [] }
         groups.push(current)
       }
       current.items.push(entry)
+    }
+
+    for (const group of groups) {
+      group.people = summarizePeople(group.items)
     }
 
     return groups

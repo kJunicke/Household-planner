@@ -3,7 +3,6 @@ import { ref, onMounted, onUnmounted } from 'vue'
 import { useTaskStore } from '../stores/taskStore'
 import { useHouseholdStore } from '../stores/householdStore'
 import { useHistoryGroups, type HistoryEntry } from '@/composables/useHistoryGroups'
-import type { Task } from '@/types/Task'
 
 const taskStore = useTaskStore()
 const householdStore = useHouseholdStore()
@@ -63,34 +62,20 @@ const confirmDeleteAll = async () => {
   closeDeleteAllModal()
 }
 
-// Helper: Check if task is a subtask and get parent task info
-// Bei gelöschten Tasks (isDeleted) können wir keine Subtask-Info mehr abrufen
-// da der Task nicht mehr in tasks.value (nur aktive Tasks) geladen ist
-const getTaskInfo = (completion: HistoryEntry) => {
-  // Gelöschte Tasks: Subtask-Info nicht verfügbar (Task nicht in aktiver Liste)
-  if (completion.isDeleted) {
-    return {
-      isSubtask: false,
-      parentTaskTitle: null
-    }
-  }
+// Notizen sind ausgeklappter Ansichtszustand, nicht persistiert.
+const expandedNotes = ref<Set<string>>(new Set())
 
-  const task = taskStore.tasks.find((t: Task) => t.task_id === completion.task_id)
-  const isSubtask = task?.parent_task_id !== null
-
-  if (isSubtask && task) {
-    const parentTask = taskStore.tasks.find((t: Task) => t.task_id === task.parent_task_id)
-    return {
-      isSubtask: true,
-      parentTaskTitle: parentTask?.title || 'Unbekannt'
-    }
-  }
-
-  return {
-    isSubtask: false,
-    parentTaskTitle: null
-  }
+const toggleNote = (completion: HistoryEntry) => {
+  if (!completion.completion_note) return
+  const open = new Set(expandedNotes.value)
+  if (!open.delete(completion.completion_id)) open.add(completion.completion_id)
+  expandedNotes.value = open
 }
+
+// Farbe allein darf die Person nicht tragen — Screenreader bekommen sie im Label nach.
+const rowLabel = (completion: HistoryEntry) =>
+  `${completion.tasks?.title || 'Unbekannte Aufgabe'}, ${completion.household_members.display_name}, ` +
+  `${formatTime(completion.completed_at)}, ${completion.points} Punkte`
 
 // Close dropdown when clicking outside
 const handleClickOutside = (event: MouseEvent) => {
@@ -161,65 +146,62 @@ onUnmounted(() => {
           :key="group.key"
           class="completion-group"
         >
-          <div class="date-header">{{ group.label }}</div>
+          <!-- Tages-Header: Überblick und zugleich Legende für die Farbpunkte der Zeilen -->
+          <div class="date-header">
+            <span class="date-label">{{ group.label }}</span>
+            <span class="day-summary">
+              <span
+                v-for="person in group.people"
+                :key="person.user_id"
+                class="day-person"
+              >
+                <span class="user-dot" :style="{ background: person.user_color }"></span>
+                {{ person.display_name }}
+                <strong>{{ person.points }}</strong>
+              </span>
+            </span>
+          </div>
           <div
             v-for="completion in group.items"
             :key="completion.completion_id"
-            class="completion-item"
-            :style="{
-              '--user-color': completion.household_members.user_color,
-              'background': `linear-gradient(to right, ${completion.household_members.user_color}15 0%, var(--color-background-elevated) 100%)`
-            }"
+            class="completion-row-wrapper"
           >
-          <div class="completion-details">
-            <div class="task-title">
-              {{ completion.tasks?.title || 'Unbekannte Aufgabe' }}
-              <!-- Quick-Aufgabe Badge -->
-              <span v-if="completion.isQuick" class="quick-badge">
-                <i class="bi bi-lightning-charge-fill"></i> Quick
-              </span>
-              <!-- Gelöscht Badge (Soft Delete) – nicht bei Quick-Aufgaben -->
-              <span v-else-if="completion.isDeleted" class="deleted-badge">
-                Gelöscht
-              </span>
-              <!-- Subtask Badge -->
-              <span v-if="getTaskInfo(completion).isSubtask" class="subtask-badge">
-                Subtask von: {{ getTaskInfo(completion).parentTaskTitle }}
-              </span>
-            </div>
-            <div class="completion-meta">
-              <span class="member-name">
-                <i class="bi bi-person-fill"></i>
-                {{ completion.household_members?.display_name || 'Unbekannt' }}
-              </span>
-              <span class="completion-date">
-                <i class="bi bi-clock"></i>
-                {{ formatTime(completion.completed_at) }}
-              </span>
-              <span class="completion-points">
-                <i class="bi bi-star-fill"></i>
-                {{ completion.points }} Pkt
-              </span>
-            </div>
-            <div v-if="completion.completion_note" class="completion-note-display">
-              <div class="note-badge">
-                <i class="bi bi-sticky"></i>
-                Notiz
-              </div>
-              <div class="note-content">
-                {{ completion.completion_note }}
-              </div>
-            </div>
-          </div>
-          <div class="completion-actions">
-            <button
-              @click="openDeleteModal(completion)"
-              class="btn btn-sm btn-delete-ghost"
-              title="Eintrag löschen"
+            <div
+              class="completion-row"
+              :class="{ 'is-expandable': !!completion.completion_note }"
+              :aria-label="rowLabel(completion)"
+              @click="toggleNote(completion)"
             >
-              <i class="bi bi-trash"></i>
-            </button>
-          </div>
+              <span class="row-time">{{ formatTime(completion.completed_at) }}</span>
+              <!-- Quick-Aufgaben tragen technisch auch deleted_at — sie sind aber kein
+                   gelöschter Task, sondern werden am Blitz erkannt. -->
+              <span
+                class="row-title"
+                :class="{ 'is-deleted': completion.isDeleted && !completion.isQuick }"
+              >
+                <i v-if="completion.isQuick" class="bi bi-lightning-charge-fill row-quick"></i>
+                {{ completion.tasks?.title || 'Unbekannte Aufgabe' }}
+              </span>
+              <i v-if="completion.completion_note" class="bi bi-sticky row-note-icon"></i>
+              <span
+                class="user-dot"
+                :style="{ background: completion.household_members.user_color }"
+              ></span>
+              <span class="row-points">{{ completion.points }}</span>
+              <button
+                @click.stop="openDeleteModal(completion)"
+                class="btn btn-sm btn-delete-ghost row-delete"
+                title="Eintrag löschen"
+              >
+                <i class="bi bi-trash"></i>
+              </button>
+            </div>
+            <div
+              v-if="completion.completion_note && expandedNotes.has(completion.completion_id)"
+              class="row-note"
+            >
+              {{ completion.completion_note }}
+            </div>
           </div>
         </div>
       </div>
@@ -304,166 +286,124 @@ onUnmounted(() => {
 .completion-group {
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
 }
 
 .date-header {
   position: sticky;
   top: 0;
   z-index: 1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.25rem 0.75rem;
   font-size: 0.75rem;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.04em;
   color: var(--color-text-muted);
   background: var(--color-background);
-  padding: 0.25rem 0.125rem;
-}
-
-.completion-item {
-  display: flex;
-  gap: 0.75rem;
-  padding: 0.75rem;
-  background: var(--color-background-elevated);
-  border-left: 3px solid var(--user-color, var(--color-border));
-  border-top: 1px solid var(--color-border);
-  border-right: 1px solid var(--color-border);
+  padding: 0.375rem 0.125rem 0.25rem;
+  margin-bottom: 0.25rem;
   border-bottom: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  transition: all 0.2s ease;
 }
 
-.completion-item:hover {
-  border-left-color: var(--user-color, var(--color-primary));
-  box-shadow: var(--shadow-sm);
-}
-
-.completion-details {
-  flex: 1;
+/* Tageszusammenfassung — zugleich die Legende für die Farbpunkte der Zeilen. */
+.day-summary {
   display: flex;
-  flex-direction: column;
-  gap: 0.375rem;
-}
-
-.task-title {
-  font-size: 1rem;
-  font-weight: 600;
-  color: var(--color-text-primary);
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-}
-
-.subtask-badge {
-  display: inline-block;
-  font-size: 0.75rem;
+  flex-wrap: wrap;
+  gap: 0.125rem 0.625rem;
+  text-transform: none;
+  letter-spacing: 0;
   font-weight: 500;
-  color: var(--bs-info);
-  background: var(--bs-info-bg, #cfe2ff);
-  padding: 0.125rem 0.5rem;
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--bs-info);
 }
 
-.deleted-badge {
-  display: inline-block;
-  font-size: 0.75rem;
-  font-weight: 500;
-  color: var(--bs-secondary);
-  background: var(--bs-secondary-bg, #e9ecef);
-  padding: 0.125rem 0.5rem;
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--bs-secondary);
-}
-
-.quick-badge {
+.day-person {
   display: inline-flex;
   align-items: center;
   gap: 0.25rem;
-  font-size: 0.75rem;
-  font-weight: 600;
-  color: #b45309;
-  background: rgba(245, 158, 11, 0.15);
-  padding: 0.125rem 0.5rem;
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--color-warning);
+  min-width: 0;
 }
 
-.completion-meta {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-  font-size: 0.8125rem;
+.day-person strong {
   color: var(--color-text-secondary);
 }
 
-.member-name,
-.completion-date,
-.completion-points {
-  display: flex;
-  align-items: center;
-  gap: 0.25rem;
+.user-dot {
+  flex-shrink: 0;
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
 }
 
-.member-name i,
-.completion-date i,
-.completion-points i {
+/* Dichte Zeile: alles auf einer Höhe, damit die Liste scannbar bleibt. */
+.completion-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: 40px;
+  padding: 0 0.125rem;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.completion-row.is-expandable {
+  cursor: pointer;
+}
+
+.row-time {
+  flex-shrink: 0;
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text-muted);
+}
+
+.row-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.875rem;
+  color: var(--color-text-primary);
+}
+
+/* Gelöschter Task: abgeschwächt statt Badge. */
+.row-title.is-deleted {
+  color: var(--color-text-muted);
+  font-style: italic;
+}
+
+.row-quick {
+  color: var(--color-warning);
   font-size: 0.75rem;
 }
 
-.completion-points {
-  color: var(--bs-warning);
-  font-weight: 600;
+.row-note-icon {
+  flex-shrink: 0;
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
 }
 
-.completion-points i {
-  color: var(--bs-warning);
-}
-
-/* Mobile optimization */
-@media (max-width: 576px) {
-  .completion-meta {
-    gap: 0.5rem;
-    font-size: 0.8125rem;
-  }
-
-  .completion-points {
-    flex-basis: 100%;
-    margin-top: 0.25rem;
-  }
-}
-
-.completion-actions {
-  display: flex;
-  align-items: center;
-}
-
-.completion-note-display {
-  margin-top: 0.75rem;
-  padding: 0.75rem;
-  background: var(--bs-info-bg, #cfe2ff);
-  border-left: 3px solid var(--bs-info);
-  border-radius: var(--radius-sm);
-}
-
-.note-badge {
-  display: flex;
-  align-items: center;
-  gap: 0.375rem;
-  font-size: 0.8125rem;
-  font-weight: 600;
-  color: var(--bs-info);
-  margin-bottom: 0.375rem;
-}
-
-.note-badge i {
-  font-size: 1rem;
-}
-
-.note-content {
+.row-points {
+  flex-shrink: 0;
+  min-width: 1.25rem;
+  text-align: right;
   font-size: 0.875rem;
-  color: var(--color-text-primary);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text-secondary);
+}
+
+.row-delete {
+  flex-shrink: 0;
+}
+
+.row-note {
+  padding: 0.5rem 0.125rem 0.625rem 3rem;
+  font-size: 0.8125rem;
   line-height: 1.4;
+  color: var(--color-text-secondary);
+  border-bottom: 1px solid var(--color-border);
 }
 
 .dropdown {
