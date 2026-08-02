@@ -16,6 +16,19 @@ Task-Liste, gefiltert über Kategorie-Chips (Alltag / Putzen / Projekte / Erledi
 - **Quick-Aufgaben**: einmalig, sofort abgeschlossen + sofort soft-deleted → erscheinen NUR in der
   Historie (mit „Quick"-Badge), nicht in der Aufgabenliste. Punkte zählen in Stats/Ausgleich.
   Insert direkt via `taskStore.createQuickTask()` (keine Edge Function, RLS erlaubt Client-Insert).
+- **„Jetzt dran"**: enthält **jede** offene wiederkehrende Aufgabe, nicht nur überfällige —
+  ob eine Aufgabe dran ist, entscheidet allein `tasks.completed`
+  ([ADR 0001](adr/0001-completed-ist-zustand-keine-ableitung.md)). Eine manuell als „wieder
+  dreckig" markierte Aufgabe steht also auch dann hier, wenn ihre Kadenz noch läuft.
+  Sortiert nach `urgency` aus `lib/taskSchedule.ts`, dringendste oben; nie erledigte zuerst.
+  Sichtbar nur, solange die Kategorie „Putzen" im Filter steht. Warnfarbe und Warndreieck
+  am Kopf erscheinen nur, wenn mindestens eine Aufgabe wirklich überfällig ist.
+- **Keine eigene Putzaufgaben-Gruppe**: „Jetzt dran" ersetzt sie vollständig, eine zweite
+  Gruppe wäre zwangsläufig leer. Gruppiert werden nur noch Alltag, Projekte und Erledigt.
+- **Status-Zeile**: „Offen" zählt recurring + one-time, „N überfällig" nur gerissene Kadenzen
+  und nie erledigte Aufgaben — deshalb ist diese Zahl kleiner als die Zahl am Sektionskopf.
+- **Erledigt-Tab**: wiederkehrende Aufgaben nach nächster Fälligkeit, danach Aufgaben ohne
+  Kadenz, ganz hinten abgeschlossene Projekte nach Abschlussdatum.
 
 ## `/history` — HistoryView
 

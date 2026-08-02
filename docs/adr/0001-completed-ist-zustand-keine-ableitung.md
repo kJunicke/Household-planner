@@ -28,7 +28,7 @@ Die Zuständigkeiten werden getrennt:
 | Frage | Wer entscheidet |
 |---|---|
 | Ist die Aufgabe **dran**? | `tasks.completed` — nur die Datenbank |
-| Wie **dringend**, wann wieder **fällig**? | das module `taskSchedule` aus Kadenz und letzter Erledigung |
+| Wie **dringend**, wann wieder **fällig**? | das Modul `taskSchedule` aus Kadenz und letzter Erledigung |
 
 Das Frontend wertet die Kadenz-Grenze `Tage >= recurrence_days` **nicht** aus, um Dranheit
 zu bestimmen. Diese Regel führt nur an einer einzigen Stelle zu einer Zustandsänderung: in

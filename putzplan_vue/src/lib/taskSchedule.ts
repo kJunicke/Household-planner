@@ -8,18 +8,27 @@ import type { Task } from '@/types/Task'
 //
 // Reine Funktion: kein Vue, kein Pinia, kein Supabase, keine Seiteneffekte.
 
+// Vokabular wie in CONTEXT.md: "dran" heißt offen und zu tun, "Fälligkeit" ist der
+// Countdown einer erledigten Aufgabe. Deshalb 'pending' für dran und 'upcoming' für
+// den laufenden Countdown — nicht umgekehrt.
 export type TaskScheduleStatus =
-  | 'never-done' // offen, noch nie erledigt
-  | 'overdue' // offen, Kadenz überschritten
-  | 'due' // offen, Kadenz noch nicht abgelaufen (manuell dreckig)
+  | 'never-done' // dran, noch nie erledigt
+  | 'overdue' // dran, Kadenz überschritten
+  | 'pending' // dran, Kadenz noch nicht abgelaufen (manuell dreckig)
   | 'upcoming' // erledigt, Countdown läuft
   | 'not-scheduled' // daily / one-time / project — keine Kadenz
 
 export type TaskSchedule = {
   status: TaskScheduleStatus
-  daysOverdue: number // Tage ÜBER die Kadenz hinaus; Infinity wenn nie erledigt
+  daysOverdue: number | null // Tage ÜBER die Kadenz hinaus; null wenn keine Tageszahl existiert
   daysUntilDue: number | null // null wenn keine Kadenz oder nie erledigt
   urgency: number // Sortierschlüssel, größer = dringender
+}
+
+// Überfällig im Sinne der Anzeige: die Kadenz ist gerissen oder es gab sie nie.
+// Steht hier, damit Karte und Status-Zeile dieselbe Menge meinen.
+export function isOverdue(schedule: TaskSchedule): boolean {
+  return schedule.status === 'overdue' || schedule.status === 'never-done'
 }
 
 const MS_PER_DAY = 1000 * 60 * 60 * 24
@@ -38,13 +47,14 @@ export function scheduleOf(task: Task, today: Date = new Date()): TaskSchedule {
   // Ohne Kadenz gibt es keine Fälligkeit — und in einer Dringlichkeits-Sortierung
   // landen diese Aufgaben immer am Ende.
   if (!hasCadence) {
-    return { status: 'not-scheduled', daysOverdue: 0, daysUntilDue: null, urgency: -Infinity }
+    return { status: 'not-scheduled', daysOverdue: null, daysUntilDue: null, urgency: -Infinity }
   }
 
   // Noch nie gemacht ist kein Sonderfall der Überfälligkeit, sondern ein eigener
-  // Zustand: maximal dringend, ohne Tageszahl.
+  // Zustand: maximal dringend, ohne Tageszahl. `urgency` bleibt eine Zahl, weil es
+  // ein Sortierschlüssel ist — die Anzeige fragt den Status, nicht den Zahlenwert.
   if (!task.last_completed_at) {
-    return { status: 'never-done', daysOverdue: Infinity, daysUntilDue: null, urgency: Infinity }
+    return { status: 'never-done', daysOverdue: null, daysUntilDue: null, urgency: Infinity }
   }
 
   const daysPassed = calendarDaysBetween(new Date(task.last_completed_at), today)
@@ -55,7 +65,7 @@ export function scheduleOf(task: Task, today: Date = new Date()): TaskSchedule {
     ? 'upcoming'
     : daysOverdue >= 0
       ? 'overdue'
-      : 'due'
+      : 'pending'
 
   return { status, daysOverdue, daysUntilDue: -daysOverdue, urgency: daysOverdue }
 }

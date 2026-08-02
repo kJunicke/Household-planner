@@ -7,7 +7,7 @@ import QuickTaskModal from '../components/QuickTaskModal.vue';
 import { useTaskStore } from "../stores/taskStore";
 import { useHouseholdStore } from "../stores/householdStore";
 import type { Task } from '@/types/Task';
-import { scheduleOf } from '@/lib/taskSchedule';
+import { scheduleOf, isOverdue } from '@/lib/taskSchedule';
 
 const taskStore = useTaskStore()
 const householdStore = useHouseholdStore()
@@ -107,8 +107,13 @@ const byUrgency = (a: Task, b: Task): number => {
   return ua === ub ? 0 : ub - ua
 }
 
-// Get tasks for a specific category
-const getTasksForCategory = (category: TaskCategory): Task[] => {
+// Get tasks for a specific category.
+// 'recurring' fehlt absichtlich: offene Putzaufgaben stehen vollständig in der
+// "Jetzt dran"-Sektion. Der Typ schließt den Aufruf aus, damit die Lücke nicht
+// still zu einer leeren Liste wird.
+type GroupedCategory = Exclude<TaskCategory, 'recurring'>
+
+const getTasksForCategory = (category: GroupedCategory): Task[] => {
   let tasks: Task[] = []
 
   if (category === 'completed') {
@@ -162,25 +167,24 @@ const getTasksForCategory = (category: TaskCategory): Task[] => {
 // docs/adr/0001-completed-ist-zustand-keine-ableitung.md. Damit erscheint auch
 // eine manuell als "wieder dreckig" markierte Aufgabe hier, obwohl ihr Intervall
 // noch läuft. Die Sektion ersetzt die reguläre Putzaufgaben-Gruppe vollständig.
-const isDue = (task: Task): boolean =>
+const isPending = (task: Task): boolean =>
   task.task_type === 'recurring' &&
   !task.completed &&
   task.parent_task_id === null
 
-const dueTasks = computed((): Task[] => {
+const pendingTasks = computed((): Task[] => {
   // Nur zeigen, wenn die Kategorie 'recurring' im aktuellen Filter sichtbar ist
   if (!selectedCategories.value.includes('recurring')) return []
   return taskStore.tasks
-    .filter(isDue)
+    .filter(isPending)
     .sort(byUrgency)
 })
 
-// Für die Status-Zeile: nur die, die ihre Kadenz wirklich gerissen haben.
+// Für die Status-Zeile und die Warnfarbe des Sektionskopfes: nur die, die ihre
+// Kadenz wirklich gerissen haben. Prädikat aus dem Modul, damit Karte und
+// Sektion dieselbe Menge meinen.
 const overdueCount = computed((): number =>
-  dueTasks.value.filter(t => {
-    const status = scheduleOf(t).status
-    return status === 'overdue' || status === 'never-done'
-  }).length
+  pendingTasks.value.filter(t => isOverdue(scheduleOf(t))).length
 )
 
 // Status-Zeile: definierte, vorhandene Daten (keine neuen Tabellen).
@@ -203,9 +207,7 @@ interface TaskGroup {
 }
 
 const groupedTasks = computed((): TaskGroup[] => {
-  // 'recurring' fehlt bewusst: offene Putzaufgaben stehen vollständig in der
-  // "Jetzt dran"-Sektion, eine zweite Gruppe wäre immer leer.
-  const order: TaskCategory[] = ['daily', 'project', 'completed']
+  const order: GroupedCategory[] = ['daily', 'project', 'completed']
   const groups: TaskGroup[] = []
 
   for (const cat of order) {
@@ -338,16 +340,19 @@ onUnmounted(() => {
           </span>
         </div>
 
-        <!-- Jetzt dran: alle offenen Putzaufgaben, dringendste zuerst -->
-        <section v-if="dueTasks.length" class="task-section section-overdue">
-          <div class="category-header category-header-overdue">
-            <i class="bi bi-exclamation-triangle-fill"></i>
+        <!-- Jetzt dran: alle offenen Putzaufgaben, dringendste zuerst.
+             Warnfarbe und Warndreieck nur, wenn wirklich etwas überfällig ist —
+             sonst verliert Rot seine Bedeutung, weil die Sektion inzwischen
+             jede offene Putzaufgabe enthält. -->
+        <section v-if="pendingTasks.length" class="task-section" :class="{ 'section-overdue': overdueCount }">
+          <div class="category-header" :class="{ 'category-header-overdue': overdueCount }">
+            <i :class="overdueCount ? 'bi bi-exclamation-triangle-fill' : 'bi bi-arrow-repeat'"></i>
             <span class="category-label">Jetzt dran</span>
-            <span class="task-count">{{ dueTasks.length }}</span>
+            <span class="task-count">{{ pendingTasks.length }}</span>
           </div>
           <div class="task-list">
             <TaskCard
-              v-for="task in dueTasks"
+              v-for="task in pendingTasks"
               :key="task.task_id"
               :task="task"
             />
@@ -355,7 +360,7 @@ onUnmounted(() => {
         </section>
 
         <!-- Empty State when no active categories have tasks -->
-        <div v-if="groupedTasks.length === 0 && dueTasks.length === 0" class="empty-state">
+        <div v-if="groupedTasks.length === 0 && pendingTasks.length === 0" class="empty-state">
           <i class="bi bi-check-circle"></i>
           <p>Keine Aufgaben in den ausgewählten Kategorien</p>
         </div>

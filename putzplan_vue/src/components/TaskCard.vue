@@ -2,7 +2,7 @@
 import type { Task } from '@/types/Task'
 import { useTaskStore } from '@/stores/taskStore'
 import { useHouseholdStore } from '@/stores/householdStore'
-import { scheduleOf } from '@/lib/taskSchedule'
+import { scheduleOf, isOverdue } from '@/lib/taskSchedule'
 import { ref, computed } from "vue";
 import TaskCompletionModal from './TaskCompletionModal.vue'
 import TaskAssignmentModal from './TaskAssignmentModal.vue'
@@ -117,13 +117,12 @@ const handleCustomCompletion = async (effortOverride: number, note: string) => {
      // If failed, modal stays open so user can retry
 }
 
-// Fälligkeit und Dringlichkeit kommen aus dem taskSchedule-module — die Karte
+// Fälligkeit und Dringlichkeit kommen aus dem taskSchedule-Modul — die Karte
 // rechnet selbst nicht mehr mit Datumsdifferenzen, sie formuliert nur noch.
 const schedule = computed(() => scheduleOf(props.task))
 
 // Deckel des Rot-Gradienten: ab 14 Tagen Verzug volle Färbung. Reine Darstellung,
-// deshalb hier und nicht im module. `Infinity / 14` ergibt für nie gemachte
-// Aufgaben ohne Sonderfall volles Rot.
+// deshalb hier und nicht im Modul.
 const OVERDUE_COLOR_CAP_DAYS = 14
 
 // Text für Überfälligkeit (null = kein Überfällig-Badge)
@@ -131,16 +130,23 @@ const overdueLabel = computed(() => {
      if (schedule.value.status === 'never-done') return 'Noch nie gemacht'
      if (schedule.value.status !== 'overdue') return null
 
-     const days = schedule.value.daysOverdue
-     if (days === 0) return 'Heute fällig'
+     const days = schedule.value.daysOverdue ?? 0
+     // "Heute dran" statt "Heute fällig": "fällig" gehört zum Countdown einer
+     // erledigten Aufgabe. Derselbe Text auf beiden Zuständen wäre der Widerspruch,
+     // den diese Umstellung gerade beseitigt.
+     if (days === 0) return 'Heute dran'
      return `${days} ${days === 1 ? 'Tag' : 'Tage'} überfällig`
 })
 
-// Farbgradient für Überfälligkeit: 0 Tage = neutral, 14+ Tage = full red
+// Farbgradient für Überfälligkeit: 0 Tage = neutral, 14+ Tage = full red.
+// Hängt am Zustand, nicht am Label — sonst verschiebt eine Textänderung die Farbe.
 const overdueColorStyle = computed(() => {
-     if (!overdueLabel.value) return null
+     if (!isOverdue(schedule.value)) return null
 
-     const intensity = Math.min(schedule.value.daysOverdue / OVERDUE_COLOR_CAP_DAYS, 1)
+     // "Noch nie gemacht" hat keine Tageszahl und ist maximal dringend.
+     const intensity = schedule.value.status === 'never-done'
+          ? 1
+          : Math.min((schedule.value.daysOverdue ?? 0) / OVERDUE_COLOR_CAP_DAYS, 1)
 
      // Color gradient from light red to strong red
      // alpha: 0.1 to 0.5
@@ -174,7 +180,8 @@ const dueInDays = computed(() => {
      // RECURRING TASKS: Zeige wann wieder fällig
      if (schedule.value.status !== 'upcoming') return null
 
-     const daysRemaining = schedule.value.daysUntilDue ?? 0
+     // Im Zustand 'upcoming' existiert immer eine Restlaufzeit.
+     const daysRemaining = schedule.value.daysUntilDue!
 
      // <= 0 heißt: die Kadenz ist durch, der nächtliche Cron war nur noch nicht dran.
      // Die Anzeige darf dann veraltet sein, aber nicht der DB widersprechen.
