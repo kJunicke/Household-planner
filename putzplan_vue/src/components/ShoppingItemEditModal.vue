@@ -1,11 +1,13 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import type { ShoppingItem } from '@/types/ShoppingItem'
+import type { CategoryOption } from '@/types/CategoryOption'
+import CategoryCombobox from './CategoryCombobox.vue'
 
 const props = defineProps<{
   item: ShoppingItem
-  /** Category labels already used in the current list (for the datalist). */
-  existingCategories: string[]
+  /** Kategorien des Haushalts für die Combobox (aktuelle Liste zuerst). */
+  categoryOptions: CategoryOption[]
 }>()
 
 const emit = defineEmits<{
@@ -58,17 +60,12 @@ const stepQty = (delta: number) => {
 
           <div class="form-group">
             <label class="form-label">Kategorie</label>
-            <input
+            <CategoryCombobox
               v-model="category"
-              type="text"
-              class="form-control"
-              list="shopping-edit-category-options"
-              maxlength="100"
+              :options="categoryOptions"
               placeholder="Leer = Unkategorisiert"
+              @submit="handleSave"
             />
-            <datalist id="shopping-edit-category-options">
-              <option v-for="cat in existingCategories" :key="cat" :value="cat" />
-            </datalist>
           </div>
 
           <div class="form-group">

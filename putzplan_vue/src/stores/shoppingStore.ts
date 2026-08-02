@@ -4,6 +4,7 @@ import type { ShoppingItem } from '@/types/ShoppingItem'
 import type { ShoppingList } from '@/types/ShoppingList'
 import type { ShoppingCategory } from '@/types/ShoppingCategory'
 import type { PendingMutation } from '@/types/PendingMutation'
+import type { CategoryOption } from '@/types/CategoryOption'
 import { supabase } from '@/lib/supabase'
 import { useHouseholdStore } from './householdStore'
 import { useAuthStore } from './authStore'
@@ -220,6 +221,38 @@ export const useShoppingStore = defineStore('shopping', () => {
   const categoryLabels = computed(() =>
     itemsByCategory.value.filter(g => !g.isUncategorized).map(g => g.label)
   )
+
+  /**
+   * Vorschläge für die Kategorie-Combobox: alle Listen des Haushalts, die der
+   * aktuellen Liste zuerst. Ein Name, den es hier schon gibt, verdrängt den
+   * gleichnamigen Treffer aus einer fremden Liste — sonst stünde derselbe Name
+   * zweimal in der Liste und die Herkunftsangabe wäre irreführend.
+   */
+  const categorySuggestions = computed<CategoryOption[]>(() => {
+    const listNames = new Map(lists.value.map(l => [l.list_id, l.name]))
+    const seen = new Set<string>()
+    const own: CategoryOption[] = []
+    const foreign: CategoryOption[] = []
+
+    for (const c of currentListCategories.value) {
+      const key = normalizeCategoryName(c.name)
+      if (seen.has(key)) continue
+      seen.add(key)
+      own.push({ name: c.name })
+    }
+
+    const rest = categories.value
+      .filter(c => c.list_id !== currentListId.value)
+      .sort((a, b) => a.name.localeCompare(b.name))
+    for (const c of rest) {
+      const key = normalizeCategoryName(c.name)
+      if (seen.has(key)) continue
+      seen.add(key)
+      foreign.push({ name: c.name, sourceListName: listNames.get(c.list_id) })
+    }
+
+    return [...own, ...foreign]
+  })
 
   const hasPendingMutations = computed(() => mutationQueue.value.length > 0)
 
@@ -920,6 +953,9 @@ export const useShoppingStore = defineStore('shopping', () => {
         operation: 'create',
         payload: { entity: 'category', listId, name: trimmed, sortOrder, tempCategoryId: tempId },
       })
+      // Deckt den Fall ab, dass jemand einen unbekannten Namen tippt und speichert,
+      // ohne die Vorschlagsliste je zu benutzen — sonst entsteht die Kategorie stumm.
+      useToastStore().showToast(`Kategorie „${trimmed}" angelegt`, 'success', 2000)
     }
 
     for (const itemId of itemIds) {
@@ -1202,6 +1238,7 @@ export const useShoppingStore = defineStore('shopping', () => {
     purchasedItems,
     itemsByCategory,
     categoryLabels,
+    categorySuggestions,
     loadLists,
     createList,
     renameList,

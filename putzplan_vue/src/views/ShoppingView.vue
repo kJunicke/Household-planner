@@ -18,6 +18,7 @@ import ShoppingItemEditModal from '@/components/ShoppingItemEditModal.vue'
 import CategoryRail from '@/components/CategoryRail.vue'
 import CategorySearchModal from '@/components/CategorySearchModal.vue'
 import CategoryEditModal from '@/components/CategoryEditModal.vue'
+import CategoryCombobox from '@/components/CategoryCombobox.vue'
 
 const shoppingStore = useShoppingStore()
 const householdStore = useHouseholdStore()
@@ -26,6 +27,11 @@ const { isOnline } = useNetworkStatus()
 // --- Top add-bar ------------------------------------------------------------
 const searchInput = ref('')
 const showSuggestions = ref(false)
+const topCategory = ref('')
+const topQty = ref(1)
+const topQtyOpen = ref(false)
+/** Sobald die Kategorie von Hand angefasst wurde, hält die Automatik still. */
+const topCategoryTouched = ref(false)
 
 // --- Modals -----------------------------------------------------------------
 const showListEditModal = ref(false)
@@ -57,6 +63,9 @@ watch(
     sectionOverride.value = new Map()
     suggestFocusKey.value = null
     clearAllGrace()
+    // Auch die obere Leiste: eine stehengebliebene Zielkategorie gehört zur alten
+    // Liste und würde hier sonst als neue Kategorie angelegt.
+    resetTopBar()
   }
 )
 
@@ -132,6 +141,33 @@ const suggestions = computed(() => {
   return [...new Set(matching)].slice(0, 5)
 })
 
+// Automatische Zielkategorie aus der Kaufhistorie — überschreibt nie eine Wahl,
+// die der Nutzer selbst getroffen hat.
+watch(searchInput, (value) => {
+  if (topCategoryTouched.value) return
+  topCategory.value = shoppingStore.suggestCategoryFor(value) ?? ''
+})
+
+const onTopCategoryInput = (value: string) => {
+  topCategoryTouched.value = true
+  topCategory.value = value
+}
+
+const openTopQty = () => { topQtyOpen.value = true }
+const closeTopQty = () => {
+  topQty.value = Math.max(1, Math.floor(Number(topQty.value) || 1))
+  topQtyOpen.value = false
+}
+
+const resetTopBar = () => {
+  searchInput.value = ''
+  showSuggestions.value = false
+  topCategory.value = ''
+  topCategoryTouched.value = false
+  topQty.value = 1
+  topQtyOpen.value = false
+}
+
 const handleAddItem = async () => {
   const value = searchInput.value.trim()
   if (!value) return
@@ -140,23 +176,24 @@ const handleAddItem = async () => {
     item => !item.purchased && item.name.toLowerCase() === value.toLowerCase()
   )
   if (existingUnpurchased) {
-    searchInput.value = ''
-    showSuggestions.value = false
+    resetTopBar()
     return
   }
 
   const existingPurchased = shoppingStore.currentListItems.find(
     item => item.purchased && item.name.toLowerCase() === value.toLowerCase()
   )
-  searchInput.value = ''
-  showSuggestions.value = false
   if (existingPurchased) {
+    resetTopBar()
     clearGrace(existingPurchased.shopping_item_id)
     await shoppingStore.markUnpurchased(existingPurchased.shopping_item_id)
     return
   }
 
-  await shoppingStore.createItem(value)
+  const qty = Math.max(1, Math.floor(Number(topQty.value) || 1))
+  const category = await ensureCategory(topCategory.value)
+  resetTopBar()
+  await shoppingStore.createItem(value, category, qty)
 }
 
 const selectSuggestion = (suggestion: string) => {
@@ -234,11 +271,22 @@ const onGekauftToggle = (item: ShoppingItem) => {
 
 const openItemEdit = (item: ShoppingItem) => { editingItem.value = item }
 
+/**
+ * Ein getippter Kategoriename, den es noch nicht gibt, wird beim Speichern
+ * angelegt. Zurück kommt der kanonische Name der Zeile — so landet „kühlregal"
+ * nicht als zweite Schreibweise neben „Kühlregal".
+ */
+const ensureCategory = async (name: string | null) => {
+  if (!name?.trim()) return null
+  return await shoppingStore.createCategory(name)
+}
+
 const handleItemSave = async (
   itemId: string,
   patch: { name: string; category: string | null; quantity: number }
 ) => {
-  await shoppingStore.updateItem(itemId, patch)
+  const category = await ensureCategory(patch.category)
+  await shoppingStore.updateItem(itemId, { ...patch, category })
   editingItem.value = null
 }
 
@@ -383,38 +431,80 @@ onUnmounted(() => {
       </div>
 
       <template v-else-if="shoppingStore.currentListId">
-        <!-- Top add-bar mit Autocomplete (→ Unkategorisiert) -->
+        <!-- Obere Leiste: Produkt · Menge · Zielkategorie · Hinzufügen · Kategorie anlegen -->
         <div class="search-container mb-3">
-          <div class="input-group">
+          <div class="top-bar">
+            <div class="top-name-wrap">
+              <input
+                v-model="searchInput"
+                type="text"
+                class="top-name-input"
+                placeholder="Produkt hinzufügen…"
+                maxlength="200"
+                @keyup.enter="handleAddItem"
+                @focus="handleInputFocus"
+                @blur="handleInputBlur"
+                :disabled="shoppingStore.isLoading"
+              />
+              <div v-if="showSuggestions && suggestions.length > 0" class="suggestions-dropdown">
+                <div
+                  v-for="suggestion in suggestions"
+                  :key="suggestion"
+                  class="suggestion-item"
+                  @mousedown.prevent="selectSuggestion(suggestion)"
+                >
+                  <i class="bi bi-clock-history me-2"></i>
+                  {{ suggestion }}
+                </div>
+              </div>
+            </div>
+
             <input
-              v-model="searchInput"
-              type="text"
-              class="form-control"
-              placeholder="Produkt hinzufügen…"
+              v-if="topQtyOpen"
+              v-focus
+              v-model.number="topQty"
+              type="number"
+              class="top-qty-input"
+              min="1"
+              max="999"
               @keyup.enter="handleAddItem"
-              @focus="handleInputFocus"
-              @blur="handleInputBlur"
-              :disabled="shoppingStore.isLoading"
+              @blur="closeTopQty"
             />
             <button
-              class="btn btn-primary"
+              v-else
+              class="top-qty-toggle"
+              :class="{ active: topQty > 1 }"
+              @click="openTopQty"
+              title="Anzahl festlegen"
+            >
+              ×{{ topQty }}
+            </button>
+
+            <CategoryCombobox
+              class="top-combo"
+              compact
+              :model-value="topCategory"
+              :options="shoppingStore.categorySuggestions"
+              placeholder="Kategorie"
+              @update:model-value="onTopCategoryInput"
+              @submit="handleAddItem"
+            />
+
+            <button
+              class="top-btn top-add"
               @click="handleAddItem"
               :disabled="!searchInput.trim() || shoppingStore.isLoading"
+              title="Hinzufügen"
             >
               <i class="bi bi-plus-lg"></i>
             </button>
-          </div>
-
-          <div v-if="showSuggestions && suggestions.length > 0" class="suggestions-dropdown">
-            <div
-              v-for="suggestion in suggestions"
-              :key="suggestion"
-              class="suggestion-item"
-              @mousedown.prevent="selectSuggestion(suggestion)"
+            <button
+              class="top-btn top-new-cat"
+              @click="showCategorySearch = true"
+              title="Kategorie anlegen"
             >
-              <i class="bi bi-clock-history me-2"></i>
-              {{ suggestion }}
-            </div>
+              <i class="bi bi-tag"></i>
+            </button>
           </div>
         </div>
 
@@ -545,11 +635,6 @@ onUnmounted(() => {
                 </div>
               </div>
 
-              <!-- + Kategorie -->
-              <button class="add-category-btn" @click="showCategorySearch = true">
-                <i class="bi bi-plus-lg me-1"></i> Kategorie
-              </button>
-
               <!-- Gekauft (globaler Block, mit Kauf-Historie) -->
               <div class="gekauft-section" v-if="gekauftItems.length > 0">
                 <h3 class="gekauft-title">
@@ -614,7 +699,7 @@ onUnmounted(() => {
   <ShoppingItemEditModal
     v-if="editingItem"
     :item="editingItem"
-    :existing-categories="categoryLabels"
+    :category-options="shoppingStore.categorySuggestions"
     @save="handleItemSave"
     @delete="handleItemDelete"
     @close="editingItem = null"
@@ -728,6 +813,74 @@ onUnmounted(() => {
 
 /* ---- Top add-bar ---- */
 .search-container { position: relative; }
+
+/* Einzeilig bis hinunter zu 360 px: die festen Knöpfe behalten ihre Trefferfläche,
+   Produktfeld und Kategorie teilen sich den Rest — die Kategorie gibt zuerst nach. */
+.top-bar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.top-name-wrap { position: relative; flex: 1 1 40%; min-width: 0; }
+.top-name-input {
+  width: 100%;
+  height: 38px;
+  padding: 0 8px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-background);
+  color: var(--color-text-primary);
+  font-size: var(--font-base);
+}
+.top-name-input:focus { outline: none; border-color: var(--color-primary); }
+.top-combo { flex: 1 1 30%; min-width: 64px; }
+
+.top-qty-toggle {
+  flex-shrink: 0;
+  min-width: 34px;
+  height: 38px;
+  padding: 0 4px;
+  border: 1px solid var(--color-border);
+  background: var(--color-background);
+  border-radius: var(--radius-md);
+  color: var(--color-text-muted);
+  font-size: var(--font-sm);
+  font-weight: 600;
+  cursor: pointer;
+  font-variant-numeric: tabular-nums;
+}
+.top-qty-toggle.active { border-color: var(--color-primary); color: var(--color-primary); }
+.top-qty-input {
+  flex-shrink: 0;
+  width: 48px;
+  height: 38px;
+  text-align: center;
+  border: 1px solid var(--color-primary);
+  border-radius: var(--radius-md);
+  background: var(--color-background);
+  color: var(--color-text-primary);
+  font-variant-numeric: tabular-nums;
+}
+.top-qty-input:focus { outline: none; }
+
+.top-btn {
+  flex-shrink: 0;
+  width: 38px;
+  height: 38px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+}
+.top-add { border: none; background: var(--color-primary); color: #fff; }
+.top-add:disabled { opacity: 0.4; cursor: not-allowed; }
+.top-new-cat {
+  border: 1px solid var(--color-border);
+  background: var(--color-background);
+  color: var(--color-text-secondary);
+}
+.top-new-cat:hover { border-color: var(--color-primary); color: var(--color-primary); }
 .suggestions-dropdown {
   position: absolute;
   top: 100%;
@@ -922,26 +1075,6 @@ onUnmounted(() => {
   cursor: pointer;
 }
 .add-confirm:disabled { opacity: 0.4; cursor: not-allowed; }
-
-/* ---- + Kategorie ---- */
-.add-category-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 100%;
-  padding: var(--spacing-sm);
-  margin-top: var(--spacing-xs);
-  margin-bottom: var(--spacing-md);
-  background: none;
-  border: 1px dashed var(--color-border-hover);
-  border-radius: var(--radius-md);
-  color: var(--color-text-secondary);
-  font-size: var(--font-sm);
-  font-weight: 500;
-  cursor: pointer;
-  min-height: var(--touch-target-min);
-}
-.add-category-btn:hover { border-color: var(--color-primary); color: var(--color-primary); }
 
 /* ---- Gekauft block ---- */
 .gekauft-section {
