@@ -47,6 +47,7 @@ const addDraft = ref<Record<string, string>>({})
 const addQty = ref<Record<string, number>>({})
 const qtyFieldOpen = ref<Set<string>>(new Set())
 const sectionOverride = ref<Map<string, boolean>>(new Map())
+const forcedAddOpen = ref<Set<string>>(new Set())
 const suggestFocusKey = ref<string | null>(null)
 
 const vFocus = { mounted: (el: HTMLElement) => el.focus() }
@@ -61,6 +62,7 @@ watch(
     addQty.value = {}
     qtyFieldOpen.value = new Set()
     sectionOverride.value = new Map()
+    forcedAddOpen.value = new Set()
     suggestFocusKey.value = null
     clearAllGrace()
     // Auch die obere Leiste: eine stehengebliebene Zielkategorie gehört zur alten
@@ -121,12 +123,37 @@ const gekauftItems = computed(() =>
 )
 
 // --- Section collapse -------------------------------------------------------
-const isSectionOpen = (key: string): boolean => {
-  const override = sectionOverride.value.get(key)
-  return override !== undefined ? override : true
+/** Leere Kategorien starten eingeklappt — sie stehen ohnehin am Listenende. */
+const isSectionOpen = (group: ShoppingCategoryGroup): boolean => {
+  const override = sectionOverride.value.get(group.key)
+  return override !== undefined ? override : group.items.length > 0
 }
-const toggleSection = (key: string) => {
-  sectionOverride.value.set(key, !isSectionOpen(key))
+const toggleSection = (group: ShoppingCategoryGroup) => {
+  sectionOverride.value.set(group.key, !isSectionOpen(group))
+}
+
+// --- Kontextuelle Add-Zeile -------------------------------------------------
+/**
+ * Sobald in einer Kategorie das erste Produkt gekauft ist, räumt sich ihre
+ * Add-Zeile weg: beim Einkaufen zählt die Liste, nicht das Eintragen. Das Plus
+ * in der Kopfzeile holt sie zurück (Muster aus der Packliste).
+ */
+const purchasedPerCategory = computed(() => {
+  const counts = new Map<string, number>()
+  for (const item of shoppingStore.currentListItems) {
+    if (!item.purchased) continue
+    const key = categoryKey(item.category)
+    counts.set(key, (counts.get(key) ?? 0) + 1)
+  }
+  return counts
+})
+
+const isAddOpen = (group: ShoppingCategoryGroup): boolean =>
+  forcedAddOpen.value.has(group.key) || !purchasedPerCategory.value.get(group.key)
+
+const openAddLine = (group: ShoppingCategoryGroup) => {
+  forcedAddOpen.value.add(group.key)
+  sectionOverride.value.set(group.key, true)
 }
 
 // --- Top add-bar autocomplete ----------------------------------------------
@@ -524,17 +551,25 @@ onUnmounted(() => {
                   class="cat-header"
                   role="button"
                   tabindex="0"
-                  @click="toggleSection(group.key)"
-                  @keydown.enter.prevent="toggleSection(group.key)"
-                  @keydown.space.prevent="toggleSection(group.key)"
+                  @click="toggleSection(group)"
+                  @keydown.enter.prevent="toggleSection(group)"
+                  @keydown.space.prevent="toggleSection(group)"
                 >
                   <span class="cat-dot" :style="{ background: categoryColor(group.category) }"></span>
                   <span class="cat-name">{{ group.label }}</span>
                   <div class="cat-header-right">
                     <span class="cat-count" v-if="group.total > 0">{{ group.total }}</span>
                     <button
+                      v-if="!isAddOpen(group)"
+                      class="cat-icon-btn"
+                      @click.stop="openAddLine(group)"
+                      title="Produkt hinzufügen"
+                    >
+                      <i class="bi bi-plus-lg"></i>
+                    </button>
+                    <button
                       v-if="!group.isUncategorized"
-                      class="cat-edit-btn"
+                      class="cat-icon-btn"
                       @click.stop="openCategoryEdit(group)"
                       title="Kategorie bearbeiten"
                     >
@@ -542,12 +577,12 @@ onUnmounted(() => {
                     </button>
                     <i
                       class="bi cat-chevron"
-                      :class="isSectionOpen(group.key) ? 'bi-chevron-up' : 'bi-chevron-down'"
+                      :class="isSectionOpen(group) ? 'bi-chevron-up' : 'bi-chevron-down'"
                     ></i>
                   </div>
                 </div>
 
-                <div v-if="isSectionOpen(group.key)" class="cat-body">
+                <div v-if="isSectionOpen(group)" class="cat-body">
                   <ListItemRow
                     v-for="item in group.items"
                     :key="item.shopping_item_id"
@@ -571,8 +606,8 @@ onUnmounted(() => {
                     </template>
                   </ListItemRow>
 
-                  <!-- Per-Sektion Add-Zeile -->
-                  <div class="add-line">
+                  <!-- Per-Sektion Add-Zeile, kontextuell -->
+                  <div v-if="isAddOpen(group)" class="add-line">
                     <div class="add-input-wrap">
                       <input
                         v-model="addDraft[group.key]"
@@ -927,18 +962,20 @@ onUnmounted(() => {
   scroll-margin-top: 72px;
 }
 .cat-uncategorized { opacity: 0.92; }
+/* Schlanker Kopf (~34 px statt 48): die volle Breite bleibt Trefferfläche zum
+   Auf- und Zuklappen, damit die 48-px-Regel sinngemäß gewahrt bleibt. */
 .cat-header {
   display: flex;
   align-items: center;
-  gap: var(--spacing-sm);
+  gap: 6px;
   width: 100%;
-  padding: var(--spacing-sm) var(--spacing-md);
+  padding: 4px var(--spacing-md);
   background: none;
   border: none;
   cursor: pointer;
   text-align: left;
   color: var(--color-text-primary);
-  min-height: var(--touch-target-min);
+  min-height: 34px;
   user-select: none;
   -webkit-tap-highlight-color: transparent;
 }
@@ -947,13 +984,13 @@ onUnmounted(() => {
   margin-left: auto;
   display: flex;
   align-items: center;
-  gap: var(--spacing-sm);
+  gap: 2px;
   flex-shrink: 0;
 }
-.cat-edit-btn {
+.cat-icon-btn {
   background: none;
   border: none;
-  padding: 4px;
+  padding: 6px;
   cursor: pointer;
   color: var(--color-text-muted);
   opacity: 0.6;
@@ -962,21 +999,26 @@ onUnmounted(() => {
   font-size: var(--font-sm);
   border-radius: var(--radius-sm);
 }
-.cat-edit-btn:hover { opacity: 1; color: var(--color-primary); }
+.cat-icon-btn:hover { opacity: 1; color: var(--color-primary); }
 .cat-dot {
   display: inline-block;
-  width: 10px;
-  height: 10px;
+  width: 8px;
+  height: 8px;
   border-radius: 50%;
   flex-shrink: 0;
 }
-.cat-name { font-weight: 600; font-size: var(--font-base); }
+.cat-name { font-weight: 600; font-size: var(--font-sm); }
 .cat-uncategorized .cat-name { color: var(--color-text-muted); font-weight: 500; }
+/* Anzahl als dezentes Badge statt als zweite Überschrift. */
 .cat-count {
-  font-size: var(--font-sm);
+  font-size: var(--font-xs);
   color: var(--color-text-secondary);
+  background: var(--color-background);
+  border-radius: 999px;
+  padding: 1px 7px;
+  margin-right: 2px;
 }
-.cat-chevron { color: var(--color-text-muted); }
+.cat-chevron { color: var(--color-text-muted); font-size: var(--font-sm); }
 .cat-body {
   padding: 0 var(--spacing-sm) var(--spacing-sm);
   display: flex;
