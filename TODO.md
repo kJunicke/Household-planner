@@ -128,10 +128,18 @@ ALTER TABLE shopping_items ADD COLUMN quantity int NOT NULL DEFAULT 1;
 
 ### Code Quality
 - **Form Validation** - Input-Validierung für alle Forms
-- **Playwright CLI E2E Tests einrichten** - Automatisierte Regressionstests für kritische Flows
-  - `npm init playwright@latest` in `putzplan_vue/`
-  - Test-Accounts aus CLAUDE.md nutzen (test@example.com / test2@example.com)
-  - Kritische Flows zuerst: Login, Task-Complete, Shopping-Item hinzufügen
+- **Automatisierte Tests einführen** - Aktuell bewusst KEIN Test-Framework; getestet wird
+  ausschließlich manuell via Claude-in-Chrome (so in CLAUDE.md festgelegt). Wenn das kippt:
+  - **Vitest** für reine Logik ohne DOM — erster Kandidat ist die Verlaufs-Gruppierung
+    (`useHistoryGroups`: Tagesgrenzen, Subtask-Faltung, Waisen-Gruppen, gemischte User).
+    Diese Randfälle sind manuell nur prüfbar, wenn man die Daten vorher herstellt.
+  - **Playwright** für kritische E2E-Flows: Login, Task-Complete, Shopping-Item hinzufügen.
+    Test-Accounts aus CLAUDE.md (test@example.com / test2@example.com).
+  - Erst dann greifen `/implement` und `/tdd` mit echten Red-Green-Slices statt manueller
+    Verifikation.
+- **Wischgeste app-weit ausrollen** - `useSwipeAction` entsteht im Verlauf-Redesign
+  (`.scratch/verlauf-verdichten/`). Einkaufs- und Packliste nutzen für Zeilenaktionen heute
+  noch `useLongPress` → auf Swipe umstellen, damit die App eine Gestensprache hat.
 
 ---
 

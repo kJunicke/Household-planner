@@ -19,3 +19,6 @@ skills-lock.json
 
 # Playwright MCP screenshots and test artifacts
 .playwright-mcp/
+
+# Lokaler Issue-Tracker (Specs & Tickets, siehe docs/agents/issue-tracker.md)
+.scratch/

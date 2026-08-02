@@ -1,64 +1,40 @@
 # CLAUDE.md
 
-**Putzplan** - Gamifizierte Shared-Household Task-App mit Vue 3 + Supabase
+**Putzplan** — gamifizierte Shared-Household Task-App mit Vue 3 + Supabase.
 
-**📋 Bug-Datenbank**: Siehe [`BUG-PATTERNS.md`](BUG-PATTERNS.md) für dokumentierte Bugs und deren Lösungen. Bei neuen Bugs bitte dort eintragen!
+## Arbeitsweise
 
-## 🔑 Credentials & Secrets
+- **Arbeitsverzeichnis**: `putzplan_vue/`
+- **`npm run dev` läuft bereits** — nicht neu starten
+- Vor dem Abschluss: `npm run type-check && npm run lint`
+- **Tests sind grundsätzlich manuell.** Es gibt bewusst kein Test-Framework (kein Vitest,
+  kein Jest, kein Playwright) und keine automatisierten Tests. Nicht nachfragen, ob eins
+  eingeführt werden soll, und keins ungefragt hinzufügen.
+- Features IMMER mit der Claude-in-Chrome-Erweiterung testen, mobil mit schmalem
+  Viewport → [docs/testing.md](docs/testing.md). Das ist die einzige Verifikationsstufe:
+  auch reine Logik wird über die laufende App geprüft, nicht über Unit-Tests.
+- Skills, die TDD voraussetzen (`/implement`, `/tdd`), fallen hier auf manuelle
+  Verifikation zurück — Red-Green-Slices werden durch Prüfschritte in der App ersetzt.
+- Bei neuen Bugs: Eintrag in [BUG-PATTERNS.md](BUG-PATTERNS.md)
+- Offene Aufgaben: [TODO.md](TODO.md)
 
-**GitHub PAT**: In `.env` im Root als `GITHUB_PAT=...` gespeichert (gitignored).
-- Wird für GitHub API (PR erstellen, pushen) genutzt
-- Benötigt Fine-grained PAT: `Contents: read+write`, `Pull requests: read+write`
-- Erneuerung: github.com → Settings → Developer settings → Personal access tokens → Fine-grained
+## Entwicklungsprinzipien
 
-## 🛠️ Development Workflow
+**YAGNI — essenziell.** Nur implementieren, was JETZT gebraucht wird. Keine Features „für
+später". Nicht genutzten Code rauswerfen. MVP-First: erst funktionsfähig, dann perfekt.
 
-**Arbeitsverzeichnis**: `putzplan_vue/`
+**Vue 3 Patterns.** Composition API (`<script setup>`), Pinia direkt in Components
+(`taskStore.deleteTask(id)`) — kein „props down, events up" bei zentralem Store.
 
-**WICHTIG**: `npm run dev` läuft bereits
+**UI.** Vue-Modals via Teleport + `v-if` (keine Bootstrap-Modals), Touch-Targets min. 48px,
+Design-Tokens in `base.css`, wiederverwendbare Patterns in `utilities.css`
+→ [docs/ui-conventions.md](docs/ui-conventions.md)
 
-### Test Accounts (E2E Tests)
-**Account 1:**
-Email: test@example.com
-Passwort: test123456
-Haushalt: Test-Haushalt
-Invite Code: FD1EB9CE
+## Tech Stack
 
-**Account 2:**
-Email: test2@example.com
-Passwort: test123456
-Haushalt: Test-Haushalt (beigetreten via FD1EB9CE)
+Vue 3 + TypeScript · Pinia · Supabase (Auth, DB, Realtime, Edge Functions) · Bootstrap 5
+(außer Modals) · kein Docker (Supabase-CLI via `npx`).
 
-### MCP Server Setup
-
-**Context7** - Bei jedem Feature für Up-to-date Library-Docs konsultieren (Vue 3, Pinia, Supabase, TypeScript)
-
-**Claude-in-Chrome** (Browser-Erweiterung) für Browser-Testing und Automatisierung:
-- **Test-URL**: `http://localhost:5173/Household-planner/`
-- Features IMMER mit der Chrome-Erweiterung testen (`mcp__claude-in-chrome__*` Tools),
-  NICHT mehr mit Playwright
-- Tools bei Bedarf via ToolSearch laden (Core-Set: `tabs_context_mcp`, `navigate`,
-  `computer`, `read_page`); für Debugging `read_console_messages`
-- **Mobile Testing**: IMMER mit schmaler Viewport testen (z.B. 390x800 für Smartphone)
-  - Verwende `resize_window` vor dem Testen (Desktop-Breite ist zu breit für echtes Mobile Testing)
-```bash
-# Code-Qualität prüfen
-npm run type-check && npm run lint
-
-# Build testen (optional)
-npm run build
-```
-
-## 🏗️ Architektur-Entscheidungen
-
-### Tech Stack
-- **Vue 3** + TypeScript + Composition API (`<script setup>`)
-- **Pinia** für State Management (direkte Nutzung in Components)
-- **Supabase** als Backend & Source of Truth (Auth, DB, Realtime)
-- **Bootstrap 5** für UI (außer Modals)
-- **Kein Docker**: Natives Setup ohne Container (npx supabase für CLI)
-
-### Projektstruktur
 ```
 putzplan_vue/
 ├── src/
@@ -68,221 +44,57 @@ putzplan_vue/
 │   ├── stores/
 │   ├── router/
 │   ├── types/
-│   └── lib/          # Supabase Config
-├── supabase/
-│   └── migrations/    # Timestamp-based SQL migrations
+│   └── lib/           # Supabase Config
+└── supabase/migrations/   # Timestamp-based SQL migrations
 ```
 
-### Views & Routes
-- `/` - **CleaningView** - Task-Liste, gefiltert über Kategorie-Chips (Alltag / Putzen / Projekte / Erledigt)
-  - **Filter-Chips**: Single-Select-Toggle. Ein Chip filtert exklusiv auf eine Kategorie;
-    erneuter Klick (oder das ✕-Badge am aktiven Chip) hebt den Filter auf → alle sichtbar.
-    Auswahl persistiert in `localStorage` (`putzplan_active_category`).
-  - **Vereinter FAB**: EIN Button (Lupe + kleines +-Badge) öffnet das Such-Overlay (suchen UND erstellen)
-  - **Cross-Tab Search**: Intelligente Suche über alle Kategorien mit Relevanz-Sortierung.
-    Bei Eingabe erscheinen zwei Aktionen: **Aufgabe erstellen** (TaskCreateModal, Titel vorbefüllt)
-    und **Quick-Aufgabe abschließen** (QuickTaskModal)
-  - **Quick-Aufgaben**: einmalig, sofort abgeschlossen + sofort soft-deleted → erscheinen NUR in der
-    Historie (mit „Quick"-Badge), nicht in der Aufgabenliste. Punkte zählen in Stats/Ausgleich.
-    Insert direkt via `taskStore.createQuickTask()` (keine Edge Function, RLS erlaubt Client-Insert)
-- `/history` - **HistoryView** - Chronologischer Verlauf aller Completions
-- `/stats` - **StatsView** - Gamification-Statistiken (Balken-/Tortendiagramm + Verlaufsgrafik mit Wochen-/Monatsansicht)
-- `/shopping` - **ListsView** - zwei Subtabs: **Einkauf** (ShoppingView) & **Packlisten** (PackingView)
-  - **ShoppingView** - Einkaufsliste, an das Packlisten-Redesign angeglichen (07/2026):
-    - **Kategorien** (`shopping_items.category`, nullable): nur „Zu kaufen" wird gruppiert,
-      „Unkategorisiert" unten gepinnt. Farbe deterministisch aus `lib/categoryColor.ts`.
-    - **Menge** (`shopping_items.quantity`, >=1): reines ×N-Label (kein Stepper — Kauf ist ein
-      einzelner Fertig-Flip).
-    - **Gekauft**: globaler Block unten mit Kauf-Historie (`times_purchased`, letzter Kauf/Käufer),
-      NICHT per Kategorie gruppiert. Grace (~6 s, `useGraceWindow`): frisch Gekauftes bleibt
-      durchgestrichen in seiner Kategorie, wandert erst nach Ablauf in den Gekauft-Block.
-    - **Priorität**: ⭐ inline als reines Highlight (kein Hochsortieren). Sortierung nach Name.
-    - **Add-Wege**: Top-Suchleiste (→ Unkategorisiert, mit Autocomplete) + per-Sektion-Add-Line.
-      Long-Press / Rechtsklick öffnet `ShoppingItemEditModal` (Name · Kategorie · Menge · Löschen).
-    - **Kategorie-Reuse**: `CategorySearchModal` mit `importItems:false` — übernimmt nur den
-      NAMEN aus anderen Listen (keine Items, die könnten anderswo schon abgehakt sein).
-      Rename/Löschen via `CategoryEditModal`.
-    - **Voll offline**: optimistische Updates + Mutation-Queue (`shopping_mutation_queue`).
-      Offline angelegte Items sind sofort abhak-/editierbar — nach dem Create-Sync werden ihre
-      Folge-Mutationen per Temp-ID-Verkettung (`reconcileTempId`) auf die echte ID umgehängt.
-      `loadItems` merged Server-Rows ohne in-flight-optimistische Items zu überschreiben.
-    - Store: `useShoppingStore` — Getter `itemsByCategory`, `categoryLabels`; Actions
-      `createItem(name, category, quantity)`, `updateItem`, `addCategory`, `renameCategory`/
-      `deleteCategory`, `categoryImportCandidates`, `togglePriority`, `markPurchased`/`markUnpurchased`.
-    - **Geteilte Bausteine** (auch von PackingView genutzt): `components/ListItemRow.vue`
-      (Zeilen-Shell + Trailing-Slot), `components/CategoryRail.vue` (Rail mit Bubble-Redesign:
-      höher, farbig, 4-Buchstaben-Label, ab >8 Kategorien dichter), `components/CategoryEditModal.vue`,
-      `components/CategorySearchModal.vue` (Prop `importItems`), `composables/useLongPress.ts`,
-      `composables/useGraceWindow.ts`, `composables/useCategoryRail.ts`.
-  - **PackingView** - nach Kategorien gruppierte Packlisten (Redesign 07/2026):
-    - **Kategorien**: frei definierbare Textlabels pro Liste (keine Kategorie-Tabelle), Farbe
-      deterministisch aus Namens-Hash (`lib/categoryColor.ts`, feste 12er-Palette). „Unkategorisiert"
-      (`category = null`) ist immer vorhanden, muted, unten angepinnt. Fertige Kategorien sinken
-      nach unten + klappen zu; offene manuell zuklappbar (Session-State, kein DB-Feld).
-    - **Entkoppeltes Modell**: `packed` (Fertig-Flag) ist unabhängig von `packed_count` (0..`quantity`).
-      Körper-Tap togglet nur `packed`; Stepper `[–] X/N [＋]` (nur qty>1) ändert `packed_count`
-      (Voll → auto-fertig, drunter → wieder offen). Long-Press / Rechtsklick öffnet Edit-Modal.
-    - **Add-Zeile pro Sektion** klappt ein, sobald in der Sektion etwas gepackt ist
-      (`packedCount > 0`), „+ hinzufügen" öffnet wieder (`forcedAddOpen`-Set).
-    - **Wiederverwendung**: „+ Kategorie"-Schnellsuche (`CategorySearchModal`) verschmilzt Neu-Erstellen
-      + Import distinct (Kategorie × Quell-Liste) über den Haushalt; Import überspringt Namens-Dubletten.
-      „Neue Liste" kann leer oder als Kopie einer bestehenden Liste (`copyList`) erstellt werden.
-    - **Reise-Notizen** (`packing_lists.notes`, Freitext, einklappbar oben).
-    - Store: `usePackingStore` — Getter `itemsByCategory`, `overallProgress`; Actions `togglePacked`,
-      `incrementPacked`/`decrementPacked`, `updateItem`, `addItem(name, category)`, `importCategory`,
-      `copyList`, `updateNotes`. Optimistische Updates mit Revert.
-- `/notes` - **NotesView** - Haushalt-Notizen (alle Mitglieder können erstellen/bearbeiten/löschen)
-- `/login` - LoginView
-- `/register` - RegisterView
-- `/household-setup` - HouseholdSetupView
+## Routes
 
-### Datenmodell
-**Source of Truth**: Supabase Schema
-*Frontend-Types können temporär abweichen für MVP-Geschwindigkeit*
+| Route | View | Zweck |
+|---|---|---|
+| `/` | CleaningView | Task-Liste + Kategorie-Chips, FAB-Suche, Quick-Aufgaben |
+| `/history` | HistoryView | Chronologie aller Completions |
+| `/stats` | StatsView | Gamification-Statistiken |
+| `/shopping` | ListsView | Subtabs Einkauf (ShoppingView) & Packlisten (PackingView) |
+| `/notes` | NotesView | Haushalt-Notizen |
+| `/login`, `/register`, `/household-setup` | — | Auth & Onboarding |
 
-**Tabellen & Primary Keys** (WICHTIG für `.eq()` Queries):
-- `households` - PK: `household_id`
-- `household_members` - PK: `user_id` (**One ID per user!** - referenziert `auth.users.id`)
-  - Hat `display_name` (Email-Prefix als Fallback beim Join/Create)
-  - Keine redundante `member_id` mehr (wurde entfernt für einfacheres Datenmodell)
-- `tasks` - PK: `task_id` (Task-Templates mit `recurrence_days`, `last_completed_at`, `task_type`)
-  - **Soft Delete**: `deleted_at` Column (NULL = aktiv, Timestamp = gelöscht)
-    - Gelöschte Tasks bleiben für Historie erhalten (Task-Namen sichtbar in HistoryView)
-    - `loadTasks()` filtert mit `.is('deleted_at', null)`
-    - `deleteTask()` setzt `deleted_at` statt echtem DELETE
-  - `task_type` - Enum mit Subtask-Verhalten:
-    - `'recurring'`: Zeitbasiert, **alle Subtask-Modi erlaubt** (checklist/deduct/bonus)
-    - `'daily'`: Immer sichtbar, **nur 'bonus' Subtasks** (eigenständige Belohnungen)
-    - `'one-time'`: Einmalig, **alle Subtask-Modi erlaubt**
-    - `'project'`: Langfristig, **nur 'checklist' + 'bonus'** (kein deduct)
-- `task_completions` - PK: `completion_id` (Append-only Historie, **Single Source of Truth**)
-  - `user_id` referenziert direkt `auth.users.id`
-  - `is_quick` - Boolean (Default `FALSE`): markiert Quick-Aufgaben (einmalig + sofort
-    abgeschlossen, nur in Historie sichtbar). HistoryView zeigt dafür ein „Quick"-Badge
-    statt des „Gelöscht"-Badges (obwohl der Task soft-deleted ist)
-- `shopping_items` - PK: `shopping_item_id` (Einkaufsliste mit Purchase-Tracking)
-  - `times_purchased` - Counter für Kaufhäufigkeit
-  - `last_purchased_at`, `last_purchased_by` - Tracking von letztem Einkauf
-  - `purchased` - Boolean für aktuellen Status (gekauft/nicht gekauft)
-  - `category` - Freitext-Kategorie (nullable, `NULL` = „Unkategorisiert"); nur „Zu kaufen" gruppiert
-  - `quantity` - Menge (INT, `>= 1`, Default 1); reines ×N-Label
-- `notes` - PK: `note_id` (Haushalt-Notizen)
-  - `content` - Textinhalt der Notiz
-  - `created_by` - User der die Notiz erstellt hat
-  - `created_at`, `updated_at` - Timestamps
+Detailverhalten je View → [docs/features.md](docs/features.md)
 
-**Task Recurrence & Business Logic:**
-- Frontend: `completeTask()` ruft Edge Function auf, `markAsDirty()` setzt nur tasks.completed
-- **Edge Function** (`complete-task`): TypeScript Business-Logik für Task-Completion
-  - Schreibt in `task_completions` Historie
-  - Updated `tasks.completed` + `tasks.last_completed_at`
-  - Ersetzt alten DB-Trigger (besseres Debugging, TypeScript statt SQL)
-  - ✅ CORS-Headers für localhost Development
-- Backend Cron: SQL Function `reset_recurring_tasks()` + pg_cron (täglich 3:00 UTC) setzt überfällige Tasks automatisch auf dreckig
-  - **Calendar Days Logic**: Verwendet `CURRENT_DATE - DATE(last_completed_at)` für ganze Tage (nicht 24h-Perioden)
-  - Beispiel: Task completed am 18.10. um 14:00 → Reset am 19.10. um 3:00 (1 ganzer Tag vergangen)
+## Datenmodell (Kurzform)
 
-### Subtask Points Modes (Task-Type-abhängig)
+Supabase-Schema ist Source of Truth. PKs heißen **nicht** `id` — wichtig für `.eq()`:
+`households.household_id`, `household_members.user_id`, `tasks.task_id`,
+`task_completions.completion_id`, `shopping_items.shopping_item_id`, `notes.note_id`.
 
-**Available Modes by Task Type:**
-- **Daily Tasks (`task_type: 'daily'`)**: Nur `bonus` erlaubt
-  - Reason: Daily tasks werden nie completed → Subtasks nie resettet → nur Bonus verhindert Doppelpunkte
-- **Projects (`task_type: 'project'`)**: Nur `checklist` + `bonus` erlaubt (kein `deduct`)
-  - Reason: Projects haben "Am Projekt arbeiten" Subtask mit custom Effort-Logging
-- **Recurring/One-time**: Alle Modi erlaubt (`checklist`, `deduct`, `bonus`)
+- `tasks` nutzt **Soft Delete** (`deleted_at`) — Historie bleibt erhalten
+- `task_completions` ist append-only und die **Single Source of Truth** für Punkte
+- Task-Completion läuft über die Edge Function `complete-task`, nicht über DB-Trigger
+- Erlaubte Subtask-Punktmodi hängen am `task_type`
 
-**Mode Descriptions:**
-- `'checklist'`: 0 Punkte (nur Tracking, Fortschritts-Anzeige)
-- `'deduct'`: Aufwand wird von Parent-Effort abgezogen (Parent - Deduct = finale Punkte)
-- `'bonus'`: Volle Punkte zusätzlich zum Parent (eigenständige Belohnung)
+Volles Schema, Recurrence-Logik und Subtask-Modi → [docs/data-model.md](docs/data-model.md)
 
-**Business Logic (Daily Tasks):**
-1. Daily task completed → `tasks.completed` bleibt `false` (Edge Function)
-2. `task_completions` wird trotzdem geschrieben (History-Tracking)
-3. Subtasks werden NICHT resettet (kein Parent-Complete-Trigger)
-4. Lösung: Nur Bonus-Subtasks → User versteht "Extra-Belohnung", kein Doppelpunkt-Problem
+## Migrations
 
-**UI Behavior:**
-- SubtaskManagementModal: Bei Daily kein Modus-Selector (auto-select bonus)
-- TaskCard: Bei Daily keine Gruppierung (flache Liste, alle Subtasks = Bonus)
+Append-only, nie gepushte Migrations editieren. RLS für alle Tabellen.
 
-## 📚 Entwicklungsprinzipien
-
-### YAGNI (You Aren't Gonna Need It) - ESSENTIELL
-- **Nur implementieren was JETZT gebraucht wird**
-- Keine Features "für später" oder "falls mal nötig"
-- Code rauswerfen wenn nicht aktiv genutzt
-- MVP-First: Erst funktionsfähig, dann perfekt
-
-### Vue 3 Patterns
-- **Pinia**: Direkte Store-Nutzung in Components (`taskStore.deleteTask(id)`)
-- **Kein Event-Chain**: Nicht "props down, events up" bei zentralem Store
-
-### UI Patterns
-- **Vue Modals**: Teleport + v-if für alle Forms (TaskCreateModal, TaskEditModal, TaskCompletionModal etc.)
-- **Nicht Bootstrap Modals**: Vue 3 Kompatibilitätsprobleme
-- **Modal Pattern**: Zentralisierte Utility-Styles in `utilities.css` (flexbox, scrollable body)
-- **FAB Pattern** (CleaningView):
-  - EIN Floating Action Button unten rechts (Material Design Standard, thumb-freundlich)
-  - Glyph: Lupe + kleines weißes +-Badge → signalisiert „suchen UND erstellen"
-  - Öffnet das Such-Overlay; bei Eingabe erscheinen die Aktionen Erstellen / Quick-Aufgabe
-  - Farbregel: FAB indigo (primär), +-Badge weiß-auf-indigo (kein grünes Erstellen-Signal,
-    Grün bleibt ausschließlich für „erledigt/abschließen")
-
-### CSS Architecture
-- **Design System**: CSS Variables in `base.css`:
-  - Farben, Spacing, Shadows, Border-Radius, Transitions
-  - **Font Sizes**: `--font-xs` bis `--font-xl` (10px-18px)
-  - **Touch Targets**: `--touch-target-min: 48px` (Android Standard)
-- **Bootstrap Overrides**: Zentrale Button/Card/Form-Styles in `base.css`
-- **Utility Classes**: Wiederverwendbare Patterns in `utilities.css`:
-  - Auth-Container Pattern (Login/Register/HouseholdSetup)
-  - Modal Pattern (TaskCompletionModal, HistoryView)
-  - Page-Container Pattern (alle Views)
-  - Section-Title Pattern
-  - Empty-State Pattern
-  - Form-Group Utility
-  - **Icon Button Utility** (`.btn-icon`) - 48px quadratische Touch-Buttons
-- **Component Styles**: Nur component-spezifische Styles in `<style scoped>`
-- **Mobile-First Touch Targets**: Alle interaktiven Buttons min. 48x48px für Touch-Freundlichkeit
-
-### Database Migrations (Supabase CLI)
-
-**Status:** ✅ Konsolidiert (26.10.2025)
-- **4 strukturierte Migrations** (war: 29)
-- Alte Migrations archiviert in `supabase/migrations/archive/`
-
-**Struktur:**
-```
-supabase/migrations/
-├── 20251026000000_consolidated_schema.sql  # Tables, Indexes, Triggers
-├── 20251026000001_rls_policies.sql         # RLS Policies (documented)
-├── 20251026000002_realtime.sql             # Realtime config
-├── 20251026000003_cron_jobs.sql            # Recurring tasks cron
-├── 20260103202609_soft_delete_tasks.sql    # Soft Delete (deleted_at Column)
-└── archive/                                 # Old migrations (reference)
-```
-
-**Workflow** (WICHTIG: CLI über `npx` ausführen):
 ```bash
-# Migration erstellen und bearbeiten
 npx supabase migration new my_feature_name
-# → SQL in supabase/migrations/[timestamp]_my_feature_name.sql schreiben
-
-# Migration pushen
 npx supabase db push
-
-# Remote-Schema-Änderungen pullen (optional)
-npx supabase db pull
-
-# Migration-Status checken (optional)
-npx supabase migration list --linked
 ```
 
-**Wichtige Regeln**:
-- **Append-only**: Nie gepushte Migrations editieren
-- **Security**: RLS für alle Tabellen, SECURITY DEFINER für Helper-Functions (`get_user_household_id()`)
-- `.env` nicht committen
+Details → [docs/migrations.md](docs/migrations.md)
 
----
-**Status & nächste Aufgaben**: Siehe `TODO.md`
+## Credentials
+
+**GitHub PAT** in `.env` im Root als `GITHUB_PAT=...` (gitignored), fine-grained mit
+`Contents: read+write` und `Pull requests: read+write`. `.env` niemals committen.
+
+## Agent skills
+
+- **Issue tracker**: Issues und Specs als Markdown unter `.scratch/<feature-slug>/`
+  (gitignored) → [docs/agents/issue-tracker.md](docs/agents/issue-tracker.md)
+- **Triage labels**: die fünf kanonischen Rollen als `Status:`-Zeile im Issue-File
+  → [docs/agents/triage-labels.md](docs/agents/triage-labels.md)
+- **Domain docs**: single-context, `CONTEXT.md` + `docs/adr/` im Root
+  → [docs/agents/domain.md](docs/agents/domain.md)
