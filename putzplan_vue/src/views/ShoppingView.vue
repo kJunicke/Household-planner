@@ -16,7 +16,7 @@ import ListEditModal from '@/components/ListEditModal.vue'
 import ListItemRow from '@/components/ListItemRow.vue'
 import ShoppingItemEditModal from '@/components/ShoppingItemEditModal.vue'
 import CategoryRail from '@/components/CategoryRail.vue'
-import CategorySearchModal from '@/components/CategorySearchModal.vue'
+import ShoppingCategoryCreateModal from '@/components/ShoppingCategoryCreateModal.vue'
 import CategoryEditModal from '@/components/CategoryEditModal.vue'
 import CategoryCombobox from '@/components/CategoryCombobox.vue'
 
@@ -40,7 +40,7 @@ const newListName = ref('')
 const editingList = ref<{ list_id: string; name: string } | null>(null)
 const editingItem = ref<ShoppingItem | null>(null)
 const editingCategory = ref<{ name: string; count: number } | null>(null)
-const showCategorySearch = ref(false)
+const showCategoryCreate = ref(false)
 
 // --- Per-section UI state (session-only, reset on list switch) ---------------
 const addDraft = ref<Record<string, string>>({})
@@ -119,8 +119,6 @@ const displaySections = computed<ShoppingCategoryGroup[]>(() => {
 const gekauftItems = computed(() =>
   shoppingStore.purchasedItems.filter(i => !graceIds.value.has(i.shopping_item_id))
 )
-
-const categoryLabels = computed(() => shoppingStore.categoryLabels)
 
 // --- Section collapse -------------------------------------------------------
 const isSectionOpen = (key: string): boolean => {
@@ -297,10 +295,9 @@ const handleItemDelete = async (itemId: string) => {
 }
 
 // --- Categories -------------------------------------------------------------
-const importCandidates = computed(() => shoppingStore.categoryImportCandidates(''))
-
-const handleCreateCategory = async (name: string) => {
-  await shoppingStore.createCategory(name)
+/** Anlegen und Umhängen in einem Zug — der Store schreibt beides gemeinsam. */
+const handleCreateCategory = async (name: string, itemIds: string[]) => {
+  await shoppingStore.createCategory(name, itemIds)
 }
 
 const openCategoryEdit = (group: ShoppingCategoryGroup) => {
@@ -500,7 +497,7 @@ onUnmounted(() => {
             </button>
             <button
               class="top-btn top-new-cat"
-              @click="showCategorySearch = true"
+              @click="showCategoryCreate = true"
               title="Kategorie anlegen"
             >
               <i class="bi bi-tag"></i>
@@ -705,14 +702,13 @@ onUnmounted(() => {
     @close="editingItem = null"
   />
 
-  <!-- Kategorie-Suche (nur Namens-Wiederverwendung, keine Item-Übernahme) -->
-  <CategorySearchModal
-    v-if="showCategorySearch"
-    :import-items="false"
-    :existing-labels="categoryLabels"
-    :candidates="importCandidates"
+  <!-- Kategorie anlegen samt Produktzuordnung -->
+  <ShoppingCategoryCreateModal
+    v-if="showCategoryCreate"
+    :items="shoppingStore.currentListItems"
+    :category-options="shoppingStore.categorySuggestions"
     @create="handleCreateCategory"
-    @close="showCategorySearch = false"
+    @close="showCategoryCreate = false"
   />
 
   <!-- Kategorie bearbeiten / löschen -->

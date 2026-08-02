@@ -59,15 +59,6 @@ export const compareCategoryGroups = (a: ShoppingCategoryGroup, b: ShoppingCateg
   return a.label.localeCompare(b.label)
 }
 
-export interface ShoppingImportCandidate {
-  sourceListId: string
-  sourceListName: string
-  category: string
-  itemCount: number
-  /** created_at of the source list — newest first in the picker. */
-  sourceCreatedAt: string
-}
-
 export const useShoppingStore = defineStore('shopping', () => {
   // State
   const items = ref<ShoppingItem[]>([])
@@ -216,11 +207,6 @@ export const useShoppingStore = defineStore('shopping', () => {
     result.sort(compareCategoryGroups)
     return result
   })
-
-  /** Category labels of the current list (named only, for the edit modal). */
-  const categoryLabels = computed(() =>
-    itemsByCategory.value.filter(g => !g.isUncategorized).map(g => g.label)
-  )
 
   /**
    * Vorschläge für die Kategorie-Combobox: alle Listen des Haushalts, die der
@@ -967,43 +953,6 @@ export const useShoppingStore = defineStore('shopping', () => {
     return target
   }
 
-  /**
-   * Distinct (category × source list) across the household, excluding the current
-   * list and the Uncategorized bucket, filtered by query, newest list first.
-   * The picker collapses these to distinct names (shopping reuses only the NAME,
-   * never the source items — those may already be checked off elsewhere).
-   */
-  const categoryImportCandidates = (query: string): ShoppingImportCandidate[] => {
-    const q = query.trim().toLowerCase()
-    const listName = new Map(lists.value.map(l => [l.list_id, l]))
-    const buckets = new Map<string, ShoppingImportCandidate>()
-
-    for (const item of items.value) {
-      if (item.list_id === currentListId.value) continue
-      if (!item.category) continue
-      if (q && !item.category.toLowerCase().includes(q)) continue
-      const list = listName.get(item.list_id)
-      if (!list) continue
-      const key = `${item.list_id}::${item.category}`
-      const existing = buckets.get(key)
-      if (existing) {
-        existing.itemCount++
-      } else {
-        buckets.set(key, {
-          sourceListId: item.list_id,
-          sourceListName: list.name,
-          category: item.category,
-          itemCount: 1,
-          sourceCreatedAt: list.created_at,
-        })
-      }
-    }
-
-    return [...buckets.values()].sort((a, b) =>
-      b.sourceCreatedAt.localeCompare(a.sourceCreatedAt)
-    )
-  }
-
   /** Produkte der aktuellen Liste, die diesen Kategorienamen tragen — gekaufte eingeschlossen. */
   const itemsInCategory = (category: string) => {
     const key = normalizeCategoryName(category)
@@ -1237,7 +1186,6 @@ export const useShoppingStore = defineStore('shopping', () => {
     unpurchasedItems,
     purchasedItems,
     itemsByCategory,
-    categoryLabels,
     categorySuggestions,
     loadLists,
     createList,
@@ -1252,7 +1200,6 @@ export const useShoppingStore = defineStore('shopping', () => {
     deleteItem,
     loadCategories,
     createCategory,
-    categoryImportCandidates,
     renameCategory,
     deleteCategory,
     suggestCategoryFor,
