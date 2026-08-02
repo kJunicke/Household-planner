@@ -56,11 +56,24 @@ export const useAuthStore = defineStore('auth', () => {
         return { success: true}
     }
 
+    // Verhindert doppelte Listener bei mehrfachem initializeAuth()-Aufruf
+    let authListenerRegistered = false
+
     async function initializeAuth() {
         const { data } = await supabase.auth.getSession()
         if (data.session) {
             user.value = data.session.user
             session.value = data.session
+        }
+
+        // Supabase erneuert Tokens im Hintergrund und meldet Logouts aus anderen Tabs.
+        // Ohne diesen Listener bliebe der Store auf dem Stand vom App-Start stehen.
+        if (!authListenerRegistered) {
+            authListenerRegistered = true
+            supabase.auth.onAuthStateChange((_event, newSession) => {
+                session.value = newSession
+                user.value = newSession?.user ?? null
+            })
         }
     }
     return {

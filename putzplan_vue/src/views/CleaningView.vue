@@ -707,7 +707,10 @@ onUnmounted(() => {
   left: 0;
   width: 100%;
   height: 100%;
-  z-index: 2000;
+  /* Über FAB (1000), aber UNTER der Modal-Ebene (1050, utilities.css):
+     TaskCard-Modals aus den Suchergebnissen teleportieren nach <body> und
+     müssen über dem Overlay liegen, sonst sind ihre Buttons nicht klickbar. */
+  z-index: 1010;
   animation: fadeIn 0.2s ease-out;
 }
 
@@ -784,9 +787,10 @@ onUnmounted(() => {
   flex-shrink: 0;
 }
 
+/* flex-basis so groß, dass beide Buttons auf schmalen Screens (<440px)
+   untereinander umbrechen statt sich zu überlappen. */
 .search-overlay-actions .btn {
-  flex: 1 1 0;
-  min-width: 140px;
+  flex: 1 1 200px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
