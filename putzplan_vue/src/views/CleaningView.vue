@@ -107,25 +107,6 @@ const byUrgency = (a: Task, b: Task): number => {
   return ua === ub ? 0 : ub - ua
 }
 
-// Helper functions for task filtering and sorting (copied from TaskList logic)
-const getDaysOverdue = (task: Task): number => {
-  if (!task.last_completed_at) return Infinity
-  const lastCompleted = new Date(task.last_completed_at)
-  const today = new Date()
-  const lastCompletedDate = new Date(lastCompleted.getFullYear(), lastCompleted.getMonth(), lastCompleted.getDate())
-  const todayDate = new Date(today.getFullYear(), today.getMonth(), today.getDate())
-  return Math.floor((todayDate.getTime() - lastCompletedDate.getTime()) / (1000 * 60 * 60 * 24))
-}
-
-const getDaysUntilDue = (task: Task): number => {
-  if (task.task_type === 'one-time') return Infinity
-  if (task.task_type !== 'recurring' || !task.recurrence_days || !task.last_completed_at) {
-    return Infinity
-  }
-  const daysPassed = getDaysOverdue(task)
-  return task.recurrence_days - daysPassed
-}
-
 // Get tasks for a specific category
 const getTasksForCategory = (category: TaskCategory): Task[] => {
   let tasks: Task[] = []
@@ -137,8 +118,10 @@ const getTasksForCategory = (category: TaskCategory): Task[] => {
       task.parent_task_id === null &&
       task.task_type !== 'project'
     )
-    // Sort by days until due (ascending)
-    tasks.sort((a, b) => getDaysUntilDue(a) - getDaysUntilDue(b))
+    // Nächste Fälligkeit zuerst — derselbe Schlüssel wie in "Jetzt dran":
+    // absteigende Dringlichkeit ist aufsteigende Restlaufzeit. Aufgaben ohne
+    // Kadenz (täglich, einmalig) haben keine Fälligkeit und bleiben hinten.
+    tasks.sort(byUrgency)
 
     // Add completed projects at the end
     const completedProjects = taskStore.tasks.filter((task: Task) =>
