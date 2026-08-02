@@ -156,6 +156,47 @@ if (taskDetails.effort - deductSum < 0) {
 
 ---
 
+## 🐛 Bug #4: Zwei Regeln für „ist die Aufgabe dran?" (03.08.2026)
+
+### Problem
+Eine noch nie erledigte wiederkehrende Aufgabe galt auf ihrer Karte als maximal dringend,
+fiel aber aus der „Jetzt dran"-Sektion heraus. Überfällig-Tage wurden ab der letzten
+Erledigung gezählt statt ab der Kadenz: Kadenz 7, zuletzt vor 10 Tagen → „10 Tage
+überfällig" statt 3. Dadurch war die Rot-Färbung praktisch immer voll ausgereizt.
+
+### Root Cause
+Die Frage „ist diese Aufgabe dran?" wurde an fünf Stellen im Frontend unabhängig
+beantwortet — jeweils mit eigener Datumsmathematik auf `last_completed_at`. Dieselbe Regel
+stand zusätzlich in SQL (`reset_recurring_tasks()`). Zwei Antworten auf eine Frage laufen
+zwangsläufig auseinander; jede Kopie hatte ihren eigenen Sonderfall für „nie erledigt".
+
+### Symptome
+- Karte und Sektion bewerten dieselbe Aufgabe widersprüchlich
+- Zwischen lokal Mitternacht und dem Cron-Lauf um 03:00 UTC: „überfällig" bei
+  gleichzeitig `completed = true`
+- Ein Fallback im Code mit dem Kommentar „Sollte nicht vorkommen"
+
+### Lösung
+Zuständigkeiten getrennt: **ob** eine Aufgabe dran ist, entscheidet allein `tasks.completed`
+in der DB; **wie dringend** sie ist, berechnet das Modul `src/lib/taskSchedule.ts` aus
+Kadenz und letzter Erledigung. Die Kadenz-Grenze `Tage >= recurrence_days` führt nur noch in
+`reset_recurring_tasks()` zu einer Zustandsänderung. Siehe
+[ADR 0001](docs/adr/0001-completed-ist-zustand-keine-ableitung.md).
+
+### Prävention
+- Eine Frage, eine Antwortstelle. Wenn dieselbe Regel in SQL **und** im Frontend steht, ist
+  eine davon zu viel — nicht beide „richtig" halten wollen.
+- Der naheliegende Aufräumgedanke (Cron abschaffen, alles im Frontend ableiten) bricht
+  „wieder dreckig" und „verschieben". Das ADR ist der Grund, es nicht zu tun.
+- Vor dem Kopieren einer Hilfsfunktion prüfen, ob die Quelle noch lebt: `TaskList.vue` war
+  seit dem Kopieren tot und trug trotzdem eine dritte Garnitur derselben Rechnung.
+
+### Related Patterns
+Bug #2 (unvollständige Migration) — auch dort lag der Fehler nicht in einer Zeile, sondern
+darin, dass nicht alle Aufrufer mitgezogen wurden.
+
+---
+
 ## 📝 Template für neue Bug-Einträge
 
 ```markdown
