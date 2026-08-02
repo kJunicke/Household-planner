@@ -126,7 +126,39 @@ ALTER TABLE shopping_items ADD COLUMN quantity int NOT NULL DEFAULT 1;
 - **User Stats** - XP, Level, Streaks pro Haushalt
 - **Ranglisten** - Mitglieder nach XP sortiert anzeigen
 
+### Architektur-Kandidaten (Review 02.08.2026)
+
+Aus dem Architektur-Review: sechs Stellen, an denen dieselbe Regel mehrfach existiert.
+Kandidat 1 ist umgesetzt (siehe Changelog), 2–6 stehen offen. Reihenfolge = Empfehlung
+des Reviews, Stärke in Klammern.
+
+- **2 — Punkteberechnung als ein Modul** *(Strong)*. Die deduct/bonus-Formel lebt in der
+  Edge Function `complete-task`; das Completion-Modal rechnet sie für seine Warnung
+  eigenständig nach. Zwei Antworten auf „wie viele Punkte gibt das?" — dieselbe Bauart
+  wie Kandidat 1. Achtung: `task_completions` ist Single Source of Truth für Punkte, das
+  Modul darf nur *vorhersagen*, nicht schreiben.
+- **3 — Kategorisierte Liste als ein Modul** *(Strong)*. `shoppingStore` und `packingStore`
+  haben `addCategory`/`categoryImportCandidates` zeichengleich; die beiden Item-Edit-Modals
+  unterscheiden sich in 8 von 147 Zeilen. Teilweise entschärft durch die geteilten Bausteine
+  aus der Einkaufsliste-Angleichung — vor dem Angehen neu vermessen.
+- **4 — CleaningView gibt Regeln ab** *(Strong)*. Suchranking (100/80/60/40) und
+  Tab-Zuordnung stecken weiterhin in View-lokalen Funktionen. Die vier Sortierungen sind
+  mit Kandidat 1 erledigt. Baut direkt auf `lib/taskSchedule.ts` auf.
+- **5 — Offline-Queue als Modul** *(Worth exploring)*. Im Einkaufsstore zwischen die
+  Domänenaktionen gefädelt (8 Call-Sites). Folge: die Packliste hat gar kein Offline.
+- **6 — Haushalts-Scope & Realtime** *(Speculative)*. 60 direkte `supabase.from()`-Aufrufe,
+  ~20× dieselbe Guard-Präambel, 5× dupliziertes Subscribe/Unsubscribe. Größter Umbau,
+  schwächste Evidenz — nicht ohne konkreten Anlass anfangen.
+
 ### Code Quality
+- **`currentHousehold` überlebt externen Logout** - nach einem Sign-out in einem anderen
+  Tab bleibt `householdStore.currentHousehold` im Speicher, bis die nächste Navigation den
+  Router-Guard auslöst. Fund aus dem Review vom 02.08.2026, damals bewusst nicht mitgefixt.
+- **„Als erledigt markieren ohne Punkte" umbenennen** - heißt im Glossar
+  ([CONTEXT.md](CONTEXT.md)) „verschieben" und markiert gerade *nicht* als erledigt: die
+  Aufgabe bleibt dran, sammelt nur keine Überfällig-Tage mehr. Sitzt im Bearbeiten-Modal.
+- **`SubtaskManagementModal.vue.backup` prüfen und löschen** - vermutlich tot wie die
+  beiden `.backup`-Dateien, die mit Kandidat 1 verschwunden sind.
 - **Form Validation** - Input-Validierung für alle Forms
 - **Automatisierte Tests einführen** - Aktuell bewusst KEIN Test-Framework; getestet wird
   ausschließlich manuell via Claude-in-Chrome (so in CLAUDE.md festgelegt). Wenn das kippt:
@@ -209,6 +241,12 @@ ALTER TABLE shopping_items ADD COLUMN quantity int NOT NULL DEFAULT 1;
 
 ## ✅ Erledigt (Changelog)
 
+- **Fälligkeit als ein Modul** (Architektur-Kandidat 1) - 03.08.2026. Die Überfällig-Regel
+  existierte 4× mit drei verschiedenen Antworten auf „nie erledigt". Jetzt: *ob* eine Aufgabe
+  dran ist, entscheidet allein `tasks.completed` (DB); *wie dringend* sie ist, berechnet
+  `lib/taskSchedule.ts`. Dazu [CONTEXT.md](CONTEXT.md) als Glossar,
+  [ADR 0001](docs/adr/0001-completed-ist-zustand-keine-ableitung.md), BUG-PATTERNS #4;
+  `TaskList.vue` als tote Kopie gelöscht.
 - **Packlisten-Redesign** (Kategorien mit Hash-Farben, Mengen/Zähler entkoppelt von Fertig-Flag, Stepper mit Auto-Fertig, Unkategorisiert-Bucket, Auto-Collapse fertiger Kategorien, Gesamt-Fortschritt, Reise-Notizen, Kategorie-Import & Liste-kopieren, Long-Press-Edit) - 16.07.2026
 - **Quick-Aufgaben + vereinter Such-/Erstellen-FAB** - 26.06.2026
 - **UX Look & Feel P0–P2 + Folge-Politur** - 06/2026 (Member-Farben, FAB, CTA-Farbregel, Single-Select-Filter, TaskCard-Politur)
