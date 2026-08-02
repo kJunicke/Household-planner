@@ -1,48 +1,29 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, onMounted, onUnmounted } from 'vue'
 import { useTaskStore } from '../stores/taskStore'
 import { useHouseholdStore } from '../stores/householdStore'
-import type { Task, EnrichedCompletion } from '@/types/Task'
+import { useHistoryGroups, type HistoryEntry } from '@/composables/useHistoryGroups'
+import type { Task } from '@/types/Task'
 
 const taskStore = useTaskStore()
 const householdStore = useHouseholdStore()
 
-// Extended type with user_color (added in computed)
-interface CompletionWithDetails extends EnrichedCompletion {
-  household_members: {
-    display_name: string
-    user_color: string
-  }
-}
-
 const showDeleteModal = ref(false)
-const completionToDelete = ref<CompletionWithDetails | null>(null)
+const completionToDelete = ref<HistoryEntry | null>(null)
 const showDeleteAllModal = ref(false)
 const showOptionsDropdown = ref(false)
 const isLoading = ref(true)
 
-// Reactive completions from store (updated via Realtime)
-// Mit Soft Delete: Task-Namen sind immer verfügbar, isDeleted Flag zeigt gelöschte Tasks
-// fetchCompletions() liefert EnrichedCompletion mit tasks.title und isDeleted
-const completions = computed((): CompletionWithDetails[] => {
-  return taskStore.completions.map(completion => {
-    const member = householdStore.householdMembers.find(m => m.user_id === completion.user_id)
-    // Cast zu EnrichedCompletion (kommt aus fetchCompletions)
-    const enriched = completion as EnrichedCompletion
+// Bezugszeitpunkt für „Heute"/„Gestern" — einmal beim Betreten der Ansicht gesetzt,
+// damit die Tagesgrenzen während des Renderns stabil bleiben.
+const now = ref(new Date())
 
-    return {
-      ...enriched,
-      // Fallback falls nicht enriched (z.B. von Realtime)
-      isDeleted: enriched.isDeleted ?? false,
-      isQuick: enriched.isQuick ?? false,
-      tasks: enriched.tasks ?? { title: 'Unbekannte Aufgabe' },
-      household_members: {
-        display_name: enriched.household_members?.display_name || member?.display_name || 'Unbekannt',
-        user_color: member?.user_color || '#6c757d'
-      }
-    }
-  }).sort((a, b) => new Date(b.completed_at).getTime() - new Date(a.completed_at).getTime())
-})
+// Anreicherung, Tagesgruppierung, Labels und Sortierung liegen im Composable.
+const { entries: completions, dayGroups: groupedCompletions } = useHistoryGroups(
+  () => taskStore.completions,
+  () => householdStore.householdMembers,
+  now
+)
 
 // Only the time per row — the day is shown once in the group header below.
 const formatTime = (dateString: string) => {
@@ -52,42 +33,7 @@ const formatTime = (dateString: string) => {
   })
 }
 
-// Human-friendly day label: Heute / Gestern / weekday + date.
-const dayLabel = (date: Date): string => {
-  const today = new Date()
-  const yesterday = new Date()
-  yesterday.setDate(today.getDate() - 1)
-  const sameDay = (a: Date, b: Date) =>
-    a.getFullYear() === b.getFullYear() &&
-    a.getMonth() === b.getMonth() &&
-    a.getDate() === b.getDate()
-  if (sameDay(date, today)) return 'Heute'
-  if (sameDay(date, yesterday)) return 'Gestern'
-  return date.toLocaleDateString('de-DE', {
-    weekday: 'short',
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric'
-  })
-}
-
-// Group the (already date-sorted) completions by calendar day.
-const groupedCompletions = computed(() => {
-  const groups: { key: string; label: string; items: CompletionWithDetails[] }[] = []
-  let current: { key: string; label: string; items: CompletionWithDetails[] } | null = null
-  for (const completion of completions.value) {
-    const date = new Date(completion.completed_at)
-    const key = `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`
-    if (!current || current.key !== key) {
-      current = { key, label: dayLabel(date), items: [] }
-      groups.push(current)
-    }
-    current.items.push(completion)
-  }
-  return groups
-})
-
-const openDeleteModal = (completion: CompletionWithDetails) => {
+const openDeleteModal = (completion: HistoryEntry) => {
   completionToDelete.value = completion
   showDeleteModal.value = true
 }
@@ -120,7 +66,7 @@ const confirmDeleteAll = async () => {
 // Helper: Check if task is a subtask and get parent task info
 // Bei gelöschten Tasks (isDeleted) können wir keine Subtask-Info mehr abrufen
 // da der Task nicht mehr in tasks.value (nur aktive Tasks) geladen ist
-const getTaskInfo = (completion: CompletionWithDetails) => {
+const getTaskInfo = (completion: HistoryEntry) => {
   // Gelöschte Tasks: Subtask-Info nicht verfügbar (Task nicht in aktiver Liste)
   if (completion.isDeleted) {
     return {
@@ -144,13 +90,6 @@ const getTaskInfo = (completion: CompletionWithDetails) => {
     isSubtask: false,
     parentTaskTitle: null
   }
-}
-
-// Helper: Calculate points for completion
-// UNIFIED SOLUTION: Always use effort_override (Single Source of Truth for historical points)
-// effort_override is ALWAYS set (even for standard completions) to preserve historical data
-const getCompletionPoints = (completion: CompletionWithDetails): number => {
-  return completion.effort_override
 }
 
 // Close dropdown when clicking outside
@@ -259,7 +198,7 @@ onUnmounted(() => {
               </span>
               <span class="completion-points">
                 <i class="bi bi-star-fill"></i>
-                {{ getCompletionPoints(completion) }} Pkt
+                {{ completion.points }} Pkt
               </span>
             </div>
             <div v-if="completion.completion_note" class="completion-note-display">
