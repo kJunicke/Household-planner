@@ -11,13 +11,16 @@
  * Überschriften. Die Reihenfolge auf der Wand ist: offene Aufgaben nach
  * Dringlichkeit, dann tägliche, dann Projekte — den Typ trägt das Papier.
  *
+ * Oben klebt die Statusleiste mit dem gemeinsamen Wochenziel (Etappe 3).
+ *
  * Noch nicht hier (spätere Etappen): Erledigt-Liste unter der Wand,
- * Aufklappen von Unteraufgaben, Statusleiste mit Wochenziel, Abreiß-Geste.
+ * Aufklappen von Unteraufgaben, Abreiß-Geste.
  * Erledigen läuft in dieser Etappe weiter über die bestehenden Wege
  * (Such-Overlay mit der alten Karte, Quick-Aufgabe).
  */
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import WallNote from '../components/WallNote.vue'
+import WallStatusBar from '../components/WallStatusBar.vue'
 import TaskCard from '../components/TaskCard.vue'
 import TaskCreateModal from '../components/TaskCreateModal.vue'
 import QuickTaskModal from '../components/QuickTaskModal.vue'
@@ -273,7 +276,17 @@ onMounted(async () => {
   // `relayout()` misst die Breiten neu, deshalb genügt hier ein weiterer Lauf,
   // sobald die Schriften stehen. Ist bereits alles geladen, löst das Promise
   // sofort aus und der Lauf kostet nichts.
-  document.fonts?.ready.then(() => relayout(false))
+  //
+  // Der Lauf liegt in einem `requestAnimationFrame`, nicht direkt im
+  // `then`-Callback: `fonts.ready` ist beim **Umschalten des Aussehens** bereits
+  // erfüllt und löst dann als Mikrotask aus — also möglicherweise noch bevor der
+  // Browser die eben gesetzte Wandhöhe angewandt hat. Gemessen würde dann in
+  // einem Zwischenzustand, und weil `wallEl.clientWidth` davon abhängt, ob die
+  // Seite in diesem Moment schon eine Bildlaufleiste hat, fällt die Wandbreite
+  // um deren Breite anders aus als nach einem Neuladen — genau das Bild aus dem
+  // QC-Befund (ein Zettel rutscht beim Umschalten in die zweite Reihe, nach dem
+  // Neuladen steht er wieder oben). Ein Frame später steht der Zustand.
+  document.fonts?.ready.then(() => requestAnimationFrame(() => relayout(false)))
 })
 
 onUnmounted(() => {
@@ -343,6 +356,9 @@ const handleCreateQuickTask = async (data: {
 
 <template>
   <main class="wall-page">
+    <!-- Statusleiste: klebt oben, bleibt beim Scrollen sichtbar. -->
+    <WallStatusBar />
+
     <!-- Die Wand: Kork, absolut positionierte Zettel, keine Überschriften. -->
     <div ref="wallEl" class="pw-wall wall" :style="{ height: `${wallHeight}px` }">
       <WallNote
@@ -456,7 +472,13 @@ const handleCreateQuickTask = async (data: {
 .wall-page {
   min-height: 100vh;
   background: var(--pw-cork-deep);
-  padding: 10px 8px 96px;
+  /* Unten kommt zum FAB-Polster die Höhe der oben klebenden Statusleiste dazu.
+     `WallStatusBar` misst sie und schreibt sie als `--wall-status-height` an
+     <html> — eine feste Pixelzahl wäre falsch, weil die Leiste kompakt/nicht
+     kompakt und je nach Leck unterschiedlich hoch ist. Ohne dieses Polster
+     bleiben am Seitenende Zettel dauerhaft unter der Leiste und ihr Eselsohr
+     (Etappe 4) wäre unerreichbar. */
+  padding: 10px 8px calc(96px + var(--wall-status-height, 0px));
 }
 
 /* Der Bezugsrahmen der absolut positionierten Zettel. Die Höhe kommt aus dem

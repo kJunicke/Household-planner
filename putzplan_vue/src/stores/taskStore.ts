@@ -272,7 +272,7 @@ export const useTaskStore = defineStore('tasks', () => {
                 // Die eigenen Zeilen dürfen den Echo-Schutz umgehen, er selbst
                 // bleibt gegen spät eintreffende Realtime-Echos bestehen.
                 await loadTasks(touchedIds)
-                await householdStore.loadWeeklyCompletions()
+                await householdStore.loadWeeklyCompletions({ force: true })
                 // Erst NACH dem Reload entfernen, sonst zählt die Woche kurz doppelt
                 // bzw. fällt die Erledigung kurz aus dem Ranking.
                 householdStore.removeOptimisticCompletion(clientMutationId)
@@ -590,7 +590,7 @@ export const useTaskStore = defineStore('tasks', () => {
         }
 
         // Header-Stats (Wochenpunkte) aktualisieren
-        await householdStore.loadWeeklyCompletions()
+        await householdStore.loadWeeklyCompletions({ force: true })
 
         toastStore.showToast('Quick-Aufgabe abgeschlossen', 'success', 3000)
         return task

@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
+import { useRoute } from 'vue-router'
 import { useAuthStore } from '../stores/authStore'
 import { useHouseholdStore } from '../stores/householdStore'
+import { useDesignStore } from '../stores/designStore'
 import SettingsSidebar from './SettingsSidebar.vue'
 import BrandLogo from './BrandLogo.vue'
 import SyncIndicator from './SyncIndicator.vue'
@@ -10,7 +12,24 @@ import { useElementHeightVar } from '../composables/useElementHeightVar'
 const authStore = useAuthStore()
 const householdStore = useHouseholdStore()
 
+const designStore = useDesignStore()
+const route = useRoute()
+
 const sidebarOpen = ref(false)
+
+/**
+ * Auf dem Putzen-Screen der Pinnwand gibt es **keine Rangliste** mehr — dort
+ * beantwortet die Statusleiste an der Wand die Frage nach dem Wochenstand, und
+ * zwar gemeinsam statt als Platzierung.
+ *
+ * Der Header ist global, deshalb hängt die Entscheidung an Route und Aussehen
+ * statt an der View: auf allen anderen Routen und im alten Aussehen bleibt die
+ * Rangliste unverändert stehen (`CleaningView` wird ausdrücklich nicht
+ * umgerüstet).
+ */
+const showRanking = computed(
+  () => !(route.name === 'home' && designStore.design === 'pinnwand')
+)
 
 // Der Header meldet seine eigene Höhe global; Toasts und Sync-Indikator hängen
 // sich daran, ein fester Pixelwert wäre auf Desktop und bei umbrechender
@@ -35,7 +54,10 @@ onMounted(async () => {
       <BrandLogo size="sm" />
 
       <!-- Wochen-Rangliste: alle Haushaltsmitglieder, eigener Eintrag hervorgehoben -->
-      <div v-if="householdStore.weeklyRanking.length > 0" class="points-display">
+      <div
+        v-if="showRanking && householdStore.weeklyRanking.length > 0"
+        class="points-display"
+      >
         <div
           v-for="entry in householdStore.weeklyRanking"
           :key="entry.userId"
@@ -50,7 +72,7 @@ onMounted(async () => {
       </div>
 
       <!-- Empty state: Mitglieder noch nicht geladen -->
-      <div v-else class="points-display points-empty">
+      <div v-else-if="showRanking" class="points-display points-empty">
         <i class="bi bi-trophy"></i>
         <span class="empty-hint">Diese Woche: {{ householdStore.currentUserWeeklyPoints }} Pkt</span>
       </div>

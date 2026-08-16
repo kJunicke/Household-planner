@@ -5,6 +5,22 @@ import type { Household, HouseholdMember } from '@/types/households'
 import { useAuthStore } from './authStore'
 import { useToastStore } from './toastStore'
 import { DEFAULT_MEMBER_COLOR, pickMemberColor } from '@/lib/memberColors'
+import {
+    DEFAULT_WEEKLY_GOAL_POINTS,
+    effectiveWeekStartDay,
+    formatDayStamp,
+    isPendingWeekStartDue,
+    normalizeWeekStartDay,
+    parseDayStamp,
+    resolveWeekWindowStart,
+    weekStartChangeover,
+    type PendingWeekStart
+} from '@/lib/weekWindow'
+import type { RealtimeChannel } from '@supabase/supabase-js'
+
+/** Grenzen des Wochenziels — identisch zum CHECK auf `households`. */
+export const MIN_WEEKLY_GOAL_POINTS = 1
+export const MAX_WEEKLY_GOAL_POINTS = 1000
 
 interface CompletionWithEffort {
   user_id: string
@@ -13,6 +29,7 @@ interface CompletionWithEffort {
   effort_override: number | null
   tasks: {
     effort: number
+    household_id?: string
   } | null
 }
 
@@ -92,6 +109,9 @@ export const useHouseholdStore = defineStore('household', () => {
 
         // 3. Lade alle Mitglieder des Households
         await loadHouseholdMembers()
+
+        // 4. Änderungen der Haushalts-Einstellungen mitbekommen
+        subscribeToHouseholdSettings()
     }
 
     const loadHouseholdMembers = async () => {
@@ -102,10 +122,18 @@ export const useHouseholdStore = defineStore('household', () => {
             return
         }
 
+        // Stabile Reihenfolge, und zwar in der Query: die Statusleiste zeigt
+        // „Reihenfolge der Mitgliederliste, keine Platzierung" — ohne ORDER BY
+        // garantiert Postgres gar keine Reihenfolge, und ein UPDATE auf
+        // `household_members` (Farbe, Name) kann sie zwischen zwei Ladevorgängen
+        // still kippen. Beitrittsdatum ist die fachliche Ordnung; `user_id` ist
+        // der Tiebreaker, falls `joined_at` fehlt oder zweimal gleich ist.
         const { data, error } = await supabase
             .from('household_members')
             .select('user_id, household_id, display_name, user_color')
             .eq('household_id', currentHousehold.value.household_id)
+            .order('joined_at', { ascending: true, nullsFirst: true })
+            .order('user_id', { ascending: true })
 
         if (error) {
             console.error('Error loading household members:', error)
@@ -181,12 +209,125 @@ export const useHouseholdStore = defineStore('household', () => {
         return member?.display_name || 'Unbekannt'
     }
 
-    // Lade wöchentliche Completions für Stats
-    const loadWeeklyCompletions = async () => {
+    /** Der in der Zeile als aktiv hinterlegte Wochenstart (0 = Sonntag … 6 = Samstag). */
+    const activeWeekStartDay = computed(() =>
+        normalizeWeekStartDay(currentHousehold.value?.week_start_day)
+    )
+
+    /** Anstehende Änderung des Wochenstarts, so wie sie am Haushalt steht. */
+    const pendingWeekStart = computed<PendingWeekStart>(() => ({
+        day:
+            typeof currentHousehold.value?.week_start_day_pending === 'number'
+                ? normalizeWeekStartDay(currentHousehold.value.week_start_day_pending)
+                : null,
+        from: parseDayStamp(currentHousehold.value?.week_start_pending_from)
+    }))
+
+    /**
+     * Wochenstart des Haushalts (0 = Sonntag … 6 = Samstag).
+     *
+     * Eine **fällige** anstehende Änderung zählt hier schon, auch wenn sie noch
+     * kein Client nach `week_start_day` fortgeschrieben hat: das Lesen darf
+     * nicht davon abhängen, wer zuerst online war.
+     *
+     * Fällt auf Montag zurück, solange die Spalte fehlt oder leer ist — die
+     * Migration ist beim ersten Ausrollen dieser Anzeige noch nicht gelaufen.
+     */
+    const weekStartDay = computed(() =>
+        effectiveWeekStartDay(new Date(), activeWeekStartDay.value, pendingWeekStart.value)
+    )
+
+    /**
+     * Der Wochentag, den die Einstellungen anzeigen sollen: eine noch nicht
+     * fällige Änderung ist bereits die Entscheidung des Haushalts, auch wenn
+     * sie erst später greift. Sonst sähe es aus, als wäre sie verlorengegangen.
+     */
+    const selectedWeekStartDay = computed(() => {
+        const pending = pendingWeekStart.value
+        return pending.day !== null ? pending.day : weekStartDay.value
+    })
+
+    /** Gemeinsames Wochenziel in Punkten; ohne gesetzten Wert ein sinnvoller Standard. */
+    const weeklyGoalPoints = computed(() => {
+        const raw = currentHousehold.value?.weekly_goal_points
+        if (typeof raw !== 'number' || !Number.isFinite(raw) || raw <= 0) {
+            return DEFAULT_WEEKLY_GOAL_POINTS
+        }
+        return Math.trunc(raw)
+    })
+
+    // Lade die Erledigungen der **laufenden Woche** (feste Woche ab dem
+    // eingestellten Wochenstart, nicht die letzten sieben Tage) und
+    // ausschließlich die des eigenen Haushalts.
+    //
+    // Die Haushaltszugehörigkeit hängt an der Aufgabe, nicht an der Erledigung —
+    // `task_completions` hat keine `household_id`. Deshalb der Inner Join auf
+    // `tasks` mit explizitem Filter: sich auf RLS zu verlassen wäre eine stille
+    // Abhängigkeit, die bei jeder Policy-Änderung falsche Zahlen liefern kann.
+    /**
+     * Start der laufenden Woche — ausschließlich aus Feldern des Haushalts
+     * abgeleitet. Kein gerätelokaler Zustand: zwei Mitglieder (und zwei Geräte
+     * desselben Mitglieds) müssen dieselbe Grenze sehen, sonst zeigt der
+     * gemeinsame Balken still verschiedene Zahlen.
+     */
+    const currentWeekStart = (now: Date = new Date()): Date =>
+        resolveWeekWindowStart(now, activeWeekStartDay.value, pendingWeekStart.value)
+
+    /**
+     * Datum, ab dem ein auf `newWeekStartDay` geänderter Wochenstart greift —
+     * die Zahl, die die Bestätigung dem Nutzer nennt und die beim Speichern
+     * unverändert in `week_start_pending_from` landet.
+     */
+    const weekStartEffectiveFrom = (newWeekStartDay: number, now: Date = new Date()): Date =>
+        weekStartChangeover(currentWeekStart(now), newWeekStartDay)
+
+    /**
+     * Fällige Wochenstart-Änderung nach `week_start_day` fortschreiben.
+     *
+     * **Idempotent:** die Bedingung steckt im `WHERE` des UPDATEs
+     * (`week_start_day_pending` nicht NULL, `week_start_pending_from` erreicht).
+     * Ein zweiter Aufruf — auch gleichzeitig vom anderen Mitglied — trifft
+     * keine Zeile mehr, weil das Pending im selben Statement geleert wird.
+     * Das Wochenfenster kann sich dabei nicht verschieben: die Leseregel wendet
+     * eine fällige Änderung ohnehin schon an, vorher und nachher kommt
+     * derselbe Wochentag heraus. Schlägt der Aufruf fehl (offline), bleibt es
+     * bei genau dieser Leseregel — nur die Zeile ist noch nicht aufgeräumt.
+     */
+    const promoteDueWeekStart = async (now: Date = new Date()) => {
+        if (!currentHousehold.value) return
+        const pending = pendingWeekStart.value
+        if (!isPendingWeekStartDue(now, pending) || pending.day === null) return
+
+        const { data, error } = await supabase
+            .from('households')
+            .update({
+                week_start_day: pending.day,
+                week_start_day_pending: null,
+                week_start_pending_from: null
+            })
+            .eq('household_id', currentHousehold.value.household_id)
+            .not('week_start_day_pending', 'is', null)
+            .lte('week_start_pending_from', formatDayStamp(now))
+            .select()
+            .maybeSingle()
+
+        if (error) {
+            console.error('Error promoting pending week start:', error)
+            return
+        }
+        if (data) currentHousehold.value = data
+    }
+
+    /** Wochenstart, gegen den die geladenen Erledigungen gezogen wurden. */
+    const loadedWeekStart = ref<string | null>(null)
+
+    const runLoadWeeklyCompletions = async () => {
         if (!currentHousehold.value) return
 
-        const weekAgo = new Date()
-        weekAgo.setDate(weekAgo.getDate() - 7)
+        await promoteDueWeekStart()
+
+        const weekStart = currentWeekStart()
+        loadedWeekStart.value = formatDayStamp(weekStart)
 
         // Lade Completions mit Tasks (für effort)
         const { data, error } = await supabase
@@ -196,9 +337,10 @@ export const useHouseholdStore = defineStore('household', () => {
                 task_id,
                 completed_at,
                 effort_override,
-                tasks (effort)
+                tasks!inner (effort, household_id)
             `)
-            .gte('completed_at', weekAgo.toISOString())
+            .eq('tasks.household_id', currentHousehold.value.household_id)
+            .gte('completed_at', weekStart.toISOString())
 
         if (error) {
             console.error('Error loading weekly completions:', error)
@@ -210,6 +352,50 @@ export const useHouseholdStore = defineStore('household', () => {
             ...item,
             tasks: Array.isArray(item.tasks) ? item.tasks[0] || null : item.tasks
         }))
+        lastWeeklyLoadAt = Date.now()
+    }
+
+    /**
+     * Die Woche wird beim Seitenaufbau von mehreren Stellen gleichzeitig
+     * angefordert (Header, Putzen-Ansicht, Sichtbarkeits-Prüfung) — jede für
+     * sich berechtigt, zusammen aber mehrere identische GETs auf
+     * `task_completions`. Gleichzeitige Anforderungen teilen sich deshalb
+     * dieselbe laufende Abfrage.
+     *
+     * **`force: true`** umgeht die Bündelung und ist Pflicht für jeden Aufruf
+     * *nach einem eigenen Schreibvorgang*: eine bereits laufende Abfrage wurde
+     * womöglich vor dem Schreiben abgeschickt und brächte den alten Stand
+     * zurück — genau die Art stiller Fehler, bei der Punkte kurz „fehlen".
+     */
+    let inFlightWeeklyLoad: Promise<void> | null = null
+    let lastWeeklyLoadAt = 0
+
+    /**
+     * Kurzes Frischefenster für den Seitenaufbau: Header und Putzen-Ansicht
+     * fordern die Woche nacheinander an (die Ansicht wartet erst auf die
+     * Aufgaben), überlappen sich also nicht immer. Übersprungen wird nur, wenn
+     * die geladene Wochengrenze noch dieselbe ist — ein verschobenes Fenster
+     * lädt immer neu.
+     */
+    const WEEKLY_LOAD_FRESH_MS = 2000
+
+    const weeklyDataIsFresh = () =>
+        lastWeeklyLoadAt > 0 &&
+        Date.now() - lastWeeklyLoadAt < WEEKLY_LOAD_FRESH_MS &&
+        loadedWeekStart.value === formatDayStamp(currentWeekStart())
+
+    const loadWeeklyCompletions = (options: { force?: boolean } = {}) => {
+        if (!options.force && inFlightWeeklyLoad) return inFlightWeeklyLoad
+        if (!options.force && weeklyDataIsFresh()) return Promise.resolve()
+
+        const run = runLoadWeeklyCompletions()
+        if (!options.force) {
+            inFlightWeeklyLoad = run
+            void run.finally(() => {
+                if (inFlightWeeklyLoad === run) inFlightWeeklyLoad = null
+            })
+        }
+        return run
     }
 
     // Berechne wöchentliche Punkte pro User
@@ -268,6 +454,185 @@ export const useHouseholdStore = defineStore('household', () => {
             .map((entry, index) => ({ ...entry, rank: index + 1 }))
     })
 
+    /**
+     * Beiträge zum gemeinsamen Wochenziel — die Datengrundlage der Statusleiste.
+     *
+     * **Keine Rangliste.** Die Reihenfolge ist die der Mitgliederliste und hängt
+     * nie an der Punktzahl; es gibt keinen Rang und keine Sortierung.
+     *
+     * Aufgebaut wird über `householdMembers`, NICHT über die Completions: wer die
+     * Segmente aus den Erledigungen ableitet, verliert genau das Mitglied, das
+     * diese Woche noch nichts getan hat — und niemandem fällt es auf, solange
+     * alle fleißig sind. Jedes Mitglied erscheint, notfalls mit 0.
+     */
+    const weeklyContributions = computed(() => {
+        const points = weeklyPointsByUser.value
+        return householdMembers.value.map(member => ({
+            userId: member.user_id,
+            name: member.display_name || 'Unbekannt',
+            color: member.user_color || DEFAULT_MEMBER_COLOR,
+            points: points.get(member.user_id) || 0
+        }))
+    })
+
+    /** Punkte des ganzen Haushalts in der laufenden Woche. */
+    const weeklyTotalPoints = computed(() =>
+        weeklyContributions.value.reduce((sum, entry) => sum + entry.points, 0)
+    )
+
+    /**
+     * Wochenziel und Wochenstart setzen. Jedes Mitglied darf das — die
+     * UPDATE-Policy auf `households` gilt für alle Mitglieder des Haushalts.
+     *
+     * Die Zielzahl wird **sofort** wirksam: `weeklyGoalPoints` hängt an
+     * `currentHousehold`, der Balken rechnet also unmittelbar gegen den neuen
+     * Wert.
+     *
+     * Der Wochenstart dagegen wird nicht in `week_start_day` geschrieben,
+     * sondern als anstehende Änderung samt Wechseltag abgelegt. Der Wechseltag
+     * wird **hier einmal** ausgerechnet und danach nur noch gelesen — er ist
+     * damit für alle Mitglieder dieselbe Zahl, statt auf jedem Gerät neu
+     * geschätzt zu werden.
+     */
+    const updateWeeklyGoalSettings = async (goalPoints: number, newWeekStartDay: number) => {
+        const toastStore = useToastStore()
+
+        if (!currentHousehold.value) {
+            return { success: false, error: 'Kein Haushalt' }
+        }
+
+        const goal = Math.trunc(goalPoints)
+        if (
+            !Number.isFinite(goal) ||
+            goal < MIN_WEEKLY_GOAL_POINTS ||
+            goal > MAX_WEEKLY_GOAL_POINTS
+        ) {
+            // Vorab prüfen statt den CHECK der Datenbank zuschlagen zu lassen:
+            // ein Postgres-Fehlertext ist keine Nutzermeldung.
+            return { success: false, error: 'Ungültiges Wochenziel' }
+        }
+
+        // Eine fällige Änderung zuerst aufräumen, damit der Wechseltag gegen
+        // den wirklich laufenden Wochenstart gerechnet wird.
+        await promoteDueWeekStart()
+
+        const day = normalizeWeekStartDay(newWeekStartDay)
+        const now = new Date()
+
+        const patch: Record<string, unknown> = { weekly_goal_points: goal }
+
+        if (day === weekStartDay.value) {
+            // Zurück auf den geltenden Tag: eine womöglich noch anstehende
+            // Änderung wird damit widerrufen.
+            patch.week_start_day_pending = null
+            patch.week_start_pending_from = null
+        } else {
+            patch.week_start_day_pending = day
+            patch.week_start_pending_from = formatDayStamp(weekStartEffectiveFrom(day, now))
+        }
+
+        const { data, error } = await supabase
+            .from('households')
+            .update(patch)
+            .eq('household_id', currentHousehold.value.household_id)
+            .select()
+            .single()
+
+        if (error) {
+            console.error('Error updating weekly goal settings:', error)
+            toastStore.showToast('Fehler beim Speichern des Wochenziels', 'error')
+            return { success: false, error: error.message }
+        }
+
+        currentHousehold.value = data
+        toastStore.showToast('Wochenziel gespeichert', 'success', 3000)
+        return { success: true }
+    }
+
+    /** Haushaltszeile neu laden — Rückfallweg, wenn ein Realtime-Ereignis fehlte. */
+    const refreshHousehold = async () => {
+        if (!currentHousehold.value) return
+
+        const { data, error } = await supabase
+            .from('households')
+            .select('*')
+            .eq('household_id', currentHousehold.value.household_id)
+            .maybeSingle()
+
+        if (error || !data) return
+        currentHousehold.value = data
+    }
+
+    // ---------------------------------------------------------------
+    // Realtime: Haushalts-Einstellungen
+    //
+    // `postgres_changes` auf `households` — die Tabelle wird dafür in
+    // `20260816170000_week_start_pending.sql` in die Publikation
+    // `supabase_realtime` aufgenommen. Bewusst nicht per Broadcast: der
+    // hinge daran, dass der **schreibende** Client sein Ereignis auch
+    // absetzt; verliert er im falschen Moment die Verbindung, erfährt das
+    // andere Mitglied nie davon und merkt es auch nicht.
+    //
+    // Als zweites Netz wird die Zeile beim Zurückkehren auf den Tab neu
+    // geladen — und dabei gleich geprüft, ob inzwischen eine neue Woche
+    // begonnen hat (eine App, die über den Wochenwechsel offen bleibt,
+    // zeigte sonst bis zum nächsten Laden das alte Fenster).
+    // ---------------------------------------------------------------
+    let settingsChannel: RealtimeChannel | null = null
+    let visibilityHandler: (() => void) | null = null
+
+    /** Fenstergrenze neu prüfen und bei Verschiebung die Woche nachladen. */
+    const reloadWeeklyCompletionsIfWindowMoved = async () => {
+        if (!currentHousehold.value) return
+        await promoteDueWeekStart()
+        if (formatDayStamp(currentWeekStart()) !== loadedWeekStart.value) {
+            await loadWeeklyCompletions()
+        }
+    }
+
+    const subscribeToHouseholdSettings = () => {
+        if (!currentHousehold.value) return
+        unsubscribeFromHouseholdSettings()
+
+        const householdId = currentHousehold.value.household_id
+
+        settingsChannel = supabase
+            .channel(`household-${householdId}-${Date.now()}`)
+            .on(
+                'postgres_changes',
+                {
+                    event: 'UPDATE',
+                    schema: 'public',
+                    table: 'households',
+                    filter: `household_id=eq.${householdId}`
+                },
+                payload => {
+                    const row = payload.new as Household | undefined
+                    if (!row) return
+                    currentHousehold.value = row
+                    void reloadWeeklyCompletionsIfWindowMoved()
+                }
+            )
+            .subscribe()
+
+        visibilityHandler = () => {
+            if (document.visibilityState !== 'visible') return
+            void refreshHousehold().then(reloadWeeklyCompletionsIfWindowMoved)
+        }
+        document.addEventListener('visibilitychange', visibilityHandler)
+    }
+
+    const unsubscribeFromHouseholdSettings = () => {
+        if (settingsChannel) {
+            supabase.removeChannel(settingsChannel)
+            settingsChannel = null
+        }
+        if (visibilityHandler) {
+            document.removeEventListener('visibilitychange', visibilityHandler)
+            visibilityHandler = null
+        }
+    }
+
     const createHousehold = async (name: string) => {
         const authStore = useAuthStore()
         const toastStore = useToastStore()
@@ -314,6 +679,7 @@ export const useHouseholdStore = defineStore('household', () => {
 
         // Load members (nur der Creator initial)
         await loadHouseholdMembers()
+        subscribeToHouseholdSettings()
         toastStore.showToast('Haushalt erstellt', 'success', 3000)
     }
 
@@ -379,6 +745,7 @@ export const useHouseholdStore = defineStore('household', () => {
 
         // Load all members
         await loadHouseholdMembers()
+        subscribeToHouseholdSettings()
         toastStore.showToast('Haushalt beigetreten', 'success', 3000)
         return true
     }
@@ -411,6 +778,7 @@ export const useHouseholdStore = defineStore('household', () => {
         }
 
         // Clear state
+        unsubscribeFromHouseholdSettings()
         currentHousehold.value = null
         householdMembers.value = []
         console.log('Left household')
@@ -437,6 +805,19 @@ export const useHouseholdStore = defineStore('household', () => {
         removeOptimisticCompletion,
         currentUserWeeklyPoints,
         todayCompletionsCount,
-        weeklyRanking
+        weeklyRanking,
+        weeklyContributions,
+        weeklyTotalPoints,
+        weeklyGoalPoints,
+        weekStartDay,
+        activeWeekStartDay,
+        pendingWeekStart,
+        selectedWeekStartDay,
+        updateWeeklyGoalSettings,
+        weekStartEffectiveFrom,
+        currentWeekStart,
+        refreshHousehold,
+        subscribeToHouseholdSettings,
+        unsubscribeFromHouseholdSettings
     }
 })

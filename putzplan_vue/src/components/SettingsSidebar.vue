@@ -6,6 +6,12 @@ import { useHouseholdStore } from '../stores/householdStore'
 import { MEMBER_COLORS, DEFAULT_MEMBER_COLOR } from '../lib/memberColors'
 import { useDesignStore } from '../stores/designStore'
 import type { DesignMode } from '../lib/design'
+import {
+  MIN_WEEKLY_GOAL_POINTS,
+  MAX_WEEKLY_GOAL_POINTS
+} from '../stores/householdStore'
+import { WEEK_DAY_LABELS } from '../lib/weekWindow'
+import WeeklyGoalConfirmModal from './WeeklyGoalConfirmModal.vue'
 
 const props = defineProps<{
   open: boolean
@@ -89,6 +95,93 @@ const currentMemberColor = computed(() => {
   const member = householdStore.householdMembers.find(m => m.user_id === authStore.user?.id)
   return member?.user_color || DEFAULT_MEMBER_COLOR
 })
+
+// ---------------------------------------------------------------
+// Wochenziel
+//
+// Bearbeitet wird bewusst hier und nicht in der Statusleiste: die Änderung
+// betrifft alle Mitglieder und soll hinter einer Bestätigung liegen.
+// ---------------------------------------------------------------
+const goalInput = ref<number | null>(null)
+const weekStartInput = ref<number>(1)
+const showGoalConfirm = ref(false)
+const savingGoal = ref(false)
+
+const weekDayOptions = WEEK_DAY_LABELS.map((label, value) => ({ value, label }))
+
+/** Die Eingabefelder mit dem aktuellen Stand des Haushalts füllen. */
+const resetGoalForm = () => {
+  goalInput.value = householdStore.weeklyGoalPoints
+  weekStartInput.value = householdStore.selectedWeekStartDay
+}
+
+const goalError = computed(() => {
+  const value = goalInput.value
+  if (value === null || value === undefined || !Number.isFinite(value)) {
+    return 'Bitte eine Punktzahl eintragen'
+  }
+  if (!Number.isInteger(value)) return 'Nur ganze Punkte'
+  if (value < MIN_WEEKLY_GOAL_POINTS || value > MAX_WEEKLY_GOAL_POINTS) {
+    return `Zwischen ${MIN_WEEKLY_GOAL_POINTS} und ${MAX_WEEKLY_GOAL_POINTS} Punkten`
+  }
+  return null
+})
+
+const goalDirty = computed(() =>
+  goalInput.value !== householdStore.weeklyGoalPoints ||
+  weekStartInput.value !== householdStore.selectedWeekStartDay
+)
+
+const canSaveGoal = computed(() => !goalError.value && goalDirty.value && !savingGoal.value)
+
+/** Tag, ab dem ein geänderter Wochenstart greift — Text der Bestätigung. */
+const goalEffectiveFrom = computed(() =>
+  householdStore.weekStartEffectiveFrom(weekStartInput.value)
+)
+
+const openGoalConfirm = () => {
+  if (!canSaveGoal.value) return
+  showGoalConfirm.value = true
+}
+
+const confirmGoalChange = async () => {
+  if (goalError.value || goalInput.value === null) return
+  savingGoal.value = true
+  const result = await householdStore.updateWeeklyGoalSettings(
+    goalInput.value,
+    weekStartInput.value
+  )
+  savingGoal.value = false
+  showGoalConfirm.value = false
+  if (!result.success) resetGoalForm()
+}
+
+// Beim Öffnen den Stand frisch übernehmen — ein anderes Mitglied kann
+// zwischenzeitlich geändert haben. `refreshHousehold()` ist der Rückfallweg,
+// falls der Broadcast der Gegenseite verpasst wurde.
+watch(() => props.open, async (isOpen) => {
+  if (!isOpen) {
+    showGoalConfirm.value = false
+    return
+  }
+  resetGoalForm()
+  await householdStore.refreshHousehold()
+  resetGoalForm()
+}, { immediate: true })
+
+// Ändert ein anderes Mitglied den Wert, während die Sidebar offen ist und
+// nichts Eigenes angefangen wurde, zieht das Formular nach.
+watch(
+  () => [householdStore.weeklyGoalPoints, householdStore.selectedWeekStartDay],
+  ([newGoal, newDay], [oldGoal, oldDay]) => {
+    // Verglichen wird gegen den **vorherigen** Stand: nur wer nichts Eigenes
+    // eingetippt hatte, bekommt den fremden Wert untergeschoben.
+    if (goalInput.value === oldGoal && weekStartInput.value === oldDay) {
+      goalInput.value = newGoal
+      weekStartInput.value = newDay
+    }
+  }
+)
 
 // Close on ESC key
 watch(() => props.open, (isOpen) => {
@@ -228,6 +321,53 @@ watch(() => props.open, (isOpen) => {
           </div>
         </section>
 
+        <!-- Wochenziel Section -->
+        <section v-if="householdStore.currentHousehold" class="sidebar-section">
+          <h3>Wochenziel</h3>
+
+          <div class="goal-field">
+            <label for="weekly-goal-points" class="goal-label">Punkte pro Woche</label>
+            <input
+              id="weekly-goal-points"
+              v-model.number="goalInput"
+              type="number"
+              inputmode="numeric"
+              class="form-control goal-input"
+              :min="MIN_WEEKLY_GOAL_POINTS"
+              :max="MAX_WEEKLY_GOAL_POINTS"
+              step="1"
+            />
+            <p v-if="goalError" class="goal-error">{{ goalError }}</p>
+            <p v-else class="goal-hint">
+              Aktuell {{ householdStore.weeklyTotalPoints }} von
+              {{ householdStore.weeklyGoalPoints }} Punkten in dieser Woche.
+            </p>
+          </div>
+
+          <div class="goal-field">
+            <label for="week-start-day" class="goal-label">Woche beginnt am</label>
+            <select
+              id="week-start-day"
+              v-model.number="weekStartInput"
+              class="form-select goal-input"
+            >
+              <option v-for="day in weekDayOptions" :key="day.value" :value="day.value">
+                {{ day.label }}
+              </option>
+            </select>
+            <p class="goal-hint">Ein neuer Wochenstart greift erst ab der nächsten Woche.</p>
+          </div>
+
+          <button
+            type="button"
+            class="btn btn-primary w-100 goal-save"
+            :disabled="!canSaveGoal"
+            @click="openGoalConfirm"
+          >
+            <i class="bi bi-check-lg"></i> Wochenziel speichern
+          </button>
+        </section>
+
         <!-- Aussehen Section -->
         <section class="sidebar-section">
           <h3>Aussehen</h3>
@@ -263,6 +403,19 @@ watch(() => props.open, (isOpen) => {
       </div>
     </aside>
   </Transition>
+
+  <WeeklyGoalConfirmModal
+    v-if="showGoalConfirm && goalInput !== null"
+    :current-goal-points="householdStore.weeklyGoalPoints"
+    :current-week-start-day="householdStore.selectedWeekStartDay"
+    :current-week-start="householdStore.currentWeekStart()"
+    :new-goal-points="goalInput"
+    :new-week-start-day="weekStartInput"
+    :current-points="householdStore.weeklyTotalPoints"
+    :effective-from="goalEffectiveFrom"
+    @close="showGoalConfirm = false"
+    @confirm="confirmGoalChange"
+  />
   </Teleport>
 </template>
 
@@ -549,6 +702,40 @@ watch(() => props.open, (isOpen) => {
   border: 3px solid var(--color-text-primary);
   box-shadow: 0 0 0 2px var(--color-background-elevated), 0 0 0 4px var(--color-primary);
   transform: scale(1.1);
+}
+
+/* Wochenziel */
+.goal-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+  margin-bottom: var(--spacing-md);
+}
+
+.goal-label {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--color-text-primary);
+  margin: 0;
+}
+
+.goal-input {
+  min-height: var(--touch-target-min);
+}
+
+.goal-hint,
+.goal-error {
+  margin: 0;
+  font-size: 0.75rem;
+  color: var(--color-text-secondary);
+}
+
+.goal-error {
+  color: var(--color-danger);
+}
+
+.goal-save {
+  min-height: var(--touch-target-min);
 }
 
 /* Aussehen */
