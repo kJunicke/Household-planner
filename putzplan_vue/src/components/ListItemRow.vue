@@ -63,18 +63,22 @@ const onContextMenu = (e: Event) => {
 </template>
 
 <style scoped>
+/* Verdichtete Zeile (Etappe 2, Variante D „kompakte Karten"):
+   der Kartenlook bleibt, nur das Padding-Übergewicht fällt weg.
+   Der Klassenname darf NICHT `card` heißen — Bootstrap wird nach den Scoped
+   Styles geladen und würde mit `flex-direction: column` die Zeile zerlegen. */
 .list-row {
   display: flex;
   align-items: center;
-  gap: var(--spacing-sm);
-  padding: var(--spacing-sm) var(--spacing-sm);
-  background: var(--color-background);
+  gap: 8px;
+  padding: 0 4px 0 10px;
+  background: var(--color-background-elevated);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-sm);
   cursor: pointer;
   user-select: none;
   -webkit-tap-highlight-color: transparent;
-  min-height: 44px;
+  min-height: 40px;
   transition: background 0.15s, opacity 0.15s;
 }
 .list-row:hover { border-color: var(--color-border-hover); }
@@ -84,8 +88,8 @@ const onContextMenu = (e: Event) => {
 
 .list-check {
   flex-shrink: 0;
-  width: 22px;
-  height: 22px;
+  width: 20px;
+  height: 20px;
   border: 2px solid var(--color-border-hover);
   border-radius: 6px;
   display: flex;
@@ -103,20 +107,23 @@ const onContextMenu = (e: Event) => {
   overflow-wrap: anywhere;
 }
 
+/* 12px Abstand ist Bedingung, keine Optik: jeder Knopf erweitert seine
+   Trefferfläche per Pseudo-Element um 5px zur Seite. Bei kleinerem Abstand
+   überlappen sich die Flächen und das im DOM spätere Element schluckt den
+   Griff auf seinen Nachbarn. */
 .row-trailing {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 12px;
   flex-shrink: 0;
 }
 
-/* Edit affordance: full 44px target, but visually quiet so it does not compete
-   with the star / stepper next to it. Negative margin keeps the row as narrow
-   as before — the target overlaps the row's own padding. */
+/* Edit affordance: 30×38 sichtbar, 40×40 treffbar — so bleibt die Zeile bei
+   40px und der Daumen trifft trotzdem. */
 .row-edit-btn {
-  width: 44px;
-  height: 44px;
-  margin-right: calc(-1 * var(--spacing-sm));
+  position: relative;
+  width: 30px;
+  height: 38px;
   border: none;
   background: transparent;
   color: var(--color-text-muted);
@@ -125,6 +132,11 @@ const onContextMenu = (e: Event) => {
   justify-content: center;
   cursor: pointer;
   font-size: var(--font-md);
+}
+.row-edit-btn::after {
+  content: '';
+  position: absolute;
+  inset: -1px -5px;
 }
 .row-edit-btn:hover { color: var(--color-primary); }
 </style>

@@ -391,6 +391,19 @@ const formatDate = (dateString: string | null) => {
     day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit'
   })
 }
+/** Aufgeklappte Kauf-Historie im Gekauft-Block (eine zur Zeit). */
+const historyOpenId = ref<string | null>(null)
+const toggleHistory = (itemId: string) => {
+  historyOpenId.value = historyOpenId.value === itemId ? null : itemId
+}
+
+/** Kauf-Historie — aufgeklappt unter der Zeile, zusätzlich als Tooltip. */
+const purchaseHistory = (item: ShoppingItem) => {
+  const parts = [`${item.times_purchased}x gekauft`]
+  if (item.last_purchased_at) parts.push(formatDate(item.last_purchased_at))
+  if (item.last_purchased_by) parts.push(getMemberName(item.last_purchased_by))
+  return parts.join(' · ')
+}
 
 // --- List CRUD --------------------------------------------------------------
 const openEditModal = (list: { list_id: string; name: string }) => {
@@ -697,7 +710,11 @@ onUnmounted(() => {
 
               </div>
 
-              <!-- Gekauft (globaler Block, mit Kauf-Historie) -->
+              <!-- Gekauft (globaler Block) — dieselbe kompakte Zeile wie oben.
+                   Der Zähler ist ein Knopf: er klappt die Kauf-Historie unter der
+                   Zeile auf. Ein Tooltip allein wäre auf dem Handy unerreichbar —
+                   es gibt kein Hover, Long-Press ist im Einkauf belegt und ein Tap
+                   auf die Zeile holt das Produkt zurück. -->
               <div class="gekauft-section" v-if="gekauftItems.length > 0">
                 <h3 class="gekauft-title">
                   <i class="bi bi-check-circle"></i> Gekauft ({{ gekauftItems.length }})
@@ -706,37 +723,39 @@ onUnmounted(() => {
                   <div
                     v-for="item in gekauftItems"
                     :key="item.shopping_item_id"
-                    class="gekauft-item"
+                    class="bought-entry"
                   >
-                    <div class="form-check">
-                      <input
-                        class="form-check-input"
-                        type="checkbox"
-                        :checked="true"
-                        @change="onGekauftToggle(item)"
-                        :id="'bought-' + item.shopping_item_id"
-                      />
-                      <label
-                        class="form-check-label text-muted text-decoration-line-through"
-                        :for="'bought-' + item.shopping_item_id"
-                      >
-                        {{ item.name }}<span v-if="item.quantity > 1"> ×{{ item.quantity }}</span>
-                      </label>
-                    </div>
-                    <div class="item-info">
-                      <small class="text-muted">
-                        {{ item.times_purchased }}x gekauft
-                        <span v-if="item.last_purchased_at">· {{ formatDate(item.last_purchased_at) }}</span>
-                        <span v-if="item.last_purchased_by">· {{ getMemberName(item.last_purchased_by) }}</span>
-                      </small>
-                      <button
-                        class="btn btn-sm btn-delete-ghost ms-2"
-                        @click="shoppingStore.deleteItem(item.shopping_item_id)"
-                        title="Löschen"
-                      >
-                        <i class="bi bi-trash"></i>
-                      </button>
-                    </div>
+                    <ListItemRow
+                      :checked="true"
+                      :name="item.name"
+                      :title="purchaseHistory(item)"
+                      @toggle="onGekauftToggle(item)"
+                      @edit="openItemEdit(item)"
+                    >
+                      <template #trailing>
+                        <span v-if="item.quantity > 1" class="qty-badge">×{{ item.quantity }}</span>
+                        <button
+                          class="bought-count-btn"
+                          :class="{ open: historyOpenId === item.shopping_item_id }"
+                          :title="purchaseHistory(item)"
+                          :aria-expanded="historyOpenId === item.shopping_item_id"
+                          @click="toggleHistory(item.shopping_item_id)"
+                        >
+                          {{ item.times_purchased }}×
+                        </button>
+                        <button
+                          class="bought-delete-btn"
+                          title="Löschen"
+                          aria-label="Löschen"
+                          @click="shoppingStore.deleteItem(item.shopping_item_id)"
+                        >
+                          <i class="bi bi-trash"></i>
+                        </button>
+                      </template>
+                    </ListItemRow>
+                    <p v-if="historyOpenId === item.shopping_item_id" class="bought-history">
+                      {{ purchaseHistory(item) }}
+                    </p>
                   </div>
                 </div>
               </div>
@@ -987,28 +1006,36 @@ onUnmounted(() => {
   .shopping-body.rail-open .cat-column { padding-right: 96px; }
 }
 
-/* ---- Category Section ---- */
+/* ---- Seitenrand: 8px statt Bootstrap-Gutter (12px) ---- */
+.container-fluid {
+  padding-left: 8px;
+  padding-right: 8px;
+}
+
+/* ---- Category Section ----
+   Etappe 2: die Sektions-Box entfällt vollständig — kein Rahmen, kein
+   Hintergrund, kein Innenabstand. Die Kategorie wird nur noch durch ihre
+   Kopfzeile auf dem Seitenhintergrund und den größeren Abstand nach unten
+   gegen die nächste abgegrenzt. */
 .cat-section {
-  background: var(--color-background-elevated);
-  border-radius: var(--radius-md);
-  margin-bottom: var(--spacing-sm);
+  margin-bottom: 8px;
   scroll-margin-top: 72px;
 }
 .cat-uncategorized { opacity: 0.92; }
-/* Schlanker Kopf (~34 px statt 48): die volle Breite bleibt Trefferfläche zum
-   Auf- und Zuklappen, damit die 48-px-Regel sinngemäß gewahrt bleibt. */
+/* Kopfzeile ohne Box: 30px Mindesthöhe, die volle Breite bleibt Trefferfläche
+   zum Auf- und Zuklappen. */
 .cat-header {
   display: flex;
   align-items: center;
   gap: var(--spacing-xs);
   width: 100%;
-  padding: var(--spacing-xs) var(--spacing-md);
+  padding: 0 4px 0 2px;
   background: none;
   border: none;
   cursor: pointer;
   text-align: left;
   color: var(--color-text-primary);
-  min-height: 34px;
+  min-height: 30px;
   user-select: none;
   -webkit-tap-highlight-color: transparent;
 }
@@ -1017,20 +1044,26 @@ onUnmounted(() => {
   margin-left: auto;
   display: flex;
   align-items: center;
-  gap: var(--spacing-xs);
+  gap: 12px;
   flex-shrink: 0;
 }
+/* 12px Abstand ist Bedingung, keine Optik: jede Trefferfläche wächst um 5px
+   zur Seite. Bei weniger Abstand überlappen sie sich und der Griff aufs Plus
+   landet auf „Kategorie bearbeiten". */
 .cat-icon-btn {
   position: relative;
   background: none;
   border: none;
-  padding: var(--spacing-xs);
+  padding: 0;
+  width: 30px;
+  height: 28px;
   cursor: pointer;
   color: var(--color-text-muted);
   opacity: 0.6;
   display: flex;
   align-items: center;
-  font-size: var(--font-sm);
+  justify-content: center;
+  font-size: var(--font-md);
   border-radius: var(--radius-sm);
 }
 /* Die Trefferfläche wächst über den Knopf hinaus auf --touch-target-dense,
@@ -1038,7 +1071,7 @@ onUnmounted(() => {
 .cat-icon-btn::after {
   content: '';
   position: absolute;
-  inset: -7px -5px;
+  inset: -6px -5px;
 }
 .cat-icon-btn:hover { opacity: 1; color: var(--color-primary); }
 .cat-dot {
@@ -1055,20 +1088,21 @@ onUnmounted(() => {
   from { background: var(--color-primary-subtle, rgba(99, 102, 241, 0.18)); }
   to { background: transparent; }
 }
-.cat-name { font-weight: 600; font-size: var(--font-sm); }
+.cat-name { font-weight: 600; font-size: var(--font-base); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cat-uncategorized .cat-name { color: var(--color-text-muted); font-weight: 500; }
 /* Anzahl als dezentes Badge statt als zweite Überschrift. */
 .cat-count {
   font-size: var(--font-xs);
   color: var(--color-text-secondary);
-  background: var(--color-background);
+  background: var(--color-background-elevated);
+  border: 1px solid var(--color-border);
   border-radius: 999px;
-  padding: 1px 7px;
-  margin-right: 2px;
+  padding: 0 6px;
+  margin-right: 6px;
 }
 .cat-chevron { color: var(--color-text-muted); font-size: var(--font-sm); }
 .cat-body {
-  padding: 0 var(--spacing-sm) var(--spacing-sm);
+  padding: 0;
   display: flex;
   flex-direction: column;
   gap: 4px;
@@ -1090,9 +1124,12 @@ onUnmounted(() => {
   min-width: 26px;
   text-align: right;
 }
+/* 30×30 sichtbar, 40×40 treffbar. Der Chip-Look bleibt: der Prioritätszustand
+   soll als gefüllte Fläche ablesbar sein, nicht nur als gelbes Icon. */
 .star-btn {
-  width: 32px;
-  height: 32px;
+  position: relative;
+  width: 30px;
+  height: 30px;
   border: 1.5px solid var(--color-border);
   background: transparent;
   border-radius: var(--radius-sm);
@@ -1101,7 +1138,13 @@ onUnmounted(() => {
   align-items: center;
   justify-content: center;
   cursor: pointer;
+  font-size: var(--font-sm);
   transition: all var(--transition-base);
+}
+.star-btn::after {
+  content: '';
+  position: absolute;
+  inset: -6px;
 }
 .star-btn:hover { border-color: var(--color-warning); color: var(--color-warning); }
 .star-btn.active { border-color: var(--color-warning); background: var(--color-warning); color: #fff; }
@@ -1110,25 +1153,26 @@ onUnmounted(() => {
 .add-line {
   display: flex;
   align-items: center;
-  gap: var(--spacing-sm);
-  padding: 2px 0;
+  gap: 4px;
+  padding: 0;
 }
 .add-input-wrap { position: relative; flex: 1; min-width: 0; }
 .add-input {
   width: 100%;
+  height: 34px;
   border: 1px dashed var(--color-border-hover);
   background: transparent;
   border-radius: var(--radius-sm);
-  padding: 8px var(--spacing-sm);
+  padding: 0 10px;
   font-size: var(--font-base);
   color: var(--color-text-primary);
 }
 .add-input:focus { outline: none; border-color: var(--color-primary); border-style: solid; }
 .add-qty-toggle {
   flex-shrink: 0;
-  min-width: 36px;
-  height: 36px;
-  padding: 0 8px;
+  min-width: 32px;
+  height: 34px;
+  padding: 0 6px;
   border: 1px dashed var(--color-border-hover);
   background: transparent;
   border-radius: var(--radius-sm);
@@ -1142,8 +1186,8 @@ onUnmounted(() => {
 .add-qty-toggle.active { border-style: solid; border-color: var(--color-primary); color: var(--color-primary); }
 .add-qty-input {
   flex-shrink: 0;
-  width: 56px;
-  height: 36px;
+  width: 48px;
+  height: 34px;
   text-align: center;
   border: 1px solid var(--color-primary);
   border-radius: var(--radius-sm);
@@ -1155,8 +1199,8 @@ onUnmounted(() => {
 .add-qty-input:focus { outline: none; }
 .add-confirm {
   flex-shrink: 0;
-  width: 36px;
-  height: 36px;
+  width: 34px;
+  height: 34px;
   border: none;
   background: var(--color-primary);
   color: white;
@@ -1167,40 +1211,71 @@ onUnmounted(() => {
 
 /* ---- Gekauft block ---- */
 .gekauft-section {
-  background: var(--color-background-elevated);
-  border-radius: var(--radius-md);
-  padding: var(--spacing-md);
+  margin-top: 8px;
 }
 .gekauft-title {
-  margin-bottom: var(--spacing-md);
+  margin-bottom: 4px;
   display: flex;
   align-items: center;
-  gap: var(--spacing-sm);
+  gap: var(--spacing-xs);
   font-size: var(--font-base);
   color: var(--color-text-secondary);
+  min-height: 30px;
 }
-.gekauft-list { display: flex; flex-direction: column; gap: var(--spacing-sm); }
-.gekauft-item {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: var(--spacing-sm) var(--spacing-md);
-  background: var(--color-background);
-  border-radius: var(--radius-md);
-  border: 1px solid var(--color-border);
-  gap: var(--spacing-sm);
-  opacity: 0.75;
-  flex-wrap: wrap;
+.gekauft-list { display: flex; flex-direction: column; gap: 4px; }
+.bought-entry { display: flex; flex-direction: column; }
+
+/* Zähler als Aufklapp-Knopf: 30×30 sichtbar, 42×42 treffbar. */
+.bought-count-btn {
+  position: relative;
+  min-width: 30px;
+  height: 30px;
+  padding: 0 4px;
+  border: 1.5px solid var(--color-border);
+  background: transparent;
+  border-radius: var(--radius-sm);
+  color: var(--color-text-secondary);
+  font-size: var(--font-sm);
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
 }
-.form-check { flex: 1; margin: 0; min-width: 0; }
-.form-check-input { cursor: pointer; width: 1.25rem; height: 1.25rem; }
-.form-check-label { cursor: pointer; font-size: 1rem; margin-left: var(--spacing-sm); }
-.item-info {
-  flex: 0 0 100%;
+.bought-count-btn::after {
+  content: '';
+  position: absolute;
+  inset: -6px;
+}
+.bought-count-btn:hover { border-color: var(--color-primary); color: var(--color-primary); }
+.bought-count-btn.open {
+  border-color: var(--color-primary);
+  background: var(--color-primary);
+  color: #fff;
+}
+
+/* Direkter Papierkorb: ein Tap zum Löschen, 30×38 sichtbar, 40×40 treffbar. */
+.bought-delete-btn {
+  position: relative;
+  width: 30px;
+  height: 38px;
+  border: none;
+  background: transparent;
+  color: var(--color-text-muted);
   display: flex;
   align-items: center;
-  gap: var(--spacing-sm);
-  margin-top: var(--spacing-xs);
-  padding-left: 2rem;
+  justify-content: center;
+  cursor: pointer;
+  font-size: var(--font-md);
+}
+.bought-delete-btn::after {
+  content: '';
+  position: absolute;
+  inset: -1px -5px;
+}
+.bought-delete-btn:hover { color: var(--color-danger); }
+
+.bought-history {
+  margin: 2px 0 0;
+  padding: 0 10px;
+  font-size: var(--font-sm);
+  color: var(--color-text-secondary);
 }
 </style>

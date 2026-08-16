@@ -124,6 +124,7 @@ const schedule = computed(() => scheduleOf(props.task))
 // Deckel des Rot-Gradienten: ab 14 Tagen Verzug volle Färbung. Reine Darstellung,
 // deshalb hier und nicht im Modul.
 const OVERDUE_COLOR_CAP_DAYS = 14
+const OVERDUE_RGB = [239, 68, 68] as const
 
 // Text für Überfälligkeit (null = kein Überfällig-Badge)
 const overdueLabel = computed(() => {
@@ -148,13 +149,16 @@ const overdueColorStyle = computed(() => {
           ? 1
           : Math.min((schedule.value.daysOverdue ?? 0) / OVERDUE_COLOR_CAP_DAYS, 1)
 
-     // Color gradient from light red to strong red
-     // alpha: 0.1 to 0.5
+     // Color gradient from light red to strong red, alpha 0.1 bis 0.5.
+     // Deckend über Weiß gemischt statt halbdurchlässig: auf einer eingefärbten
+     // Karte würde sich sonst die Personenfarbe durch das Badge mischen und der
+     // Kontrast der Badge-Schrift wäre nicht mehr vorhersagbar.
      const alpha = 0.1 + (intensity * 0.4)
      const borderAlpha = 0.3 + (intensity * 0.7)
+     const [r, g, b] = OVERDUE_RGB.map(c => Math.round(255 + (c - 255) * alpha))
 
      return {
-          backgroundColor: `rgba(239, 68, 68, ${alpha})`,
+          backgroundColor: `rgb(${r}, ${g}, ${b})`,
           borderLeft: `3px solid rgba(239, 68, 68, ${borderAlpha})`,
           paddingLeft: '0.375rem',
           borderRadius: 'var(--radius-sm)'
@@ -196,28 +200,59 @@ const assignedMember = computed(() => {
      return householdStore.householdMembers.find(m => m.user_id === props.task.assigned_to)
 })
 
-// Initialen des zugewiesenen Members für den Avatar-Chip
-const assigneeInitials = computed(() => {
-     const name = assignedMember.value?.display_name?.trim()
-     if (!name) return ''
-     const parts = name.split(/\s+/)
-     if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase()
-     return name.slice(0, 2).toUpperCase()
-})
+// --- Zuweisung als Kartenhintergrund (Etappe 2) ------------------------------
+// Der Avatar ist von der Karte verschwunden; die Zuständigkeit trägt jetzt der
+// Hintergrund in der Personenfarbe. Die Deckkraft ist nicht fest, sondern die
+// stärkste, bei der der Aufgabentitel noch klar lesbar bleibt: die Farbe wird
+// über den Kartengrund gelegt und die Deckkraft von 0.35 abwärts gesucht, bis
+// der Kontrast zwischen Titelfarbe und Ergebnis 7:1 erreicht (WCAG AAA für
+// Fließtext). Ohne diese Grenze verschluckt eine dunkle Mitgliedsfarbe den Titel.
+const CARD_BASE_RGB = [255, 255, 255] as const   // --color-background-elevated
+const TITLE_RGB = [30, 41, 59] as const          // --color-text-primary (#1e293b)
+const MIN_TITLE_CONTRAST = 7
+const MAX_TINT_ALPHA = 0.35
+const MIN_TINT_ALPHA = 0.08
 
-// Assignment Glow - Subtiler Farbschimmer für zugewiesene Tasks
-const assignmentGlowStyle = computed(() => {
-     if (!assignedMember.value) return {}
+const relativeLuminance = ([r, g, b]: readonly number[]): number => {
+     const channel = (v: number) => {
+          const s = v / 255
+          return s <= 0.03928 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4)
+     }
+     return 0.2126 * channel(r) + 0.7152 * channel(g) + 0.0722 * channel(b)
+}
 
-     // Hexadezimal zu RGB konvertieren für opacity
-     const hex = assignedMember.value.user_color
-     const r = parseInt(hex.slice(1, 3), 16)
-     const g = parseInt(hex.slice(3, 5), 16)
-     const b = parseInt(hex.slice(5, 7), 16)
+const contrastRatio = (a: readonly number[], b: readonly number[]): number => {
+     const [hi, lo] = [relativeLuminance(a), relativeLuminance(b)].sort((x, y) => y - x)
+     return (hi + 0.05) / (lo + 0.05)
+}
 
+const hexToRgb = (hex: string): [number, number, number] | null => {
+     const m = /^#?([0-9a-f]{6})$/i.exec(hex.trim())
+     if (!m) return null
+     const n = parseInt(m[1], 16)
+     return [(n >> 16) & 255, (n >> 8) & 255, n & 255]
+}
+
+const assignmentTintStyle = computed(() => {
+     const color = assignedMember.value?.user_color
+     const rgb = color ? hexToRgb(color) : null
+     if (!rgb) return {}
+
+     const blend = (alpha: number) =>
+          rgb.map((c, i) => CARD_BASE_RGB[i] + (c - CARD_BASE_RGB[i]) * alpha)
+
+     let alpha = MIN_TINT_ALPHA
+     for (let a = MAX_TINT_ALPHA; a >= MIN_TINT_ALPHA; a -= 0.01) {
+          if (contrastRatio(blend(a), TITLE_RGB) >= MIN_TITLE_CONTRAST) {
+               alpha = a
+               break
+          }
+     }
+
+     const [r, g, b] = blend(alpha).map(Math.round)
      return {
-          backgroundColor: `rgba(${r}, ${g}, ${b}, 0.08)`,
-          borderColor: `rgba(${r}, ${g}, ${b}, 0.3)`
+          backgroundColor: `rgb(${r}, ${g}, ${b})`,
+          borderColor: `rgba(${rgb[0]}, ${rgb[1]}, ${rgb[2]}, 0.45)`,
      }
 })
 
@@ -360,22 +395,14 @@ const handleCompleteProject = async () => {
 </script>
 
 <template>
-     <div class="task-card" :class="{ 'has-assignment': props.task.assigned_to }" :style="assignmentGlowStyle">
+     <div class="task-card" :class="{ 'has-assignment': props.task.assigned_to }" :style="assignmentTintStyle">
           <!-- Main Horizontal Layout -->
           <div class="task-card-main" @click="!props.task.parent_task_id && subtasks.length > 0 ? toggleSubtasks() : null" :style="{ cursor: !props.task.parent_task_id && subtasks.length > 0 ? 'pointer' : 'default' }">
                <!-- Left: Assignee + Title + Badges -->
+               <!-- Kein Assignee-Avatar mehr: die Zuständigkeit trägt der Kartenhintergrund,
+                    Zuweisen läuft über das Bearbeiten-Modal. Der frei gewordene Platz
+                    gehört dem Titel. -->
                <div class="task-left">
-                    <!-- Assignee Avatar (zeigt Zuständigkeit auf einen Blick) -->
-                    <button
-                         class="assignee-avatar"
-                         :class="{ unassigned: !assignedMember }"
-                         :style="assignedMember ? { backgroundColor: assignedMember.user_color } : {}"
-                         @click.stop="openAssignmentModal"
-                         :title="assignedMember ? 'Zugewiesen: ' + assignedMember.display_name : 'Aufgabe zuweisen'"
-                    >
-                         <span v-if="assignedMember">{{ assigneeInitials }}</span>
-                         <i v-else class="bi bi-person-plus"></i>
-                    </button>
                     <div class="task-info-block">
                          <h4 class="task-title">{{ props.task.title }}</h4>
                          <div class="task-meta">
@@ -440,8 +467,15 @@ const handleCompleteProject = async () => {
                     </template>
 
                     <!-- REGULAR TASKS: Standard logic -->
+                    <!-- Reihenfolge nach „wahrscheinlichste Aktion ganz rechts":
+                         erledigt → „wieder dreckig" außen, offen → Abschließen außen. -->
                     <template v-else-if="props.task.completed">
                          <div class="action-buttons">
+                              <button class="action-btn-modifier"
+                                      @click="openCompletionModal"
+                                      title="Aufwand anpassen">
+                                   <i class="bi bi-sliders"></i>
+                              </button>
                               <!-- Trotzdem geputzt: Quick + Modal-Option -->
                               <button class="btn btn-success btn-sm action-btn"
                                       @click="handleCompleteTask"
@@ -449,11 +483,6 @@ const handleCompleteProject = async () => {
                                       title="Trotzdem geputzt">
                                    <i v-if="isQuickCompleting" class="bi bi-arrow-repeat spinning"></i>
                                    <i v-else class="bi bi-check-lg"></i>
-                              </button>
-                              <button class="action-btn-modifier"
-                                      @click="openCompletionModal"
-                                      title="Aufwand anpassen">
-                                   <i class="bi bi-sliders"></i>
                               </button>
                               <!-- Dreckig markieren -->
                               <button class="btn btn-warning btn-sm action-btn"
@@ -465,17 +494,17 @@ const handleCompleteProject = async () => {
                     </template>
                     <template v-else>
                          <div class="action-buttons">
+                              <button class="action-btn-modifier"
+                                      @click="openCompletionModal"
+                                      title="Aufwand anpassen">
+                                   <i class="bi bi-sliders"></i>
+                              </button>
                               <button class="btn btn-success btn-sm action-btn"
                                       @click="handleCompleteTask"
                                       :disabled="isQuickCompleting"
                                       title="Sauber markieren">
                                    <i v-if="isQuickCompleting" class="bi bi-arrow-repeat spinning"></i>
                                    <i v-else class="bi bi-check-lg"></i>
-                              </button>
-                              <button class="action-btn-modifier"
-                                      @click="openCompletionModal"
-                                      title="Aufwand anpassen">
-                                   <i class="bi bi-sliders"></i>
                               </button>
                          </div>
                     </template>
@@ -637,67 +666,29 @@ const handleCompleteProject = async () => {
      border-color: var(--color-border-hover);
 }
 
-/* Main Horizontal Layout */
+/* Main Horizontal Layout — dieselbe Padding-Kur wie im Einkauf: der Rahmen
+   gibt Platz ab, der Inhalt behält seine Größe. */
 .task-card-main {
      display: flex;
      align-items: center;
      justify-content: space-between;
-     padding: var(--spacing-sm) var(--spacing-md);
-     gap: var(--spacing-sm);
-     min-height: var(--touch-target-min);
+     padding: 4px 4px 4px 10px;
+     gap: 8px;
+     min-height: 44px;
 }
 
-/* Left Side: Assignee + Title + Badges */
+/* Left Side: Title + Badges (der Avatar ist entfallen) */
 .task-left {
      display: flex;
      align-items: center;
-     gap: 0.625rem;
      flex: 1;
      min-width: 0;
-}
-
-/* Assignee Avatar */
-.assignee-avatar {
-     width: 36px;
-     height: 36px;
-     min-width: 36px;
-     border-radius: 50%;
-     border: none;
-     color: #fff;
-     font-size: 0.7rem;
-     font-weight: 700;
-     letter-spacing: 0.02em;
-     display: inline-flex;
-     align-items: center;
-     justify-content: center;
-     cursor: pointer;
-     flex-shrink: 0;
-     transition: transform var(--transition-base);
-}
-
-.assignee-avatar:hover {
-     transform: scale(1.08);
-}
-
-.assignee-avatar.unassigned {
-     background: transparent;
-     border: 1.5px dashed var(--color-border);
-     color: var(--color-text-muted);
-}
-
-.assignee-avatar.unassigned:hover {
-     border-color: var(--color-primary);
-     color: var(--color-primary);
-}
-
-.assignee-avatar i {
-     font-size: var(--font-md);
 }
 
 .task-info-block {
      display: flex;
      flex-direction: column;
-     gap: 0.25rem;
+     gap: 2px;
      flex: 1;
      min-width: 0;
 }
@@ -727,7 +718,7 @@ const handleCompleteProject = async () => {
      padding: 0.125rem 0.5rem;
      font-size: 0.6875rem;
      font-weight: 700;
-     color: #991b1b;
+     color: #7f1d1d;
      white-space: nowrap;
      transition: all var(--transition-base);
 }
@@ -752,7 +743,9 @@ const handleCompleteProject = async () => {
 /* Effort = einziger gefüllter Badge (Schlüsselinfo), Typ-Badges dezent als
    Outline, damit die Meta-Zeile nicht „bunt" wirkt. */
 .effort-badge {
-     background: var(--bs-primary);
+     /* Projekt-Token statt --bs-primary: weiß darauf liegt bei 6,1:1 statt bei
+        exakt 4,5:1, also mit Reserve für die nächste Farbnuance. */
+     background: var(--color-primary);
      color: white;
 }
 
@@ -764,13 +757,14 @@ const handleCompleteProject = async () => {
 
 .type-badge-project {
      background: transparent;
-     color: var(--color-info, #0d6efd);
+     /* Dunkleres Blau: 6,7:1 auf weißem Grund statt grenzwertiger 4,5:1. */
+     color: #1d4ed8;
      border: 1px solid currentColor;
 }
 
 .type-badge-daily {
      background: transparent;
-     color: var(--color-warning-dark);
+     color: #92400e;
      border: 1px solid var(--color-warning);
 }
 
@@ -800,23 +794,43 @@ const handleCompleteProject = async () => {
      font-size: 0.7rem;
 }
 
-/* Right Side: Edit Icon + Action Buttons */
+/* Eingefärbte Karte: der Hintergrund trägt die Personenfarbe, also müssen die
+   leisen Elemente darauf nachziehen. Der Titel ist über die Deckkraft-Suche
+   abgesichert; Sekundärtext bekommt eine dunklere Farbe, und die Umriss-Badges
+   bekommen einen deckenden Grund, damit ihr Kontrast unabhängig von der
+   Mitgliedsfarbe bleibt. */
+.has-assignment .overdue-text {
+     color: #334155;
+}
+
+.has-assignment .type-badge-one-time,
+.has-assignment .type-badge-project,
+.has-assignment .type-badge-daily {
+     background: var(--color-background-elevated);
+}
+
+.has-assignment .type-badge-one-time {
+     color: var(--color-text-secondary);
+}
+
+/* Right Side: Edit Icon + Action Buttons.
+   Alle Knöpfe sind sichtbar schlanker geworden; die Trefferfläche wächst per
+   Pseudo-Element nach außen — dasselbe Muster wie in der Einkaufszeile. */
 .task-right {
      display: flex;
      align-items: center;
-     gap: 0.5rem;
+     gap: 10px;
      flex-shrink: 0;
 }
 
 .edit-btn {
+     position: relative;
      background: transparent;
-     border: 1px solid var(--color-border);
+     border: none;
      border-radius: var(--radius-sm);
      padding: 0;
-     width: var(--touch-target-min);
-     height: var(--touch-target-min);
-     min-width: var(--touch-target-min);
-     min-height: var(--touch-target-min);
+     width: 30px;
+     height: 38px;
      cursor: pointer;
      display: flex;
      align-items: center;
@@ -826,27 +840,31 @@ const handleCompleteProject = async () => {
      flex-shrink: 0;
 }
 
+.edit-btn::after {
+     content: '';
+     position: absolute;
+     inset: -1px -5px;
+}
+
 .edit-btn i {
      font-size: var(--font-lg);
 }
 
 .edit-btn:hover {
-     background: var(--color-background-muted);
      color: var(--color-primary);
-     border-color: var(--color-primary);
-     transform: scale(1.05);
 }
 
 .action-buttons {
      display: flex;
-     gap: 0.25rem;
+     gap: 6px;
 }
 
 .action-btn {
-     width: var(--touch-target-min);
-     height: var(--touch-target-min);
-     min-width: var(--touch-target-min);
-     min-height: var(--touch-target-min);
+     position: relative;
+     width: 38px;
+     height: 38px;
+     min-width: 38px;
+     min-height: 38px;
      padding: 0;
      border: none;
      border-radius: var(--radius-md);
@@ -857,19 +875,26 @@ const handleCompleteProject = async () => {
      justify-content: center;
 }
 
+.action-btn::after {
+     content: '';
+     position: absolute;
+     inset: -1px;
+}
+
 .action-btn i {
-     font-size: var(--font-xl);
+     font-size: var(--font-lg);
 }
 
 /* Secondary action: "Aufwand anpassen" — visually subordinate to the
    primary green complete button so the two are not confused. */
 .action-btn-modifier {
-     width: var(--touch-target-min);
-     height: var(--touch-target-min);
-     min-width: var(--touch-target-min);
-     min-height: var(--touch-target-min);
+     position: relative;
+     width: 34px;
+     height: 38px;
+     min-width: 34px;
+     min-height: 38px;
      padding: 0;
-     border: 1.5px solid var(--color-border);
+     border: 1px solid var(--color-border);
      border-radius: var(--radius-md);
      background: var(--color-background-elevated);
      color: var(--color-text-secondary);
@@ -880,8 +905,14 @@ const handleCompleteProject = async () => {
      justify-content: center;
 }
 
+.action-btn-modifier::after {
+     content: '';
+     position: absolute;
+     inset: -2px -4px;
+}
+
 .action-btn-modifier i {
-     font-size: var(--font-lg);
+     font-size: var(--font-md);
 }
 
 .action-btn-modifier:hover {
@@ -931,8 +962,8 @@ const handleCompleteProject = async () => {
 .subtasks-section {
      border-top: 1px solid var(--color-border);
      background: var(--color-background);
-     padding: 0.75rem 1rem;
-     padding-left: 3rem; /* Einrückung für Subtasks */
+     padding: 0.5rem 0.5rem;
+     padding-left: 1.5rem; /* Einrückung für Subtasks */
 }
 
 .subtasks-header-row {
@@ -1008,11 +1039,6 @@ const handleCompleteProject = async () => {
 
 /* Mobile Responsive */
 @media (max-width: 640px) {
-     .task-card-main {
-          padding: 0.625rem 0.75rem;
-          gap: 0.75rem;
-     }
-
      .task-title {
           font-size: 0.875rem;
      }
@@ -1023,7 +1049,7 @@ const handleCompleteProject = async () => {
      }
 
      .subtasks-section {
-          padding-left: 2rem;
+          padding-left: 1.25rem;
      }
 }
 </style>

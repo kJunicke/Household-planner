@@ -126,6 +126,55 @@ ALTER TABLE shopping_items ADD COLUMN quantity int NOT NULL DEFAULT 1;
 - **User Stats** - XP, Level, Streaks pro Haushalt
 - **Ranglisten** - Mitglieder nach XP sortiert anzeigen
 
+### Vertagt aus der Grilling-Session 16.08.2026
+
+Durchgegrillt, bewusst **nicht** in derselben Session umgesetzt. Kontext und Begründungen
+stehen im Handoff-Dokument der Session.
+
+- **Sticky-Kategoriekopf im Putzen-Tab** — beim Scrollen soll die aktuelle Sektion oben
+  angepinnt bleiben. Entschieden: Header bleibt sticky, Kopf klebt direkt darunter →
+  braucht `--header-height` per `ResizeObserver`. **Blocker:** hängt am Filterbubbles-Punkt
+  darunter, weil `CategoryNav` heute mit `z-index: 850` bei `top: 0` klebt und den Header
+  (z-index 100) verdeckt — beides muss zusammen gelöst werden.
+- **Kategorie-Rail statt Filterbubbles im Putzen-Tab** — `CategoryRail` + `useCategoryRail`
+  wiederverwenden, aber: die Rail *springt*, `CategoryNav` *filtert* exklusiv. Ersatz
+  bedeutet Verlust des Filters. Zusätzlich zwei ungelöste Layout-Fragen: Kollision mit dem
+  Such-FAB (beide fixed unten rechts) und die deutlich breiteren TaskCards gegenüber
+  Listenzeilen. Braucht eigenen Design-Durchgang.
+- **„Alles löschen" aus dem Verlauf in die Einstellungen** — als eigene Sektion
+  „Gefahrenzone" in der `SettingsSidebar`, Bestätigung durch exaktes Eintippen des
+  Haushaltsnamens (GitHub-Muster). Löscht nur `task_completions`, haushaltsweit — die
+  Warnung muss sagen, dass auch die Erledigungen der anderen Person verschwinden.
+  Die UI wurde bereits aus `HistoryView` entfernt, `taskStore.deleteAllCompletions()`
+  bleibt vorerst ohne Aufrufer.
+- **Refactoring aller drei Listentypen auf geteilte Bausteine** — Einkauf, Packliste,
+  To-do unter einen Hut. Heute nur Packliste + To-do geteilt (`useChecklistStore`,
+  `ChecklistView`); Einkauf bleibt außen vor, weil es eine eigene `shopping_categories`-
+  Tabelle, Preise, Priorität und Drag-&-Drop hat. Braucht eine eigene Session.
+  Überschneidet sich mit Architektur-Kandidat 3.
+
+### Vertagt aus den UX-Etappen 08/2026
+
+Während Etappe 2 aufgefallen, bewusst nicht dort mit umgesetzt — beides betrifft die
+Einkaufs-Kopfzeile und hätte den Verdichtungs-Umbau vermischt.
+
+- **Add-Zeilen global ausblenden, sobald irgendwo abgehakt wurde** — heute entscheidet
+  `isAddOpen()` in `ShoppingView.vue` pro Kategorie (`purchasedPerCategory.get(key)`), die
+  Add-Zeile verschwindet also nur in der Kategorie, in der etwas abgehakt wurde. Gewünscht
+  ist: sobald in der Liste *irgendwo* ein Produkt abgehakt ist, verschwinden **alle**
+  Add-Zeilen — man ist dann im Laden und nicht mehr am Erfassen. Offene Kanten: (a) eine
+  manuell per „+" geöffnete Zeile sollte beim Abhaken vermutlich stehenbleiben, sonst reißt
+  es dem Nutzer das Feld mitten im Tippen weg (`forcedAddOpen`); (b) ob die Zeilen
+  zurückkommen, wenn das letzte abgehakte Produkt wieder entharkt wird, oder für die
+  Sitzung weg bleiben.
+- **Kategorie umbenennen inline statt im Modal** — für ein einziges Namensfeld ist
+  `CategoryEditModal` zu schwer. Gewünscht: Tap auf den Kategorienamen macht daraus ein
+  Eingabefeld direkt in der Kopfzeile. Zu klären: wo das Löschen hinwandert — das Modal
+  trägt heute auch die Löschvarianten „nur Kategorie" vs. „mit Produkten" samt
+  Sicherheitsabfrage, die gefährliche Aktion braucht ihre Rückfrage weiterhin. Das Modal
+  wird von Einkauf **und** Packliste benutzt; beide gemeinsam umstellen, sonst zerfällt die
+  gemeinsame Gestensprache aus Etappe 2.
+
 ### Architektur-Kandidaten (Review 02.08.2026)
 
 Aus dem Architektur-Review: sechs Stellen, an denen dieselbe Regel mehrfach existiert.
@@ -154,9 +203,9 @@ des Reviews, Stärke in Klammern.
 - **`currentHousehold` überlebt externen Logout** - nach einem Sign-out in einem anderen
   Tab bleibt `householdStore.currentHousehold` im Speicher, bis die nächste Navigation den
   Router-Guard auslöst. Fund aus dem Review vom 02.08.2026, damals bewusst nicht mitgefixt.
-- **„Als erledigt markieren ohne Punkte" umbenennen** - heißt im Glossar
-  ([CONTEXT.md](CONTEXT.md)) „verschieben" und markiert gerade *nicht* als erledigt: die
-  Aufgabe bleibt dran, sammelt nur keine Überfällig-Tage mehr. Sitzt im Bearbeiten-Modal.
+- ~~**„Als erledigt markieren ohne Punkte" umbenennen**~~ - wird vom Verschieben-Umbau
+  (Grilling 16.08.2026) abgelöst: `postponed_until`-Spalte, verschobene Aufgabe verlässt
+  „Jetzt dran". Glossar-Eintrag „verschieben" und ADR-0001 müssen dabei nachgezogen werden.
 - **`SubtaskManagementModal.vue.backup` prüfen und löschen** - vermutlich tot wie die
   beiden `.backup`-Dateien, die mit Kandidat 1 verschwunden sind.
 - **Form Validation** - Input-Validierung für alle Forms

@@ -46,14 +46,19 @@ const emit = defineEmits<{
 </template>
 
 <style scoped>
+/* Die Zählanzeige zwischen den Knöpfen hält sie weit genug auseinander,
+   dass sich die erweiterten Trefferflächen nicht überlappen. */
 .pack-stepper {
   display: flex;
   align-items: center;
-  gap: 2px;
+  gap: 4px;
 }
+/* 34×34 sichtbar, 40×40 treffbar — dasselbe Pseudo-Element-Muster wie bei den
+   übrigen Icon-Knöpfen, damit die Zeile bei 40px bleibt. */
 .step-btn {
-  width: 32px;
-  height: 32px;
+  position: relative;
+  width: 34px;
+  height: 34px;
   border: 1px solid var(--color-border);
   background: var(--color-background-elevated);
   border-radius: var(--radius-sm);
@@ -64,10 +69,15 @@ const emit = defineEmits<{
   cursor: pointer;
   font-size: var(--font-base);
 }
+.step-btn::after {
+  content: '';
+  position: absolute;
+  inset: -4px;
+}
 .step-btn:hover:not(:disabled) { border-color: var(--color-primary); color: var(--color-primary); }
 .step-btn:disabled { opacity: 0.35; cursor: not-allowed; }
 .step-count {
-  min-width: 40px;
+  min-width: 32px;
   text-align: center;
   font-size: var(--font-sm);
   font-weight: 600;

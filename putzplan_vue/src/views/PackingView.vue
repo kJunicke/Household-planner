@@ -806,11 +806,17 @@ onUnmounted(() => {
   .packing-body.rail-open .cat-column { padding-right: 96px; }
 }
 
-/* ---- Category Section ---- */
+/* ---- Seitenrand: 8px statt Bootstrap-Gutter (12px) ---- */
+.container-fluid {
+  padding-left: 8px;
+  padding-right: 8px;
+}
+
+/* ---- Category Section ----
+   Etappe 2: dieselbe Verdichtung wie im Einkauf — die Sektions-Box entfällt,
+   die Kopfzeile sitzt ohne Rahmen auf dem Seitenhintergrund. */
 .cat-section {
-  background: var(--color-background-elevated);
-  border-radius: var(--radius-md);
-  margin-bottom: var(--spacing-sm);
+  margin-bottom: 8px;
   scroll-margin-top: 72px;
 }
 .cat-uncategorized { opacity: 0.92; }
@@ -819,15 +825,15 @@ onUnmounted(() => {
 .cat-header {
   display: flex;
   align-items: center;
-  gap: var(--spacing-sm);
+  gap: var(--spacing-xs);
   width: 100%;
-  padding: var(--spacing-sm) var(--spacing-md);
+  padding: 0 4px 0 2px;
   background: none;
   border: none;
   cursor: pointer;
   text-align: left;
   color: var(--color-text-primary);
-  min-height: var(--touch-target-min);
+  min-height: 30px;
   user-select: none;
   -webkit-tap-highlight-color: transparent;
 }
@@ -837,31 +843,49 @@ onUnmounted(() => {
   margin-left: auto;
   display: flex;
   align-items: center;
-  gap: var(--spacing-sm);
+  gap: 12px;
   flex-shrink: 0;
 }
 
+/* 30×28 sichtbar, 40×40 treffbar. Die 12px Abstand oben sind Bedingung:
+   bei weniger überlappen sich die erweiterten Flächen. */
 .cat-edit-btn {
+  position: relative;
   background: none;
   border: none;
-  padding: 4px;
+  padding: 0;
+  width: 30px;
+  height: 28px;
   cursor: pointer;
   color: var(--color-text-muted);
   opacity: 0.6;
   display: flex;
   align-items: center;
-  font-size: var(--font-sm);
+  justify-content: center;
+  font-size: var(--font-md);
   border-radius: var(--radius-sm);
+}
+.cat-edit-btn::after {
+  content: '';
+  position: absolute;
+  inset: -6px -5px;
 }
 .cat-edit-btn:hover { opacity: 1; color: var(--color-primary); }
 .cat-dot {
   display: inline-block;
-  width: 10px;
-  height: 10px;
+  width: 8px;
+  height: 8px;
   border-radius: 50%;
   flex-shrink: 0;
 }
-.cat-name { font-weight: 600; font-size: var(--font-base); }
+.cat-name {
+  font-weight: 600;
+  font-size: var(--font-base);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .cat-uncategorized .cat-name { color: var(--color-text-muted); font-weight: 500; }
 .cat-count {
   font-size: var(--font-sm);
@@ -874,7 +898,7 @@ onUnmounted(() => {
 .cat-chevron { color: var(--color-text-muted); }
 
 .cat-body {
-  padding: 0 var(--spacing-sm) var(--spacing-sm);
+  padding: 0;
   display: flex;
   flex-direction: column;
   gap: 4px;
@@ -903,8 +927,8 @@ onUnmounted(() => {
 .add-line {
   display: flex;
   align-items: center;
-  gap: var(--spacing-sm);
-  padding: 2px 0;
+  gap: 4px;
+  padding: 0;
 }
 .add-input-wrap {
   position: relative;
@@ -913,10 +937,11 @@ onUnmounted(() => {
 }
 .add-input {
   width: 100%;
+  height: 34px;
   border: 1px dashed var(--color-border-hover);
   background: transparent;
   border-radius: var(--radius-sm);
-  padding: 8px var(--spacing-sm);
+  padding: 0 10px;
   font-size: var(--font-base);
   color: var(--color-text-primary);
 }
@@ -953,9 +978,9 @@ onUnmounted(() => {
 .suggestion-item:hover { background: var(--color-background); }
 .add-qty-toggle {
   flex-shrink: 0;
-  min-width: 36px;
-  height: 36px;
-  padding: 0 8px;
+  min-width: 32px;
+  height: 34px;
+  padding: 0 6px;
   border: 1px dashed var(--color-border-hover);
   background: transparent;
   border-radius: var(--radius-sm);
@@ -974,8 +999,8 @@ onUnmounted(() => {
 
 .add-qty-input {
   flex-shrink: 0;
-  width: 56px;
-  height: 36px;
+  width: 48px;
+  height: 34px;
   text-align: center;
   border: 1px solid var(--color-primary);
   border-radius: var(--radius-sm);
@@ -988,8 +1013,8 @@ onUnmounted(() => {
 
 .add-confirm {
   flex-shrink: 0;
-  width: 36px;
-  height: 36px;
+  width: 34px;
+  height: 34px;
   border: none;
   background: var(--color-primary);
   color: white;
@@ -1024,7 +1049,7 @@ onUnmounted(() => {
   font-size: var(--font-sm);
   font-weight: 500;
   cursor: pointer;
-  min-height: var(--touch-target-min);
+  min-height: var(--touch-target-dense);
 }
 .add-category-btn:hover { border-color: var(--color-primary); color: var(--color-primary); }
 </style>
