@@ -9,6 +9,7 @@ import { supabase } from '@/lib/supabase'
 import { useHouseholdStore } from './householdStore'
 import { useAuthStore } from './authStore'
 import { useToastStore } from './toastStore'
+import { registerSyncSource } from '@/composables/useSyncStatus'
 import type { RealtimeChannel } from '@supabase/supabase-js'
 
 // localStorage Keys
@@ -119,6 +120,12 @@ export const useShoppingStore = defineStore('shopping', () => {
       console.error('Failed to load queue from storage:', error)
     }
   }
+
+  // Offline-Queue sofort aus dem localStorage herstellen — ein reiner
+  // Lesevorgang ohne Netzwerk. Dadurch kennt der Sync-Indikator im Header
+  // unsynchronisierte Änderungen auch dann, wenn die Einkaufsansicht in dieser
+  // Sitzung noch nicht geöffnet wurde.
+  loadQueueFromStorage()
 
   // Auto-save items to cache on change
   watch(items, saveItemsToCache, { deep: true })
@@ -256,6 +263,11 @@ export const useShoppingStore = defineStore('shopping', () => {
   })
 
   const hasPendingMutations = computed(() => mutationQueue.value.length > 0)
+
+  // Der Sync-Indikator im Header liest über diese Anmeldung mit. Der Einkauf ist
+  // heute die einzige Quelle mit Offline-Queue; weitere Stores melden sich später
+  // genauso an, ohne dass der Header sie kennen muss.
+  registerSyncSource('shopping', { hasPending: hasPendingMutations, isSyncing })
 
   // ============================================================================
   // Mutation Queue Helpers

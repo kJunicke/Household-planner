@@ -458,15 +458,8 @@ onUnmounted(() => {
         </div>
       </div>
 
-      <!-- Offline/Sync Status Banner -->
-      <div v-if="!isOnline" class="alert alert-warning mb-3" role="alert">
-        <i class="bi bi-wifi-off me-2"></i>
-        <strong>Offline-Modus</strong> - Änderungen werden automatisch synchronisiert sobald die Verbindung wiederhergestellt ist.
-      </div>
-      <div v-else-if="shoppingStore.hasPendingMutations || shoppingStore.isSyncing" class="alert alert-info mb-3" role="alert">
-        <span class="spinner-border spinner-border-sm me-2"></span>
-        <strong>Synchronisiere...</strong>
-      </div>
+      <!-- Kein Sync-Banner im Seiteninhalt: es schob beim Abhaken alles darunter
+           nach unten. Der Zustand steht jetzt im Header (SyncIndicator). -->
 
       <!-- Keine Listen vorhanden -->
       <div v-if="shoppingStore.lists.length === 0 && !shoppingStore.isLoading" class="empty-state">

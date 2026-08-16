@@ -3,7 +3,10 @@
   <head>
     <meta charset="UTF-8">
     <link rel="icon" href="/favicon.ico">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <!-- interactive-widget=resizes-content: Android Chrome verkleinert damit beim
+         Öffnen der Tastatur auch den Layout-Viewport, sodass Modal-Footer sichtbar
+         bleiben. iOS Safari ignoriert es — dafür useVisualViewportHeight(). -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, interactive-widget=resizes-content">
 
     <!-- PWA Meta Tags -->
     <meta name="theme-color" content="#ffffff">

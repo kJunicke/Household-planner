@@ -1,160 +1,110 @@
-<template>
-  <div class="toast-container position-fixed bottom-0 end-0 p-3">
-    <div
-      v-for="toast in toastStore.toasts"
-      :key="toast.id"
-      :ref="el => setToastRef(toast.id, el as HTMLElement | null)"
-      class="toast"
-      :class="getToastClass(toast.type)"
-      role="alert"
-      aria-live="polite"
-      aria-atomic="true"
-      data-bs-autohide="true"
-      data-bs-delay="5000"
-    >
-      <div class="toast-header">
-        <span class="toast-icon me-2" :class="getIconClass(toast.type)">
-          {{ getIcon(toast.type) }}
-        </span>
-        <strong class="me-auto">{{ getTitle(toast.type) }}</strong>
-        <button
-          type="button"
-          class="btn-close"
-          data-bs-dismiss="toast"
-          aria-label="Close"
-        ></button>
-      </div>
-      <div class="toast-body">
-        {{ toast.message }}
-      </div>
-    </div>
-  </div>
-</template>
-
 <script setup lang="ts">
-import { ref, watch, nextTick } from 'vue'
 import { useToastStore } from '@/stores/toastStore'
 import type { ToastType } from '@/stores/toastStore'
-import { Toast as BootstrapToast } from 'bootstrap'
 
 const toastStore = useToastStore()
 
-// Map toast IDs to DOM refs
-const toastRefs = ref<Map<string, HTMLElement>>(new Map())
+// Reine Darstellung: kein Bootstrap-Toast, kein Auto-Hide-Timer, keine DOM-Refs.
+// Der Timer sitzt im Store.
 
-const setToastRef = (id: string, el: HTMLElement | null) => {
-  if (el) {
-    toastRefs.value.set(id, el)
-  } else {
-    toastRefs.value.delete(id)
-  }
+const icons: Record<ToastType, string> = {
+  success: 'bi-check-circle-fill',
+  error: 'bi-exclamation-circle-fill',
+  info: 'bi-info-circle-fill'
 }
-
-// Helper: Get Bootstrap color class for toast type
-const getToastClass = (type: ToastType): string => {
-  const classes: Record<ToastType, string> = {
-    success: 'toast-success',
-    error: 'toast-error',
-    info: 'toast-info'
-  }
-  return classes[type]
-}
-
-// Helper: Get icon for toast type
-const getIcon = (type: ToastType): string => {
-  const icons: Record<ToastType, string> = {
-    success: '✓',
-    error: '✕',
-    info: 'ℹ'
-  }
-  return icons[type]
-}
-
-// Helper: Get icon class for toast type
-const getIconClass = (type: ToastType): string => {
-  const classes: Record<ToastType, string> = {
-    success: 'text-success',
-    error: 'text-danger',
-    info: 'text-primary'
-  }
-  return classes[type]
-}
-
-// Helper: Get title for toast type
-const getTitle = (type: ToastType): string => {
-  const titles: Record<ToastType, string> = {
-    success: 'Erfolg',
-    error: 'Fehler',
-    info: 'Info'
-  }
-  return titles[type]
-}
-
-// Watch for new toasts and initialize Bootstrap Toast
-watch(
-  () => toastStore.toasts.length,
-  async () => {
-    await nextTick()
-
-    // Initialize Bootstrap Toasts for new toasts
-    toastStore.toasts.forEach(toast => {
-      const el = toastRefs.value.get(toast.id)
-      if (el) {
-        // Check if already initialized
-        const existingInstance = BootstrapToast.getInstance(el)
-        if (!existingInstance) {
-          const bsToast = new BootstrapToast(el)
-
-          // Listen to hidden event to remove from store
-          el.addEventListener('hidden.bs.toast', () => {
-            toastStore.removeToast(toast.id)
-          })
-
-          // Show the toast
-          bsToast.show()
-        }
-      }
-    })
-  }
-)
 </script>
 
+<template>
+  <div class="toast-stack" aria-live="polite" aria-atomic="true">
+    <TransitionGroup name="toast">
+      <button
+        v-for="toast in toastStore.toasts"
+        :key="toast.id"
+        type="button"
+        class="toast-line"
+        :class="`toast-${toast.type}`"
+        role="alert"
+        aria-label="Meldung ausblenden"
+        @click="toastStore.removeToast(toast.id)"
+      >
+        <i class="bi" :class="icons[toast.type]"></i>
+        <span class="toast-text">{{ toast.message }}</span>
+      </button>
+    </TransitionGroup>
+  </div>
+</template>
+
 <style scoped>
-.toast-container {
-  z-index: 9999;
+/* Oben rechts, unterhalb des Headers — der Einstellungen-Avatar bleibt frei.
+   Die Headerhöhe kommt aus der globalen Variable, die der Header selbst misst. */
+.toast-stack {
+  position: fixed;
+  top: calc(var(--app-header-height, 56px) + 0.5rem);
+  right: 0.5rem;
+  left: 0.5rem;
+  z-index: 1080;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.375rem;
+  pointer-events: none;
 }
 
-/* Custom toast colors using Design System variables */
-.toast-success .toast-header {
-  background-color: var(--color-success-light);
-  color: white;
+.toast-line {
+  pointer-events: auto;
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  max-width: min(24rem, 100%);
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--color-border);
+  border-left: 4px solid var(--color-primary);
+  border-radius: var(--radius-md);
+  background: var(--color-background-elevated);
+  box-shadow: var(--shadow-lg);
+  color: var(--color-text-primary);
+  font-size: var(--font-md);
+  text-align: left;
+  cursor: pointer;
 }
 
-.toast-error .toast-header {
-  background-color: var(--color-danger);
-  color: white;
+/* Normale Meldungen sind einzeilig. Lange Texte (der Offline-Erklärtext) brechen
+   um, statt abgeschnitten zu werden — abgeschnittene Erklärungen sind nutzlos. */
+.toast-text {
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
-.toast-info .toast-header {
-  background-color: var(--color-primary);
-  color: white;
+/* Typ-Signal ausschließlich über Icon und linken Rand — kein Titel, kein Kopfbalken. */
+.toast-success {
+  border-left-color: var(--color-success);
+}
+.toast-success i {
+  color: var(--color-success);
 }
 
-/* Icon styling */
-.toast-icon {
-  font-size: 1.25rem;
-  font-weight: bold;
+.toast-error {
+  border-left-color: var(--color-danger);
+}
+.toast-error i {
+  color: var(--color-danger);
 }
 
-/* Toast body styling */
-.toast-body {
-  font-size: 0.9rem;
+.toast-info {
+  border-left-color: var(--color-primary);
+}
+.toast-info i {
+  color: var(--color-primary);
 }
 
-/* Override Bootstrap close button color for colored headers */
-.toast-success .btn-close,
-.toast-error .btn-close,
-.toast-info .btn-close {
-  filter: brightness(0) invert(1);
+.toast-enter-active,
+.toast-leave-active {
+  transition: opacity var(--transition-base), transform var(--transition-base);
+}
+
+.toast-enter-from,
+.toast-leave-to {
+  opacity: 0;
+  transform: translateY(-0.5rem);
 }
 </style>

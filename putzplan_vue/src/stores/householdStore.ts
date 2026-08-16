@@ -220,43 +220,28 @@ export const useHouseholdStore = defineStore('household', () => {
         return weeklyPointsByUser.value.get(authStore.user.id) || 0
     })
 
-    // Wöchentliche Rangliste
+    // Wöchentliche Rangliste — enthält **alle** Haushaltsmitglieder, auch solche
+    // ohne Punkte in dieser Woche. Wer führt, soll trotzdem sehen, wie viele Punkte
+    // die andere Person hat und welche Farbe sie trägt.
     const weeklyRanking = computed(() => {
         const authStore = useAuthStore()
-        if (!authStore.user) return null
+        if (!authStore.user) return []
 
         const points = weeklyPointsByUser.value
 
-        // Erstelle sortierte Rangliste
-        const ranking = Array.from(points.entries())
-            .map(([userId, pts]) => {
-                const member = householdMembers.value.find(m => m.user_id === userId)
-                return {
-                    userId,
-                    name: member?.display_name || 'Unbekannt',
-                    color: member?.user_color || '#4A90E2',
-                    points: pts,
-                    isCurrentUser: userId === authStore.user!.id
-                }
-            })
-            .sort((a, b) => b.points - a.points) // Sortiere nach Punkten (absteigend)
-
-        if (ranking.length === 0) return null
-
-        // Finde eigene Position
-        const currentUserIndex = ranking.findIndex(r => r.isCurrentUser)
-        const currentUserRank = currentUserIndex + 1 // 1-basiert
-
-        const leader = ranking[0]
-        const isLeader = currentUserIndex === 0
-
-        return {
-            leader,
-            currentUser: currentUserIndex >= 0 ? ranking[currentUserIndex] : null,
-            currentUserRank,
-            isLeader,
-            totalUsers: ranking.length
-        }
+        return householdMembers.value
+            .map((member, index) => ({
+                userId: member.user_id,
+                name: member.display_name || 'Unbekannt',
+                color: member.user_color || '#4A90E2',
+                points: points.get(member.user_id) || 0,
+                isCurrentUser: member.user_id === authStore.user!.id,
+                order: index
+            }))
+            // Punkte absteigend; bei Gleichstand die Mitgliederreihenfolge, damit
+            // die Liste nicht bei jeder Neuberechnung springt.
+            .sort((a, b) => b.points - a.points || a.order - b.order)
+            .map((entry, index) => ({ ...entry, rank: index + 1 }))
     })
 
     const createHousehold = async (name: string) => {

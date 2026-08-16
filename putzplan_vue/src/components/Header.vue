@@ -4,11 +4,19 @@ import { useAuthStore } from '../stores/authStore'
 import { useHouseholdStore } from '../stores/householdStore'
 import SettingsSidebar from './SettingsSidebar.vue'
 import BrandLogo from './BrandLogo.vue'
+import SyncIndicator from './SyncIndicator.vue'
+import { useElementHeightVar } from '../composables/useElementHeightVar'
 
 const authStore = useAuthStore()
 const householdStore = useHouseholdStore()
 
 const sidebarOpen = ref(false)
+
+// Der Header meldet seine eigene Höhe global; Toasts und Sync-Indikator hängen
+// sich daran, ein fester Pixelwert wäre auf Desktop und bei umbrechender
+// Rangliste falsch.
+const headerEl = ref<HTMLElement | null>(null)
+useElementHeightVar(headerEl, '--app-header-height')
 
 const currentMemberColor = computed(() => {
   const member = householdStore.householdMembers.find(m => m.user_id === authStore.user?.id)
@@ -21,47 +29,34 @@ onMounted(async () => {
 </script>
 
 <template>
-  <header class="app-header">
+  <header ref="headerEl" class="app-header">
     <!-- Compact Header Bar -->
     <div class="header-bar">
       <BrandLogo size="sm" />
 
-      <!-- Weekly Points Display -->
-      <div v-if="householdStore.weeklyRanking" class="points-display">
-        <!-- 1. Platz (Leader) -->
-        <div class="rank-item">
-          <span class="rank-position">1.</span>
-          <span
-            class="rank-color-dot"
-            :style="{ backgroundColor: householdStore.weeklyRanking.leader.color }"
-          ></span>
-          <span class="rank-name" :class="{ 'current-user': householdStore.weeklyRanking.isLeader }">
-            {{ householdStore.weeklyRanking.leader.name }}
-          </span>
-          <span class="rank-points">{{ householdStore.weeklyRanking.leader.points }}</span>
-        </div>
-
-        <!-- Eigener Platz (falls nicht Leader) -->
-        <div v-if="!householdStore.weeklyRanking.isLeader && householdStore.weeklyRanking.currentUser" class="rank-item">
-          <span class="rank-position">{{ householdStore.weeklyRanking.currentUserRank }}.</span>
-          <span
-            class="rank-color-dot"
-            :style="{ backgroundColor: householdStore.weeklyRanking.currentUser.color }"
-          ></span>
-          <span class="rank-name current-user">
-            {{ householdStore.weeklyRanking.currentUser.name }}
-          </span>
-          <span class="rank-points">{{ householdStore.weeklyRanking.currentUser.points }}</span>
+      <!-- Wochen-Rangliste: alle Haushaltsmitglieder, eigener Eintrag hervorgehoben -->
+      <div v-if="householdStore.weeklyRanking.length > 0" class="points-display">
+        <div
+          v-for="entry in householdStore.weeklyRanking"
+          :key="entry.userId"
+          class="rank-item"
+          :class="{ 'current-user': entry.isCurrentUser }"
+        >
+          <span class="rank-position">{{ entry.rank }}.</span>
+          <span class="rank-color-dot" :style="{ backgroundColor: entry.color }"></span>
+          <span class="rank-name">{{ entry.name }}</span>
+          <span class="rank-points">{{ entry.points }}</span>
         </div>
       </div>
 
-      <!-- Empty state: keine Completions diese Woche -->
+      <!-- Empty state: Mitglieder noch nicht geladen -->
       <div v-else class="points-display points-empty">
         <i class="bi bi-trophy"></i>
         <span class="empty-hint">Diese Woche: {{ householdStore.currentUserWeeklyPoints }} Pkt</span>
       </div>
 
       <div class="header-actions">
+        <SyncIndicator />
         <button
           class="user-avatar"
           :style="{ backgroundColor: currentMemberColor }"
@@ -97,10 +92,13 @@ onMounted(async () => {
 }
 
 /* Weekly Points Display */
+/* Auf zwei Mitglieder optimiert. Mehr Mitglieder sollen lediglich nicht
+   zerbrechen: die Einträge umbrechen dann in eine zweite Zeile. */
 .points-display {
   display: flex;
   align-items: center;
-  gap: 0.75rem;
+  flex-wrap: wrap;
+  gap: 0.25rem 0.5rem;
   flex-shrink: 1;
   min-width: 0;
 }
@@ -129,6 +127,15 @@ onMounted(async () => {
   align-items: center;
   gap: 0.25rem;
   font-size: 0.75rem;
+  padding: 0.125rem 0.375rem;
+  border-radius: var(--radius-sm);
+  min-width: 0;
+}
+
+/* Eigener Eintrag bleibt hervorgehoben */
+.rank-item.current-user {
+  background: rgba(79, 70, 229, 0.1);
+  outline: 1px solid rgba(79, 70, 229, 0.25);
 }
 
 .rank-position {
@@ -154,7 +161,7 @@ onMounted(async () => {
   max-width: 4rem;
 }
 
-.rank-name.current-user {
+.rank-item.current-user .rank-name {
   color: var(--color-primary);
   font-weight: 700;
 }
@@ -168,7 +175,8 @@ onMounted(async () => {
 .header-actions {
   display: flex;
   align-items: center;
-  gap: 0.75rem;
+  gap: 0.25rem;
+  flex-shrink: 0;
 }
 
 .user-avatar {
