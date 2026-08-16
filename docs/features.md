@@ -65,10 +65,28 @@ Skyline-Packing (`lib/wallLayout.ts`).
   Personenfarbe immer kräftiger wirkt als die Nicht-Farbe.
 - **Am Zettel sichtbar**: Titel, Punktwert, bei Rückstand eine rote Dauer („2 Tage",
   „nie") und genau **ein** Knopf (Bearbeiten, öffnet das bestehende Modal).
-- **Statusleiste** oben: ein Balken für den ganzen Haushalt gegen das **Wochenziel**, ein
-  Farbsegment je Mitglied, darunter eine Legende. Keine Rangliste, keine Platzierung; ein
-  Mitglied ohne Punkte erscheint mit Segmentbreite 0 und einer 0. Die wöchentliche
-  Rangliste im Header ist auf dieser Ansicht ausgeblendet, in `/stats` bleibt sie.
+- **Statusleiste** oben, klebend: **ein** Balken über die volle Breite für den ganzen
+  Haushalt gegen das **Wochenziel**, ein Farbsegment je Mitglied, die Legende mit Name und
+  Punktzahl mittig in der Kopfzeile. Keine Rangliste, keine Platzierung; ein Mitglied ohne
+  Punkte erscheint mit Segmentbreite 0 und einer 0. Die wöchentliche Rangliste im Header
+  ist auf dieser Ansicht ausgeblendet, in `/stats` bleibt sie.
+  - **Über dem Ziel** leuchtet der gefüllte Balken langsam auf und ab (voller Zyklus nie
+    unter 3 s), und flache Linien spritzen aus der rechten Kante. Die **Helligkeit** trägt
+    das Ausmaß, nicht das Tempo — schneller hieße aufdringlicher. Der Helligkeitsdeckel ab
+    dem 7,6-fachen Ziel ist gewollt: er hält die Segmentfarben mit 70 % lesbar, das
+    sichtbare Signal trägt dort nur noch die Tatsache „wir sind drüber", den genauen
+    Faktor die `+N`-Zahl.
+  - **Die Höhe ist über alle Punktstände exakt gleich** (60 px offen, 53 px kompakt).
+    Alles Druckabhängige ist absolut positioniert und trägt nichts zur Layouthöhe bei —
+    sonst spränge die Wand bei jedem Erledigen. Ihre Höhe reserviert die Wand über
+    `--wall-status-height`, damit kein Zettel dauerhaft unter der Leiste bleibt.
+  - Verworfen wurden auf dem Weg dorthin: umlaufende Bahnen (Flexbox staucht jede Summe
+    über 100 % lautlos zurück), ein tropfendes Leck (machte die Leiste höher) und ein
+    wanderndes Streifenmuster (zu schnell, zu ablenkend).
+- **Wochenziel und Wochenstart** ändert jedes Mitglied in der Settings-Sidebar, nie inline
+  in der Leiste. Vor dem Speichern benennt eine Bestätigung die Folgen: das Ziel gilt
+  sofort, der neue Wochenstart erst ab einem genannten Datum, und die laufende Woche ist
+  dadurch einmalig länger (→ [data-model.md](data-model.md)).
 
 ## `/history` — HistoryView
 

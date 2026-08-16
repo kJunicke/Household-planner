@@ -10,8 +10,21 @@ Wichtig für `.eq()`-Queries — die PKs heißen nicht `id`.
 - `households` — PK: `household_id`
   - `weekly_goal_points` (INTEGER, Default 30) — gemeinsames **Wochenziel** in Punkten,
     gilt sofort für die laufende Woche
-  - `week_start_day` (SMALLINT, Default 1 = Montag) — Wochenstart in JS-`getDay()`-
-    Konvention (0 = Sonntag), wirkt erst ab der nächsten Woche
+  - `week_start_day` (SMALLINT, Default 1 = Montag) — der Wochenstart, der **gerade
+    gilt**, in JS-`getDay()`-Konvention (0 = Sonntag)
+  - `week_start_day_pending` (SMALLINT, nullable) + `week_start_pending_from` (DATE,
+    nullable) — der **nächste** Wochenstart und der Kalendertag, ab dem er gilt.
+    Beide NULL, solange nichts ansteht. Ein geänderter Wochenstart darf die laufende
+    Woche nicht neu zuschneiden, sonst verschwänden gesammelte Punkte scheinbar; der
+    Wechseltag wird deshalb **einmal beim Speichern** berechnet (erstes Auftreten des
+    neuen Wochentags am oder nach dem Ende der laufenden Woche) und liegt am Haushalt,
+    nicht am Gerät — zwei Mitglieder müssen dasselbe Wochenfenster sehen.
+    Die Übergangswoche ist dadurch einmalig länger (bis 13 Tage); nichts verschwindet,
+    nichts zählt doppelt. Das Fortschreiben Pending → Aktiv erledigen die Clients beim
+    Laden und ist idempotent — die Leseregel wendet ein fälliges Pending ohnehin schon
+    an, das Fortschreiben ist reines Aufräumen.
+  - `households` steht in der Publikation `supabase_realtime`, damit die Änderung des
+    einen Mitglieds beim anderen ohne Reload ankommt
   - Beide gehören dem Haushalt, jedes Mitglied darf sie ändern. **Keine Historie** —
     sichtbar ist immer nur die laufende Woche (→ `CONTEXT.md`, „Wochenziel")
 - `household_members` — PK: `user_id` (**One ID per user!** — referenziert `auth.users.id`)

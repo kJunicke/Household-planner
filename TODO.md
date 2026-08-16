@@ -177,6 +177,46 @@ ALTER TABLE shopping_items ADD COLUMN quantity int NOT NULL DEFAULT 1;
   `.fab-plus` und die Pinnwand-Fassung des Such-Overlays (aus `WallView.vue`).
   `.wall` selbst bleibt scoped.
 
+### Pinnwand-Redesign — vertagt aus Etappe 3 (Tickets 07 + 08, 17.08.2026)
+
+- **Kein Timer für den Wochenwechsel bei dauerhaft offenem Tab.** Das Wochenfenster
+  wird beim Laden, beim Sichtbarwerden des Tabs und bei Realtime-Ereignissen
+  nachgezogen — nicht aber von selbst. Ein Tab, der über Mitternacht des
+  Wochenwechsels im Vordergrund liegt und **gar keine** Interaktion sieht, zeigt bis
+  zum nächsten Auslöser das alte Fenster. Bewusst akzeptiert (zwei Nutzer, mobil).
+
+- **`promoteDueWeekStart()` scheitert still.** Schlägt das Fortschreiben
+  Pending → Aktiv dauerhaft fehl (offline, RLS-Änderung), bleibt die Zeile für immer
+  im Pending-Zustand, ohne dass es irgendwo sichtbar wird. Unkritisch, weil die
+  Leseregel ein fälliges Pending ohnehin anwendet und die Anzeige damit richtig
+  bleibt — genau dafür ist sie vom Schreiben entkoppelt.
+
+- **Legende bei drei Mitgliedern.** Auf 375 px ellipsieren die Namen ab **5 Zeichen**
+  (gemessen; die Rechnung des Implementierers lag mit ≈6,8 rund 30 % zu optimistisch).
+  Punktzahlen und Farben bleiben vollständig. Laut Ticket zulässig — gestaltet wird
+  für zwei Personen, drei müssen nur funktionieren. Hebel, falls es stört: „ Pkt" aus
+  der Punktzahl streichen (+19 px) oder die Legende auf 10 px setzen.
+
+- **Kein Puffer zwischen `+N`-Marke und Balken.** Gescrollt bleiben **1,16 px**, und
+  die 22-px-Kopfzeile trägt die um 3° gedrehte Marke (20,20 px) mit nur 1,8 px Rest.
+  Aktuell kollisionsfrei, aber jede Änderung an Schriftgröße, Zeilenhöhe oder Drehung
+  von `.status-over` kippt es. Die feste Kopfhöhe muss dann mit angehoben werden.
+
+- **Helligkeitsdeckel des Aufleuchtens ist ein echtes Plateau.** Ab dem 7,6-fachen
+  des Wochenziels sieht das Pulsieren bei jedem Stand gleich aus. Bewusst so: der
+  Deckel hält die Segmentfarben mit exakt 70 % lesbar, und oberhalb trägt die exakte
+  `+N`-Zahl das Ausmaß. Der QC hält 0,30 eher für zu kräftig als für zu schwach.
+
+- **Auf hellen Personenfarben trägt das Aufleuchten schwächer**, als der Mittelwert
+  nahelegt: bei knappem Überschuss 7,4 Stufen im Mittel, im Rotkanal aber nur 2,1 —
+  es wirkt dort als Sättigungsverschiebung statt als Helligkeitssprung. Löst sich
+  vermutlich mit der kuratierten Farbpalette (siehe Etappe 2).
+
+- **Der Balken ist 18 px kürzer als das Papier**, weil rechts dauerhaft ein Streifen
+  für die Spritzer reserviert ist — auch unter dem Ziel. Vom QC geprüft: ein genau
+  erreichtes Ziel sieht trotzdem voll aus, weil der Streifen außerhalb der Spur liegt.
+  Bleibt eine leichte Asymmetrie (20 px links, 30 px rechts bis zur Papierkante).
+
 ### Task Management
 - **"Meine Aufgaben" View** - Extra Tab für zugewiesene Tasks (Option 1)
   - CategoryNav erweitern um 5. Tab: "Meine Aufgaben"
@@ -429,3 +469,6 @@ des Reviews, Stärke in Klammern.
 ## 📝 Notizen
 
 **Migrations:** Konsolidiert am 26.10.2025 (29 → 4 Migrations)
+
+# Neue Todos von Kilian
+Richtwert 1p ~ 10 min auf 1p~5 min setzen 1p -> 2p migration
