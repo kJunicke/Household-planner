@@ -7,9 +7,13 @@ import QuickTaskModal from '../components/QuickTaskModal.vue';
 import { useTaskStore } from "../stores/taskStore";
 import { useHouseholdStore } from "../stores/householdStore";
 import type { Task } from '@/types/Task';
-import { scheduleOf, isOverdue } from '@/lib/taskSchedule';
+import { useTaskBoard, countOverdue } from '@/composables/useTaskBoard';
 
 const taskStore = useTaskStore()
+
+// Auswahl und Reihenfolge kommen aus dem gemeinsamen Composable — diese View
+// entscheidet nur noch, welche davon der aktuelle Kategorie-Filter zeigt.
+const board = useTaskBoard(() => taskStore.tasks)
 const householdStore = useHouseholdStore()
 const showCreateModal = ref(false)
 const showQuickModal = ref(false)
@@ -99,111 +103,41 @@ const categoryConfig: Record<TaskCategory, { label: string; icon: string }> = {
   completed: { label: 'Erledigt', icon: 'bi-check-circle' }
 }
 
-// Dringendste zuerst. Über den Gleichheits-Zweig, weil `urgency` für nie erledigte
-// Aufgaben Infinity ist und Infinity - Infinity = NaN einen Komparator zerstört.
-const byUrgency = (a: Task, b: Task): number => {
-  const ua = scheduleOf(a).urgency
-  const ub = scheduleOf(b).urgency
-  return ua === ub ? 0 : ub - ua
-}
-
 // Get tasks for a specific category.
 // 'recurring' fehlt absichtlich: offene Putzaufgaben stehen vollständig in der
 // "Jetzt dran"-Sektion. Der Typ schließt den Aufruf aus, damit die Lücke nicht
 // still zu einer leeren Liste wird.
 type GroupedCategory = Exclude<TaskCategory, 'recurring'>
 
-const getTasksForCategory = (category: GroupedCategory): Task[] => {
-  let tasks: Task[] = []
-
-  if (category === 'completed') {
-    // Completed tasks (non-projects)
-    tasks = taskStore.tasks.filter((task: Task) =>
-      task.completed &&
-      task.parent_task_id === null &&
-      task.task_type !== 'project'
-    )
-    // Nächste Fälligkeit zuerst — derselbe Schlüssel wie in "Jetzt dran":
-    // absteigende Dringlichkeit ist aufsteigende Restlaufzeit. Aufgaben ohne
-    // Kadenz (täglich, einmalig) haben keine Fälligkeit und bleiben hinten.
-    tasks.sort(byUrgency)
-
-    // Add completed projects at the end
-    const completedProjects = taskStore.tasks.filter((task: Task) =>
-      task.completed &&
-      task.parent_task_id === null &&
-      task.task_type === 'project'
-    ).sort((a, b) => {
-      if (!a.last_completed_at || !b.last_completed_at) return 0
-      return new Date(b.last_completed_at).getTime() - new Date(a.last_completed_at).getTime()
-    })
-    tasks = [...tasks, ...completedProjects]
-
-  } else if (category === 'daily') {
-    // Daily + one-time tasks (not completed)
-    tasks = taskStore.tasks.filter((task: Task) =>
-      !task.completed &&
-      task.parent_task_id === null &&
-      (task.task_type === 'daily' || task.task_type === 'one-time')
-    )
-    // Alphabetisch sortieren (stabile Reihenfolge)
-    tasks.sort((a, b) => a.title.localeCompare(b.title, 'de'))
-
-  } else if (category === 'project') {
-    // Projects (not completed)
-    tasks = taskStore.tasks.filter((task: Task) =>
-      !task.completed &&
-      task.parent_task_id === null &&
-      task.task_type === 'project'
-    )
-  }
-
-  return tasks
+const getTasksForCategory = (category: GroupedCategory): readonly Task[] => {
+  if (category === 'completed') return board.completedTasks.value
+  if (category === 'daily') return board.dailyTasks.value
+  return board.projectTasks.value
 }
 
-// "Jetzt dran": jede offene wiederkehrende Aufgabe.
-// Ob eine Aufgabe dran ist, entscheidet allein `completed` aus der Datenbank —
-// die Kadenz-Grenze wird hier NICHT ausgewertet, siehe
-// docs/adr/0001-completed-ist-zustand-keine-ableitung.md. Damit erscheint auch
-// eine manuell als "wieder dreckig" markierte Aufgabe hier, obwohl ihr Intervall
-// noch läuft. Die Sektion ersetzt die reguläre Putzaufgaben-Gruppe vollständig.
-const isPending = (task: Task): boolean =>
-  task.task_type === 'recurring' &&
-  !task.completed &&
-  task.parent_task_id === null
-
-const pendingTasks = computed((): Task[] => {
+// "Jetzt dran": jede offene wiederkehrende Aufgabe, dringendste zuerst.
+// Die Sektion ersetzt die reguläre Putzaufgaben-Gruppe vollständig.
+const pendingTasks = computed((): readonly Task[] => {
   // Nur zeigen, wenn die Kategorie 'recurring' im aktuellen Filter sichtbar ist
   if (!selectedCategories.value.includes('recurring')) return []
-  return taskStore.tasks
-    .filter(isPending)
-    .sort(byUrgency)
+  return board.pendingTasks.value
 })
 
 // Für die Status-Zeile und die Warnfarbe des Sektionskopfes: nur die, die ihre
-// Kadenz wirklich gerissen haben. Prädikat aus dem Modul, damit Karte und
-// Sektion dieselbe Menge meinen.
-const overdueCount = computed((): number =>
-  pendingTasks.value.filter(t => isOverdue(scheduleOf(t))).length
-)
+// Kadenz wirklich gerissen haben — und nur aus der hier sichtbaren Menge, damit
+// die Warnung mit dem Kategorie-Filter verschwindet.
+const overdueCount = computed((): number => countOverdue(pendingTasks.value))
 
 // Status-Zeile: definierte, vorhandene Daten (keine neuen Tabellen).
-// Daily-Aufgaben sind immer sichtbar/resetten täglich → kein "offener Rückstand",
-// daher nur recurring + one-time zählen.
-const openTasksCount = computed((): number =>
-  taskStore.tasks.filter(
-    t => !t.completed &&
-      t.parent_task_id === null &&
-      (t.task_type === 'recurring' || t.task_type === 'one-time')
-  ).length
-)
+const openTasksCount = board.openTasksCount
 
 // Grouped tasks computed property
 interface TaskGroup {
   category: TaskCategory
   label: string
   icon: string
-  tasks: Task[]
+  // readonly: geteilte Instanz aus dem Composable-Cache, nicht in-place sortieren
+  tasks: readonly Task[]
 }
 
 const groupedTasks = computed((): TaskGroup[] => {
