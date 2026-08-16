@@ -2,6 +2,26 @@
 <html lang="de">
   <head>
     <meta charset="UTF-8">
+
+    <!-- Aussehen-Umschalter (Pinnwand-Redesign): MUSS synchron und VOR dem
+         ersten Stylesheet laufen. Das gebaute CSS ist render-blockierend und
+         enthaelt den klassischen :root-Satz; das Modul-Script ist deferred und
+         liefe erst nach dem HTML-Parsing — der Browser duerfte also kurz den
+         klassischen Grund malen (Weiss-Blitz vor Kork).
+         Bewusst generisch gehalten: nur der Storage-Schluessel wird hier
+         gedoppelt (Gegenstueck: STORAGE_KEY in src/lib/design.ts), neue Modi
+         brauchen keine Aenderung. Jeder Fehler faellt still auf klassisch. -->
+    <script>
+      try {
+        var d = localStorage.getItem('putzplan.design');
+        if (d && d !== 'classic' && /^[a-z-]{1,32}$/.test(d)) {
+          document.documentElement.setAttribute('data-design', d);
+        }
+      } catch (e) {
+        /* localStorage gesperrt o. ae. — klassisches Aussehen */
+      }
+    </script>
+
     <link rel="icon" href="/favicon.ico">
     <!-- interactive-widget=resizes-content: Android Chrome verkleinert damit beim
          Öffnen der Tastatur auch den Layout-Viewport, sodass Modal-Footer sichtbar

@@ -77,6 +77,109 @@
   --touch-target-dense: 40px;
 }
 
+/* ============================================================================
+   Pinnwand-Farbwelt — zweiter Token-Satz (Pinnwand-Redesign, Etappe 1)
+   ----------------------------------------------------------------------------
+   Liegt NEBEN dem Bestand, überschreibt `:root` nicht. Aktiv nur, wenn
+   `data-design="pinnwand"` am <html> steht (→ src/lib/design.ts). Ohne das
+   Attribut gilt der obige Satz unverändert — das alte Aussehen bleibt exakt
+   wie bisher.
+
+   Die bestehenden Token-NAMEN bleiben; nur ihre Werte hängen am aktiven Satz.
+   Die `--pw-*`-Rohtöne sind die Palette aus dem Prototypen (r5-freiewand.html)
+   und stehen den Pinnwand-Komponenten späterer Etappen zur Verfügung.
+   Kein Dark Mode — Kork ist eine helle Formsprache.
+   ========================================================================== */
+:root[data-design='pinnwand'] {
+  /* Rohpalette */
+  --pw-cork: #e7dcc8;
+  --pw-cork-deep: #d8c9ad;
+  --pw-paper: #fffdf6;
+  --pw-paper-day: #fdf1c9;   /* tägliche Aufgaben: gelber Notizblock */
+  --pw-paper-proj: #dcc39c;  /* Projekte: Packpapier */
+  --pw-ink: #241f1a;
+  --pw-ink-soft: #544a3e;
+  --pw-free: #8a7f6d;
+  --pw-tape: #e9d48a;
+  --pw-accent: #2b4a8f;
+  --pw-line: #241f1a;
+  --pw-shadow: 3px 3px 0 var(--pw-line);
+  --pw-shadow-lift: 7px 10px 0 rgba(36, 31, 26, 0.35);
+
+  /* --- Bestehende Token-Namen, neu belegt --- */
+
+  /* Primary — Tinte-Blau statt Indigo */
+  --color-primary: var(--pw-accent);
+  --color-primary-light: #3a5fae;
+  --color-primary-dark: #1f376b;
+
+  /* Success/Complete */
+  --color-success: #1a6350;
+  --color-success-light: #23806a;
+  --color-success-dark: #124839;
+
+  /* Warning/Dirty */
+  --color-warning: #b8801f;
+  --color-warning-light: #d69a33;
+  --color-warning-dark: #8f6214;
+
+  /* Danger/Delete */
+  --color-danger: #c23c28;
+  --color-danger-light: #d55440;
+  --color-danger-dark: #98301f;
+
+  /* Kontrastfeste Füllfarben: weiße Schrift darauf erreicht ≥ 4,5:1 */
+  --color-info-contrast: #1a5566;
+  --color-warning-contrast: #8f6214;
+  --color-success-contrast: #124839;
+
+  /* Neutrals — Kork statt Weiß, Papier statt Karte, Tinte statt Slate */
+  --color-background: var(--pw-cork);
+  --color-background-elevated: var(--pw-paper);
+  --color-text-primary: var(--pw-ink);
+  --color-text-secondary: var(--pw-ink-soft);
+  --color-text-muted: var(--pw-free);
+  --color-border: #cbbb9a;
+  --color-border-hover: #b5a184;
+
+  /* Schatten — harte Versätze statt weicher Verläufe */
+  --shadow-sm: 1px 1px 0 rgba(36, 31, 26, 0.35);
+  --shadow-md: var(--pw-shadow);
+  --shadow-lg: 5px 6px 0 rgba(36, 31, 26, 0.30);
+  --shadow-xl: var(--pw-shadow-lift);
+
+  /* Radien — Papier wird geschnitten, nicht gerundet */
+  --radius-sm: 2px;
+  --radius-md: 4px;
+  --radius-lg: 5px;
+  --radius-xl: 6px;
+}
+
+/* Wenige Stellen unten haben Farben hart verdrahtet statt über Tokens.
+   Hier nachgezogen, damit im Pinnwand-Aussehen keine Slate-Reste stehen
+   bleiben. Keine neuen .btn/.form-control-Definitionen (→ Ticket 03). */
+:root[data-design='pinnwand'] .btn-secondary {
+  background: var(--pw-cork-deep);
+  color: var(--color-text-primary);
+}
+
+:root[data-design='pinnwand'] .btn-secondary:hover {
+  background: #c9b795;
+  color: var(--color-text-primary);
+}
+
+:root[data-design='pinnwand'] .form-control:focus,
+:root[data-design='pinnwand'] input:focus,
+:root[data-design='pinnwand'] textarea:focus,
+:root[data-design='pinnwand'] select:focus {
+  box-shadow: 0 0 0 3px rgba(43, 74, 143, 0.15);
+}
+
+:root[data-design='pinnwand'] .alert-danger {
+  background: rgba(194, 60, 40, 0.12);
+  color: var(--color-danger-dark);
+}
+
 *,
 *::before,
 *::after {

@@ -9,8 +9,15 @@ import { useAuthStore } from './stores/authStore'
 import { useHouseholdStore } from './stores/householdStore'
 import { useShoppingStore } from './stores/shoppingStore'
 import { useVisualViewportHeight } from './composables/useVisualViewportHeight'
+import { initializeDesign } from './lib/design'
 
 import App from './App.vue'
+
+// Das Attribut ist zu diesem Zeitpunkt schon vom Inline-Script im <head> von
+// index.html gesetzt (dort, weil das gebaute CSS render-blockierend ist und
+// dieses Modul deferred läuft). Der Aufruf hier normalisiert nur noch: ein
+// kaputter localStorage-Wert wird auf 'classic' zurückgesetzt.
+initializeDesign()
 
 // Visual-Viewport-Höhe global bereitstellen (--visual-viewport-height).
 // Das geteilte Modal-Muster bemisst sich daran, damit die Bildschirmtastatur

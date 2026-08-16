@@ -4,6 +4,8 @@ import { useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/authStore'
 import { useHouseholdStore } from '../stores/householdStore'
 import { MEMBER_COLORS, DEFAULT_MEMBER_COLOR } from '../lib/memberColors'
+import { useDesignStore } from '../stores/designStore'
+import type { DesignMode } from '../lib/design'
 
 const props = defineProps<{
   open: boolean
@@ -16,6 +18,13 @@ const emit = defineEmits<{
 const router = useRouter()
 const authStore = useAuthStore()
 const householdStore = useHouseholdStore()
+const designStore = useDesignStore()
+
+// Aussehen-Auswahl. Gilt nur für dieses Gerät, greift sofort ohne Neuladen.
+const designOptions: { value: DesignMode; label: string; hint: string }[] = [
+  { value: 'classic', label: 'Klassisch', hint: 'Das gewohnte Aussehen' },
+  { value: 'pinnwand', label: 'Pinnwand', hint: 'Kork, Papier und Tinte' },
+]
 
 const isEditingName = ref(false)
 const newDisplayName = ref('')
@@ -217,6 +226,32 @@ watch(() => props.open, (isOpen) => {
               </button>
             </div>
           </div>
+        </section>
+
+        <!-- Aussehen Section -->
+        <section class="sidebar-section">
+          <h3>Aussehen</h3>
+          <div class="design-options">
+            <button
+              v-for="option in designOptions"
+              :key="option.value"
+              type="button"
+              class="design-option"
+              :class="{ selected: designStore.design === option.value }"
+              @click="designStore.setDesign(option.value)"
+            >
+              <span class="design-swatch" :class="`swatch-${option.value}`" />
+              <span class="design-text">
+                <span class="design-label">{{ option.label }}</span>
+                <span class="design-hint">{{ option.hint }}</span>
+              </span>
+              <i
+                v-if="designStore.design === option.value"
+                class="bi bi-check-lg design-check"
+              ></i>
+            </button>
+          </div>
+          <p class="design-note">Gilt nur für dieses Gerät.</p>
         </section>
       </div>
 
@@ -514,6 +549,85 @@ watch(() => props.open, (isOpen) => {
   border: 3px solid var(--color-text-primary);
   box-shadow: 0 0 0 2px var(--color-background-elevated), 0 0 0 4px var(--color-primary);
   transform: scale(1.1);
+}
+
+/* Aussehen */
+.design-options {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+}
+
+.design-option {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+  width: 100%;
+  min-height: var(--touch-target-min);
+  padding: var(--spacing-sm) var(--spacing-md);
+  text-align: left;
+  background: var(--color-background);
+  border: 2px solid var(--color-border);
+  border-radius: var(--radius-md);
+  color: var(--color-text-primary);
+  cursor: pointer;
+  transition: all var(--transition-base);
+}
+
+.design-option:hover {
+  border-color: var(--color-border-hover);
+}
+
+.design-option.selected {
+  border-color: var(--color-primary);
+  background: var(--color-background-elevated);
+}
+
+.design-swatch {
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-border);
+}
+
+.swatch-classic {
+  background: linear-gradient(135deg, #ffffff 0 50%, #4f46e5 50% 100%);
+}
+
+.swatch-pinnwand {
+  background: linear-gradient(135deg, #e7dcc8 0 50%, #fffdf6 50% 100%);
+  border-color: #241f1a;
+}
+
+.design-text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+  flex: 1;
+  min-width: 0;
+}
+
+.design-label {
+  font-size: 0.9375rem;
+  font-weight: 600;
+}
+
+.design-hint {
+  font-size: 0.75rem;
+  color: var(--color-text-secondary);
+}
+
+.design-check {
+  color: var(--color-primary);
+  font-size: 1.125rem;
+  flex-shrink: 0;
+}
+
+.design-note {
+  margin: var(--spacing-sm) 0 0;
+  font-size: 0.75rem;
+  color: var(--color-text-secondary);
 }
 
 /* Sidebar Footer */
