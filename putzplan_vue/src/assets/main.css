@@ -1,2 +1,5 @@
 @import './base.css';
 @import './utilities.css';
+/* Zuletzt: die Pinnwand-Schicht ueberschreibt Bootstrap und die obigen
+   Basis-Stile, aber nur unterhalb von `data-design="pinnwand"`. */
+@import './pinnwand.css';

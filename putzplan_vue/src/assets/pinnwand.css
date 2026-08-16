@@ -1,0 +1,449 @@
+/* ============================================================================
+   Pinnwand-Primitiven (Pinnwand-Redesign, Etappe 1 / Ticket 03)
+   ----------------------------------------------------------------------------
+   Analog zu utilities.css, aber ausschliesslich fuer das neue Aussehen.
+
+   REGEL FUER DIESE DATEI: **jeder** Selektor beginnt mit
+   `:root[data-design='pinnwand']`. Ohne das Attribut darf aus dieser Datei
+   nichts greifen — das klassische Aussehen bleibt unveraendert.
+
+   Zwei Aufgaben:
+   1. Eigene Definitionen fuer `.btn`, `.form-control`, `.badge`, `.container`
+      unter DENSELBEN Klassennamen. Sie ueberschreiben Bootstrap nur hier
+      unten; Bootstrap bleibt eingebunden und fuer das alte Aussehen zustaendig.
+      Kein Template wird angefasst.
+   2. Die wiederkehrenden Pinnwand-Bausteine als `.pw-*`-Klassen
+      (Wandhintergrund, Zettel, Klebeband-Leiste) fuer die spaeteren Etappen.
+
+   Spezifitaet: `:root[data-design='pinnwand'] .x` = (0,3,0) und schlaegt damit
+   auch Bootstraps zusammengesetzte Selektoren wie `.btn:disabled` (0,2,0) und
+   scoped Component-Styles wie `.bottom-nav[data-v-…]` (0,2,0) — ohne
+   `!important`.
+
+   Bewusst NICHT skeuomorph: Eingabefelder, Formulare und Modals. Die werden
+   nur umgefaerbt (ueber die Tokens in base.css) und bleiben nuechtern.
+   ========================================================================== */
+
+/* ----------------------------------------------------------------------------
+   1. Knoepfe — `.btn` und Varianten
+   --------------------------------------------------------------------------*/
+
+/* Papier statt Pille: harte Kontur, Offset-Schatten, kein Verlauf.
+   `background-color` wird hier NICHT gesetzt — das erledigen die Varianten
+   unten. Bootstraps `background-color: var(--bs-btn-bg)` steht in `.btn`
+   (0,1,0) und verliert gegen die Varianten-Regeln (0,3,0). */
+:root[data-design='pinnwand'] .btn {
+  border: 2px solid var(--pw-line);
+  border-radius: var(--radius-sm);
+  padding: 0.5rem 1rem;
+  font-weight: 600;
+  line-height: 1.3;
+  box-shadow: 2px 2px 0 var(--pw-line);
+  transition:
+    transform var(--transition-fast),
+    box-shadow var(--transition-fast),
+    background-color var(--transition-fast);
+}
+
+/* Der Knopf hebt nicht ab, er wird gedrueckt: er wandert auf seinen eigenen
+   Schatten zu. Ersetzt das `translateY(-1px)` aus base.css. */
+:root[data-design='pinnwand'] .btn:hover {
+  transform: translate(1px, 1px);
+  box-shadow: 1px 1px 0 var(--pw-line);
+}
+
+:root[data-design='pinnwand'] .btn:active {
+  transform: translate(2px, 2px);
+  box-shadow: 0 0 0 var(--pw-line);
+}
+
+:root[data-design='pinnwand'] .btn:focus-visible {
+  outline: 2px solid var(--pw-accent);
+  outline-offset: 2px;
+  box-shadow: 2px 2px 0 var(--pw-line);
+}
+
+/* Bootstraps `.btn:disabled` (0,2,0) faerbt sonst auf `--bs-btn-disabled-bg`
+   (#0d6efd) zurueck und schlaegt dabei `.btn-primary` (0,1,0) aus base.css.
+   Genau das war das Bootstrap-Blau auf /notes: der Knopf „Notiz erstellen"
+   startet leer und damit `disabled`. Die Gegenmassnahme ist nicht Uebermalen,
+   sondern hoehere Spezifitaet: die `.btn-*:disabled`-Regeln weiter unten sind
+   (0,4,0) und setzen dieselbe Fuellung wie im aktiven Zustand. Bleibt ein
+   `.btn` ohne Variante (z. B. `.btn-icon`), greift Bootstraps eigener
+   Vorgabewert `--bs-btn-disabled-bg: transparent` — passt. Diese Regel hier
+   regelt daher nur Kontur und Zustandsoptik. */
+:root[data-design='pinnwand'] .btn:disabled,
+:root[data-design='pinnwand'] .btn.disabled {
+  border-color: var(--pw-line);
+  opacity: 0.45;
+  transform: none;
+  box-shadow: 2px 2px 0 var(--pw-line);
+}
+
+/* Farbvarianten. Alle (0,3,0) und damit auch fuer den disabled-Fall staerker
+   als Bootstraps `.btn:disabled` (0,2,0). */
+:root[data-design='pinnwand'] .btn-primary,
+:root[data-design='pinnwand'] .btn-primary:disabled {
+  background-color: var(--color-primary);
+  color: var(--pw-paper);
+}
+
+:root[data-design='pinnwand'] .btn-primary:hover {
+  background-color: var(--color-primary-light);
+  color: var(--pw-paper);
+}
+
+:root[data-design='pinnwand'] .btn-success,
+:root[data-design='pinnwand'] .btn-success:disabled {
+  background-color: var(--color-success);
+  color: var(--pw-paper);
+}
+
+:root[data-design='pinnwand'] .btn-success:hover {
+  background-color: var(--color-success-light);
+  color: var(--pw-paper);
+}
+
+:root[data-design='pinnwand'] .btn-warning,
+:root[data-design='pinnwand'] .btn-warning:disabled {
+  background-color: var(--color-warning);
+  color: var(--pw-paper);
+}
+
+:root[data-design='pinnwand'] .btn-warning:hover {
+  background-color: var(--color-warning-light);
+  color: var(--pw-paper);
+}
+
+:root[data-design='pinnwand'] .btn-danger,
+:root[data-design='pinnwand'] .btn-danger:disabled {
+  background-color: var(--color-danger);
+  color: var(--pw-paper);
+}
+
+:root[data-design='pinnwand'] .btn-danger:hover {
+  background-color: var(--color-danger-light);
+  color: var(--pw-paper);
+}
+
+/* Loest den Ad-hoc-Block aus base.css ab (Etappe 0), jetzt mit Kontur. */
+:root[data-design='pinnwand'] .btn-secondary,
+:root[data-design='pinnwand'] .btn-secondary:disabled {
+  background-color: var(--pw-cork-deep);
+  color: var(--color-text-primary);
+}
+
+:root[data-design='pinnwand'] .btn-secondary:hover {
+  background-color: #c9b795;
+  color: var(--color-text-primary);
+}
+
+:root[data-design='pinnwand'] .btn-outline-danger,
+:root[data-design='pinnwand'] .btn-outline-danger:disabled {
+  background-color: var(--pw-paper);
+  border-color: var(--color-danger);
+  color: var(--color-danger);
+}
+
+:root[data-design='pinnwand'] .btn-outline-danger:hover {
+  background-color: var(--color-danger);
+  border-color: var(--color-danger);
+  color: var(--pw-paper);
+}
+
+:root[data-design='pinnwand'] .btn-outline-secondary,
+:root[data-design='pinnwand'] .btn-outline-secondary:disabled {
+  background-color: var(--pw-paper);
+  border-color: var(--pw-line);
+  color: var(--color-text-primary);
+}
+
+:root[data-design='pinnwand'] .btn-outline-secondary:hover {
+  background-color: var(--pw-cork-deep);
+  border-color: var(--pw-line);
+  color: var(--color-text-primary);
+}
+
+/* Textlinks bleiben Text: keine Kontur, kein Schatten, kein Versatz. */
+:root[data-design='pinnwand'] .btn-link,
+:root[data-design='pinnwand'] .btn-link:disabled {
+  background-color: transparent;
+  border-color: transparent;
+  box-shadow: none;
+  color: var(--color-primary);
+  font-weight: 600;
+}
+
+:root[data-design='pinnwand'] .btn-link:hover,
+:root[data-design='pinnwand'] .btn-link:active {
+  background-color: transparent;
+  box-shadow: none;
+  transform: none;
+  color: var(--color-primary-dark);
+  text-decoration: underline;
+}
+
+/* Ikonen-Knoepfe aus utilities.css und der Schliessen-Knopf der Modals sind
+   bewusst flaechenlos — Modals bleiben nuechtern. */
+:root[data-design='pinnwand'] .btn-icon,
+:root[data-design='pinnwand'] .btn-delete-ghost,
+:root[data-design='pinnwand'] .btn-close {
+  border-color: transparent;
+  box-shadow: none;
+}
+
+:root[data-design='pinnwand'] .btn-icon:hover,
+:root[data-design='pinnwand'] .btn-delete-ghost:hover,
+:root[data-design='pinnwand'] .btn-close:hover {
+  transform: none;
+  box-shadow: none;
+}
+
+/* Kleine Knoepfe: Bootstraps `.btn-sm` bringt eigene Radien mit. */
+:root[data-design='pinnwand'] .btn-sm {
+  border-radius: var(--radius-sm);
+  padding: 0.3rem 0.6rem;
+}
+
+:root[data-design='pinnwand'] .btn-lg {
+  border-radius: var(--radius-sm);
+  padding: 0.7rem 1.3rem;
+}
+
+/* ----------------------------------------------------------------------------
+   2. Eingabefelder — bewusst nuechtern
+   ----------------------------------------------------------------------------
+   Laut Spec kippt das Konzept genau hier in Kitsch. Kein Offset-Schatten,
+   keine Papierkontur, kein Linienraster: Felder bekommen nur die neuen Farben
+   und die knapperen Radien aus den Tokens. Die Regeln hier existieren nur,
+   damit Bootstraps eigene Radien und der blaue Fokusring nicht durchschlagen.
+   --------------------------------------------------------------------------*/
+:root[data-design='pinnwand'] .form-control,
+:root[data-design='pinnwand'] .form-select,
+:root[data-design='pinnwand'] textarea,
+:root[data-design='pinnwand'] input[type='text'],
+:root[data-design='pinnwand'] input[type='email'],
+:root[data-design='pinnwand'] input[type='password'],
+:root[data-design='pinnwand'] input[type='number'],
+:root[data-design='pinnwand'] input[type='search'],
+:root[data-design='pinnwand'] input[type='date'],
+:root[data-design='pinnwand'] select {
+  border: 1.5px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background-color: var(--pw-paper);
+  color: var(--color-text-primary);
+  box-shadow: none;
+}
+
+:root[data-design='pinnwand'] .form-control:focus,
+:root[data-design='pinnwand'] .form-select:focus,
+:root[data-design='pinnwand'] textarea:focus,
+:root[data-design='pinnwand'] input:focus,
+:root[data-design='pinnwand'] select:focus {
+  border-color: var(--color-primary);
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(43, 74, 143, 0.15);
+}
+
+:root[data-design='pinnwand'] .form-control::placeholder,
+:root[data-design='pinnwand'] textarea::placeholder,
+:root[data-design='pinnwand'] input::placeholder {
+  color: var(--color-text-muted);
+}
+
+:root[data-design='pinnwand'] .form-check-input:checked {
+  background-color: var(--color-primary);
+  border-color: var(--color-primary);
+}
+
+/* ----------------------------------------------------------------------------
+   3. Badges — kleine gestempelte Marken
+   ----------------------------------------------------------------------------
+   Nur Form und Kontur. Die Fuellfarbe kommt weiterhin aus den Komponenten
+   bzw. den `.badge-*`-Klassen der Views, damit hier keine Semantik verloren
+   geht. Die Kontur ist halbtransparente Tinte und funktioniert deshalb sowohl
+   auf hellen als auch auf gesaettigten Fuellungen.
+
+   `.badge` selbst kommt im Repo nur EINMAL literal vor
+   (`SettlementView.vue:190`). Die sichtbaren Marken heissen anders und sind
+   in den Komponenten scoped definiert. Deren Selektoren sind
+   `.effort-badge[data-v-…]` = (0,2,0); die Liste hier ist (0,3,0) und
+   ueberschreibt sie, ohne dass ein Template angefasst wird.
+
+   Bewusst NICHT in der Liste: `.fab-plus-badge`. Der FAB gehoert zu den
+   kosmetischen Resten ausserhalb des Bootstrap-Perimeters und ist laut Spec
+   Out of Scope.
+   --------------------------------------------------------------------------*/
+:root[data-design='pinnwand'] .badge,
+:root[data-design='pinnwand'] .meta-badge,
+:root[data-design='pinnwand'] .effort-badge,
+:root[data-design='pinnwand'] .subtask-effort-badge,
+:root[data-design='pinnwand'] .subtask-group-badge,
+:root[data-design='pinnwand'] .qty-badge,
+:root[data-design='pinnwand'] .preview-badge,
+:root[data-design='pinnwand'] .postponed-badge,
+:root[data-design='pinnwand'] .overdue-badge,
+:root[data-design='pinnwand'] .completed-badge,
+:root[data-design='pinnwand'] .type-badge-daily,
+:root[data-design='pinnwand'] .type-badge-project,
+:root[data-design='pinnwand'] .type-badge-one-time,
+:root[data-design='pinnwand'] .badge-daily,
+:root[data-design='pinnwand'] .badge-project,
+:root[data-design='pinnwand'] .badge-one-time,
+:root[data-design='pinnwand'] .badge-checklist,
+:root[data-design='pinnwand'] .badge-bonus,
+:root[data-design='pinnwand'] .badge-deduct {
+  border: 1.5px solid rgba(36, 31, 26, 0.55);
+  border-radius: var(--radius-sm);
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  box-shadow: 1px 1px 0 rgba(36, 31, 26, 0.35);
+}
+
+/* ----------------------------------------------------------------------------
+   4. Container
+   ----------------------------------------------------------------------------
+   `.container-fluid` ist das tatsaechlich benutzte (24 von 25 Stellen);
+   `.container` steht einmal in StatsView. Beide bekommen dieselbe knappe
+   Randbreite, damit Zettel dicht an der Wandkante sitzen duerfen.
+   --------------------------------------------------------------------------*/
+:root[data-design='pinnwand'] .container,
+:root[data-design='pinnwand'] .container-fluid {
+  padding-right: var(--spacing-sm);
+  padding-left: var(--spacing-sm);
+}
+
+/* ----------------------------------------------------------------------------
+   5. Restliche Bootstrap-Flaechen, die auf Kork herausstechen
+   --------------------------------------------------------------------------*/
+:root[data-design='pinnwand'] .card {
+  border: 2px solid var(--pw-line);
+  border-radius: var(--radius-sm);
+  background-color: var(--pw-paper);
+}
+
+/* EINZIGE `!important`-Stelle der Datei — bewusst und begruendet:
+   Bootstraps Schatten-Utilities (`.shadow-sm`, `.shadow`, `.shadow-lg`) sind in
+   Bootstrap selbst mit `!important` deklariert. Gegen `!important` hilft
+   Spezifitaet grundsaetzlich nicht, egal wie tief der Selektor geschachtelt
+   ist — nur ein spaeteres `!important` gewinnt. Ohne das hier bleibt auf
+   `.card.shadow-sm` (z. B. drei Karten auf /uebersicht) Bootstraps weicher
+   Glow `rgba(0,0,0,.075) 0 2px 4px` unter der harten Papierkante stehen: genau
+   die Mischform aus weichem Verlauf und harter Kontur, die das neue Aussehen
+   ausschliessen soll. Die Utility-Klassen stehen in den Templates, und die
+   werden in diesem Ticket nicht angefasst.
+   Nur `.shadow-sm` ist im Repo tatsaechlich in Gebrauch (3 Stellen); die
+   uebrigen Schatten-Utilities bleiben absichtlich unangetastet, damit der
+   Eingriff so schmal wie moeglich bleibt.
+   Gilt weiterhin nur unterhalb des Pinnwand-Attributs. */
+:root[data-design='pinnwand'] .card,
+:root[data-design='pinnwand'] .card:hover,
+:root[data-design='pinnwand'] .shadow-sm {
+  box-shadow: var(--pw-shadow) !important;
+}
+
+:root[data-design='pinnwand'] .alert {
+  border: 2px solid var(--pw-line);
+  border-radius: var(--radius-sm);
+}
+
+:root[data-design='pinnwand'] .alert-danger {
+  background-color: rgba(194, 60, 40, 0.12);
+  color: var(--color-danger-dark);
+}
+
+/* Weicher Streuschatten passt nicht zur harten Formsprache. Der Selektor ist
+   (0,3,0) und schlaegt damit den scoped `.bottom-nav[data-v-…]` (0,2,0) aus
+   BottomNav.vue — die Komponente bleibt unangetastet und behaelt im
+   klassischen Aussehen ihren weichen Schatten. */
+:root[data-design='pinnwand'] .bottom-nav {
+  border-top: 2px solid var(--pw-line);
+  background-color: var(--pw-paper);
+  box-shadow: 0 -2px 0 rgba(36, 31, 26, 0.25);
+}
+
+/* ============================================================================
+   6. Pinnwand-Bausteine (`.pw-*`)
+   ----------------------------------------------------------------------------
+   Vorrat fuer Etappe 2 ff. Auch diese Klassen haengen am Attribut — im alten
+   Aussehen greift aus dieser Datei nichts, selbst wenn eine Klasse dort
+   versehentlich im Markup landet.
+   ========================================================================== */
+
+/* Wandhintergrund: Kork mit unregelmaessiger Sprenkelung. Nur Farbverlaeufe,
+   keine Bilddatei. */
+:root[data-design='pinnwand'] .pw-wall {
+  background-color: var(--pw-cork);
+  background-image:
+    radial-gradient(circle at 12% 22%, rgba(138, 127, 109, 0.22) 0 1.5px, transparent 2px),
+    radial-gradient(circle at 63% 8%, rgba(138, 127, 109, 0.18) 0 2px, transparent 2.5px),
+    radial-gradient(circle at 34% 71%, rgba(138, 127, 109, 0.2) 0 1.5px, transparent 2px),
+    radial-gradient(circle at 86% 54%, rgba(138, 127, 109, 0.16) 0 2px, transparent 2.5px),
+    radial-gradient(circle at 48% 41%, rgba(216, 201, 173, 0.55) 0 3px, transparent 4px);
+  background-size: 47px 43px, 71px 67px, 59px 53px, 83px 79px, 37px 41px;
+}
+
+/* Zettel: das Grundelement der Wand. */
+:root[data-design='pinnwand'] .pw-note {
+  position: relative;
+  border: 2px solid var(--pw-line);
+  border-radius: var(--radius-sm);
+  background-color: var(--pw-paper);
+  color: var(--color-text-primary);
+  padding: var(--spacing-sm);
+  box-shadow: var(--pw-shadow);
+}
+
+/* Taegliche Aufgaben: gelber Notizblock. */
+:root[data-design='pinnwand'] .pw-note--day {
+  background-color: var(--pw-paper-day);
+}
+
+/* Projekte: Packpapier. */
+:root[data-design='pinnwand'] .pw-note--proj {
+  background-color: var(--pw-paper-proj);
+}
+
+/* Ein angehobener Zettel (Drag, offenes Detail) wirft einen laengeren
+   Schatten und kippt minimal aus der Achse. */
+:root[data-design='pinnwand'] .pw-note--lifted {
+  box-shadow: var(--pw-shadow-lift);
+  transform: rotate(-1deg) translate(-2px, -3px);
+}
+
+/* Klebeband-Leiste: liegt als Kind ueber der Oberkante eines Zettels.
+   Der Elternteil braucht `position: relative` — `.pw-note` hat das. */
+:root[data-design='pinnwand'] .pw-tape {
+  position: absolute;
+  top: -10px;
+  left: 50%;
+  width: 62px;
+  height: 20px;
+  transform: translateX(-50%) rotate(-2deg);
+  background-color: var(--pw-tape);
+  border: 1px solid rgba(36, 31, 26, 0.28);
+  opacity: 0.9;
+  pointer-events: none;
+}
+
+:root[data-design='pinnwand'] .pw-tape--left {
+  left: 14px;
+  transform: rotate(-8deg);
+}
+
+:root[data-design='pinnwand'] .pw-tape--right {
+  right: 14px;
+  left: auto;
+  transform: rotate(7deg);
+}
+
+/* Klebeband als durchgehende Leiste, z. B. als Abschnittstrenner auf der Wand. */
+:root[data-design='pinnwand'] .pw-tape-strip {
+  display: block;
+  height: 22px;
+  background-color: var(--pw-tape);
+  border-top: 1px solid rgba(36, 31, 26, 0.28);
+  border-bottom: 1px solid rgba(36, 31, 26, 0.28);
+  opacity: 0.92;
+  transform: rotate(-0.4deg);
+}

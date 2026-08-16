@@ -155,30 +155,9 @@
   --radius-xl: 6px;
 }
 
-/* Wenige Stellen unten haben Farben hart verdrahtet statt über Tokens.
-   Hier nachgezogen, damit im Pinnwand-Aussehen keine Slate-Reste stehen
-   bleiben. Keine neuen .btn/.form-control-Definitionen (→ Ticket 03). */
-:root[data-design='pinnwand'] .btn-secondary {
-  background: var(--pw-cork-deep);
-  color: var(--color-text-primary);
-}
-
-:root[data-design='pinnwand'] .btn-secondary:hover {
-  background: #c9b795;
-  color: var(--color-text-primary);
-}
-
-:root[data-design='pinnwand'] .form-control:focus,
-:root[data-design='pinnwand'] input:focus,
-:root[data-design='pinnwand'] textarea:focus,
-:root[data-design='pinnwand'] select:focus {
-  box-shadow: 0 0 0 3px rgba(43, 74, 143, 0.15);
-}
-
-:root[data-design='pinnwand'] .alert-danger {
-  background: rgba(194, 60, 40, 0.12);
-  color: var(--color-danger-dark);
-}
+/* Die Ad-hoc-Nachbesserungen aus Etappe 0 (btn-secondary, Fokusring,
+   alert-danger) sind nach `pinnwand.css` gewandert — dort stehen jetzt alle
+   Pinnwand-Regeln beisammen. base.css enthaelt oberhalb nur noch Tokens.  */
 
 *,
 *::before,

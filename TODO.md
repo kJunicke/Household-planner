@@ -115,6 +115,28 @@ ALTER TABLE shopping_items ADD COLUMN quantity int NOT NULL DEFAULT 1;
 
 ## 🎯 Offene Aufgaben
 
+### Pinnwand-Redesign — Reste aus Etappe 1 (Ticket 03, 16.08.2026)
+
+- **`bootstrap.bundle.min.js` aus `main.ts` entfernen** (Aufräum-Etappe).
+  Prüfergebnis aus Ticket 03: **entbehrlich**, in dieser Etappe bewusst noch nicht
+  entfernt. Belege:
+  - `grep -rn "data-bs-" src/` → 0 Treffer.
+  - Kein `new bootstrap.*`, kein `import … from 'bootstrap'` außerhalb der zwei
+    Zeilen in `src/main.ts`.
+  - Die drei fraglichen Dropdown-Stellen sind eigene `.suggestions-dropdown`-Blöcke
+    mit `v-if` und scoped CSS, keine Bootstrap-Komponente:
+    `ChecklistView.vue:548`, `ShoppingView.vue:502`, `ShoppingView.vue:668`.
+  - Modals laufen ohnehin über Teleport + `v-if`.
+
+  Das **CSS** (`bootstrap.min.css`) bleibt vorerst — das alte Aussehen braucht es.
+
+- **Disabled `.btn-primary` ist im klassischen Aussehen Bootstrap-Blau** (`#0d6efd`
+  statt `--color-primary`). Ursache: Bootstraps `.btn:disabled` (0,2,0) mit
+  `--bs-btn-disabled-bg` schlägt den Override `.btn-primary` (0,1,0) in `base.css`.
+  Sichtbar auf jeder Route mit disabled Primärbutton, z. B. „Notiz erstellen" auf
+  `/notes` bei leerem Feld. In Ticket 03 nur für das Pinnwand-Aussehen behoben
+  (`pinnwand.css`), klassisch bewusst unangetastet gelassen.
+
 ### Task Management
 - **"Meine Aufgaben" View** - Extra Tab für zugewiesene Tasks (Option 1)
   - CategoryNav erweitern um 5. Tab: "Meine Aufgaben"
