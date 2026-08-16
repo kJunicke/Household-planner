@@ -959,18 +959,20 @@ const handleCompleteProject = async () => {
 }
 
 /* Subtasks Section - Eingeklappte Liste mit Einrückung */
+/* Die Einrückung bleibt das Zeichen der Unterordnung — aber als schmale Stufe,
+   nicht als Platzfresser. Die Zeilen darin haben dieselbe Dichte wie die
+   Aufgabenkarte selbst. */
 .subtasks-section {
      border-top: 1px solid var(--color-border);
      background: var(--color-background);
-     padding: 0.5rem 0.5rem;
-     padding-left: 1.5rem; /* Einrückung für Subtasks */
+     padding: 6px 4px 6px 16px;
 }
 
 .subtasks-header-row {
      display: flex;
      align-items: center;
-     gap: 0.5rem;
-     margin-bottom: 0.75rem;
+     gap: 6px;
+     margin-bottom: 6px;
 }
 
 .reset-subtasks-btn,
@@ -984,24 +986,24 @@ const handleCompleteProject = async () => {
 .subtasks-list {
      display: flex;
      flex-direction: column;
-     gap: 0.5rem;
+     gap: 4px;
 }
 
 /* Subtask Groups (by points mode) */
 .subtask-group {
      display: flex;
      flex-direction: column;
-     gap: 0.25rem;
+     gap: 4px;
 }
 
 .subtask-group-header {
      display: flex;
      align-items: center;
      justify-content: space-between;
-     padding: 0.25rem 0.375rem;
+     padding: 2px 4px;
      background: var(--color-background-muted);
      border-radius: var(--radius-sm);
-     margin-bottom: 0.25rem;
+     margin-bottom: 2px;
 }
 
 .subtask-group-badge {
@@ -1022,18 +1024,21 @@ const handleCompleteProject = async () => {
      border-radius: var(--radius-sm);
 }
 
+/* Weiß auf den hellen Bootstrap-Tönen erreicht nur 1,96:1 (Info) bzw. 1,6:1
+   (Warning). Die Gruppen-Badges nehmen deshalb die kontrastfeste Stufe der
+   Design-Tokens — dieselbe Farbsemantik, nur dunkel genug für weiße Schrift. */
 .badge-checklist {
-     background: var(--bs-info);
+     background: var(--color-info-contrast);
      color: white;
 }
 
 .badge-deduct {
-     background: var(--bs-warning);
+     background: var(--color-warning-contrast);
      color: white;
 }
 
 .badge-bonus {
-     background: var(--bs-success);
+     background: var(--color-success-contrast);
      color: white;
 }
 
@@ -1049,7 +1054,7 @@ const handleCompleteProject = async () => {
      }
 
      .subtasks-section {
-          padding-left: 1.25rem;
+          padding-left: 12px;
      }
 }
 </style>

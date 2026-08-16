@@ -63,13 +63,18 @@ const onKeydown = (e: KeyboardEvent) => {
 </template>
 
 <style scoped>
+/* Dieselbe schlanke Karte wie die Einzelzeile (Etappe 2) — der
+   Aufklapp-Mechanismus bleibt unverändert, nur die Darstellung zieht nach.
+   Klassenname bewusst nicht `card`: Bootstrap lädt nach den Scoped Styles. */
 .fold-row {
   display: flex;
   align-items: center;
   gap: 0.5rem;
   min-height: var(--touch-target-dense);
-  padding: 0 0.5rem 0 0.125rem;
-  border-bottom: 1px solid var(--color-border);
+  padding: 0 4px 0 10px;
+  background: var(--color-background-elevated);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
   cursor: pointer;
   touch-action: pan-y;
 }
@@ -83,13 +88,13 @@ const onKeydown = (e: KeyboardEvent) => {
   flex-shrink: 0;
   width: 1rem;
   font-size: var(--font-sm);
-  color: var(--color-text-muted);
+  color: var(--color-text-secondary);
 }
 
 .fold-count {
   flex-shrink: 0;
   font-size: var(--font-sm);
   font-variant-numeric: tabular-nums;
-  color: var(--color-text-muted);
+  color: var(--color-text-secondary);
 }
 </style>

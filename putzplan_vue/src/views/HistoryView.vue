@@ -198,34 +198,81 @@ onUnmounted(() => {
 <style scoped>
 /* Component-specific styles only */
 
+/* Seitenrand 8px statt Bootstrap-Gutter (12px) — wie im Einkauf. */
+.container-fluid {
+  padding-left: 8px;
+  padding-right: 8px;
+}
+
+/* 8px zwischen Tagesgruppen. */
 .completions-list {
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
+  gap: 8px;
 }
 
+/* Kartenstapel statt einzeln schwebender Karten.
+   Rechnung, warum kein Zwischenraum: 59 Zeilen à 40px + 18 Kopfzeilen à 30px +
+   17 Sektionsabstände à 8px sind bereits 3036px — mehr als die 2992,7px der
+   alten Ansicht. Zeilenhöhe, Kopfzeilenhöhe und Sektionsabstand sind aus
+   Etappe 2 gesetzt, also muss der Rest kommen: die Karten sitzen ohne Lücke
+   aufeinander und teilen sich ihre Trennlinie (-1px). Der Kartenlook bleibt —
+   erhöhter Hintergrund, Rahmen, gerundete Enden je Tagesgruppe. */
 .completion-group {
   display: flex;
   flex-direction: column;
 }
 
+.completion-group > * + * {
+  margin-top: -1px;
+}
+
+/* Innen bündig, nur die Enden der Tagesgruppe werden gerundet. */
+.completion-group :deep(.row-swipe),
+.completion-group :deep(.row-note),
+.completion-group .fold-row {
+  border-radius: 0;
+}
+
+.completion-group > *:nth-child(2) :deep(.row-swipe),
+.completion-group > .fold-row:nth-child(2) {
+  border-top-left-radius: var(--radius-sm);
+  border-top-right-radius: var(--radius-sm);
+}
+
+/* Nur der unterste sichtbare Kasten der Gruppe wird unten gerundet — bei
+   offener Notiz ist das die Notiz, sonst die Zeile selbst. */
+.completion-group > *:last-child :deep(.row-swipe:last-child),
+.completion-group > .fold-row:last-child,
+.completion-group > *:last-child :deep(.row-note) {
+  border-bottom-left-radius: var(--radius-sm);
+  border-bottom-right-radius: var(--radius-sm);
+}
+
+/* Tages-Kopfzeile im Kopfzeilen-Maß aus Etappe 2: 30px Mindesthöhe, keine Box,
+   kein Rahmen, keine eigene Färbung — sie sitzt auf dem Seitenhintergrund wie
+   die Kategorie-Kopfzeile im Einkauf. Sie klebt weiterhin oben; der
+   Hintergrund ist exakt der Seitenhintergrund, damit die Karten im geklebten
+   Zustand nicht durchscheinen, die Kopfzeile aber trotzdem keine Box bildet. */
 .date-header {
   position: sticky;
-  top: 0;
-  z-index: 1;
+  /* Unter der sticky App-Kopfleiste einrasten, nicht dahinter verschwinden —
+     die Leiste meldet ihre Höhe als --app-header-height. */
+  top: var(--app-header-height, 56px);
+  z-index: 2;
   display: flex;
   flex-wrap: wrap;
-  align-items: baseline;
+  align-items: center;
   justify-content: space-between;
   gap: 0.25rem 0.75rem;
+  min-height: 30px;
   font-size: var(--font-sm);
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  color: var(--color-text-muted);
+  color: var(--color-text-secondary);
   background: var(--color-background);
-  padding: 0.25rem 0.125rem 0.1875rem;
-  border-bottom: 1px solid var(--color-border);
+  padding: 0 4px 0 2px;
 }
 
 /* Tageszusammenfassung — zugleich die Legende für die Farbpunkte der Zeilen. */

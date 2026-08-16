@@ -207,12 +207,15 @@ const handleProjectWork = async (effort: number, note: string) => {
 </template>
 
 <style scoped>
-/* Horizontal Layout wie TaskCard, aber kompakter */
+/* Verdichtete Zeile (Etappe 2, Nachtrag): dieselbe Dichte wie die Aufgabenkarte
+   und die Einkaufszeile — 40px Mindesthöhe, Innenabstand rechts 4px / links 10px.
+   Die Unterordnung zeigt allein die Einrückung der Sektion, nicht eine kleinere
+   Zeile. */
 .subtask-item {
   display: flex;
   background: var(--color-background-elevated);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-sm);
   transition: all var(--transition-base);
   overflow: hidden;
 }
@@ -236,9 +239,9 @@ const handleProjectWork = async (effort: number, note: string) => {
   align-items: center;
   justify-content: space-between;
   width: 100%;
-  padding: var(--spacing-sm) var(--spacing-md);
-  gap: var(--spacing-md);
-  min-height: calc(var(--touch-target-min) + var(--spacing-sm));
+  padding: 0 4px 0 10px;
+  gap: 8px;
+  min-height: 40px;
 }
 
 /* Left: Title + Effort Badge */
@@ -267,29 +270,42 @@ const handleProjectWork = async (effort: number, note: string) => {
   border-radius: var(--radius-sm);
   font-size: 0.625rem;
   font-weight: 600;
-  background: var(--bs-primary);
+  /* Projekt-Token statt --bs-primary: weiß darauf liegt bei 6,1:1 statt exakt
+     4,5:1 — dieselbe Wahl wie beim Effort-Badge der Aufgabenkarte. */
+  background: var(--color-primary);
   color: white;
   white-space: nowrap;
   flex-shrink: 0;
 }
 
-/* Right: Edit + Action Buttons */
+/* Right: Edit + Action Buttons.
+   Sichtbar bleiben die Knöpfe schlank; die Trefferfläche wächst per
+   Pseudo-Element nach außen, damit die Zeile bei 40px bleibt.
+
+   Die Abstände sind Bedingung, keine Optik — jeder Knopf zieht seine Fläche
+   seitlich auf: ✎ +5px, Abschließen +1px, Regler +4px. Daraus folgt die
+   Restluft zwischen zwei erweiterten Flächen:
+     ✎ → Aktionsgruppe: 10px − 5 − 1 = 4px
+     Abschließen → Regler: 10px − 1 − 4 = 5px
+   Bei kleineren Abständen überlappen sich die Flächen und der im DOM spätere
+   Knopf schluckt stillschweigend die Kante seines Nachbarn. Wer hier an Gap
+   oder Inset dreht, rechnet diese beiden Zeilen neu nach. */
 .subtask-right {
   display: flex;
   align-items: center;
-  gap: var(--spacing-sm);
+  gap: 10px;
   flex-shrink: 0;
 }
 
 .subtask-edit-btn {
+  position: relative;
   background: transparent;
-  border: 1px solid var(--color-border);
+  border: none;
   border-radius: var(--radius-sm);
   padding: 0;
-  width: var(--touch-target-min);
-  height: var(--touch-target-min);
-  min-width: var(--touch-target-min);
-  min-height: var(--touch-target-min);
+  width: 30px;
+  height: 38px;
+  min-width: 30px;
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -299,27 +315,32 @@ const handleProjectWork = async (effort: number, note: string) => {
   flex-shrink: 0;
 }
 
+.subtask-edit-btn::after {
+  content: '';
+  position: absolute;
+  inset: -1px -5px;
+}
+
 .subtask-edit-btn i {
   font-size: var(--font-lg);
 }
 
 .subtask-edit-btn:hover {
-  background: var(--color-background-muted);
   color: var(--color-primary);
-  border-color: var(--color-primary);
-  transform: scale(1.05);
 }
 
 .subtask-action-btn-wrapper {
   display: flex;
-  gap: 0.25rem;
+  align-items: center;
+  gap: 10px;
 }
 
 .subtask-action-btn {
-  width: var(--touch-target-min);
-  height: var(--touch-target-min);
-  min-width: var(--touch-target-min);
-  min-height: var(--touch-target-min);
+  position: relative;
+  width: 38px;
+  height: 38px;
+  min-width: 38px;
+  min-height: 38px;
   padding: 0;
   border: none;
   border-radius: var(--radius-md);
@@ -330,18 +351,25 @@ const handleProjectWork = async (effort: number, note: string) => {
   justify-content: center;
 }
 
+.subtask-action-btn::after {
+  content: '';
+  position: absolute;
+  inset: -1px;
+}
+
 .subtask-action-btn i {
-  font-size: var(--font-xl);
+  font-size: var(--font-lg);
 }
 
 /* Secondary action: subordinate to the primary green complete button. */
 .subtask-action-btn-modifier {
-  width: var(--touch-target-min);
-  height: var(--touch-target-min);
-  min-width: var(--touch-target-min);
-  min-height: var(--touch-target-min);
+  position: relative;
+  width: 34px;
+  height: 38px;
+  min-width: 34px;
+  min-height: 38px;
   padding: 0;
-  border: 1.5px solid var(--color-border);
+  border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
   background: var(--color-background-elevated);
   color: var(--color-text-secondary);
@@ -352,6 +380,12 @@ const handleProjectWork = async (effort: number, note: string) => {
   justify-content: center;
 }
 
+.subtask-action-btn-modifier::after {
+  content: '';
+  position: absolute;
+  inset: -2px -4px;
+}
+
 .subtask-action-btn-modifier:hover {
   border-color: var(--color-primary);
   color: var(--color-primary);
@@ -359,7 +393,7 @@ const handleProjectWork = async (effort: number, note: string) => {
 }
 
 .subtask-action-btn-modifier i {
-  font-size: var(--font-lg);
+  font-size: var(--font-md);
 }
 
 .btn-primary {
@@ -405,7 +439,7 @@ const handleProjectWork = async (effort: number, note: string) => {
   gap: var(--spacing-xs);
   flex: 1;
   align-items: center;
-  padding: 0.5rem 0.75rem;
+  padding: 4px 4px 4px 10px;
 }
 
 .subtask-edit .form-control {
@@ -435,11 +469,6 @@ const handleProjectWork = async (effort: number, note: string) => {
 
 /* Mobile Responsive */
 @media (max-width: 640px) {
-  .subtask-wrapper {
-    padding: 0.4rem 0.625rem;
-    gap: 0.625rem;
-  }
-
   .subtask-title {
     font-size: 0.8125rem;
   }

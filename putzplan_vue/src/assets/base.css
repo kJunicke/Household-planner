@@ -20,6 +20,16 @@
   --color-danger-light: #f87171;
   --color-danger-dark: #dc2626;
 
+  /* Kontrastfeste Füllfarben: dieselbe Semantik wie oben, aber so weit
+     abgedunkelt, dass WEISSE Schrift darauf mindestens 4,5:1 erreicht.
+     Die Basis- und -dark-Töne sind dafür zu hell (weiß auf --color-warning
+     liegt bei ~1,6:1). Für farbige Badges mit weißer Schrift diese Stufe
+     nehmen, nicht die Basisfarbe.
+     Gemessen auf Weiß: Info 5,36:1 · Warning 5,02:1 · Success 5,02:1 */
+  --color-info-contrast: #0e7490;
+  --color-warning-contrast: #b45309;
+  --color-success-contrast: #15803d;
+
   /* Neutrals */
   --color-background: #f8fafc;
   --color-background-elevated: #ffffff;

@@ -111,15 +111,17 @@ const onKeydown = (e: KeyboardEvent) => {
 </template>
 
 <style scoped>
-/* Die Löschfläche liegt hinter der Zeile und wird vom Wisch freigelegt. */
+/* Die Löschfläche liegt hinter der Zeile und wird vom Wisch freigelegt.
+   Die Rundung sitzt am Wrapper, damit die rote Fläche nicht über die
+   Kartenecken hinausläuft. */
 .row-swipe {
   position: relative;
   overflow: hidden;
+  border-radius: var(--radius-sm);
 }
 
 .row-swipe.is-child {
   margin-left: 1rem;
-  border-left: 2px solid var(--color-border);
 }
 
 .row-swipe-delete {
@@ -137,7 +139,10 @@ const onKeydown = (e: KeyboardEvent) => {
   font-size: var(--font-lg);
 }
 
-/* Dichte Zeile: alles auf einer Höhe, damit die Liste scannbar bleibt.
+/* Verdichtete Zeile (Etappe 2): schlanke Karte im Maß der Einkaufs- und
+   Subtask-Zeilen — 40px Mindesthöhe, Innenabstand rechts 4px / links 10px.
+   Der Klassenname darf NICHT `card` heißen: Bootstrap wird nach den Scoped
+   Styles geladen und würde mit `flex-direction: column` die Zeile zerlegen.
    pan-y überlässt dem Browser das vertikale Scrollen. */
 .completion-row {
   position: relative;
@@ -145,9 +150,12 @@ const onKeydown = (e: KeyboardEvent) => {
   align-items: center;
   gap: 0.5rem;
   min-height: var(--touch-target-dense);
-  padding: 0 0.5rem 0 0.125rem;
-  background: var(--color-background);
-  border-bottom: 1px solid var(--color-border);
+  padding: 0 4px 0 10px;
+  background: var(--color-background-elevated);
+  border: 1px solid var(--color-border);
+  /* Die Rundung sitzt am Wrapper .row-swipe, der auch die Löschfläche
+     dahinter beschneidet — läge sie hier, blitzte das Rot in den Ecken auf. */
+  border-radius: 0;
   touch-action: pan-y;
   transition: transform 0.18s ease;
 }
@@ -161,39 +169,45 @@ const onKeydown = (e: KeyboardEvent) => {
   outline-offset: -2px;
 }
 
-.row-swipe.is-child .completion-row {
-  padding-left: 0.5rem;
-}
 
 .row-time {
   flex-shrink: 0;
   font-size: var(--font-sm);
   font-variant-numeric: tabular-nums;
-  color: var(--color-text-muted);
+  /* text-secondary statt -muted: auf der hellen Karte kommt -muted nur auf
+     2,6:1, secondary auf 4,8:1. */
+  color: var(--color-text-secondary);
 }
 
-/* Gelöschter Task: abgeschwächt statt Badge. */
+/* Gelöschter Task: abgeschwächt statt Badge — die Kursive trägt den Hinweis,
+   die Farbe bleibt bei 4,8:1 lesbar. */
 .dense-row-title.is-deleted {
-  color: var(--color-text-muted);
+  color: var(--color-text-secondary);
   font-style: italic;
 }
 
 .row-quick {
-  color: var(--color-warning);
+  /* -dark statt -warning: 3,3:1 statt 2,2:1 auf der Karte. */
+  color: var(--color-warning-dark);
   font-size: var(--font-sm);
 }
 
 .row-note-icon {
   flex-shrink: 0;
   font-size: var(--font-sm);
-  color: var(--color-text-muted);
+  color: var(--color-text-secondary);
 }
 
+/* Die aufgeklappte Notiz hängt bündig als Fuß an der Zeile — dieselbe geteilte
+   Trennlinie wie zwischen zwei Karten. */
 .row-note {
-  padding: 0.5rem 0.125rem 0.625rem 3rem;
+  margin-top: -1px;
+  padding: 6px 10px 6px 3rem;
   font-size: var(--font-sm);
   line-height: 1.4;
   color: var(--color-text-secondary);
-  border-bottom: 1px solid var(--color-border);
+  background: var(--color-background-elevated);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
 }
 </style>
