@@ -175,6 +175,26 @@ Einkaufs-Kopfzeile und hätte den Verdichtungs-Umbau vermischt.
   wird von Einkauf **und** Packliste benutzt; beide gemeinsam umstellen, sonst zerfällt die
   gemeinsame Gestensprache aus Etappe 2.
 
+Während Etappe 5 aufgefallen, beides **vorbestehend** und deshalb nicht dort mitgenommen:
+
+- **Das Löschen einer Liste kommt bei anderen Sessions nicht an.** Der Listen-Kanal in
+  `createChecklistStore` filtert auf `household_id`; bei DELETE liefert Postgres ohne
+  `REPLICA IDENTITY FULL` nur den Primärschlüssel, der Filter greift also ins Leere. Item-
+  Löschungen kommen an, weil dieser Kanal keinen Filter hat. Betrifft Packliste und To-do
+  gleichermaßen. Zu klären: `REPLICA IDENTITY FULL` auf der Listentabelle oder der Filter
+  raus und clientseitig aussortieren.
+- **Sichtbares Vokabular sagt noch „Item"** (Modaltitel „Item bearbeiten", Toasts „N Items
+  übernommen", Löschabfrage „Kategorie + 2 Items löschen?"). Laut Glossar heißt ein
+  einzelnes Element **Eintrag**. Betrifft nach der Extraktion beide Listentypen auf einmal,
+  ist aber eine sichtbare Änderung an der funktionierenden Packliste und gehört deshalb in
+  eine eigene Etappe. Die Datenspalten (`packed`, `packed_count`) bleiben davon unberührt —
+  sie umzubenennen würde ein Feld-Mapping erzwingen und genau die Sonderfälle einführen,
+  die die geteilte Schicht vermeiden soll.
+- **Letzte Liste nicht löschbar** — die Regel sitzt in `deleteList` *und* am Löschen-Knopf
+  in `ChecklistView` (`:can-delete`). Für To-do womöglich unerwünscht. Falls gewünscht:
+  `allowDeletingLastList?: boolean` in `ChecklistStoreConfig` **plus** Prop an die Ansicht,
+  zusammen, nicht einzeln.
+
 ### Architektur-Kandidaten (Review 02.08.2026)
 
 Aus dem Architektur-Review: sechs Stellen, an denen dieselbe Regel mehrfach existiert.
