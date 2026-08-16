@@ -19,6 +19,12 @@ export interface Task {
   last_completed_at: string | null // ISO timestamp, auto-updated via DB trigger from task_completions
                                    // For projects: Timestamp when project was marked as completed
 
+  // Verschieben: Datum (YYYY-MM-DD), an dem die Aufgabe wieder dran sein soll.
+  // NULL = nicht verschoben. KEINE zweite Quelle für "dran" — das bleibt allein
+  // `completed`. Diese Spalte ist nur der Weckruf für den nächtlichen Cron,
+  // siehe docs/adr/0001-completed-ist-zustand-keine-ableitung.md.
+  postponed_until: string | null
+
   // Task Assignment
   assigned_to: string | null // user_id of assigned household member (optional)
   assignment_permanent: boolean // Whether assignment persists after completion

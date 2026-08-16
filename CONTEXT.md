@@ -59,6 +59,19 @@ Zeitplan; die App setzt diese Entscheidung nicht zurück.
 
 ### verschieben
 
-Die manuelle Aktion, die eine dran-Aufgabe wieder als frisch erledigt behandelt, ohne
-Punkte zu vergeben. Die Aufgabe bleibt in der Liste, hört aber auf, Überfällig-Tage zu
-sammeln.
+Die manuelle Aktion, die eine Aufgabe bis zu einem gewählten Datum aus dem Weg räumt,
+**ohne** dass jemand sie erledigt hat: keine Punkte, kein Verlaufseintrag, und der
+Zeitpunkt der letzten Erledigung bleibt unangetastet — das Intervall läuft danach im
+gewohnten Rhythmus weiter.
+
+Die Aufgabe verlässt „Jetzt dran" und erscheint unter **Erledigt**, dort aber mit dem
+Kennzeichen „verschoben auf …" statt einer Fälligkeit. Am gewählten Tag holt der
+nächtliche Cron sie von selbst zurück.
+
+Technisch: `completed` wird gesetzt (damit bleibt es die alleinige Antwort auf „ist die
+Aufgabe dran") und das **Verschiebe-Datum** in einer eigenen Spalte hinterlegt. Diese
+Spalte ist keine zweite Dranheits-Quelle, sondern nur der Weckruf für den Cron.
+„Wieder dreckig" leert sie.
+
+Nicht verfügbar bei täglichen Aufgaben (setzen sich nächtlich selbst zurück) und
+Projekten (durchgehend bearbeitbar, sammeln keine Überfällig-Tage).

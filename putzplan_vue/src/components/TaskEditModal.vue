@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { Task } from '@/types/Task'
 import { ref, computed } from 'vue'
+import { canPostpone } from '@/lib/taskSchedule'
 
 interface Props {
   task: Task
@@ -12,11 +13,15 @@ interface Emits {
   (e: 'delete'): void
   (e: 'assign'): void
   (e: 'manage-subtasks'): void
-  (e: 'skip'): void
+  (e: 'postpone'): void
 }
 
 const props = defineProps<Props>()
 const emit = defineEmits<Emits>()
+
+// Verschieben gibt es nur, wo es Sinn ergibt (nicht bei täglich und Projekt).
+// Die Regel steht im Zeitplan-Modul, damit Karte und Modal dieselbe meinen.
+const showPostpone = computed(() => canPostpone(props.task))
 
 const editForm = ref({
   title: props.task.title,
@@ -111,8 +116,13 @@ const handleClose = () => {
         <div class="modal-footer">
           <!-- Zusätzliche Actions links -->
           <div class="footer-actions-left">
-            <button class="btn btn-outline-warning btn-compact" @click="emit('skip')" title="Als erledigt markieren ohne Punkte">
-              <i class="bi bi-skip-forward"></i>
+            <button
+              v-if="showPostpone"
+              class="btn btn-outline-warning btn-compact"
+              @click="emit('postpone')"
+              title="Aufgabe verschieben"
+            >
+              <i class="bi bi-calendar-plus"></i>
             </button>
             <button class="btn btn-outline-secondary btn-compact" @click="emit('assign')" title="Aufgabe zuweisen">
               <i class="bi bi-person"></i>

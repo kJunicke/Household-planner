@@ -2,6 +2,7 @@ import { ref, computed } from 'vue'
 import { defineStore } from 'pinia'
 import type { Task, TaskCompletion, EnrichedCompletion } from '@/types/Task'
 import { supabase } from '@/lib/supabase'
+import { formatPostponeDate } from '@/lib/taskSchedule'
 import { useHouseholdStore } from './householdStore'
 import { useAuthStore } from './authStore'
 import { useToastStore } from './toastStore'
@@ -110,6 +111,19 @@ export const useTaskStore = defineStore('tasks', () => {
             return false
         }
 
+        // Wird eine verschobene Aufgabe doch noch erledigt, ist der Weckruf hinfällig:
+        // sonst würde der Cron sie am alten Zieldatum verfrüht wieder auf dran setzen.
+        // Nur ein Extra-Request, wenn tatsächlich eine Verschiebung anliegt.
+        const postponedTask = tasks.value.find(t => t.task_id === taskId)
+        if (postponedTask?.postponed_until) {
+            await supabase.from('tasks').update({ postponed_until: null }).eq('task_id', taskId)
+            // Lokal mitziehen, nicht nur auf loadTasks() unten vertrauen: dessen Guard
+            // lässt den Reload still ausfallen, wenn parallel schon ein Load läuft
+            // (z.B. durch Realtime). Ohne das behauptet die Karte weiter "verschoben",
+            // obwohl gerade erledigt und Punkte vergeben wurden.
+            postponedTask.postponed_until = null
+        }
+
         // Reload tasks vom Backend (Source of Truth, kein optimistic update)
         await loadTasks()
 
@@ -130,12 +144,14 @@ export const useTaskStore = defineStore('tasks', () => {
 
     // MARK AS DIRTY - Task wieder als "dreckig" markieren
     // Ändert nur tasks.completed, löscht KEINE completions aus der Historie
+    // Hebt eine Verschiebung auf: die manuelle Entscheidung "jetzt dran" schlägt
+    // den gesetzten Weckruf, sonst würde der Cron die Aufgabe später erneut wecken.
     const markAsDirty = async (taskId: string) => {
         const toastStore = useToastStore()
         // UPDATE tasks.completed = FALSE
         const { error } = await supabase
             .from('tasks')
-            .update({ completed: false })
+            .update({ completed: false, postponed_until: null })
             .eq('task_id', taskId)
 
         if (error) {
@@ -144,32 +160,47 @@ export const useTaskStore = defineStore('tasks', () => {
             return false
         }
 
+        // Lokal mitziehen, aus demselben Grund wie in completeTask: der Reload
+        // unten kann am Guard scheitern, und ein stehen gebliebenes
+        // "verschoben"-Kennzeichen widerspräche der gerade getroffenen Entscheidung.
+        const task = tasks.value.find(t => t.task_id === taskId)
+        if (task) {
+            task.completed = false
+            task.postponed_until = null
+        }
+
         // Reload tasks vom Backend (Source of Truth)
         await loadTasks()
         return true
     }
 
-    // SKIP - Task zeitlich verschieben ohne Punkte zu vergeben
-    // Setzt last_completed_at auf jetzt (für Cron-Job Berechnung)
-    // OHNE task_completions Entry (keine Punkte, keine Historie)
-    // completed bleibt FALSE (Task bleibt dirty, nur zeitlich verschoben)
-    const skipTask = async (taskId: string) => {
+    // POSTPONE - Aufgabe bis zu einem Datum aus dem Weg räumen
+    //
+    // Setzt completed = TRUE (damit sie "Jetzt dran" verlässt — completed bleibt die
+    // alleinige Dranheits-Quelle) und postponed_until auf das Zieldatum, das der
+    // nächtliche Cron als Weckruf liest.
+    //
+    // last_completed_at bleibt ABSICHTLICH unangetastet: es wird keine Erledigung
+    // erfunden, der Intervall-Anker bleibt erhalten. Kein task_completions-Eintrag,
+    // also weder Punkte noch Verlaufszeile.
+    const postponeTask = async (taskId: string, targetDate: string) => {
         const toastStore = useToastStore()
 
         const { error } = await supabase
             .from('tasks')
             .update({
-                last_completed_at: new Date().toISOString()
+                completed: true,
+                postponed_until: targetDate
             })
             .eq('task_id', taskId)
 
         if (error) {
-            console.error('Error skipping task:', error)
+            console.error('Error postponing task:', error)
             toastStore.showToast('Fehler beim Verschieben der Aufgabe', 'error')
             return false
         }
 
-        toastStore.showToast('Task verschoben', 'success')
+        toastStore.showToast(`Verschoben auf ${formatPostponeDate(targetDate)}`, 'success')
         // Reload tasks vom Backend (Source of Truth)
         await loadTasks()
         return true
@@ -757,7 +788,7 @@ export const useTaskStore = defineStore('tasks', () => {
         loadTasks,
         completeTask,
         markAsDirty,
-        skipTask,
+        postponeTask,
         createTask,
         createQuickTask,
         updateTask,

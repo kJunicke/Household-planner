@@ -2,7 +2,7 @@
 import type { Task } from '@/types/Task'
 import { useTaskStore } from '@/stores/taskStore'
 import { useHouseholdStore } from '@/stores/householdStore'
-import { scheduleOf, isOverdue } from '@/lib/taskSchedule'
+import { scheduleOf, isOverdue, formatPostponeDate } from '@/lib/taskSchedule'
 import { ref, computed } from "vue";
 import TaskCompletionModal from './TaskCompletionModal.vue'
 import TaskAssignmentModal from './TaskAssignmentModal.vue'
@@ -11,6 +11,7 @@ import SubtaskItem from './SubtaskItem.vue'
 import ProjectWorkModal from './ProjectWorkModal.vue'
 import ProjectCompleteModal from './ProjectCompleteModal.vue'
 import TaskEditModal from './TaskEditModal.vue'
+import TaskPostponeModal from './TaskPostponeModal.vue'
 import confetti from 'canvas-confetti'
 
 interface Props {
@@ -24,6 +25,7 @@ const showEditModal = ref(false)
 const showCompletionModal = ref(false)
 const showAssignmentModal = ref(false)
 const showSubtaskManagementModal = ref(false)
+const showPostponeModal = ref(false)
 const showProjectWorkModal = ref(false)
 const showProjectCompleteModal = ref(false)
 const subtasksExpanded = ref(false) // Standardmäßig eingeklappt für kompakteres Design
@@ -62,9 +64,19 @@ const handleEditManageSubtasks = () => {
      openSubtaskManagementModal()
 }
 
-const handleEditSkip = async () => {
+// Folge-Dialog-Muster wie bei Zuweisen und Subtasks: Bearbeiten schließt, Verschieben öffnet.
+const handleEditPostpone = () => {
      showEditModal.value = false
-     await taskStore.skipTask(props.task.task_id)
+     showPostponeModal.value = true
+}
+
+const closePostponeModal = () => {
+     showPostponeModal.value = false
+}
+
+const handlePostponeConfirm = async (targetDate: string) => {
+     const success = await taskStore.postponeTask(props.task.task_id, targetDate)
+     if (success) showPostponeModal.value = false
 }
 
 const handleDeleteTask = async () => {
@@ -166,7 +178,19 @@ const overdueColorStyle = computed(() => {
 })
 
 // Fälligkeits- oder Completion-Info für erledigte Tasks
+// Verschoben: statt Fälligkeit das konkrete Zieldatum. Die Aufgabe steht damit
+// in der Erledigt-Sektion, aber erkennbar als verschoben und nicht als erledigt.
+const postponedLabel = computed(() => {
+     if (schedule.value.status !== 'postponed') return null
+     return `Verschoben auf ${formatPostponeDate(schedule.value.postponedUntil!)}`
+})
+
 const dueInDays = computed(() => {
+     // Verschoben hat kein Erledigungs- und kein Fälligkeitsdatum zu zeigen —
+     // sonst stünde bei einer einmaligen Aufgabe "Erledigt am ...", obwohl sie
+     // niemand erledigt hat.
+     if (schedule.value.status === 'postponed') return null
+
      if (!props.task.completed || !props.task.last_completed_at) {
           return null
      }
@@ -444,6 +468,12 @@ const handleCompleteProject = async () => {
 
                               <!-- Due in X days (only for recurring completed tasks) -->
                               <span v-if="dueInDays" class="overdue-text">{{ dueInDays }}</span>
+
+                              <!-- Verschoben-Kennzeichen statt Fälligkeit -->
+                              <span v-if="postponedLabel" class="meta-badge postponed-badge">
+                                   <i class="bi bi-calendar-event"></i>
+                                   {{ postponedLabel }}
+                              </span>
                          </div>
                     </div>
                </div>
@@ -642,7 +672,15 @@ const handleCompleteProject = async () => {
                @delete="handleEditDelete"
                @assign="handleEditAssign"
                @manage-subtasks="handleEditManageSubtasks"
-               @skip="handleEditSkip"
+               @postpone="handleEditPostpone"
+          />
+
+          <!-- Task Postpone Modal -->
+          <TaskPostponeModal
+               v-if="showPostponeModal"
+               :task="props.task"
+               @close="closePostponeModal"
+               @confirm="handlePostponeConfirm"
           />
      </div>
 
@@ -766,6 +804,15 @@ const handleCompleteProject = async () => {
      background: transparent;
      color: #92400e;
      border: 1px solid var(--color-warning);
+}
+
+/* Verschoben: dieselbe dezente Outline wie die Typ-Badges — es ist ein Zustands-
+   hinweis, keine Warnung. Braunton passend zum Verschieben-Knopf im Modal. */
+.postponed-badge {
+     background: transparent;
+     color: var(--color-warning-contrast);
+     border: 1px solid var(--color-warning);
+     font-weight: 500;
 }
 
 /* Subtask-Toggle: Fortschritt + Chevron in einem tappbaren Control */

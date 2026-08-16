@@ -42,10 +42,11 @@ Zwei bestehende Verhaltensweisen würden von einer Ableitung zerstört:
   dran gesetzt, würde ein ableitendes Frontend sie sofort wieder als sauber berechnen — die
   Eingabe des Haushaltsmitglieds wäre wirkungslos. Weil `completed` Zustand ist, gewinnt die
   manuelle Markierung automatisch: das Frontend kann die Flag gar nicht überstimmen.
-- **verschieben.** `skipTask` setzt `last_completed_at` auf jetzt und lässt `completed`
-  unberührt — die Aufgabe bleibt dran, sammelt aber keine Überfällig-Tage mehr. Bei einer
-  Ableitung aus `last_completed_at` würde genau dieselbe Datenlage als „erledigt" gelesen.
-  „Verschieben" und „erledigt" wären nicht mehr unterscheidbar.
+- **verschieben.** Eine verschobene Aufgabe ist bis zu einem gewählten Datum nicht dran,
+  obwohl niemand sie erledigt hat: `completed` steht auf wahr, `last_completed_at` bleibt
+  auf dem alten Wert. Ein ableitendes Frontend würde genau diese Datenlage sofort wieder
+  als „überfällig" lesen — die Verschiebung wäre wirkungslos. Weil `completed` Zustand
+  ist, hält sie.
 
 ## Verworfene Alternative
 
@@ -57,6 +58,31 @@ Abgelehnt, weil der Gewinn den Preis nicht trägt: die Übersteuerung wäre weit
 gespeicherter Zustand, nur verteilt auf mehr Spalten statt einer. Man tauscht eine
 Datenbank-Regel gegen eine Migration, zusätzliche Felder und die Pflicht, in jeder Abfrage
 zwei Quellen zu verrechnen — und muss die Kadenz-Regel trotzdem irgendwo hinschreiben.
+
+## Nachtrag 2026-08-16 — Verschieben mit Zieldatum
+
+Verschieben wurde neu definiert: die Aufgabe ist bis zu einem gewählten Datum nicht dran,
+ohne Erledigung und ohne Punkte (Glossar in `CONTEXT.md`). Dafür trägt `tasks` eine neue
+nullable Spalte `postponed_until`.
+
+Die Kernaussage dieses ADR bleibt gültig, weil die Spalte **keine zweite Quelle für
+„dran"** ist. Verschieben setzt `completed = true`; die Frage „ist die Aufgabe dran"
+beantwortet weiterhin allein diese Flag, und das Frontend leitet nach wie vor nichts aus
+der Kadenz ab. `postponed_until` ist ausschließlich ein **Weckruf für den Cron**:
+
+- Neue Klausel in `reset_recurring_tasks()`: erreichtes Verschiebe-Datum weckt die
+  Aufgabe und leert die Spalte. Bewusst ohne Kadenz-Filter, damit auch einmalige
+  Aufgaben zurückkommen.
+- Die bestehende Kadenz-Klausel fordert zusätzlich `postponed_until IS NULL`. Ohne das
+  weckt das unveränderte `last_completed_at` die Aufgabe in derselben Nacht wieder auf.
+
+Damit steht die Zustandsänderung weiterhin an genau einer Stelle: in SQL. Die oben
+verworfene Alternative bleibt verworfen — sie wollte den Cron *ersetzen*; hier wird er
+*gefüttert*.
+
+Das Modul `taskSchedule` kennt dafür den Zustand `postponed`. Er trägt das Zieldatum,
+verhält sich in der Dringlichkeits-Sortierung wie erledigt und ersetzt die Fälligkeits-
+rechnung, die sonst aus dem alten `last_completed_at` eine falsche Zahl erzeugen würde.
 
 ## Konsequenzen
 
