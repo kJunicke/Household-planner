@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import type { PackingItem } from '@/types/PackingItem'
+import type { ChecklistItem } from '@/types/Checklist'
 import ListItemRow from '@/components/ListItemRow.vue'
 
-defineProps<{ item: PackingItem }>()
+defineProps<{ item: ChecklistItem }>()
 
 const emit = defineEmits<{
   toggle: []

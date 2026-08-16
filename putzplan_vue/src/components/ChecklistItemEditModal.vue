@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import { ref } from 'vue'
-import type { PackingItem } from '@/types/PackingItem'
+import type { ChecklistItem } from '@/types/Checklist'
 
 const props = defineProps<{
-  item: PackingItem
+  item: ChecklistItem
   /** Category labels already used in the current list (for the datalist). */
   existingCategories: string[]
 }>()

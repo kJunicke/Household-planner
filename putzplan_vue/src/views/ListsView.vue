@@ -2,8 +2,9 @@
 import { ref } from 'vue'
 import ShoppingView from './ShoppingView.vue'
 import PackingView from './PackingView.vue'
+import TodoView from './TodoView.vue'
 
-type ListsTab = 'shopping' | 'packing'
+type ListsTab = 'shopping' | 'packing' | 'todo'
 
 const activeTab = ref<ListsTab>('shopping')
 </script>
@@ -24,11 +25,18 @@ const activeTab = ref<ListsTab>('shopping')
       >
         <i class="bi bi-bag-check me-1"></i> Packlisten
       </button>
+      <button
+        :class="['subtab-chip', activeTab === 'todo' && 'active']"
+        @click="activeTab = 'todo'"
+      >
+        <i class="bi bi-check2-square me-1"></i> To-do
+      </button>
     </div>
 
     <!-- Sub-Views -->
     <ShoppingView v-if="activeTab === 'shopping'" />
-    <PackingView v-else />
+    <PackingView v-else-if="activeTab === 'packing'" />
+    <TodoView v-else />
   </div>
 </template>
 
