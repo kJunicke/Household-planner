@@ -65,6 +65,21 @@ export interface HistoryDayGroup {
   people: HistoryDayPerson[]
 }
 
+/**
+ * Durchsuchte Felder eines Eintrags: Aufgabentitel, Anzeigename der Person,
+ * Erledigungs-Notiz und — bei Subtask-Completions — der Titel des Parents. Der
+ * eigene Titel kommt aus der angereicherten Completion, nicht aus der Task-Tabelle,
+ * deshalb bleiben Erledigungen gelöschter Aufgaben (Soft Delete) auffindbar.
+ *
+ * Der Parent-Titel muss mitgesucht werden, weil die Liste Subtask-Completions unter
+ * genau dieser Überschrift faltet: gesucht wird der Text, den die App anzeigt. Da
+ * alle Kinder einer Faltgruppe denselben Parent haben, überlebt die Gruppe den
+ * Filter vollständig und wird nicht zur leeren Hülle.
+ */
+const matchesTerm = (entry: HistoryEntry, needle: string, parentTitle?: string): boolean =>
+  [entry.tasks?.title, entry.household_members.display_name, entry.completion_note, parentTitle]
+    .some(field => field?.toLowerCase().includes(needle))
+
 const FALLBACK_NAME = 'Unbekannt'
 const FALLBACK_COLOR = '#6c757d'
 const FALLBACK_TITLE = 'Unbekannte Aufgabe'
@@ -165,7 +180,9 @@ export function useHistoryGroups(
   completions: MaybeRefOrGetter<(TaskCompletion | EnrichedCompletion)[]>,
   members: MaybeRefOrGetter<HouseholdMember[]>,
   referenceDate: MaybeRefOrGetter<Date>,
-  tasks: MaybeRefOrGetter<Task[]>
+  tasks: MaybeRefOrGetter<Task[]>,
+  /** Live-Suchbegriff; leer bedeutet „nicht filtern". */
+  searchTerm: MaybeRefOrGetter<string> = ''
 ) {
   // Completions aus Realtime sind evtl. nicht angereichert — daher überall Fallbacks.
   const entries = computed((): HistoryEntry[] => {
@@ -192,13 +209,37 @@ export function useHistoryGroups(
       .sort((a, b) => new Date(b.completed_at).getTime() - new Date(a.completed_at).getTime())
   })
 
+  /** Normalisierter Suchbegriff — leer, wenn nicht gefiltert wird. */
+  const normalizedTerm = computed(() => toValue(searchTerm).trim().toLowerCase())
+
+  /** Wahr, solange ein Suchbegriff aktiv ist — trennt „nichts gefunden" von „noch nichts da". */
+  const isFiltering = computed(() => normalizedTerm.value.length > 0)
+
+  // Gefiltert wird vor der Gruppierung: die Gruppierung selbst bleibt unverändert,
+  // Tage ohne Treffer entstehen dadurch gar nicht erst.
+  const matchingEntries = computed((): HistoryEntry[] => {
+    const needle = normalizedTerm.value
+    if (!needle) return entries.value
+
+    // Parent-Titel je Task — dieselbe Auflösung, die `foldRows` für die Überschrift
+    // der Faltgruppe benutzt, damit Sichtbares und Durchsuchbares übereinstimmen.
+    const byTaskId = new Map(toValue(tasks).map(task => [task.task_id, task]))
+    const parentTitleOf = (entry: HistoryEntry): string | undefined => {
+      if (entry.isDeleted) return undefined
+      const parentId = byTaskId.get(entry.task_id)?.parent_task_id
+      return parentId ? byTaskId.get(parentId)?.title : undefined
+    }
+
+    return entries.value.filter(entry => matchesTerm(entry, needle, parentTitleOf(entry)))
+  })
+
   const dayGroups = computed((): HistoryDayGroup[] => {
     const now = toValue(referenceDate)
     const taskList = toValue(tasks)
     const days: { key: string; label: string; items: HistoryEntry[] }[] = []
     let current: { key: string; label: string; items: HistoryEntry[] } | null = null
 
-    for (const entry of entries.value) {
+    for (const entry of matchingEntries.value) {
       const date = new Date(entry.completed_at)
       const key = dayKey(date)
       if (!current || current.key !== key) {
@@ -208,8 +249,9 @@ export function useHistoryGroups(
       current.items.push(entry)
     }
 
-    // Die Tagessummen zählen alle Completions des Tages — auch die, die anschließend
-    // in eine Faltgruppe wandern.
+    // Die Tagessummen zählen alle Completions, die der Tag hier tatsächlich enthält —
+    // auch die, die anschließend in eine Faltgruppe wandern. Bei aktivem Filter sind
+    // das die Treffer des Tages, passend zu den Zeilen darunter.
     return days.map(day => ({
       key: day.key,
       label: day.label,
@@ -218,5 +260,5 @@ export function useHistoryGroups(
     }))
   })
 
-  return { entries, dayGroups }
+  return { entries, dayGroups, isFiltering }
 }

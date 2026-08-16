@@ -12,39 +12,28 @@ import HistoryFoldRow from '@/components/HistoryFoldRow.vue'
 const taskStore = useTaskStore()
 const householdStore = useHouseholdStore()
 
-const showDeleteAllModal = ref(false)
-const showOptionsDropdown = ref(false)
 const isLoading = ref(true)
+
+// Live-Filter, kein Suchmodus: kein Enter, kein Overlay — die Liste folgt dem Tippen.
+const searchTerm = ref('')
 
 // Bezugszeitpunkt für „Heute"/„Gestern" — einmal beim Betreten der Ansicht gesetzt,
 // damit die Tagesgrenzen während des Renderns stabil bleiben.
 const now = ref(new Date())
 
 // Anreicherung, Tagesgruppierung, Labels und Sortierung liegen im Composable.
-const { entries: completions, dayGroups: groupedCompletions } = useHistoryGroups(
+const { entries: completions, dayGroups: groupedCompletions, isFiltering } = useHistoryGroups(
   () => taskStore.completions,
   () => householdStore.householdMembers,
   now,
-  () => taskStore.tasks
+  () => taskStore.tasks,
+  searchTerm
 )
 
 // Keine Rückfrage: der Wisch legt das Löschen erst frei, das ist die Absicht.
 const deleteCompletion = async (completion: HistoryEntry) => {
   swipeOpenId.value = null
   await taskStore.deleteCompletion(completion.completion_id)
-}
-
-const openDeleteAllModal = () => {
-  showDeleteAllModal.value = true
-}
-
-const closeDeleteAllModal = () => {
-  showDeleteAllModal.value = false
-}
-
-const confirmDeleteAll = async () => {
-  await taskStore.deleteAllCompletions()
-  closeDeleteAllModal()
 }
 
 // Aufgeklappte Notizen und Faltgruppen sind reiner Ansichtszustand, nicht persistiert.
@@ -69,12 +58,8 @@ const closeSwipe = (id: string) => {
   if (swipeOpenId.value === id) swipeOpenId.value = null
 }
 
-// Close dropdown when clicking outside
 const handleClickOutside = (event: MouseEvent) => {
   const target = event.target as HTMLElement
-  if (!target.closest('.dropdown')) {
-    showOptionsDropdown.value = false
-  }
   // Ein Tap außerhalb schließt die aufgewischte Zeile. Der Klick nach einem Wisch
   // kommt hier nicht an — die Geste hält ihn zurück.
   if (!target.closest('.row-swipe-delete')) {
@@ -104,24 +89,27 @@ onUnmounted(() => {
 <template>
   <main class="page-container">
     <div class="container-fluid">
-      <div class="d-flex justify-content-between align-items-center mb-4">
-        <h2 class="page-title">Verlauf</h2>
-        <div class="dropdown">
+      <div class="history-header mb-4">
+        <h2 class="page-title mb-0">Verlauf</h2>
+        <!-- Dauerhaft sichtbares Suchfeld — der frühere Optionen-Knopf saß hier. -->
+        <div class="history-search">
+          <i class="bi bi-search"></i>
+          <input
+            v-model="searchTerm"
+            type="search"
+            class="history-search-input"
+            placeholder="Aufgabe, Person, Notiz…"
+            aria-label="Verlauf durchsuchen"
+          />
           <button
-            class="btn btn-sm btn-outline-secondary dropdown-toggle"
+            v-if="searchTerm"
             type="button"
-            @click="showOptionsDropdown = !showOptionsDropdown"
-            :disabled="completions.length === 0"
+            class="history-search-clear"
+            aria-label="Suche zurücksetzen"
+            @click="searchTerm = ''"
           >
-            <i class="bi bi-three-dots-vertical"></i> Optionen
+            <i class="bi bi-x-lg"></i>
           </button>
-          <ul class="dropdown-menu" :class="{ show: showOptionsDropdown }">
-            <li>
-              <button class="dropdown-item text-danger" @click="openDeleteAllModal(); showOptionsDropdown = false">
-                <i class="bi bi-trash"></i> Alle löschen
-              </button>
-            </li>
-          </ul>
         </div>
       </div>
 
@@ -135,6 +123,15 @@ onUnmounted(() => {
       <div v-else-if="completions.length === 0" class="empty-state">
         <i class="bi bi-clock-history"></i>
         <p>Noch keine erledigten Tasks</p>
+      </div>
+
+      <!-- Eigener Leerzustand: es gibt Einträge, nur keinen Treffer. -->
+      <div v-else-if="groupedCompletions.length === 0 && isFiltering" class="empty-state">
+        <i class="bi bi-search"></i>
+        <p>Keine Treffer für „{{ searchTerm }}"</p>
+        <button type="button" class="btn btn-sm btn-outline-secondary" @click="searchTerm = ''">
+          Suche zurücksetzen
+        </button>
       </div>
 
       <div v-else class="completions-list">
@@ -195,39 +192,6 @@ onUnmounted(() => {
       </div>
     </div>
 
-    <!-- Delete All Modal -->
-    <Teleport to="body">
-      <div v-if="showDeleteAllModal" class="modal-overlay" @click="closeDeleteAllModal">
-        <div class="modal-content" @click.stop>
-          <div class="modal-header">
-            <h3 class="modal-title">Gesamten Verlauf löschen</h3>
-            <button @click="closeDeleteAllModal" class="btn-close" aria-label="Schließen">
-              <i class="bi bi-x-lg"></i>
-            </button>
-          </div>
-          <div class="modal-body">
-            <p class="text-danger fw-bold">
-              <i class="bi bi-exclamation-triangle-fill"></i>
-              Achtung: Diese Aktion kann nicht rückgängig gemacht werden!
-            </p>
-            <p>
-              Möchtest du wirklich den gesamten Verlauf für diesen Haushalt löschen?
-            </p>
-            <p class="text-muted mb-0">
-              Es werden {{ completions.length }} Einträge gelöscht.
-            </p>
-          </div>
-          <div class="modal-footer">
-            <button @click="closeDeleteAllModal" class="btn btn-secondary">
-              Abbrechen
-            </button>
-            <button @click="confirmDeleteAll" class="btn btn-danger">
-              <i class="bi bi-trash"></i> Alle löschen
-            </button>
-          </div>
-        </div>
-      </div>
-    </Teleport>
   </main>
 </template>
 
@@ -285,15 +249,73 @@ onUnmounted(() => {
   color: var(--color-text-secondary);
 }
 
-.dropdown {
-  position: relative;
+/* Kopfzeile: Titel links, dauerhaft sichtbares Suchfeld rechts daneben. */
+.history-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
 }
 
-.dropdown-menu {
+.history-search {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0 0.5rem;
+  min-height: 40px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md, 8px);
+  background: var(--color-background-soft, transparent);
+}
+
+.history-search > i {
+  color: var(--color-text-muted);
+  flex-shrink: 0;
+}
+
+.history-search-input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  outline: none;
+  background: transparent;
+  font-size: var(--font-md, 1rem);
+  color: var(--color-text-primary);
+}
+
+/* Browser-eigenes Kreuz von type=search unterdrücken — wir haben einen eigenen Knopf. */
+.history-search-input::-webkit-search-cancel-button {
+  display: none;
+}
+
+/* Sichtbar 32px, damit die Suchleiste ihre Höhe behält; die Trefferfläche wird per
+   Pseudo-Element auf 48px erweitert — dasselbe Muster wie an der Kategorie-Kopfzeile. */
+.history-search-clear {
+  position: relative;
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: none;
+  color: var(--color-text-muted);
+  cursor: pointer;
+}
+
+.history-search-clear::after {
+  content: '';
   position: absolute;
-  right: 0;
-  top: 100%;
-  margin-top: 0.25rem;
-  z-index: 1000;
+  top: 50%;
+  left: 50%;
+  width: var(--touch-target-min, 48px);
+  height: var(--touch-target-min, 48px);
+  transform: translate(-50%, -50%);
+}
+
+.history-search-clear:hover {
+  color: var(--bs-danger);
 }
 </style>
