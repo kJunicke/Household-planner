@@ -79,3 +79,32 @@ Spalte ist keine zweite Dranheits-Quelle, sondern nur der Weckruf für den Cron.
 
 Nicht verfügbar bei täglichen Aufgaben (setzen sich nächtlich selbst zurück) und
 Projekten (durchgehend bearbeitbar, sammeln keine Überfällig-Tage).
+
+### Wochenziel
+
+Die Punktzahl, die der Haushalt sich für eine Woche gemeinsam vornimmt. Sie gehört dem
+Haushalt, nicht einer Person, und jedes Mitglied darf sie ändern.
+
+Gemessen wird sie gegen die Summe aller Erledigungen der laufenden Woche — **ein** Balken
+für alle, aufgeteilt in ein Farbsegment je Mitglied. Das ist ausdrücklich **keine
+Rangliste**: die Farbanteile beantworten „wer hat was gemacht", nie „wer liegt vorn".
+
+Es gibt keine Historie: sichtbar ist immer nur die laufende Woche. Eine geänderte Zielzahl
+gilt deshalb sofort, ein geänderter Wochenstart dagegen erst ab der nächsten Woche — sonst
+verschwänden bereits gesammelte Punkte scheinbar.
+
+### Abreißen
+
+Die Geste, mit der eine Aufgabe erledigt wird: den Zettel am **Eselsohr** greifen und nach
+unten ziehen. Fachlich passiert dasselbe wie bei jeder Erledigung — die Punkte werden über
+die Edge Function `complete-task` verbucht, die Aufgabe verlässt „Jetzt dran".
+
+Abreißen ist ein **Griff, kein Urteil**: es lässt sich unmittelbar danach zurücknehmen,
+solange der Fetzen sichtbar ist. Das unterscheidet es von **wieder dreckig**, das eine
+inhaltliche Aussage über den Zustand der Wohnung ist und keine Korrektur eines Fehlgriffs.
+
+### Eselsohr
+
+Die angeknickte Ecke unten rechts an jedem Zettel — der Griff zum **Abreißen**. Es ist die
+einzige Stelle, an der die Geste beginnen darf, und es ist gesperrt, solange die Wand
+scrollt.
