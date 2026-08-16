@@ -52,7 +52,7 @@ putzplan_vue/
 
 | Route | View | Zweck |
 |---|---|---|
-| `/` | CleaningView | Task-Liste + Kategorie-Chips, FAB-Suche, Quick-Aufgaben |
+| `/` | HomeView | Weiche: klassischer CleaningView **oder** Pinnwand (WallView), je nach Aussehen-Einstellung |
 | `/history` | HistoryView | Chronologie aller Completions |
 | `/stats` | StatsView | Gamification-Statistiken |
 | `/shopping` | ListsView | Subtabs Einkauf (ShoppingView) & Packlisten (PackingView) |
@@ -72,6 +72,8 @@ Supabase-Schema ist Source of Truth. PKs heißen **nicht** `id` — wichtig für
 - `task_completions` ist append-only und die **Single Source of Truth** für Punkte
 - Task-Completion läuft über die Edge Function `complete-task`, nicht über DB-Trigger
 - Erlaubte Subtask-Punktmodi hängen am `task_type`
+- `households` trägt das **Wochenziel** (`weekly_goal_points`, `week_start_day`) —
+  ohne Historie, sichtbar ist immer nur die laufende Woche
 
 Volles Schema, Recurrence-Logik und Subtask-Modi → [docs/data-model.md](docs/data-model.md)
 

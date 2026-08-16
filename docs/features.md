@@ -2,7 +2,16 @@
 
 Detailverhalten der einzelnen Views. Nur lesen, wenn du an der jeweiligen View arbeitest.
 
-## `/` — CleaningView
+## `/` — HomeView (Weiche)
+
+`/` rendert seit dem Pinnwand-Redesign eine Weiche: je nach Aussehen-Einstellung
+(`designStore`, pro Gerät in `localStorage`) entweder den klassischen `CleaningView`
+oder die `WallView`. Die Umschaltung wirkt sofort ohne Neuladen; beide Ansichten
+arbeiten auf denselben Stores und derselben Edge Function.
+
+Kein `keep-alive` — die weichende Ansicht meldet ihre Realtime-Subscription ab.
+
+### Klassisch: CleaningView
 
 Task-Liste, gefiltert über Kategorie-Chips (Alltag / Putzen / Projekte / Erledigt).
 
@@ -29,6 +38,37 @@ Task-Liste, gefiltert über Kategorie-Chips (Alltag / Putzen / Projekte / Erledi
   und nie erledigte Aufgaben — deshalb ist diese Zahl kleiner als die Zahl am Sektionskopf.
 - **Erledigt-Tab**: wiederkehrende Aufgaben nach nächster Fälligkeit, danach Aufgaben ohne
   Kadenz, ganz hinten abgeschlossene Projekte nach Abschlussdatum.
+
+Auswahl und Sortierung liegen im gemeinsamen Composable `useTaskBoard.ts`, damit
+klassischer Screen und Pinnwand dieselbe Antwort auf „welche Aufgaben sind dran und in
+welcher Reihenfolge" geben. Die zurückgegebenen Listen sind `readonly` — wer sortieren
+will, kopiert mit `[...liste]`, sonst zerstört ein `.sort()` den computed-Cache beider
+Ansichten.
+
+### Pinnwand: WallView
+
+Offene Aufgaben hängen als Papierzettel an einer Korkwand, absolut positioniert per
+Skyline-Packing (`lib/wallLayout.ts`).
+
+- **Reihenfolge**: offene Aufgaben → tägliche → Projekte, ohne Überschriften. Der Typ ist
+  am Papier und an der Befestigung erkennbar (weiß + Reißzwecke / gelb + Klebeband /
+  Packpapier + Büroklammer). Keine Raumkategorien, keine Chipleiste.
+- **Neigung, Versatz und Abstand** kommen deterministisch aus der `task_id` (FNV-1a-Hash).
+  Eine Neigung, die sich pro Render ändert, wirkt wie ein Fehler.
+- **Zettelbreite wird gemessen, nicht gerechnet**: der Zettel wird kurz ungedreht auf
+  `max-content` gestellt und vermessen. Ungedreht, weil ein geneigter Zettel sich zu breit
+  misst; mit Aufschlag nach oben, weil ein fehlendes halbes Pixel den Titel umbrechen
+  lässt. Einzelne Wörter brechen nie um — lange **mehrwortige** Titel brechen an
+  Wortgrenzen um (Deckel 68 % der Wandbreite).
+- **Person** = farbige Umrandung aus `household_members.user_color`, kein Name, keine
+  Initialen, kein Badge. Ohne Zuständigen tritt der Rand bewusst zurück, damit eine
+  Personenfarbe immer kräftiger wirkt als die Nicht-Farbe.
+- **Am Zettel sichtbar**: Titel, Punktwert, bei Rückstand eine rote Dauer („2 Tage",
+  „nie") und genau **ein** Knopf (Bearbeiten, öffnet das bestehende Modal).
+- **Statusleiste** oben: ein Balken für den ganzen Haushalt gegen das **Wochenziel**, ein
+  Farbsegment je Mitglied, darunter eine Legende. Keine Rangliste, keine Platzierung; ein
+  Mitglied ohne Punkte erscheint mit Segmentbreite 0 und einer 0. Die wöchentliche
+  Rangliste im Header ist auf dieser Ansicht ausgeblendet, in `/stats` bleibt sie.
 
 ## `/history` — HistoryView
 

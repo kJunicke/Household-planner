@@ -8,6 +8,12 @@
 Wichtig für `.eq()`-Queries — die PKs heißen nicht `id`.
 
 - `households` — PK: `household_id`
+  - `weekly_goal_points` (INTEGER, Default 30) — gemeinsames **Wochenziel** in Punkten,
+    gilt sofort für die laufende Woche
+  - `week_start_day` (SMALLINT, Default 1 = Montag) — Wochenstart in JS-`getDay()`-
+    Konvention (0 = Sonntag), wirkt erst ab der nächsten Woche
+  - Beide gehören dem Haushalt, jedes Mitglied darf sie ändern. **Keine Historie** —
+    sichtbar ist immer nur die laufende Woche (→ `CONTEXT.md`, „Wochenziel")
 - `household_members` — PK: `user_id` (**One ID per user!** — referenziert `auth.users.id`)
   - Hat `display_name` (Email-Prefix als Fallback beim Join/Create)
   - Keine redundante `member_id` mehr (wurde entfernt für einfacheres Datenmodell)

@@ -137,6 +137,46 @@ ALTER TABLE shopping_items ADD COLUMN quantity int NOT NULL DEFAULT 1;
   `/notes` bei leerem Feld. In Ticket 03 nur für das Pinnwand-Aussehen behoben
   (`pinnwand.css`), klassisch bewusst unangetastet gelassen.
 
+- **Badge-Kontur auf gesättigten Füllungen kaum lesbar.** Die Pinnwand-Kontur
+  `1.5px rgba(36,31,26,.55)` misst gegen `effort-badge` (`#2B4A8F`) nur **1,93:1**,
+  gegen `completed-badge` (`#198754`) 3,60:1 — gegenüber 9,71:1 auf dem hellen
+  `overdue-badge`. Zierde, keine Information; deshalb vertagt.
+  (`getComputedStyle` meldet zudem 1px statt 1.5px — Rundung auf Gerätepixel bei DPR 1.)
+
+- **Kosmetische Reste außerhalb des Bootstrap-Perimeters im Pinnwand-Aussehen.**
+  Komponenteneigene Klassen, laut Spec ausdrücklich Out of Scope („Etappe 1 färbt die
+  übrigen Views über die Tokens mit, mehr nicht"), stechen auf Kork aber heraus:
+  `.list-chip.active` auf `/listen` (kräftiges Indigo-Pill, r16px), `.cat-count`
+  (r999px), `.rail-bubble` (r14px), weiche Schatten an `.category-nav-container`
+  (`rgba(0,0,0,.05) 0 2px 8px`) und `.fab` (`rgba(0,0,0,.15) 0 4px 12px`).
+
+### Pinnwand-Redesign — vertagt aus Etappe 2 (Ticket 04, 16.08.2026)
+
+- **Kuratierte Personenfarben-Palette + Migration bestehender `user_color`-Werte.**
+  Von der Spec (Etappe 1) vorgesehen, im Lauf bewusst als eigenes Ticket vertagt, weil
+  es eine DB-Änderung und die Farbwahl des Nutzers braucht. Befund des QC: die
+  Umrandung ist die einzige Person-Information am Zettel, aber `#4A90E2` misst nur
+  **3,23** gegen Papier und **2,43** gegen Kork. Zwischenlösung in Ticket 04: der Rand
+  ohne Zuständigen tritt zurück (`#CAC4B8`, 1,71/1,28), damit eine Personenfarbe
+  wenigstens immer kräftiger ist als die Nicht-Farbe. **Kein Laufzeit-Snapping** — die
+  gewählte Farbe muss die angezeigte bleiben.
+
+- **Zielzahl auf kleinen Telefonen.** Gemessen: 390×844 → **17** Zettel ohne Scrollen,
+  375×667 → **10** (Spec-Ziel „rund zwölf"). Ursache ist der 0,68-Breitendeckel, der
+  auf der schmaleren Wand sechs Titel zweizeilig macht. Bewusster Preis für die
+  Nutzerentscheidung „Titel brechen nicht unnötig um".
+
+- **Suchlogik liegt doppelt vor.** `src/lib/taskSearch.ts` (Wand) gegen die
+  Inline-Version in `CleaningView.vue` (alter Screen, durfte nicht angefasst werden).
+  QC-Beleg: identische Trefferlisten in Inhalt und Reihenfolge für „test", „wischen",
+  „e". Auflösen, sobald der alte View wegfällt.
+
+- **Aus den Komponenten nach `pinnwand.css` heben**, sobald der alte View wegfällt:
+  `.zettel`, `.zettel--daily`, `.zettel--project`, `.pin`, `.tape`, `.clip`,
+  `.points`, `--owner-none` (aus `WallNote.vue`) sowie `.fab-card`/`.fab-btn`/
+  `.fab-plus` und die Pinnwand-Fassung des Such-Overlays (aus `WallView.vue`).
+  `.wall` selbst bleibt scoped.
+
 ### Task Management
 - **"Meine Aufgaben" View** - Extra Tab für zugewiesene Tasks (Option 1)
   - CategoryNav erweitern um 5. Tab: "Meine Aufgaben"
