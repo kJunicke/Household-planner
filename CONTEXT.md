@@ -59,10 +59,14 @@ Zeitplan; die App setzt diese Entscheidung nicht zurück.
 
 ### verschieben
 
-Die manuelle Aktion, die eine Aufgabe bis zu einem gewählten Datum aus dem Weg räumt,
+Die manuelle Aktion, die eine Aufgabe bis zu einem gewählten Termin aus dem Weg räumt,
 **ohne** dass jemand sie erledigt hat: keine Punkte, kein Verlaufseintrag, und der
 Zeitpunkt der letzten Erledigung bleibt unangetastet — das Intervall läuft danach im
 gewohnten Rhythmus weiter.
+
+Der Termin wird auf drei Wegen bestimmt: nach dem Intervall der Aufgabe (Vorauswahl,
+sofern eine Kadenz existiert), über eine selbst eingegebene Anzahl Tage — ausdrücklich
+auch weniger als das Intervall — oder über ein frei gewähltes Datum. Frühestens morgen.
 
 Die Aufgabe verlässt „Jetzt dran" und erscheint unter **Erledigt**, dort aber mit dem
 Kennzeichen „verschoben auf …" statt einer Fälligkeit. Am gewählten Tag holt der

@@ -130,32 +130,40 @@ export function scheduleOf(task: Task, today: Date = new Date()): TaskSchedule {
 // arithmetik ist wie die Fälligkeit — und weil sie so ohne Vue, Pinia und
 // Datenbank prüfbar bleibt.
 
-export type PostponeOption = 'interval' | 'plus-1' | 'plus-3' | 'plus-7' | 'custom'
+// 'interval' = Kadenz der Aufgabe, 'days' = frei eingegebene Tageszahl,
+// 'custom' = frei gewähltes Datum. Kurze Voreinstellungen gibt es bewusst nicht:
+// der Nutzer bestimmt die Tageszahl selbst, ausdrücklich auch unterhalb der Kadenz.
+export type PostponeOption = 'interval' | 'days' | 'custom'
+
+export type PostponeInput = {
+  customDate?: string | null
+  customDays?: number | null
+}
 
 // Zieldatum als YYYY-MM-DD, oder null wenn die Option für diese Aufgabe nicht
-// existiert (Intervall ohne Kadenz) bzw. das freie Datum unbrauchbar ist.
+// existiert (Intervall ohne Kadenz) bzw. die Eingabe unbrauchbar ist.
 export function postponeTargetDate(
   task: Task,
   option: PostponeOption,
-  customDate: string | null = null,
+  input: PostponeInput = {},
   today: Date = new Date()
 ): string | null {
   if (option === 'custom') {
+    const customDate = input.customDate
     if (!customDate) return null
     // Nur Zukunft: heute und früher sind keine Verschiebung.
     return calendarDaysBetween(today, parseIsoDate(customDate)) > 0 ? customDate.slice(0, 10) : null
   }
 
-  const days =
-    option === 'interval'
-      ? task.task_type === 'recurring' && task.recurrence_days > 0
-        ? task.recurrence_days
-        : null
-      : option === 'plus-1'
-        ? 1
-        : option === 'plus-3'
-          ? 3
-          : 7
+  let days: number | null
+  if (option === 'interval') {
+    days = task.task_type === 'recurring' && task.recurrence_days > 0 ? task.recurrence_days : null
+  } else {
+    // Mindestens ein ganzer Tag; eine Obergrenze gibt es bewusst nicht, und eine
+    // Untergrenze am Intervall auch nicht — kürzer als die Kadenz ist erlaubt.
+    const value = input.customDays
+    days = typeof value === 'number' && Number.isInteger(value) && value >= 1 ? value : null
+  }
 
   if (days === null) return null
 

@@ -27,13 +27,21 @@ const hasIntervalOption = computed(
 )
 
 // Vorauswahl "nach Intervall": ein Bestätigen-Klick genügt im Normalfall.
-const selectedOption = ref<PostponeOption>(hasIntervalOption.value ? 'interval' : 'plus-1')
+// Ohne Intervall (einmalige Aufgaben) ist die eigene Tageszahl vorausgewählt —
+// sie ist die allgemeinste Option und mit dem Startwert ebenfalls sofort bestätigbar.
+const DEFAULT_CUSTOM_DAYS = 7
+
+const selectedOption = ref<PostponeOption>(hasIntervalOption.value ? 'interval' : 'days')
 const customDate = ref<string>('')
+const customDays = ref<number | null>(DEFAULT_CUSTOM_DAYS)
 
 const minDate = computed(() => earliestPostponeDate())
 
 const targetDate = computed(() =>
-  postponeTargetDate(props.task, selectedOption.value, customDate.value || null)
+  postponeTargetDate(props.task, selectedOption.value, {
+    customDate: customDate.value || null,
+    customDays: customDays.value
+  })
 )
 
 const targetLabel = computed(() =>
@@ -46,6 +54,10 @@ const selectOption = (option: PostponeOption) => {
 
 const handleCustomInput = () => {
   selectedOption.value = 'custom'
+}
+
+const handleDaysInput = () => {
+  selectedOption.value = 'days'
 }
 
 const handleConfirm = () => {
@@ -72,9 +84,8 @@ const handleClose = () => {
             Wann soll „{{ props.task.title }}" wieder dran sein?
           </p>
 
-          <div class="option-list">
+          <div v-if="hasIntervalOption" class="option-list">
             <button
-              v-if="hasIntervalOption"
               type="button"
               class="option-btn"
               :class="{ active: selectedOption === 'interval' }"
@@ -83,36 +94,28 @@ const handleClose = () => {
               <span class="option-label">Nach Intervall</span>
               <span class="option-hint">in {{ props.task.recurrence_days }} Tagen</span>
             </button>
-
-            <button
-              type="button"
-              class="option-btn"
-              :class="{ active: selectedOption === 'plus-1' }"
-              @click="selectOption('plus-1')"
-            >
-              <span class="option-label">+ 1 Tag</span>
-            </button>
-
-            <button
-              type="button"
-              class="option-btn"
-              :class="{ active: selectedOption === 'plus-3' }"
-              @click="selectOption('plus-3')"
-            >
-              <span class="option-label">+ 3 Tage</span>
-            </button>
-
-            <button
-              type="button"
-              class="option-btn"
-              :class="{ active: selectedOption === 'plus-7' }"
-              @click="selectOption('plus-7')"
-            >
-              <span class="option-label">+ 1 Woche</span>
-            </button>
           </div>
 
-          <div class="custom-date">
+          <div class="custom-field">
+            <label for="postpone-days" class="form-label">Eigene Anzahl Tage</label>
+            <div class="days-row">
+              <input
+                id="postpone-days"
+                type="number"
+                inputmode="numeric"
+                class="form-control days-input"
+                :class="{ active: selectedOption === 'days' }"
+                v-model.number="customDays"
+                min="1"
+                step="1"
+                @input="handleDaysInput"
+                @focus="handleDaysInput"
+              />
+              <span class="days-unit">Tage</span>
+            </div>
+          </div>
+
+          <div class="custom-field">
             <label for="postpone-date" class="form-label">Eigenes Datum</label>
             <input
               id="postpone-date"
@@ -130,13 +133,13 @@ const handleClose = () => {
               Wieder dran am <strong>{{ targetLabel }}</strong>
             </template>
             <template v-else>
-              Bitte ein Datum in der Zukunft wählen.
+              Bitte eine Anzahl von mindestens 1 Tag oder ein Datum in der Zukunft wählen.
             </template>
           </p>
 
           <p class="postpone-note">
-            Verschieben vergibt keine Punkte und erzeugt keinen Verlaufseintrag.
-            Das Intervall der Aufgabe bleibt unverändert.
+            Verschieben vergibt keine Punkte und erzeugt keinen Verlaufseintrag.<template v-if="hasIntervalOption">
+            Das Intervall der Aufgabe bleibt unverändert.</template>
           </p>
         </div>
 
@@ -200,8 +203,25 @@ const handleClose = () => {
   color: var(--color-text-secondary);
 }
 
-.custom-date {
+.custom-field {
   margin-top: 1rem;
+}
+
+.days-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+/* Muss .form-control (width: 100%) schlagen -- gleiche Spezifitaet, aber
+   .form-control steht weiter unten und gewaenne sonst. */
+.form-control.days-input {
+  width: 6rem;
+}
+
+.days-unit {
+  font-size: 0.9375rem;
+  color: var(--color-text-secondary);
 }
 
 .form-label {
