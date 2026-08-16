@@ -195,6 +195,23 @@ Während Etappe 5 aufgefallen, beides **vorbestehend** und deshalb nicht dort mi
   `allowDeletingLastList?: boolean` in `ChecklistStoreConfig` **plus** Prop an die Ansicht,
   zusammen, nicht einzeln.
 
+Während Etappe 6 aufgefallen:
+
+- **`runLoadTasks` ersetzt `tasks.value` komplett** mit dem Stand zum SELECT-Zeitpunkt. Ein
+  Realtime-Echo für eine **fremde** Zeile, das zwischen SELECT und Zuweisung eintrifft, wird
+  dabei überschrieben — der Echo-Schutz greift nicht, weil eine fremde ID nicht „in Flug"
+  ist. Zweimal belegt: einmal blieb `last_completed_at` 13 ms daneben stehen und konvergierte
+  nicht mehr (folgenlos), einmal zeigte ein Tab eine fremde Aufgabe über 6 s als erledigt.
+  Vorbestehend, aber Etappe 6 löst pro Abschluss zusätzliche Reloads aus und vergrößert das
+  Zeitfenster. Richtung: Zeilen einzeln mergen statt das Array zu ersetzen, oder das
+  Reload-Ergebnis gegen zwischenzeitlich eingetroffene Echos abgleichen.
+- **Geschwister-Subtasks lassen sich weiterhin parallel abschließen.** Die Doppel-Tap-Sperre
+  greift pro `task_id`; zwei gleichzeitige `complete-task`-Aufrufe für Geschwister desselben
+  Parents können unterschiedliche Punkte berechnen, weil der Parent-Wert vom kumulierten
+  Subtask-Zustand abhängt. Steht so schon als Fallstrick im Plan zu Etappe 6.
+- **Etappen C–F der optimistischen Aktualisierungen** stehen aus (restliche Task-Aktionen,
+  Checkliste, Notizen, Offline-Queue als Modul) → `.scratch/ux-etappen-08-2026/optimistic-updates-plan.md`.
+
 ### Architektur-Kandidaten (Review 02.08.2026)
 
 Aus dem Architektur-Review: sechs Stellen, an denen dieselbe Regel mehrfach existiert.

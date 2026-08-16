@@ -7,6 +7,17 @@ import { useHouseholdStore } from './householdStore'
 import { useAuthStore } from './authStore'
 import { useToastStore } from './toastStore'
 import type { RealtimeChannel } from '@supabase/supabase-js'
+import { isInFlight, isNetworkError, revertRows, runOptimistic, serializeMutation } from '@/lib/optimistic'
+
+/**
+ * Optimistische Completion: trägt eine Client-Kennung, weil die `completion_id`
+ * erst vom Server kommt. Das INSERT-Echo aus Realtime ersetzt den Eintrag
+ * darüber, statt ihn zu duplizieren.
+ */
+type OptimisticCompletion = TaskCompletion & { clientMutationId: string }
+
+const isOptimistic = (c: TaskCompletion | EnrichedCompletion): c is OptimisticCompletion =>
+    'clientMutationId' in c
 
 export const useTaskStore = defineStore('tasks', () => {
     // State - wie ref() in Komponenten
@@ -19,15 +30,50 @@ export const useTaskStore = defineStore('tasks', () => {
     // Realtime subscription channel (wird in subscribe() initialisiert)
     let realtimeChannel: RealtimeChannel | null = null
 
-    // Actions - Funktionen die State ändern
-    const loadTasks = async () => {
-        console.log('Loading tasks...')
+    // Aufgaben, deren Abschluss gerade beim Server liegt — Doppel-Tap-Schutz,
+    // siehe completeTask.
+    const completionsInFlight = new Set<string>()
 
-        // Verhindere parallele Calls
-        if (isLoading.value) {
-            console.log('Already loading tasks, skipping...')
-            return
+    // Guard gegen parallele Ladevorgänge. Ein zweiter Aufruf während eines
+    // laufenden Loads wird NICHT mehr verschluckt (das hinterließ veraltete
+    // Karten), sondern gemerkt: nach dem laufenden Durchgang wird genau einmal
+    // nachgeladen. Wer awaitet, bekommt den Zustand nach diesem Nachlauf.
+    let loadTasksRun: Promise<void> | null = null
+    let loadTasksRequestedAgain = false
+    // IDs, für die dieser Reload den Echo-Schutz gezielt umgehen darf: der
+    // Hintergrund-Reload NACH einem erfolgreichen Commit will genau die Zeile
+    // holen, die er selbst geschrieben hat. Der Schutz bleibt für alle anderen
+    // Quellen (Realtime, fremde Reloads) bis zur Freigabe bestehen.
+    let pendingBypass = new Set<string>()
+
+    const loadTasks = (bypassIds: string[] = []): Promise<void> => {
+        for (const id of bypassIds) pendingBypass.add(id)
+
+        if (loadTasksRun) {
+            loadTasksRequestedAgain = true
+            return loadTasksRun
         }
+
+        loadTasksRun = (async () => {
+            try {
+                do {
+                    loadTasksRequestedAgain = false
+                    const bypass = pendingBypass
+                    pendingBypass = new Set<string>()
+                    await runLoadTasks(bypass)
+                } while (loadTasksRequestedAgain)
+            } finally {
+                loadTasksRun = null
+                loadTasksRequestedAgain = false
+            }
+        })()
+
+        return loadTasksRun
+    }
+
+    // Actions - Funktionen die State ändern
+    const runLoadTasks = async (bypass: Set<string> = new Set()) => {
+        console.log('Loading tasks...')
 
         const householdStore = useHouseholdStore()
         const toastStore = useToastStore()
@@ -52,7 +98,13 @@ export const useTaskStore = defineStore('tasks', () => {
 
             if (tasksError) throw tasksError
 
-            tasks.value = tasksData || []
+            // Echo-Schutz: Zeilen, deren Mutation gerade unterwegs ist, behalten
+            // ihren optimistischen Zustand — sonst springt die Karte kurz zurück,
+            // weil der Server die Änderung noch nicht geschrieben hat.
+            tasks.value = (tasksData || []).map((row: Task) => {
+                if (bypass.has(row.task_id) || !isInFlight(row.task_id)) return row
+                return tasks.value.find(t => t.task_id === row.task_id) ?? row
+            })
             console.log('Loaded tasks:', tasks.value)
             // Completions werden NICHT hier geladen - fetchCompletions() ist dafür zuständig
             // (mit JOIN zu tasks für Task-Namen in der Historie)
@@ -64,82 +116,290 @@ export const useTaskStore = defineStore('tasks', () => {
         }
     }
 
-    // COMPLETE - Task als erledigt markieren (via Edge Function)
-    // Edge Function schreibt in task_completions Historie UND setzt tasks.completed = TRUE + last_completed_at
-    // Optional: effortOverride und completionNote für Sonderfälle (z.B. unerwarteter Mehraufwand)
+    // COMPLETE - Task als erledigt markieren (via Edge Function), optimistisch.
+    //
+    // Die Karte bewegt sich sofort und der Aufrufer darf sofort Konfetti zünden;
+    // Edge Function und Reloads laufen im Hintergrund. Der Rückgabewert sagt
+    // deshalb nur „lokal angewendet", nicht „serverseitig bestätigt".
+    //
+    // Der PUNKTWERT wird bewusst NICHT vorhergesagt — die Edge Function rechnet
+    // ihn aus den Subtask-Zuständen. Die optimistische Completion trägt nur eine
+    // Schätzung fürs Wochen-Ranking, die beim Eintreffen der echten Zeile still
+    // korrigiert wird.
     const completeTask = async (taskId: string, effortOverride?: number, completionNote?: string) => {
         const authStore = useAuthStore()
         const toastStore = useToastStore()
+        const householdStore = useHouseholdStore()
 
         if (!authStore.user) {
             console.error('Cannot complete task: No user logged in')
             toastStore.showToast('Fehler: Nicht angemeldet', 'error')
             return false
         }
+        const userId = authStore.user.id
 
-        // Call Edge Function (replaces direct DB access + trigger logic)
-        // effortOverride and completionNote are both optional and independent
-        const payload: {
-            taskId: string
-            effortOverride?: number
-            completionNote?: string
-        } = { taskId }
-
-        if (effortOverride !== undefined) {
-            payload.effortOverride = effortOverride
+        // Doppel-Tap-Schutz an EINER Stelle (vorher hing er implizit an den
+        // `isQuickCompleting`-Flags der Komponenten, die den ganzen Roundtrip
+        // umspannten — mit dem optimistischen Rückgabewert wäre dieses Fenster
+        // auf ~0 ms geschrumpft und ein zweiter Tap hätte doppelte Punkte
+        // erzeugt). Die Sperre hängt jetzt am `settled`-Promise: die Karte darf
+        // sich sofort bewegen, ein zweites Abschließen derselben Aufgabe kommt
+        // erst nach dem Commit durch.
+        if (completionsInFlight.has(taskId)) {
+            console.warn('Completion already in flight, ignoring duplicate tap:', taskId)
+            return false
         }
 
-        if (completionNote?.trim()) {
-            payload.completionNote = completionNote
-        }
+        const clientMutationId =
+            typeof crypto !== 'undefined' && 'randomUUID' in crypto
+                ? crypto.randomUUID()
+                : `opt-${Date.now()}-${Math.random()}`
 
-        const { data, error } = await supabase.functions.invoke('complete-task', {
-            body: payload
+        // Vor dem Apply merken: der Apply räumt postponed_until lokal weg.
+        const postponedBefore = Boolean(tasks.value.find(t => t.task_id === taskId)?.postponed_until)
+
+        // Snapshot der Zeilen, die der Apply anfasst (Task + ggf. Subtasks)
+        type RowSnapshot = Pick<Task, 'task_id' | 'completed' | 'last_completed_at' | 'postponed_until' | 'assigned_to'>
+
+        // Für Fehler-Toast und Reload-Bypass, im Apply gefüllt
+        let taskTitle = 'Aufgabe'
+        const touchedIds: string[] = []
+
+        const { applied, settled } = runOptimistic<RowSnapshot[]>({
+            entityId: taskId,
+            apply: () => {
+                const task = tasks.value.find(t => t.task_id === taskId)
+                if (!task) {
+                    console.error('Cannot complete task: not in local state', taskId)
+                    return null
+                }
+
+                const snapshot: RowSnapshot[] = [snapshotOf(task)]
+                taskTitle = task.title
+                touchedIds.push(task.task_id)
+                const now = new Date().toISOString()
+
+                // Spiegelt die Edge Function:
+                // - Checklist-Subtask ohne expliziten Override wird abgehakt
+                // - sonst: tägliche Aufgaben bleiben ABSICHTLICH nicht abgeschlossen
+                const isChecklistSubtask =
+                    task.parent_task_id !== null &&
+                    task.subtask_points_mode === 'checklist' &&
+                    effortOverride === undefined
+
+                if (isChecklistSubtask || task.task_type !== 'daily') {
+                    task.completed = true
+                }
+                task.last_completed_at = now
+                // Verschiebung ist mit der Erledigung hinfällig (siehe Commit unten)
+                task.postponed_until = null
+                if (!task.assignment_permanent) {
+                    task.assigned_to = null
+                }
+
+                // Die Edge Function setzt alle Subtasks eines Parents zurück
+                if (task.parent_task_id === null && !isChecklistSubtask) {
+                    for (const subtask of tasks.value.filter(t => t.parent_task_id === taskId)) {
+                        snapshot.push(snapshotOf(subtask))
+                        touchedIds.push(subtask.task_id)
+                        subtask.completed = false
+                    }
+                }
+
+                // Optimistische Completion — mit Client-Kennung, damit das
+                // INSERT-Echo sie ersetzt statt sie zu duplizieren.
+                const estimatedEffort = estimateCompletionEffort(task, effortOverride)
+                const optimisticCompletion: OptimisticCompletion = {
+                    clientMutationId,
+                    completion_id: `optimistic-${clientMutationId}`,
+                    task_id: taskId,
+                    user_id: userId,
+                    completed_at: now,
+                    effort_override: estimatedEffort,
+                    completion_note: completionNote?.trim() || null
+                }
+                completions.value.push(optimisticCompletion)
+                householdStore.addOptimisticCompletion({
+                    clientMutationId,
+                    user_id: userId,
+                    task_id: taskId,
+                    completed_at: now,
+                    effort_override: estimatedEffort,
+                    tasks: { effort: task.effort }
+                })
+
+                return snapshot
+            },
+
+            commit: async () => {
+                const payload: {
+                    taskId: string
+                    effortOverride?: number
+                    completionNote?: string
+                } = { taskId }
+
+                if (effortOverride !== undefined) payload.effortOverride = effortOverride
+                if (completionNote?.trim()) payload.completionNote = completionNote
+
+                const { data, error } = await supabase.functions.invoke('complete-task', {
+                    body: payload
+                })
+
+                if (error) {
+                    console.error('Full error object:', JSON.stringify(error, null, 2))
+                    throw error
+                }
+                if (!data?.success) {
+                    console.error('Full response data:', JSON.stringify(data, null, 2))
+                    throw new Error(data?.error || 'complete-task failed')
+                }
+
+                // Wird eine verschobene Aufgabe doch noch erledigt, ist der Weckruf
+                // hinfällig: sonst würde der Cron sie am alten Zieldatum verfrüht
+                // wieder auf dran setzen. Nur ein Extra-Request, wenn nötig.
+                if (postponedBefore) {
+                    await supabase.from('tasks').update({ postponed_until: null }).eq('task_id', taskId)
+                }
+
+                if (data.warning) {
+                    console.warn('Edge function warning:', data.warning)
+                    toastStore.showToast(`⚠️ ${data.warning}`, 'info', 5000)
+                }
+            },
+
+            onSuccess: async () => {
+                // Reloads im Hintergrund — der Nutzer hat sein Konfetti längst.
+                // Die eigenen Zeilen dürfen den Echo-Schutz umgehen, er selbst
+                // bleibt gegen spät eintreffende Realtime-Echos bestehen.
+                await loadTasks(touchedIds)
+                await householdStore.loadWeeklyCompletions()
+                // Erst NACH dem Reload entfernen, sonst zählt die Woche kurz doppelt
+                // bzw. fällt die Erledigung kurz aus dem Ranking.
+                householdStore.removeOptimisticCompletion(clientMutationId)
+                // Die echte Completion holen und die optimistische ERSETZEN, statt
+                // sie nur zu löschen — sonst verschwindet der Eintrag ersatzlos,
+                // wenn das Realtime-Echo ausbleibt.
+                await replaceOptimisticCompletion(clientMutationId, taskId, userId)
+            },
+
+            revert: async (snapshot, error) => {
+                // Optimistische Completion aus beiden Listen entfernen
+                householdStore.removeOptimisticCompletion(clientMutationId)
+                completions.value = completions.value.filter(
+                    c => !(isOptimistic(c) && c.clientMutationId === clientMutationId)
+                )
+
+                // Karte zurück: Zeilen nachladen (Source of Truth) und nur bei
+                // Nichtexistenz auf den Schnappschuss zurückfallen — analog zu
+                // patchItem in createChecklistStore. Bei einem NETZfehler wird
+                // nicht nachgeladen: der SELECT liefe in dieselben Timeouts und
+                // die Karte stünde sekundenlang auf „erledigt", während Verlauf
+                // und Wochenwertung längst zurückgenommen sind.
+                await restoreRows(snapshot, isNetworkError(error))
+            },
+
+            onError: () => {
+                toastStore.showToast(`Fehler beim Abschließen: ${taskTitle}`, 'error')
+            }
         })
 
-        if (error) {
-            console.error('Error calling complete-task function:', error)
-            console.error('Full error object:', JSON.stringify(error, null, 2))
-            toastStore.showToast('Fehler beim Abschließen der Aufgabe', 'error')
-            return false
+        if (applied) {
+            completionsInFlight.add(taskId)
+            void settled.finally(() => completionsInFlight.delete(taskId))
         }
 
-        if (!data?.success) {
-            console.error('Edge function returned error:', data)
-            console.error('Full response data:', JSON.stringify(data, null, 2))
-            toastStore.showToast('Fehler beim Abschließen der Aufgabe', 'error')
-            return false
+        // Bewusst NICHT awaiten: Konfetti hängt an der Aktion, nicht am Server.
+        return applied
+    }
+
+    /** Snapshot der optimistisch veränderten Task-Felder. */
+    const snapshotOf = (task: Task) => ({
+        task_id: task.task_id,
+        completed: task.completed,
+        last_completed_at: task.last_completed_at,
+        postponed_until: task.postponed_until,
+        assigned_to: task.assigned_to
+    })
+
+    /**
+     * Schätzung des Punktwerts NUR fürs Wochen-Ranking. Die verbindliche Zahl
+     * rechnet die Edge Function; im UI wird diese Schätzung nirgends als
+     * Erfolgsmeldung gefeiert.
+     */
+    const estimateCompletionEffort = (task: Task, effortOverride?: number): number => {
+        if (effortOverride !== undefined) return effortOverride
+        if (task.parent_task_id !== null) {
+            if (task.subtask_points_mode === 'checklist') return 0
+            return task.effort
         }
+        const deductSum = tasks.value
+            .filter(t => t.parent_task_id === task.task_id && t.completed && t.subtask_points_mode === 'deduct')
+            .reduce((sum, t) => sum + t.effort, 0)
+        return Math.max(0, task.effort - deductSum)
+    }
 
-        // Wird eine verschobene Aufgabe doch noch erledigt, ist der Weckruf hinfällig:
-        // sonst würde der Cron sie am alten Zieldatum verfrüht wieder auf dran setzen.
-        // Nur ein Extra-Request, wenn tatsächlich eine Verschiebung anliegt.
-        const postponedTask = tasks.value.find(t => t.task_id === taskId)
-        if (postponedTask?.postponed_until) {
-            await supabase.from('tasks').update({ postponed_until: null }).eq('task_id', taskId)
-            // Lokal mitziehen, nicht nur auf loadTasks() unten vertrauen: dessen Guard
-            // lässt den Reload still ausfallen, wenn parallel schon ein Load läuft
-            // (z.B. durch Realtime). Ohne das behauptet die Karte weiter "verschoben",
-            // obwohl gerade erledigt und Punkte vergeben wurden.
-            postponedTask.postponed_until = null
+    /**
+     * Rücknahme mehrerer Task-Zeilen über das gemeinsame Muster
+     * (nachladen, nur bei Nichtexistenz Schnappschuss).
+     */
+    const restoreRows = async (
+        snapshot: Pick<Task, 'task_id' | 'completed' | 'last_completed_at' | 'postponed_until' | 'assigned_to'>[],
+        skipReload = false
+    ) => {
+        await revertRows({
+            table: 'tasks',
+            pkColumn: 'task_id',
+            snapshots: snapshot,
+            list: tasks,
+            skipReload
+        })
+    }
+
+    /**
+     * Ersetzt die optimistische Completion durch die echte Serverzeile. Läuft
+     * nach erfolgreichem Commit; kommt das Realtime-Echo zuerst, ist hier nichts
+     * mehr zu tun. Schlägt der Nachschlag fehl, wird die optimistische Zeile
+     * trotzdem entfernt — sie darf nicht als Dauerzustand hängen bleiben.
+     */
+    const replaceOptimisticCompletion = async (
+        clientMutationId: string,
+        taskId: string,
+        userId: string
+    ) => {
+        const index = completions.value.findIndex(
+            c => isOptimistic(c) && c.clientMutationId === clientMutationId
+        )
+        if (index === -1) return // Echo war schneller
+
+        try {
+            const { data } = await supabase
+                .from('task_completions')
+                .select('completion_id, task_id, user_id, completed_at, effort_override, completion_note')
+                .eq('task_id', taskId)
+                .eq('user_id', userId)
+                .order('completed_at', { ascending: false })
+                .limit(1)
+                .maybeSingle()
+
+            const current = completions.value.findIndex(
+                c => isOptimistic(c) && c.clientMutationId === clientMutationId
+            )
+            if (current === -1) return
+
+            const alreadyPresent =
+                data && completions.value.some(c => c.completion_id === data.completion_id)
+
+            if (data && !alreadyPresent) {
+                completions.value[current] = data as TaskCompletion
+            } else {
+                completions.value.splice(current, 1)
+            }
+        } catch (error) {
+            console.error('Error fetching confirmed completion:', error)
+            completions.value = completions.value.filter(
+                c => !(isOptimistic(c) && c.clientMutationId === clientMutationId)
+            )
         }
-
-        // Reload tasks vom Backend (Source of Truth, kein optimistic update)
-        await loadTasks()
-
-        // Reload weekly completions for header stats
-        const householdStore = useHouseholdStore()
-        await householdStore.loadWeeklyCompletions()
-
-        // Show warning if subtask reset failed (prevents silent data corruption)
-        if (data.warning) {
-            console.warn('Edge function warning:', data.warning)
-            // Use 'info' type since 'warning' doesn't exist yet
-            toastStore.showToast(`⚠️ ${data.warning}`, 'info', 5000)
-        } else {
-            toastStore.showToast('Aufgabe abgeschlossen', 'success', 3000)
-        }
-        return true
     }
 
     // MARK AS DIRTY - Task wieder als "dreckig" markieren
@@ -148,11 +408,15 @@ export const useTaskStore = defineStore('tasks', () => {
     // den gesetzten Weckruf, sonst würde der Cron die Aufgabe später erneut wecken.
     const markAsDirty = async (taskId: string) => {
         const toastStore = useToastStore()
-        // UPDATE tasks.completed = FALSE
-        const { error } = await supabase
-            .from('tasks')
-            .update({ completed: false, postponed_until: null })
-            .eq('task_id', taskId)
+        // UPDATE tasks.completed = FALSE — in derselben Kette wie eine ggf. noch
+        // laufende Mutation dieser Zeile, sonst könnte ein gerade unterwegs
+        // befindliches complete-task die Zurücksetzung wieder überschreiben.
+        const { error } = await serializeMutation(taskId, async () =>
+            await supabase
+                .from('tasks')
+                .update({ completed: false, postponed_until: null })
+                .eq('task_id', taskId)
+        )
 
         if (error) {
             console.error('Error marking task as dirty:', error)
@@ -160,16 +424,8 @@ export const useTaskStore = defineStore('tasks', () => {
             return false
         }
 
-        // Lokal mitziehen, aus demselben Grund wie in completeTask: der Reload
-        // unten kann am Guard scheitern, und ein stehen gebliebenes
-        // "verschoben"-Kennzeichen widerspräche der gerade getroffenen Entscheidung.
-        const task = tasks.value.find(t => t.task_id === taskId)
-        if (task) {
-            task.completed = false
-            task.postponed_until = null
-        }
-
-        // Reload tasks vom Backend (Source of Truth)
+        // Kein lokales Mitziehen mehr nötig: der loadTasks-Guard verschluckt
+        // parallele Anforderungen nicht mehr, sondern lädt danach genau einmal nach.
         await loadTasks()
         return true
     }
@@ -435,6 +691,10 @@ export const useTaskStore = defineStore('tasks', () => {
                     // UPDATE - Task wurde geändert
                     if (payload.eventType === 'UPDATE') {
                         const updatedTask = payload.new as Task
+                        // Echo-Schutz: eine Zeile, deren eigene Mutation gerade
+                        // unterwegs ist, wird nicht überschrieben — sonst springt
+                        // der optimistische Zustand kurz zurück.
+                        if (isInFlight(updatedTask.task_id)) return
                         const index = tasks.value.findIndex(t => t.task_id === updatedTask.task_id)
                         if (index !== -1) {
                             tasks.value[index] = updatedTask
@@ -461,10 +721,23 @@ export const useTaskStore = defineStore('tasks', () => {
                     // INSERT - Neue Completion wurde erstellt
                     if (payload.eventType === 'INSERT') {
                         const newCompletion = payload.new as TaskCompletion
-                        // Nur hinzufügen wenn nicht schon vorhanden
-                        if (!completions.value.find(c => c.completion_id === newCompletion.completion_id)) {
-                            completions.value.push(newCompletion)
+                        if (completions.value.find(c => c.completion_id === newCompletion.completion_id)) return
+
+                        // Echo einer eigenen optimistischen Completion: die Prüfung
+                        // auf completion_id greift hier nicht (die ID kommt erst vom
+                        // Server), deshalb über task_id + user_id die optimistische
+                        // Zeile ERSETZEN statt zu duplizieren.
+                        const optimisticIndex = completions.value.findIndex(
+                            c => isOptimistic(c) &&
+                                c.task_id === newCompletion.task_id &&
+                                c.user_id === newCompletion.user_id
+                        )
+                        if (optimisticIndex !== -1) {
+                            completions.value[optimisticIndex] = newCompletion
+                            return
                         }
+
+                        completions.value.push(newCompletion)
                     }
 
                     // DELETE - Completion wurde gelöscht (sollte nicht vorkommen, aber für Vollständigkeit)

@@ -22,6 +22,30 @@ export const useHouseholdStore = defineStore('household', () => {
     const householdMembers = ref<HouseholdMember[]>([])
     const weeklyCompletions = ref<CompletionWithEffort[]>([])
 
+    // Optimistische Completions (noch nicht vom Server bestätigt). Bewusst
+    // getrennt von `weeklyCompletions`, weil `loadWeeklyCompletions()` die Liste
+    // komplett ersetzt und dabei eine parallel noch laufende Erledigung sonst
+    // kurz aus dem Wochen-Ranking fallen würde. Der Punktwert darin ist eine
+    // Schätzung — die Edge Function rechnet serverseitig, die echte Zeile
+    // korrigiert still.
+    const optimisticWeeklyCompletions = ref<(CompletionWithEffort & { clientMutationId: string })[]>([])
+
+    const addOptimisticCompletion = (entry: CompletionWithEffort & { clientMutationId: string }) => {
+        optimisticWeeklyCompletions.value.push(entry)
+    }
+
+    const removeOptimisticCompletion = (clientMutationId: string) => {
+        optimisticWeeklyCompletions.value = optimisticWeeklyCompletions.value.filter(
+            c => c.clientMutationId !== clientMutationId
+        )
+    }
+
+    /** Bestätigte + optimistische Completions — Basis aller Wochen-Kennzahlen. */
+    const effectiveWeeklyCompletions = computed<CompletionWithEffort[]>(() => [
+        ...weeklyCompletions.value,
+        ...optimisticWeeklyCompletions.value
+    ])
+
     // Actions
     const loadUserHousehold = async () => {
         const authStore = useAuthStore()
@@ -192,7 +216,7 @@ export const useHouseholdStore = defineStore('household', () => {
     const weeklyPointsByUser = computed(() => {
         const pointsMap = new Map<string, number>()
 
-        weeklyCompletions.value.forEach((completion: CompletionWithEffort) => {
+        effectiveWeeklyCompletions.value.forEach((completion: CompletionWithEffort) => {
             // Priorisiere effort_override, dann task.effort, Fallback 1
             const taskEffort = completion.tasks?.effort ?? 1
             const effort = completion.effort_override ?? taskEffort
@@ -208,7 +232,7 @@ export const useHouseholdStore = defineStore('household', () => {
     const todayCompletionsCount = computed(() => {
         const now = new Date()
         const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate())
-        return weeklyCompletions.value.filter(
+        return effectiveWeeklyCompletions.value.filter(
             c => new Date(c.completed_at) >= startOfToday
         ).length
     })
@@ -405,6 +429,12 @@ export const useHouseholdStore = defineStore('household', () => {
         joinHousehold,
         leaveHousehold,
         loadWeeklyCompletions,
+        // Bewusst NICHT die rohe `weeklyCompletions` exportieren: wer sie statt
+        // `effectiveWeeklyCompletions` benutzt, übersieht optimistische
+        // Erledigungen. Nach außen gibt es nur die zusammengeführte Sicht.
+        effectiveWeeklyCompletions,
+        addOptimisticCompletion,
+        removeOptimisticCompletion,
         currentUserWeeklyPoints,
         todayCompletionsCount,
         weeklyRanking

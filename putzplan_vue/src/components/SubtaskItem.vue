@@ -98,13 +98,13 @@ const handleProjectWork = async (effort: number, note: string) => {
   const success = await taskStore.completeTask(props.task.task_id, effort, note)
 
   if (success) {
-    // Immediately reset the subtask so it's always available
-    await taskStore.markAsDirty(props.task.task_id)
     confetti({
       particleCount: 50,
       spread: 50,
       origin: { y: 0.7 }
     })
+    // Immediately reset the subtask so it's always available — nach dem Konfetti.
+    await taskStore.markAsDirty(props.task.task_id)
   }
 
   showProjectWorkModal.value = false

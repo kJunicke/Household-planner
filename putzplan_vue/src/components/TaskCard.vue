@@ -385,14 +385,15 @@ const handleProjectWork = async (effort: number, note: string) => {
      isLoggingWork.value = false
 
      if (success) {
-          // Immediately reset the subtask so it's always available
-          await taskStore.markAsDirty(projectWorkSubtaskId.value)
           showProjectWorkModal.value = false
           confetti({
                particleCount: 100,
                spread: 70,
                origin: { y: 0.6 }
           })
+          // Immediately reset the subtask so it's always available — nach dem
+          // Konfetti, damit das Feedback nicht auf den Server wartet.
+          await taskStore.markAsDirty(projectWorkSubtaskId.value)
      }
      // If failed, modal stays open so user can retry
 }
