@@ -15,8 +15,13 @@
  * - nur EIN sichtbarer Knopf: Bearbeiten. Die bis zu sieben Icon-Buttons der
  *   alten Karte entfallen; die Folgedialoge des Bearbeiten-Modals bleiben aber
  *   vollständig erreichbar.
- * - der Long-Press mit den vier beschrifteten Richtungen (Ticket 10) und der
- *   Fetzen zum Zurückkleben (Ticket 11).
+ * - der Fetzen zum Zurückkleben (Ticket 11).
+ *
+ * **Der Long-Press** auf der Zettelfläche (Ticket 10) blendet alle vier
+ * Richtungen beschriftet ein: oben verschieben, unten erledigen, links
+ * zuweisen, rechts erledigen mit angepasstem Aufwand — bei jedem Aufgabentyp
+ * identisch. Die Geste steckt in `useDirectionPress`, die Beschriftung in
+ * `WallDirectionMenu`.
  *
  * **Das Eselsohr** unten rechts ist der Abreiß-Griff (Ticket 09): von dort aus
  * nach unten ziehen erledigt die Aufgabe, sofort und ohne vorheriges langes
@@ -38,7 +43,10 @@ import { useHouseholdStore } from '@/stores/householdStore'
 import { scheduleOf } from '@/lib/taskSchedule'
 import { kindOfTaskType, rotationOf, subtaskColumns } from '@/lib/wallLayout'
 import { useTearGesture } from '@/composables/useTearGesture'
+import { useDirectionPress, type PressDirection } from '@/composables/useDirectionPress'
 import { flyPoints } from '@/lib/pointsFlight'
+import WallDirectionMenu from './WallDirectionMenu.vue'
+import TaskCompletionModal from './TaskCompletionModal.vue'
 import TaskEditModal from './TaskEditModal.vue'
 import TaskAssignmentModal from './TaskAssignmentModal.vue'
 import SubtaskManagementModal from './SubtaskManagementModal.vue'
@@ -46,16 +54,21 @@ import TaskPostponeModal from './TaskPostponeModal.vue'
 
 const props = defineProps<{ task: Task; expanded?: boolean }>()
 /**
- * `tear-start` / `tear-end`: solange am Zettel gezogen wird, darf ihn ein
- * Neupacken der Wand nicht gleichzeitig durch die Gegend fliegen lassen — sonst
- * kämpfen die FLIP-Animation und der Finger um dasselbe `transform`. Die Wand
- * merkt sich die ID und lässt genau diesen Zettel aus, wie sie es beim
- * angetippten Zettel schon tut.
+ * `gesture-start` / `gesture-end`: solange der Finger auf diesem Zettel eine
+ * Geste ausführt — Ziehen am Eselsohr (Ticket 09) **oder** langes Drücken mit
+ * Richtungen (Ticket 10) —, darf ihn ein Neupacken der Wand nicht gleichzeitig
+ * durch die Gegend fliegen lassen: sonst kämpfen die FLIP-Animation und der
+ * Finger um dasselbe `transform`, und der Richtungskranz verlöre seinen
+ * Bezugspunkt. Die Wand merkt sich die ID und lässt genau diesen Zettel aus,
+ * wie sie es beim angetippten Zettel schon tut.
+ *
+ * Bewusst nicht „tear": beide Gesten melden hier, und ein Name, der nur die
+ * eine nennt, wäre für die andere schlicht falsch.
  */
 const emit = defineEmits<{
   (e: 'toggle', taskId: string): void
-  (e: 'tear-start', taskId: string): void
-  (e: 'tear-end', taskId: string): void
+  (e: 'gesture-start', taskId: string): void
+  (e: 'gesture-end', taskId: string): void
 }>()
 
 const taskStore = useTaskStore()
@@ -111,6 +124,10 @@ const columns = computed(() => subtaskColumns(subtasks.value.map(s => s.title)))
  * passiert; das Aufklappen selbst gehört der Wand, weil sie neu packen muss.
  */
 const onSurfaceTap = () => {
+  // Den nachlaufenden Klick eines Long-Press sieht diese Stelle nie: ihn fängt
+  // `useDirectionPress` in der Einfangphase am Fenster ab, bevor er irgendein
+  // Ziel erreicht. Hier steht deshalb bewusst KEINE zweite Schluckstelle —
+  // zwei Stellen, die dasselbe abräumen, wären eine zu viel.
   if (!hasSubtasks.value) return
   emit('toggle', props.task.task_id)
 }
@@ -256,8 +273,8 @@ const isNoteTearing = computed(() => tearActiveId.value === NOTE_HANDLE)
 const isTearReady = computed(() => isNoteTearing.value && tearPull.value >= tearDistance)
 
 watch(isNoteTearing, active => {
-  if (active) emit('tear-start', props.task.task_id)
-  else emit('tear-end', props.task.task_id)
+  if (active) emit('gesture-start', props.task.task_id)
+  else emit('gesture-end', props.task.task_id)
 })
 
 /**
@@ -311,6 +328,82 @@ const markTorn = (subtaskId: string) => {
     recentlyTorn.value = next
   }, 700)
 }
+
+// --- Long-Press mit vier Richtungen (Etappe 4 / Ticket 10) -------------------
+
+/**
+ * Was diese Geste NICHT starten darf.
+ *
+ * Das Eselsohr und die Griffe der Zettelchen haben ihre eigene Geste
+ * (`useTearGesture`), der Bearbeiten-Knopf seinen Klick. Weil `pointerdown` bis
+ * zum Wurzelelement hochblubbert, würde der Long-Press dort sonst **zusätzlich**
+ * mitlaufen: ein Zug am Eselsohr hätte nach 420 ms auch die Richtungen
+ * eingeblendet, und dieselbe Fingerbewegung nach unten hätte zweimal erledigt.
+ *
+ * Das ganze Zettelchen (`.mini`) ist ausgenommen, nicht nur sein Griff: es liegt
+ * im aufgeklappten Zettel als eigene Fläche darin, und ein Long-Press auf einer
+ * Unteraufgabe, der Richtungen für den ELTERN-Zettel einblendet, wäre eine
+ * Aussage über das falsche Ding.
+ */
+const isPressControl = (target: EventTarget | null): boolean =>
+  target instanceof Element && target.closest('.ear, .mini, .edit') !== null
+
+/**
+ * Die Belegung ist in `WallDirectionMenu` beschriftet und hier ausgeführt —
+ * beide Listen müssen dieselbe Aussage machen.
+ *
+ * **Kontextunabhängig, ausdrücklich ohne Fallunterscheidung nach Aufgabentyp**
+ * (Spec): dieselbe Bewegung tut auf jedem Zettel dasselbe. Deshalb steht hier
+ * kein `if (task_type === …)` und darf auch keins dazukommen.
+ *
+ * Drei der vier Richtungen öffnen genau die Dialoge, die schon am
+ * Bearbeiten-Knopf hängen; nur „unten" handelt sofort, weil es der Schnellweg
+ * ist, den die Beschriftung lehren soll.
+ */
+const onPressDirection = (direction: PressDirection) => {
+  if (direction === 'down') {
+    const el = root.value
+    if (el) void tearNote(el)
+    return
+  }
+  if (direction === 'up') showPostponeModal.value = true
+  else if (direction === 'left') showAssignmentModal.value = true
+  else showCompletionModal.value = true
+}
+
+const press = useDirectionPress({
+  onDirection: onPressDirection,
+  isControl: isPressControl,
+  anchorEl: () => root.value
+})
+
+// Einzeln herausgezogen — verschachtelte Refs werden im Template nicht
+// ausgepackt (dieselbe Falle wie bei der Abreiß-Geste oben).
+const {
+  open: pressOpen,
+  direction: pressDirection,
+  anchor: pressAnchor,
+  onPointerDown: onPressDown,
+  onPointerMove: onPressMove,
+  onPointerUp: onPressUp,
+  onPointerCancel: onPressCancel,
+  onTouchMove: onPressTouchMove
+} = press
+
+/**
+ * Dieselbe Ausnahme wie beim Abreißen: solange die Richtungen offen sind, darf
+ * ein Neupacken der Wand (ein anderes Mitglied ändert etwas) diesen Zettel nicht
+ * durch die Gegend fliegen lassen. Der Kranz liegt in Fensterkoordinaten fest —
+ * ein wegfliegender Zettel ließe Beschriftung und Bezugspunkt auseinanderlaufen.
+ *
+ * Beide Gesten teilen sich dafür `gestureNoteId` in `WallView`. Das geht, weil sie
+ * sich gegenseitig ausschließen: der Long-Press startet nicht auf dem Eselsohr
+ * (→ `isPressControl`), und ein zweiter Finger kommt in keiner der beiden durch.
+ */
+watch(pressOpen, open => {
+  if (open) emit('gesture-start', props.task.task_id)
+  else emit('gesture-end', props.task.task_id)
+})
 
 /** Deterministisch aus der `task_id` — nach jedem Neuladen dieselbe Neigung. */
 const rotation = computed(() => rotationOf(props.task.task_id))
@@ -389,6 +482,39 @@ const showEditModal = ref(false)
 const showAssignmentModal = ref(false)
 const showSubtaskManagementModal = ref(false)
 const showPostponeModal = ref(false)
+/** „Erledigen mit angepasstem Aufwand" — nur über den Zug nach rechts. */
+const showCompletionModal = ref(false)
+
+/**
+ * Erledigen mit angepasstem Aufwand.
+ *
+ * **Kein eigenes `:disabled` und kein eigener Riegel**: der Doppeltipp-Schutz
+ * sitzt synchron in `taskStore.completeTask` (`completionsInFlight`, vor dem
+ * ersten `await`). Über den Rückgabewert entscheidet sich auch hier, ob eine
+ * Zahl fliegt — ein abgewiesener zweiter Griff darf keine zweite auslösen.
+ *
+ * **Was fliegt, ist der gewählte Aufwand, nicht `effectivePoints`.** Ein
+ * ausdrücklich gesetzter `effortOverride` ersetzt die Rechnung vollständig,
+ * inklusive des Abzugs erledigter `deduct`-Unteraufgaben — genau so rechnet
+ * `estimateCompletionEffort` im Store (erste Zeile: `if (effortOverride !==
+ * undefined) return effortOverride`), und die Statusleiste wächst um genau
+ * diesen Betrag.
+ *
+ * Der Startpunkt ist die Mitte des Zettels und nicht die des Eselsohrs: der
+ * Zug ging hier nicht von der Ecke aus.
+ *
+ * Bei einem Aufwand von 0 kann diese Stelle nicht landen — das Modal lässt nur
+ * 1 bis 5 zu. Die ruhige „erledigt"-Variante des Abreißens braucht es hier
+ * deshalb nicht.
+ */
+const handleCustomCompletion = async (effortOverride: number, note: string) => {
+  const el = root.value
+  const origin = el ? centerOf(el) : null
+  const applied = await taskStore.completeTask(props.task.task_id, effortOverride, note)
+  if (!applied) return
+  showCompletionModal.value = false
+  if (origin) flyPoints(`+${effortOverride} P`, origin)
+}
 
 /** Folge-Dialog-Muster wie in der alten Karte: Bearbeiten schließt, der nächste öffnet. */
 const openFollowUp = (which: 'assign' | 'subtasks' | 'postpone') => {
@@ -456,11 +582,17 @@ const handlePostponeConfirm = async (targetDate: string) => {
       {
         'zettel--tappable': hasSubtasks,
         'zettel--tearing': isNoteTearing,
-        'zettel--tear-ready': isTearReady
+        'zettel--tear-ready': isTearReady,
+        'zettel--pressed': pressOpen
       }
     ]"
     :style="noteStyle"
     @click="onSurfaceTap"
+    @pointerdown="onPressDown"
+    @pointermove="onPressMove"
+    @pointerup="onPressUp"
+    @pointercancel="onPressCancel"
+    @touchmove="onPressTouchMove"
   >
     <!-- Befestigung: Reißzwecke / Klebeband / Büroklammern.
          Sie ist das Typ-Signal, deshalb kein Text daneben. -->
@@ -530,6 +662,11 @@ const handlePostponeConfirm = async (targetDate: string) => {
       </div>
     </div>
 
+    <!-- Der nachlaufende Klick eines Long-Press kann sehr wohl hier landen: der
+         Knopf sitzt oben rechts, also genau dort, wo ein Zug nach oben oder
+         rechts hinführt. Dass er das Modal trotzdem nicht öffnet, regelt der
+         Klick-Wächter am Fenster (→ `useDirectionPress`) — er sieht den Klick
+         in der Einfangphase, vor diesem `@click.stop`. -->
     <button class="edit" title="Aufgabe bearbeiten" @click.stop="showEditModal = true">
       <i class="bi bi-pencil" aria-hidden="true"></i>
     </button>
@@ -561,6 +698,21 @@ const handlePostponeConfirm = async (targetDate: string) => {
       @pointercancel="onTearCancel"
       @click="swallowTearClick"
     ></button>
+
+    <!-- Die vier beschrifteten Richtungen. Teleportiert nach `body` und in
+         Fensterkoordinaten gelegt — die Begründung steht in der Komponente. -->
+    <WallDirectionMenu v-if="pressOpen" :anchor="pressAnchor" :active="pressDirection" />
+
+    <!-- Zug nach rechts: erledigen mit angepasstem Aufwand. Dasselbe Modal wie
+         in der alten Karte, damit beide Ansichten denselben Ablauf haben. -->
+    <TaskCompletionModal
+      v-if="showCompletionModal"
+      :taskTitle="props.task.title"
+      :defaultEffort="props.task.effort"
+      :isLoading="taskStore.isLoading"
+      @close="showCompletionModal = false"
+      @confirm="handleCustomCompletion"
+    />
 
     <TaskEditModal
       v-if="showEditModal"
@@ -636,6 +788,16 @@ const handlePostponeConfirm = async (targetDate: string) => {
   min-height: 44px;
   text-align: left;
   will-change: transform;
+  /* Ohne das ist der Long-Press (Ticket 10) auf einem Zettel nicht bedienbar:
+     ein langes Drücken auf Text startet auf dem Telefon die native
+     Textauswahl samt Lupe und Kontextleiste. Der Browser nimmt dabei die Geste
+     weg (`pointercancel`) — die Richtungen erschienen und verschwänden sofort
+     wieder. Dauerhaft und nicht nur während der Geste, weil die Auswahl schon
+     VOR dem Auslösen beginnt.
+     Es geht nichts verloren: ein Zettel ist ein Knopf, kein Fließtext. */
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
 }
 
 .title {
@@ -1117,6 +1279,20 @@ const handlePostponeConfirm = async (targetDate: string) => {
   z-index: 800 !important;
   box-shadow: var(--pw-shadow-lift);
   cursor: grabbing;
+}
+
+/* --- Long-Press: der Zettel unter den Beschriftungen (Ticket 10) ----------- */
+
+/* Er hebt sich ab wie beim Abreißen, und aus demselben Grund mit `!important`:
+   den z-index schreibt `WallView` als Inline-Style.
+   **Ohne jede Änderung an Größe, Lage oder Neigung** — der Zettel ist der
+   Bezugspunkt des Richtungskranzes, der in Fensterkoordinaten daneben liegt.
+   Ein Zettel, der beim Auslösen wächst oder springt, verschöbe seine Mitte
+   gegen die bereits festgelegte Mitte des Kranzes. Der Zustand ist deshalb
+   rein farblich. */
+.zettel--pressed {
+  z-index: 810 !important;
+  box-shadow: var(--pw-shadow-lift);
 }
 
 /* Weit genug gezogen: Loslassen erledigt. Die Perforation reißt sichtbar auf. */

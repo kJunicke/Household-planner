@@ -1,4 +1,9 @@
 import { onUnmounted, readonly, ref } from 'vue'
+import {
+  releaseScrollWatch,
+  retainScrollWatch,
+  scrollQuietState
+} from './useScrollQuiet'
 
 /**
  * Abreißen am Eselsohr (Pinnwand-Redesign, Etappe 4).
@@ -44,49 +49,13 @@ const TEAR_DISTANCE = 56
  */
 const AXIS_RATIO = 1.4
 
-/**
- * Nachlauf nach dem letzten Scroll-Ereignis.
- *
- * Momentum-Scrolling läuft nach dem Loslassen weiter; ohne diesen Nachlauf
- * greift man mitten in eine fliegende Wand und reißt einen Zettel ab, den man
- * nur vorbeifliegen sah.
- */
-const SCROLL_QUIET_MS = 300
-
-// --- Scroll-Wächter: EIN Zustand für alle Griffe der Seite -------------------
+// --- Scroll-Wächter -----------------------------------------------------------
 //
-// Ein einziger passiver Zuhörer am Fenster, nicht einer je Zettel. Bei rund
-// zwanzig Zetteln mit je einem Eselsohr plus deren Zettelchen wären es sonst
-// dutzende Zuhörer für dieselbe Information.
+// Liegt seit Ticket 10 in `useScrollQuiet`: der Long-Press braucht denselben
+// Zustand, und zwei Wächter wären zwei Wahrheiten. Verhalten unverändert,
+// einschließlich der 300 ms Nachlauf.
 
-const scrolling = ref(false)
-let quietTimer: number | null = null
-let users = 0
-
-const onWindowScroll = () => {
-  scrolling.value = true
-  if (quietTimer !== null) clearTimeout(quietTimer)
-  quietTimer = window.setTimeout(() => {
-    scrolling.value = false
-    quietTimer = null
-  }, SCROLL_QUIET_MS)
-}
-
-const retainScrollWatch = () => {
-  users += 1
-  if (users === 1) window.addEventListener('scroll', onWindowScroll, { passive: true })
-}
-
-const releaseScrollWatch = () => {
-  users = Math.max(0, users - 1)
-  if (users > 0) return
-  window.removeEventListener('scroll', onWindowScroll)
-  if (quietTimer !== null) {
-    clearTimeout(quietTimer)
-    quietTimer = null
-  }
-  scrolling.value = false
-}
+const scrolling = scrollQuietState
 
 export function useTearGesture(options: {
   /** Der Griff wurde weit genug nach unten gezogen. */
@@ -230,8 +199,8 @@ export function useTearGesture(options: {
   })
 
   return {
-    /** Nur lesend nach außen — geändert wird ausschließlich hier drin. */
-    scrolling: readonly(scrolling),
+    /** Nur lesend nach außen — geändert wird ausschließlich im Wächter. */
+    scrolling,
     activeId: readonly(activeId),
     pull: readonly(pull),
     tearDistance: TEAR_DISTANCE,

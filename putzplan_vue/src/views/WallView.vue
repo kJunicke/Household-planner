@@ -20,12 +20,14 @@
  * volle Wandbreite ein. Welche Zettel offen sind, weiß die Wand und nicht der
  * Zettel — sie muss es beim Packen wissen.
  *
- * Erledigt wird am **Eselsohr** des Zettels (Etappe 4, Ticket 09) — die Geste
- * steckt im Zettel, die Wand weiß davon nur, dass sie einen gezogenen Zettel
- * nicht gleichzeitig durch die Gegend animieren darf (→ `tearingId`).
+ * Erledigt wird am **Eselsohr** des Zettels (Etappe 4, Ticket 09), und langes
+ * Drücken blendet die vier Richtungen ein (Ticket 10). Beide Gesten stecken im
+ * Zettel; die Wand weiß davon nur, dass sie einen Zettel unter dem Finger nicht
+ * gleichzeitig durch die Gegend animieren darf. Er meldet dafür
+ * `gesture-start` / `gesture-end` — ein gemeinsamer Zustand für beide Gesten,
+ * unter der Bedingung, dass sie sich ausschließen (→ `gestureNoteId`).
  *
- * Noch nicht hier (spätere Tickets): der Long-Press mit den vier beschrifteten
- * Richtungen und der Fetzen zum Zurückkleben.
+ * Noch nicht hier (spätere Tickets): der Fetzen zum Zurückkleben.
  */
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import WallNote from '../components/WallNote.vue'
@@ -122,17 +124,29 @@ const wallHeight = ref(0)
 const expandedIds = ref(new Set<string>())
 
 /**
- * Der Zettel, an dem gerade gezogen wird (Abreißen, Ticket 09) — höchstens
- * einer, weil ein Finger nur an einem Griff hängen kann.
+ * Der Zettel, der gerade **unter einer Geste des Fingers steht** — und deshalb
+ * von der Animation ausgenommen ist.
  *
- * Er wird beim Neupacken **nicht animiert**, aus demselben Grund wie der
- * angetippte Zettel: die FLIP-Animation schreibt `transform`, und genau das
- * schreibt auch die Zieh-Geste. Ohne diese Ausnahme flöge der Zettel unter dem
+ * Das sind zwei Gesten: das Ziehen am Eselsohr (Abreißen, Ticket 09) und das
+ * lange Drücken mit den vier Richtungen (Ticket 10). Der Name sagt bewusst
+ * nicht „tearing": er hieß einmal so, und das war falsch, sobald die zweite
+ * Geste dazukam.
+ *
+ * **Ein Zustand für beide, und die Bedingung dafür:** die Gesten schließen sich
+ * gegenseitig aus. Der Long-Press startet nicht auf dem Eselsohr (→
+ * `isPressControl` im Zettel), und in keiner der beiden kommt ein zweiter
+ * Finger durch. Genau deshalb kann hier höchstens eine ID stehen. Fällt diese
+ * Bedingung — etwa wenn eine dritte Geste dazukommt, die überall startet —,
+ * fällt die Konstruktion und es braucht einen Zustand je Geste.
+ *
+ * Warum überhaupt: beim Neupacken schreibt die FLIP-Animation `transform`, und
+ * genau das schreibt auch die Zieh-Geste; der Richtungskranz wiederum liegt in
+ * Fensterkoordinaten fest. Ohne diese Ausnahme flöge der Zettel unter dem
  * Finger davon, wenn währenddessen ein anderes Mitglied etwas ändert. Seine
  * neue **Position** (`left`/`top`) bekommt er trotzdem — die Wand bleibt
  * korrekt gepackt, der Zettel springt nur dorthin, statt zu fliegen.
  */
-const tearingId = ref<string | null>(null)
+const gestureNoteId = ref<string | null>(null)
 const noteEls = new Map<string, HTMLElement>()
 /** Zuletzt gesetzte Positionen — Ausgangspunkt jeder FLIP-Animation. */
 const lastPositions = new Map<string, { x: number; y: number }>()
@@ -375,8 +389,8 @@ const relayout = (animate: boolean, anchorId?: string) => {
     // Zusammen mit dem Scroll-Anker weiter unten steht er damit wirklich still:
     // der Anker hält seine Bildschirmposition, das Auslassen hier verhindert,
     // dass er trotzdem eine Flugbahn zeigt.
-    // Ebenso der Zettel, an dem gerade gezogen wird (→ `tearingId`).
-    if (note.id === anchorId || note.id === tearingId.value) continue
+    // Ebenso der Zettel, der gerade unter einer Geste steht (→ `gestureNoteId`).
+    if (note.id === anchorId || note.id === gestureNoteId.value) continue
 
     const previous = before.get(note.id)
     if (previous) {
@@ -509,11 +523,11 @@ watch(layoutSignature, () => {
   if ([...expandedIds.value].some(id => !onWall.has(id))) {
     expandedIds.value = new Set([...expandedIds.value].filter(id => onWall.has(id)))
   }
-  // Dasselbe für den gezogenen Zettel: verschwindet er von der Wand (erledigt,
-  // gelöscht), kommt das `tear-end` seiner Komponente nicht mehr an — sie ist
+  // Dasselbe für den Zettel unter der Geste: verschwindet er von der Wand
+  // (erledigt, gelöscht), kommt das `gesture-end` seiner Komponente nicht an — sie ist
   // ausgehängt. Ohne diese Zeile bliebe seine ID hängen und genau dieser Zettel
   // würde nach einem „wieder dreckig" nie wieder mitfliegen.
-  if (tearingId.value !== null && !onWall.has(tearingId.value)) tearingId.value = null
+  if (gestureNoteId.value !== null && !onWall.has(gestureNoteId.value)) gestureNoteId.value = null
   scheduleRelayout(true)
 })
 
@@ -638,8 +652,8 @@ const handleCreateQuickTask = async (data: {
         :task="task"
         :expanded="expandedIds.has(task.task_id)"
         @toggle="toggleNote"
-        @tear-start="tearingId = $event"
-        @tear-end="tearingId = tearingId === $event ? null : tearingId"
+        @gesture-start="gestureNoteId = $event"
+        @gesture-end="gestureNoteId = gestureNoteId === $event ? null : gestureNoteId"
       />
     </div>
 
