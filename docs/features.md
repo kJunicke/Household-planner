@@ -135,6 +135,24 @@ Skyline-Packing (`lib/wallLayout.ts`).
     und die Geste abbrechen, bevor sie erkannt ist. Überall sonst auf dem Zettel scrollt es
     normal, und während des Scrollens plus einer kurzen Nachlaufzeit löst gar keine Geste
     aus.
+- **Long-Press mit vier Richtungen**: Halten auf einem Zettel blendet vier Richtungen um
+  ihn herum ein: oben verschieben, unten erledigen, links zuweisen, rechts Aufwand
+  anpassen. Ziehen in eine Richtung und Loslassen führt sie aus; zurück zur Mitte
+  widerruft. Genau in der Diagonalen wird nichts gewählt.
+  - Die **Belegung ist bei jedem Aufgabentyp dieselbe** — auch dort, wo eine Richtung
+    selten sinnvoll ist. Eine Bedienart, deren Belegung je nach Typ wechselt, muss bei
+    jedem Griff neu gelernt werden.
+  - Damit liegen **vier Bedienarten auf demselben Zettel**. Sie grenzen sich über drei
+    verschiedene Achsen ab: gegen das Antippen (aufklappen) über die Zeit, gegen das
+    Abreißen am Eselsohr über den Ort, gegen den Bildlauf über die Bewegung. Im Zweifel
+    gewinnt immer die andere — ein abgebrochener Long-Press klappt den Zettel weiterhin
+    auf.
+  - **Der Long-Press kostet keine Bildlauffläche.** Der Bildlauf wird erst abbestellt,
+    wenn die Geste ausgelöst hat; bis dahin gehört die Zettelfläche ganz dem Scrollen.
+    Anders als beim Eselsohr, wo ein gesperrter Fleck der Preis der Geste ist.
+  - Die **Beschriftungen werden vermessen, nicht geschätzt**: der Kranz wird am
+    Fensterrand so weit hereingeschoben, wie es die tatsächliche Textbreite verlangt, je
+    Seite getrennt. Eine Übersetzung oder ein längeres Wort verschiebt damit nichts.
   - **Aufgeklappt hat ein Zettel kein Eselsohr** — seine untere rechte Ecke ist zugleich
     die des letzten Zettelchens, und ein Zug dort hätte die ganze Aufgabe statt der
     Unteraufgabe erledigt.

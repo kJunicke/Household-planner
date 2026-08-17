@@ -228,6 +228,13 @@ ALTER TABLE shopping_items ADD COLUMN quantity int NOT NULL DEFAULT 1;
   erreichtes Ziel sieht trotzdem voll aus, weil der Streifen außerhalb der Spur liegt.
   Bleibt eine leichte Asymmetrie (20 px links, 30 px rechts bis zur Papierkante).
 
+- **Der untere Klemmfall des Richtungskranzes ist ungeprüft.** Er ist nicht widerlegt,
+  sondern in der Prüfumgebung nicht erreichbar: das Browserfenster ließ sich nicht so
+  weit verkleinern, dass ein Zettel nah genug an den unteren Rand rückt. Die drei
+  anderen Seiten sind gemessen und landen punktgenau auf ihrem Sollwert; die untere
+  Eingangsgröße ist ebenfalls gemessen, nur der Klemmfall selbst nicht. Auf einem
+  echten Telefon mit langer Wand in einem Griff nachzuholen.
+
 - **Der gezogene Zettel springt bei einem Relayout unter dem Finger weg** — gemessen bis
   114,7 px, ohne Animation, während alle anderen gleiten. Er ist bewusst von der Animation
   ausgenommen (sonst kämpften Animation und Finger um dieselbe Bewegung), bekommt seine
