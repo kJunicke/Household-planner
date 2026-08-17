@@ -119,6 +119,25 @@ Skyline-Packing (`lib/wallLayout.ts`).
   letzten Zettel ganz unten auf der Seite zu, springt der Inhalt um rund 85 px. Das
   Dokument schrumpft, während die Seite bereits am Anschlag steht — es bleibt kein
   Bildlaufweg für die Korrektur. Überall sonst hält die Position auf einen halben Pixel.
+- **Abreißen**: Eine Aufgabe wird erledigt, indem man ihren Zettel am **Eselsohr** in der
+  unteren rechten Ecke nach unten zieht. Ab einem Zugweg von 56 px reißt er ab. Ein
+  kürzerer Zug, ein waagerechter Zug und ein Zug nach oben setzen den Zettel zurück, ohne
+  etwas zu erledigen — und der nachlaufende Klick wird geschluckt, weil er an einem
+  Zettelchen sonst eine ungewollte Erledigung wäre.
+  - Der **Punktwert fliegt** danach in die Statusleiste und quittiert dort seine Ankunft.
+    Die Zahl in der Fußzeile ist dieselbe, die fliegt: der Aufwand abzüglich bereits
+    erledigter Abzugs-Unteraufgaben. Eine Zahl am Zettel ist ein Versprechen.
+  - **Ein Abriss quittiert immer**, auch wenn es null Punkte gibt (weil die
+    Unteraufgaben den Aufwand schon aufgezehrt haben). Dann fliegt „erledigt" statt einer
+    Zahl — dieselbe Bahn, nur leiser. Kein Zettel verschwindet stumm.
+  - **Preis der Geste:** auf dem Eselsohr scrollt die Seite nicht (rund 1500 px² je
+    Zettel). Andernfalls würde der Browser beim Zug nach unten selbst zu scrollen beginnen
+    und die Geste abbrechen, bevor sie erkannt ist. Überall sonst auf dem Zettel scrollt es
+    normal, und während des Scrollens plus einer kurzen Nachlaufzeit löst gar keine Geste
+    aus.
+  - **Aufgeklappt hat ein Zettel kein Eselsohr** — seine untere rechte Ecke ist zugleich
+    die des letzten Zettelchens, und ein Zug dort hätte die ganze Aufgabe statt der
+    Unteraufgabe erledigt.
 - **Erledigt-Streifen** unter der Wand — erledigte Aufgaben verschwinden nicht, sie sinken
   nach unten. Je Aufgabe eine ruhige Zeile von 36 px: Personenfarbe als Punkt,
   durchgestrichener Titel, Zeitstempel, und ein Knopf, der sie wieder auf „dran" setzt. Die

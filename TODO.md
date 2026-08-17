@@ -228,6 +228,17 @@ ALTER TABLE shopping_items ADD COLUMN quantity int NOT NULL DEFAULT 1;
   erreichtes Ziel sieht trotzdem voll aus, weil der Streifen außerhalb der Spur liegt.
   Bleibt eine leichte Asymmetrie (20 px links, 30 px rechts bis zur Papierkante).
 
+- **Der gezogene Zettel springt bei einem Relayout unter dem Finger weg** — gemessen bis
+  114,7 px, ohne Animation, während alle anderen gleiten. Er ist bewusst von der Animation
+  ausgenommen (sonst kämpften Animation und Finger um dieselbe Bewegung), bekommt seine
+  neue Position aber sofort gesetzt. Braucht eine fremde Änderung per Realtime mitten in
+  der Geste, ist also selten.
+
+- **Die Akzent-Perforation am Eselsohr liegt mit 0 px Reserve auf der Ausschnittkante.**
+  Sie schneidet heute nicht an, aber sie ist die letzte Stelle, an der eine wachsende Zahl
+  dieselbe Kerbe erzeugen könnte, die der Knick dort schon zweimal erzeugt hat. Die Lehre
+  daraus wäre, diese Kante genauso festzunageln wie die Knickhöhe.
+
 - **Ältere Erledigungen kennen ihren Erlediger nicht.** Der Store lädt nur die
   Completions der laufenden Woche; alles davor bekommt im Erledigt-Streifen einen
   farblosen Punkt. Am Wochenanfang ist damit fast die ganze Liste grau. Eine eigene
