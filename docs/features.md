@@ -59,7 +59,24 @@ Skyline-Packing (`lib/wallLayout.ts`).
   `max-content` gestellt und vermessen. Ungedreht, weil ein geneigter Zettel sich zu breit
   misst; mit Aufschlag nach oben, weil ein fehlendes halbes Pixel den Titel umbrechen
   lässt. Einzelne Wörter brechen nie um — lange **mehrwortige** Titel brechen an
-  Wortgrenzen um (Deckel 68 % der Wandbreite).
+  Wortgrenzen um (Deckel 68 % der Wandbreite). Diese Breite „Breite folgt dem Titel"
+  bleibt die Voreinstellung. Ein zweiter Packlauf greift danach dort ein, wo die Wand
+  sonst schlechter aussähe: er füllt die Reststreifen einer Reihe und darf zwei Zettel
+  auf je knapp die halbe Wandbreite ziehen, damit sie **nebeneinander** stehen statt
+  untereinander — zwei Zettel nebeneinander ist das Bild, das die Wand tragen soll, eine
+  Kette einzeiliger Zettel der Zustand, den es zu vermeiden gilt. Verschmälert wird nur,
+  wenn beide Zettel danach tatsächlich nebeneinander unterkommen — es gibt keinen
+  grundlos schmalen Einzelzettel. Untergrenze ist die gemessene `min-content`-Breite je
+  Zettel, deshalb kann strukturell kein einzelnes Wort umbrechen und kein Titel neu
+  abgeschnitten werden; ein Titel ohne Umbruchstelle wird vom zweiten Lauf gar nicht erst
+  angefasst. Ein Zettel darf durch die Verschmälerung höchstens eine Titelzeile zulegen
+  (gemessen gegen die bereits gedeckelte Voreinstellung), sonst fällt er auf seine
+  Voreinstellung zurück — und weil die Breite eines Paares eine gemeinsame Entscheidung
+  ist, fällt die andere Hälfte dann mit, statt mit einer Breite stehenzubleiben, die nur
+  galt, solange der Partner schmal blieb. Gemessen bei 23 Aufgaben und 375 px: leere
+  Fläche 33,96 % → 27,01 %, Wandhöhe 1042 → 942 px, Reihen mit nur einem Zettel 13 → 9 —
+  der Löwenanteil davon kommt aus dem Füllen der Reststreifen, nicht aus dem
+  Paar-Erzwingen, das nur 2 von 23 Zetteln verschmälert.
 - **Person** = farbige Umrandung aus `household_members.user_color`, kein Name, keine
   Initialen, kein Badge. Ohne Zuständigen tritt der Rand bewusst zurück, damit eine
   Personenfarbe immer kräftiger wirkt als die Nicht-Farbe.

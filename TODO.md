@@ -207,6 +207,17 @@ ALTER TABLE shopping_items ADD COLUMN quantity int NOT NULL DEFAULT 1;
   Deckel hält die Segmentfarben mit exakt 70 % lesbar, und oberhalb trägt die exakte
   `+N`-Zahl das Ausmaß. Der QC hält 0,30 eher für zu kräftig als für zu schwach.
 
+- **Die Schriftart Inter ist nirgends geladen** — kein `@font-face`, kein Font-Link,
+  systemweit nicht installiert. Die Wand vermisst ihre Zettel also mit der
+  System-Schrift. Das ist Bestand und war nicht Teil von Ticket 12, verschiebt aber
+  jede Breitenzahl gegenüber dem, was das Design annimmt.
+
+- **Das Vermessen der Zettel kostet den Großteil der Layoutzeit.** Gemessen:
+  7,2–18,4 ms für den vollen Wandaufbau bei 23 Zetteln, davon rund 75 % im Messschritt
+  (zwei erzwungene Layouts je Zettel). Vertretbar für einen Lauf beim Mounten oder bei
+  Datenänderung, aber es liegt in der Größenordnung eines Bildaufbaus und wächst
+  linear mit der Zettelzahl. Bei deutlich mehr Aufgaben wird es spürbar.
+
 - **Auf hellen Personenfarben trägt das Aufleuchten schwächer**, als der Mittelwert
   nahelegt: bei knappem Überschuss 7,4 Stufen im Mittel, im Rotkanal aber nur 2,1 —
   es wirkt dort als Sättigungsverschiebung statt als Helligkeitssprung. Löst sich
