@@ -19,6 +19,39 @@ type OptimisticCompletion = TaskCompletion & { clientMutationId: string }
 const isOptimistic = (c: TaskCompletion | EnrichedCompletion): c is OptimisticCompletion =>
     'clientMutationId' in c
 
+/** Die Task-Felder, die eine Erledigung anfasst — und die ein Rückgängig zurückschreibt. */
+type RowSnapshot = Pick<Task, 'task_id' | 'completed' | 'last_completed_at' | 'postponed_until' | 'assigned_to'>
+
+/**
+ * Was nötig ist, um eine Erledigung zurückzunehmen (→ `undoCompletion`).
+ *
+ * Wird bei JEDER optimistisch angewandten Erledigung angelegt, weil der Store
+ * nicht weiß, welche davon dem Nutzer einen Fetzen anbietet. Angeboten wird das
+ * Zurückkleben nur beim Abreißen eines ganzen Zettels (→ `useTornScrap`); die
+ * übrigen Fahrscheine werden nie eingelöst und fallen aus dem Deckel unten
+ * heraus.
+ */
+interface UndoTicket {
+    userId: string
+    /** Task-Zeile plus alle Unteraufgaben, die die Edge Function zurückgesetzt hat. */
+    snapshot: RowSnapshot[]
+    /** `true`, sobald der Server bestätigt hat; `false`, wenn bereits zurückgenommen wurde. */
+    settled: Promise<boolean>
+    clientMutationId: string
+}
+
+/**
+ * Wie viele Fahrscheine höchstens aufgehoben werden.
+ *
+ * Ein Deckel und **keine Verfallszeit**: der Fetzen hängt, bis die Pinnwand
+ * verlassen wird — beliebig lange. Jede Frist, die hier stünde, wäre irgendwann
+ * kürzer als er und nähme ihm still sein Rückgängig. Der Deckel greift
+ * stattdessen erst, wenn nach dem Abreißen noch `UNDO_TICKET_LIMIT` weitere
+ * Erledigungen passiert sind — und schon die erste davon ersetzt den Fetzen,
+ * dessen Fahrschein damit ohnehin verworfen wird.
+ */
+const UNDO_TICKET_LIMIT = 8
+
 export const useTaskStore = defineStore('tasks', () => {
     // State - wie ref() in Komponenten
     const tasks = ref<Task[]>([])
@@ -33,6 +66,10 @@ export const useTaskStore = defineStore('tasks', () => {
     // Aufgaben, deren Abschluss gerade beim Server liegt — Doppel-Tap-Schutz,
     // siehe completeTask.
     const completionsInFlight = new Set<string>()
+
+    // Offene Rückgängig-Fahrscheine, je Aufgabe der jüngste. Reihenfolge = Einfügereihenfolge
+    // (Map-Garantie), damit der Deckel den ältesten verdrängen kann.
+    const undoTickets = new Map<string, UndoTicket>()
 
     // Guard gegen parallele Ladevorgänge. Ein zweiter Aufruf während eines
     // laufenden Loads wird NICHT mehr verschluckt (das hinterließ veraltete
@@ -158,12 +195,12 @@ export const useTaskStore = defineStore('tasks', () => {
         // Vor dem Apply merken: der Apply räumt postponed_until lokal weg.
         const postponedBefore = Boolean(tasks.value.find(t => t.task_id === taskId)?.postponed_until)
 
-        // Snapshot der Zeilen, die der Apply anfasst (Task + ggf. Subtasks)
-        type RowSnapshot = Pick<Task, 'task_id' | 'completed' | 'last_completed_at' | 'postponed_until' | 'assigned_to'>
-
         // Für Fehler-Toast und Reload-Bypass, im Apply gefüllt
         let taskTitle = 'Aufgabe'
         const touchedIds: string[] = []
+        // Für den Rückgängig-Fahrschein, im Apply gefüllt (der Schnappschuss geht
+        // sonst in `runOptimistic` hinein und kommt hier nicht wieder heraus).
+        let undoSnapshot: RowSnapshot[] = []
 
         const { applied, settled } = runOptimistic<RowSnapshot[]>({
             entityId: taskId,
@@ -228,6 +265,7 @@ export const useTaskStore = defineStore('tasks', () => {
                     tasks: { effort: task.effort }
                 })
 
+                undoSnapshot = snapshot
                 return snapshot
             },
 
@@ -306,6 +344,23 @@ export const useTaskStore = defineStore('tasks', () => {
         if (applied) {
             completionsInFlight.add(taskId)
             void settled.finally(() => completionsInFlight.delete(taskId))
+
+            // Rückgängig-Fahrschein hinterlegen. Ein vorhandener für dieselbe
+            // Aufgabe wird ersetzt — angeboten wird immer nur die jüngste
+            // Erledigung, und genau darauf beruht die Suche nach der zu
+            // löschenden Zeile in `undoCompletion`.
+            undoTickets.delete(taskId)
+            undoTickets.set(taskId, {
+                userId,
+                snapshot: undoSnapshot,
+                settled,
+                clientMutationId
+            })
+            while (undoTickets.size > UNDO_TICKET_LIMIT) {
+                const oldest = undoTickets.keys().next().value
+                if (oldest === undefined) break
+                undoTickets.delete(oldest)
+            }
         }
 
         // Bewusst NICHT awaiten: Konfetti hängt an der Aktion, nicht am Server.
@@ -428,6 +483,148 @@ export const useTaskStore = defineStore('tasks', () => {
         // parallele Anforderungen nicht mehr, sondern lädt danach genau einmal nach.
         await loadTasks()
         return true
+    }
+
+    /**
+     * Fahrschein wegwerfen, ohne ihn einzulösen — das Fenster ist zu.
+     * Danach ist die Erledigung endgültig; ein späteres Zurücknehmen geht nur
+     * noch über „wieder dreckig" (und lässt die Punkte stehen).
+     */
+    const discardUndoTicket = (taskId: string) => {
+        undoTickets.delete(taskId)
+    }
+
+    /** Gibt es für diese Aufgabe noch ein offenes Rückgängig-Fenster? */
+    const canUndoCompletion = (taskId: string) => undoTickets.has(taskId)
+
+    /**
+     * ZURÜCKKLEBEN — die jüngste eigene Erledigung dieser Aufgabe zurücknehmen
+     * (Pinnwand-Redesign, Etappe 4, Ticket 11).
+     *
+     * **Was „rückgängig" auf Datenebene heißt.** `task_completions` ist
+     * append-only und die einzige Quelle der Punkte. Beides gilt weiter — aber
+     * append-only schützt **Tatsachen**, und innerhalb des Fetzen-Fensters sagt
+     * der Nutzer genau das Gegenteil: die Zeile beschreibt keine Erledigung,
+     * sondern einen Fehlgriff. Eine solche Zeile wird **gelöscht**, nicht
+     * ausgeglichen:
+     *
+     * - Eine Gegenbuchung („−3 P") wäre eine erfundene zweite Tatsache. Sie
+     *   stünde im Verlauf, in `/stats` und in jeder späteren Auswertung als
+     *   Ereignis da, das nie stattgefunden hat, und `effort_override` ist als
+     *   Punktwert einer Leistung definiert, nicht als Vorzeichen.
+     * - Die Zeile stehen zu lassen und nur `tasks.completed` zurückzusetzen ist
+     *   „wieder dreckig" — laut Glossar eine Aussage über die Wohnung, kein
+     *   Korrigieren. Die Punkte blieben verbucht, und das Ticket verlangt
+     *   ausdrücklich, dass sie aus dem Balken verschwinden.
+     *
+     * Zurückgeschrieben wird der Schnappschuss aus der Erledigung — nicht nur
+     * `completed`. `last_completed_at` ist der Anker der Kadenz: bliebe der neue
+     * Wert stehen, wäre die Aufgabe zwar wieder dran, aber ihre nächste
+     * Fälligkeit um ein volles Intervall verschoben. Ebenso zurück: das von der
+     * Edge Function gelöschte `assigned_to`, das beim Erledigen geräumte
+     * `postponed_until` und der `completed`-Zustand aller Unteraufgaben, die die
+     * Edge Function zurückgesetzt hat.
+     *
+     * **Warum das Warten auf `settled` sein muss:** vor der Bestätigung gibt es
+     * keine Zeile zum Löschen. Wer hier nicht wartet, löscht nichts und die
+     * Punkte bleiben — genau der stille Fehler, den das Ticket verbietet.
+     *
+     * **Doppeltipp:** der Riegel ist das synchrone `undoTickets.delete` ganz
+     * oben, vor dem ersten `await` — dieselbe Regel wie bei `completeTask`. Ein
+     * `:disabled` am Fetzen schützt nicht, weil Vue das Attribut erst im nächsten
+     * Tick schreibt.
+     */
+    const undoCompletion = async (taskId: string): Promise<boolean> => {
+        const toastStore = useToastStore()
+        const householdStore = useHouseholdStore()
+
+        const ticket = undoTickets.get(taskId)
+        if (!ticket) return false
+        // Synchron, vor dem ersten `await`. Zwischen dieser Zeile und dem
+        // `get` darüber darf nichts stehen, das den Ablauf unterbricht.
+        undoTickets.delete(taskId)
+
+        // Der Commit läuft womöglich noch. Ist er gescheitert, hat `revert`
+        // bereits alles zurückgenommen — dann gibt es nichts mehr zu tun.
+        const confirmed = await ticket.settled
+        if (!confirmed) return true
+
+        // Die zu löschende Zeile: die **jüngste eigene** Erledigung dieser
+        // Aufgabe. Das ist genau unsere, weil `completeTask` einen vorhandenen
+        // Fahrschein derselben Aufgabe ersetzt — ein zweites Abreißen macht das
+        // erste unwiderruflich, statt es zu verwechseln. Eine Zeitgrenze steht
+        // hier bewusst nicht: Client- und Serveruhr laufen auseinander, und eine
+        // um Sekunden danebenliegende Schranke ließe die Punkte still stehen.
+        // Erledigungen anderer Mitglieder bleiben durch `user_id` außen vor.
+        const { data: row, error: findError } = await supabase
+            .from('task_completions')
+            .select('completion_id')
+            .eq('task_id', taskId)
+            .eq('user_id', ticket.userId)
+            .order('completed_at', { ascending: false })
+            .limit(1)
+            .maybeSingle()
+
+        if (findError) {
+            console.error('Error finding completion to undo:', findError)
+            toastStore.showToast('Zurückkleben fehlgeschlagen', 'error')
+            return false
+        }
+
+        if (row) {
+            const { error: deleteError } = await supabase
+                .from('task_completions')
+                .delete()
+                .eq('completion_id', row.completion_id)
+
+            if (deleteError) {
+                console.error('Error deleting completion on undo:', deleteError)
+                toastStore.showToast('Zurückkleben fehlgeschlagen', 'error')
+                return false
+            }
+
+            // Aus der lokalen Historie ebenfalls raus — sonst steht der Eintrag
+            // im Verlauf, bis er das nächste Mal geladen wird.
+            completions.value = completions.value.filter(
+                c =>
+                    c.completion_id !== row.completion_id &&
+                    !(isOptimistic(c) && c.clientMutationId === ticket.clientMutationId)
+            )
+        }
+        householdStore.removeOptimisticCompletion(ticket.clientMutationId)
+
+        // Task-Zeilen zurück auf den Stand vor dem Abreißen. In derselben Kette
+        // wie jede andere Mutation dieser Zeile (→ `serializeMutation`), damit
+        // ein noch nachlaufender Schreibvorgang die Rücknahme nicht überholt.
+        const restoreError = await serializeMutation(taskId, async () => {
+            for (const snapshot of ticket.snapshot) {
+                const { error } = await supabase
+                    .from('tasks')
+                    .update({
+                        completed: snapshot.completed,
+                        last_completed_at: snapshot.last_completed_at,
+                        postponed_until: snapshot.postponed_until,
+                        assigned_to: snapshot.assigned_to
+                    })
+                    .eq('task_id', snapshot.task_id)
+                if (error) return error
+            }
+            return null
+        })
+
+        if (restoreError) {
+            console.error('Error restoring task rows on undo:', restoreError)
+            toastStore.showToast('Zurückkleben fehlgeschlagen', 'error')
+        }
+
+        // Beides neu laden: die Wand bekommt ihren Zettel zurück, die
+        // Statusleiste ihre Punkte weg. `force`, weil unmittelbar nach eigenem
+        // Schreiben — eine gebündelte Abfrage könnte vor dem Löschen abgeschickt
+        // worden sein und den alten Stand zurückbringen.
+        await loadTasks(ticket.snapshot.map(s => s.task_id))
+        await householdStore.loadWeeklyCompletions({ force: true })
+
+        return !restoreError
     }
 
     // POSTPONE - Aufgabe bis zu einem Datum aus dem Weg räumen
@@ -1060,6 +1257,9 @@ export const useTaskStore = defineStore('tasks', () => {
         isLoading,
         loadTasks,
         completeTask,
+        undoCompletion,
+        discardUndoTicket,
+        canUndoCompletion,
         markAsDirty,
         postponeTask,
         createTask,

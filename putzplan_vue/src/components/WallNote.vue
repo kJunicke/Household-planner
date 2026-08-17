@@ -45,6 +45,7 @@ import { kindOfTaskType, rotationOf, subtaskColumns } from '@/lib/wallLayout'
 import { useTearGesture } from '@/composables/useTearGesture'
 import { useDirectionPress, type PressDirection } from '@/composables/useDirectionPress'
 import { flyPoints } from '@/lib/pointsFlight'
+import { offerScrap } from '@/composables/useTornScrap'
 import WallDirectionMenu from './WallDirectionMenu.vue'
 import TaskCompletionModal from './TaskCompletionModal.vue'
 import TaskEditModal from './TaskEditModal.vue'
@@ -237,6 +238,16 @@ const tearNote = async (handle: HTMLElement) => {
   if (!applied) return
   if (points > 0) flyPoints(`+${points} P`, origin)
   else flyPoints('erledigt', origin, { muted: true })
+  // Der Fetzen — das Rückgängig zur Geste (Ticket 11). Erst NACH `applied`:
+  // ein abgewiesener Doppelgriff hat nichts erledigt und darf nichts zum
+  // Zurücknehmen anbieten.
+  //
+  // Nur der ganze Zettel bekommt einen. Ein abgerissenes Zettelchen bleibt
+  // sichtbar an seinem Platz stehen — es verschwindet nichts, was man
+  // zurückholen müsste —, und die Wege über die Dialoge (Aufwand anpassen,
+  // verschieben) sind bewusste Entscheidungen mit Bestätigung, keine Geste,
+  // die schneller ist als der Gedanke.
+  offerScrap({ taskId: props.task.task_id, title: props.task.title, points })
 }
 
 /**

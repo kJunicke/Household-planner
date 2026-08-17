@@ -27,11 +27,16 @@
  * `gesture-start` / `gesture-end` — ein gemeinsamer Zustand für beide Gesten,
  * unter der Bedingung, dass sie sich ausschließen (→ `gestureNoteId`).
  *
- * Noch nicht hier (spätere Tickets): der Fetzen zum Zurückkleben.
+ * Über der Erledigt-Liste hängt der **Fetzen** (Ticket 11): ein Tipp klebt den
+ * zuletzt abgerissenen Zettel zurück. Er verfällt nicht, sondern hängt bis zum
+ * Verlassen der Pinnwand. Sein Zustand liegt in `useTornScrap` und nicht hier —
+ * er entsteht im Zettel und wird unter der Wand gezeigt, die Wand selbst hat
+ * damit nichts zu tun.
  */
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import WallNote from '../components/WallNote.vue'
 import WallDoneList from '../components/WallDoneList.vue'
+import WallScrap from '../components/WallScrap.vue'
 import WallStatusBar from '../components/WallStatusBar.vue'
 import TaskCard from '../components/TaskCard.vue'
 import TaskCreateModal from '../components/TaskCreateModal.vue'
@@ -660,6 +665,12 @@ const handleCreateQuickTask = async (data: {
     <p v-if="!taskStore.isLoading && wallTasks.length === 0" class="wall-empty">
       Nichts angepinnt.
     </p>
+
+    <!-- Der Fetzen: hängt über der Erledigt-Liste und klebt den zuletzt
+         abgerissenen Zettel auf einen Tipp zurück (Ticket 11). Er rendert
+         nichts, solange nichts abgerissen wurde, und verschwindet erst beim
+         Verlassen der Pinnwand. -->
+    <WallScrap />
 
     <!-- Erledigt: kompakter Streifen UNTER der Wand, nicht auf ihr. -->
     <WallDoneList :tasks="doneTasks" />
