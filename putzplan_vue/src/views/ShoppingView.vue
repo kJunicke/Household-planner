@@ -135,14 +135,39 @@ const toggleSection = (group: ShoppingCategoryGroup) => {
 
 // --- Kontextuelle Add-Zeile -------------------------------------------------
 /**
- * Sobald in einer Kategorie das erste Produkt gekauft ist, räumt sich ihre
- * Add-Zeile weg: beim Einkaufen zählt die Liste, nicht das Eintragen. Das Plus
- * in der Kopfzeile holt sie zurück (Muster aus der Packliste).
+ * Sobald in der Liste das erste Produkt gekauft ist, räumen sich ALLE
+ * Add-Zeilen weg — nicht nur die der betroffenen Kategorie. Abhaken heißt, dass
+ * der Einkauf läuft; dann zählt die Liste und nicht das Eintragen, und acht
+ * Schreibzeilen zwischen den Produktzeilen sind genau die Unruhe, die dabei
+ * stört. Das Plus in der Kopfzeile holt eine einzelne Zeile gezielt zurück
+ * (Muster aus der Packliste), die obere Leiste bleibt ohnehin sichtbar.
+ *
+ * Der Zustand hängt an `purchasedItems` und damit an `currentListItems` — er
+ * ist auf die aktuelle Liste beschränkt und löst sich von selbst wieder, sobald
+ * nichts mehr gekauft ist (Rückgängig im Grace-Fenster, geleerter
+ * Gekauft-Block, Listenwechsel).
+ *
+ * ENTSCHEIDUNG DES NUTZERS — bitte nicht „reparieren":
+ *
+ * 1. Die Schreibzeilen bleiben weg, bis jemand das Plus im Kategoriekopf
+ *    drückt — über Neuladen und über Tage hinweg. Das ist gewollt und kein
+ *    vergessener Reset. Weil der Zustand aus den Daten abgeleitet ist, hält er
+ *    ohne Speicherung: solange in der Liste etwas als gekauft steht, sind die
+ *    Zeilen fort. `forcedAddOpen` ist bewusst nur für die Sitzung — ein per
+ *    Plus zurückgeholtes Feld ist eine einmalige Ausnahme, kein neuer
+ *    Dauerzustand. Also KEIN Zurücksetzen beim Laden einbauen.
+ *
+ * 2. Die Regel gilt in BEIDEN Aussehen. Sie beschreibt den Ablauf beim
+ *    Einkaufen, nicht das Aussehen, und steht deshalb absichtlich hier in
+ *    TypeScript ohne jede Kopplung an `data-design`. Das „klassische Aussehen
+ *    bleibt unverändert" aus Ticket 01 gilt ab hier nur noch optisch — auch das
+ *    ist bewusst so entschieden.
  */
 const purchasedPerCategory = computed(() => shoppingStore.purchasedPerCategory)
+const anythingPurchased = computed(() => shoppingStore.purchasedItems.length > 0)
 
 const isAddOpen = (group: ShoppingCategoryGroup): boolean =>
-  forcedAddOpen.value.has(group.key) || !purchasedPerCategory.value.get(group.key)
+  forcedAddOpen.value.has(group.key) || !anythingPurchased.value
 
 const openAddLine = (group: ShoppingCategoryGroup) => {
   forcedAddOpen.value.add(group.key)
@@ -444,7 +469,7 @@ onUnmounted(() => {
   <div class="page-container">
     <div class="container-fluid">
       <!-- Einkaufslisten Chip-Leiste -->
-      <div class="list-chip-bar mb-3">
+      <div class="list-chip-bar">
         <div class="list-chip-container">
           <button
             v-for="list in shoppingStore.lists"
@@ -484,8 +509,12 @@ onUnmounted(() => {
       </div>
 
       <template v-else-if="shoppingStore.currentListId">
+        <!-- `.sheet` ist im klassischen Aussehen ein reiner Gruppierungs-Container
+             ohne einen einzigen Style. Im Pinnwand-Aussehen wird daraus das eine
+             Blatt Papier, auf dem die ganze Liste steht. -->
+        <div class="sheet">
         <!-- Obere Leiste: Produkt · Menge · Zielkategorie · Hinzufügen · Kategorie anlegen -->
-        <div class="search-container mb-3">
+        <div class="search-container">
           <div class="top-bar">
             <div class="top-name-wrap">
               <input
@@ -652,6 +681,10 @@ onUnmounted(() => {
 
                   <!-- Per-Sektion Add-Zeile, kontextuell -->
                   <div v-if="isAddOpen(group)" class="add-line">
+                    <!-- Leeres Kaestchen: haelt die Schreibzeile im Pinnwand-Aussehen
+                         in derselben Spur wie die Produktzeilen darueber. Im
+                         klassischen Aussehen `display: none`. -->
+                    <span class="add-ghost-box" aria-hidden="true"></span>
                     <div class="add-input-wrap">
                       <input
                         v-model="addDraft[group.key]"
@@ -759,6 +792,15 @@ onUnmounted(() => {
                   </div>
                 </div>
               </div>
+
+              <!-- Leere Liste: bisher stand hier nur die eingeklappte Kopfzeile
+                   „Unkategorisiert" (der Store haelt diesen Eimer immer vor) und
+                   sonst nichts. Im klassischen Aussehen bleibt das so
+                   (`display: none`), im Pinnwand-Aussehen zeigt das Blatt seinen
+                   leeren Zustand an. -->
+              <p v-if="shoppingStore.currentListItems.length === 0" class="list-empty">
+                — nichts notiert —
+              </p>
             </div>
 
             <!-- Rechte Kategorie-Schnellnav -->
@@ -772,6 +814,7 @@ onUnmounted(() => {
             />
           </div>
         </template>
+        </div>
       </template>
     </div>
   </div>
@@ -849,10 +892,14 @@ onUnmounted(() => {
 
 <style scoped>
 /* ---- List Chip Bar ---- */
+/* `margin-bottom` steht hier statt als Bootstraps `.mb-3` im Template: `.mb-3`
+   ist bei Bootstrap `!important` und liesse sich vom Pinnwand-Aussehen nicht
+   mehr auf null ziehen. Der Wert ist identisch mit `.mb-3` (1rem). */
 .list-chip-bar {
   background: var(--color-background-elevated);
   border-radius: var(--radius-lg);
   padding: var(--spacing-sm);
+  margin-bottom: 1rem;
 }
 .list-chip-container {
   display: flex;
@@ -894,7 +941,11 @@ onUnmounted(() => {
 .chip-edit-btn:hover { opacity: 1; }
 
 /* ---- Top add-bar ---- */
-.search-container { position: relative; }
+.search-container { position: relative; margin-bottom: 1rem; }
+
+/* Nur im Pinnwand-Aussehen sichtbar (siehe unten). */
+.add-ghost-box { display: none; }
+.list-empty { display: none; }
 
 /* Einzeilig bis hinunter zu 360 px: die festen Knöpfe behalten ihre Trefferfläche,
    Produktfeld und Kategorie teilen sich den Rest — die Kategorie gibt zuerst nach. */
@@ -1277,5 +1328,496 @@ onUnmounted(() => {
   padding: 0 10px;
   font-size: var(--font-sm);
   color: var(--color-text-secondary);
+}
+
+/* ==========================================================================
+   PINNWAND-AUSSEHEN — „Der lange Zettel" (Vorlage: Prototyp-Variante A)
+   --------------------------------------------------------------------------
+   Alles ab hier haengt an `:root[data-design='pinnwand']`. Ohne das Attribut
+   greift keine einzige Regel — das klassische Aussehen oben bleibt Wort fuer
+   Wort der Normalfall.
+
+   ADDITIV, NICHT UMGEBAUT: die geteilten Bausteine (`ListItemRow`,
+   `CategoryCombobox`) werden ausschliesslich ueber `:deep()` unterhalb von
+   `.sheet` angefasst. `.sheet` gibt es nur in dieser View, also kann keine
+   dieser Regeln die Packliste oder das To-do erreichen — die benutzen dieselben
+   Komponenten ueber `ChecklistView.vue` und bleiben unveraendert, bis sie ihre
+   eigenen Tickets (02/03) bekommen.
+
+   Die einzige geteilte Datei, die dieses Ticket wirklich umbaut, ist
+   `pinnwand.css` (Eingabefeld-Selektoren, Rail-Kontrast) — dort steht jeweils
+   die Begruendung.
+   ========================================================================== */
+
+/* ---- Listenwechsel: Klebestreifen-Reiter an der Blattkante ---------------- */
+:root[data-design='pinnwand'] .list-chip-bar {
+  background: none;
+  border-radius: 0;
+  padding: 0 4px;
+  /* Die Reiter kleben auf der Oberkante des Blattes. */
+  margin-bottom: -6px;
+  position: relative;
+  z-index: 2;
+}
+:root[data-design='pinnwand'] .list-chip-container {
+  gap: 6px;
+  padding: 0;
+  align-items: flex-end;
+}
+:root[data-design='pinnwand'] .list-chip {
+  min-height: var(--touch-target-min);
+  padding: 4px 12px 10px;
+  border: 2px solid var(--pw-line);
+  border-bottom: none;
+  border-radius: 0;
+  background: var(--pw-tape);
+  color: var(--pw-ink);
+  font-weight: 700;
+  transform: rotate(-0.6deg);
+  transition: none;
+}
+:root[data-design='pinnwand'] .list-chip:hover {
+  border-color: var(--pw-line);
+  color: var(--pw-ink);
+}
+/* Aktiv = derselbe Papierton wie das Blatt darunter, zwei Pixel tiefer gesetzt
+   und fetter: der Reiter geht in das Blatt ueber, statt darauf zu liegen. */
+:root[data-design='pinnwand'] .list-chip.active {
+  background: var(--pw-paper);
+  color: var(--pw-ink);
+  font-weight: 800;
+  transform: translateY(2px);
+  padding-bottom: 12px;
+}
+:root[data-design='pinnwand'] .list-chip.add-chip {
+  background: var(--pw-cork-deep);
+  color: var(--pw-ink);
+  padding: 4px 12px 10px;
+}
+:root[data-design='pinnwand'] .list-chip.add-chip:hover {
+  background: var(--pw-tape);
+  color: var(--pw-ink);
+}
+/* Der Stift im Reiter mass 12×12px. Sichtbar bleibt er klein, treffbar wird er
+   ueber das Pseudo-Element — 28 + 2×10 = 48px in beiden Richtungen. */
+:root[data-design='pinnwand'] .chip-edit-btn {
+  position: relative;
+  width: 28px;
+  height: 28px;
+  justify-content: center;
+  margin-left: 4px;
+  opacity: 1;
+  color: var(--pw-ink);
+  font-size: var(--font-sm);
+}
+:root[data-design='pinnwand'] .chip-edit-btn::after {
+  content: '';
+  position: absolute;
+  inset: -10px;
+}
+
+/* ---- Das Blatt ----------------------------------------------------------
+   Der Kontrast entsteht nicht mehr aus einer Fuellung gegen Kork, sondern aus
+   einer Papierflaeche mit harter Tintenkante. Seiten hart geschnitten, oben und
+   unten abgerissen. */
+:root[data-design='pinnwand'] .sheet {
+  position: relative;
+  background: var(--pw-paper);
+  border-left: 2px solid var(--pw-line);
+  border-right: 2px solid var(--pw-line);
+  box-shadow: 3px 3px 0 var(--pw-line);
+  padding: 14px 8px 18px;
+  margin-top: 10px;
+  margin-bottom: 14px;
+}
+/* Abrisskante: Papierzacken auf einer um 2px versetzten Tintenzacke. */
+:root[data-design='pinnwand'] .sheet::before,
+:root[data-design='pinnwand'] .sheet::after {
+  content: '';
+  position: absolute;
+  left: -2px;
+  right: -2px;
+  height: 10px;
+  background:
+    linear-gradient(135deg, var(--pw-paper) 50%, transparent 50%) 0 0 / 14px 10px repeat-x,
+    linear-gradient(-135deg, var(--pw-paper) 50%, transparent 50%) 7px 0 / 14px 10px repeat-x,
+    linear-gradient(135deg, var(--pw-line) 50%, transparent 50%) 0 2px / 14px 10px repeat-x,
+    linear-gradient(-135deg, var(--pw-line) 50%, transparent 50%) 7px 2px / 14px 10px repeat-x;
+  pointer-events: none;
+}
+:root[data-design='pinnwand'] .sheet::before { top: -10px; transform: scaleY(-1); }
+:root[data-design='pinnwand'] .sheet::after { bottom: -10px; }
+
+/* ---- Obere Leiste auf dem Blatt ------------------------------------------ */
+:root[data-design='pinnwand'] .search-container {
+  margin-bottom: 12px;
+  padding-bottom: 12px;
+  border-bottom: 1px dashed rgba(36, 31, 26, 0.35);
+}
+:root[data-design='pinnwand'] .top-bar { gap: 6px; }
+:root[data-design='pinnwand'] .top-name-input {
+  height: 44px;
+  border: 2px solid var(--pw-line);
+  border-radius: 2px;
+  background: var(--pw-paper);
+  color: var(--pw-ink);
+}
+:root[data-design='pinnwand'] .top-qty-toggle,
+:root[data-design='pinnwand'] .top-qty-input {
+  position: relative;
+  height: 44px;
+  min-width: 44px;
+  border: 2px solid var(--pw-line);
+  border-radius: 2px;
+  background: var(--pw-tape);
+  color: var(--pw-ink);
+  font-weight: 800;
+}
+:root[data-design='pinnwand'] .top-qty-toggle.active {
+  border-color: var(--pw-line);
+  color: var(--pw-ink);
+}
+/* 44px sichtbar, 48px treffbar — wie die Knoepfe daneben. */
+:root[data-design='pinnwand'] .top-qty-toggle::after {
+  content: '';
+  position: absolute;
+  inset: -2px;
+}
+/* 44px sichtbar, 48px treffbar. Nicht 48px sichtbar, weil die Leiste einzeilig
+   bleibt und die drei festen Knoepfe sich die Breite mit Produktfeld und
+   Kategorie teilen.
+   Gemessen (Container kuenstlich verengt, Media Queries feuern dabei nicht):
+   bei 320px laeuft nichts ueber; die Kategorie-Kopfzeile beginnt ab rund 308px
+   zu ueberlaufen, bei 220px die obere Leiste um 44px und das Blatt um 48px.
+   Echte Geraete gehen nicht unter 320px — die Zahlen stehen hier als
+   gemessener Rand, nicht als gerechneter. */
+:root[data-design='pinnwand'] .top-btn {
+  position: relative;
+  width: 44px;
+  height: 44px;
+  border-radius: 2px;
+  border: 2px solid var(--pw-line);
+  box-shadow: 2px 2px 0 var(--pw-line);
+}
+:root[data-design='pinnwand'] .top-btn::after {
+  content: '';
+  position: absolute;
+  inset: -2px;
+}
+:root[data-design='pinnwand'] .top-btn:active {
+  transform: translate(2px, 2px);
+  box-shadow: 0 0 0 var(--pw-line);
+}
+:root[data-design='pinnwand'] .top-add {
+  background: var(--pw-accent);
+  color: var(--pw-paper);
+}
+:root[data-design='pinnwand'] .top-new-cat {
+  background: var(--pw-paper);
+  color: var(--pw-ink);
+}
+/* Deaktiviert heisst nicht unsichtbar. Das klassische `opacity: 0.4` drueckte
+   das weisse Plus auf dem blauen Grund auf 1,35:1 — man sah nicht mehr, dass da
+   ueberhaupt ein Knopf ist. Statt zu blenden wird umgefaerbt: Packpapier mit
+   gedaempfter Tinte, volle Deckkraft, ~5:1. Die blaue Fuellung faellt weg, der
+   Knopf wirkt dadurch klar inaktiv und bleibt trotzdem erkennbar. */
+:root[data-design='pinnwand'] .top-add:disabled,
+:root[data-design='pinnwand'] .add-confirm:disabled {
+  opacity: 1;
+  background: var(--pw-cork-deep);
+  color: var(--pw-ink-soft);
+}
+:root[data-design='pinnwand'] .top-new-cat:hover {
+  background: var(--pw-tape);
+  border-color: var(--pw-line);
+  color: var(--pw-ink);
+}
+/* Das Kategoriefeld traegt seinen Rahmen am Wrapper, nicht am `input`. */
+:root[data-design='pinnwand'] .top-combo :deep(.combo-field) {
+  min-height: 44px;
+  border: 2px solid var(--pw-line);
+  border-radius: 2px;
+  background: var(--pw-paper);
+}
+/* Ohne diese Regel hatte das Feld hier ueberhaupt keinen Fokuszustand:
+   `.combo-field:focus-within` aus `CategoryCombobox.vue` ist (0,3,0), die Regel
+   direkt darueber ist (0,5,0) und ueberschreibt die Rahmenfarbe in beiden
+   Zustaenden. Ueberall sonst — im Modal und im klassischen Aussehen — traegt
+   `:focus-within` den Zustand weiterhin allein; nur an dieser einen Stelle hat
+   meine eigene, spezifischere Regel sie geschlagen. Deshalb der Ausgleich
+   genau hier, in derselben Optik wie die Felder daneben. */
+:root[data-design='pinnwand'] .top-combo :deep(.combo-field:focus-within) {
+  border-color: var(--pw-accent);
+  box-shadow: 0 0 0 3px rgba(43, 74, 143, 0.15);
+}
+:root[data-design='pinnwand'] .top-combo :deep(.combo-dot) {
+  border-radius: 0;
+  border: 1.5px solid var(--pw-line);
+  width: 11px;
+  height: 11px;
+}
+:root[data-design='pinnwand'] .top-combo :deep(.combo-clear) {
+  color: var(--pw-ink);
+}
+:root[data-design='pinnwand'] .sheet :deep(.combo-list),
+:root[data-design='pinnwand'] .sheet .suggestions-dropdown {
+  border: 2px solid var(--pw-line);
+  border-radius: 2px;
+  background: var(--pw-paper);
+  box-shadow: var(--pw-shadow);
+}
+:root[data-design='pinnwand'] .sheet .suggestion-item {
+  color: var(--pw-ink);
+  border-bottom-color: rgba(36, 31, 26, 0.2);
+  min-height: var(--touch-target-min);
+}
+
+/* ---- Kategorie = Ueberschrift mit doppelter Tintenlinie, keine Box -------- */
+:root[data-design='pinnwand'] .cat-section { margin-bottom: 18px; }
+/* Das klassische `opacity: 0.92` verduennt jeden Kontrast in der Sektion. */
+:root[data-design='pinnwand'] .cat-uncategorized { opacity: 1; }
+:root[data-design='pinnwand'] .cat-header {
+  min-height: 40px;
+  margin-bottom: 4px;
+  padding: 0 2px 3px;
+  border-bottom: 3px double var(--pw-line);
+  color: var(--pw-ink);
+}
+:root[data-design='pinnwand'] .cat-name {
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--pw-ink);
+}
+:root[data-design='pinnwand'] .cat-uncategorized .cat-name {
+  color: var(--pw-ink-soft);
+  font-weight: 700;
+}
+/* Die Kategoriefarbe bleibt als kleine gestempelte Marke erhalten — sie traegt
+   keinen Text und ist damit nicht kontrastpflichtig, aber sie haelt die
+   Farbkodierung, die die Rail rechts weiterfuehrt. Bewusste Abweichung von der
+   Vorlage A, die den Punkt ganz strich. */
+:root[data-design='pinnwand'] .cat-dot {
+  width: 11px;
+  height: 11px;
+  border-radius: 0;
+  border: 1.5px solid var(--pw-line);
+}
+:root[data-design='pinnwand'] .cat-count {
+  background: none;
+  border: none;
+  border-radius: 0;
+  padding: 0;
+  color: var(--pw-ink);
+  font-size: var(--font-sm);
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+:root[data-design='pinnwand'] .cat-chevron { color: var(--pw-ink); }
+/* 18px Abstand + 9px seitliche Erweiterung = 48×48px Trefferflaeche, die sich
+   gerade beruehrt statt zu ueberlappen. Im klassischen Aussehen bleiben es 12px
+   Abstand und 40×40. */
+:root[data-design='pinnwand'] .cat-header-right { gap: 18px; }
+:root[data-design='pinnwand'] .cat-icon-btn {
+  color: var(--pw-ink);
+  opacity: 1;
+}
+:root[data-design='pinnwand'] .cat-icon-btn::after { inset: -10px -9px; }
+
+/* ---- Produktzeile: kein Rahmen, kein Hintergrund — Schrift auf Papier ----- */
+:root[data-design='pinnwand'] .cat-body { gap: 0; }
+:root[data-design='pinnwand'] .sheet :deep(.list-row) {
+  min-height: var(--touch-target-min);
+  padding: 0 2px;
+  background: none;
+  border: none;
+  border-bottom: 1px solid rgba(36, 31, 26, 0.16);
+  border-radius: 0;
+  color: var(--pw-ink);
+}
+:root[data-design='pinnwand'] .sheet :deep(.list-row:hover) {
+  background: rgba(36, 31, 26, 0.04);
+}
+/* Ein abgehakter Artikel bleibt lesbar: durchgestrichen und eine Spur leiser,
+   aber nicht auf 55 % heruntergeblendet. */
+:root[data-design='pinnwand'] .sheet :deep(.list-row.checked) { opacity: 1; }
+:root[data-design='pinnwand'] .sheet :deep(.list-row.checked .list-name) {
+  color: var(--pw-ink-soft);
+  text-decoration: line-through 2px var(--pw-line);
+}
+:root[data-design='pinnwand'] .sheet :deep(.list-check) {
+  width: 22px;
+  height: 22px;
+  border: 2px solid var(--pw-line);
+  border-radius: 0;
+  color: var(--pw-ink);
+}
+:root[data-design='pinnwand'] .sheet :deep(.list-check.on) {
+  background: none;
+  border-color: var(--pw-line);
+  color: var(--pw-ink);
+}
+:root[data-design='pinnwand'] .sheet :deep(.row-trailing) { gap: 18px; }
+:root[data-design='pinnwand'] .sheet :deep(.row-edit-btn) {
+  width: 30px;
+  height: 30px;
+  color: var(--pw-ink);
+}
+:root[data-design='pinnwand'] .sheet :deep(.row-edit-btn)::after { inset: -9px; }
+/* Prioritaet ohne Rahmen: die Zeile hat keinen mehr. Rot unterstrichen wie im
+   Original — der Text bleibt Tinte, das Rot traegt keine Information allein
+   (das Sternchen daneben tut es). */
+:root[data-design='pinnwand'] .sheet :deep(.row-priority .list-name) {
+  text-decoration: underline 2px #b03a28;
+  text-underline-offset: 3px;
+}
+/* Die Prioritaet stand doppelt: `.row-priority` weiter oben faerbt mit
+   `!important` die Rahmenfarbe, und im Blatt ist der einzige Rahmen die
+   Trennlinie unter der Zeile — die wurde also bernsteinfarben, zusaetzlich zur
+   roten Unterstreichung. Gegen `!important` hilft nur `!important`; die
+   Trennlinie bleibt Trennlinie, die Unterstreichung traegt das Signal. */
+:root[data-design='pinnwand'] .sheet :deep(.list-row.row-priority) {
+  border-bottom-color: rgba(36, 31, 26, 0.16) !important;
+}
+
+/* Menge: umrandeter Chip auf Klebebandgelb (uebernommen aus Variante C — er hat
+   eine echte Flaeche und ist damit ablesbar, wo A nur einen roten Randvermerk
+   hatte). */
+:root[data-design='pinnwand'] .sheet .qty-badge {
+  min-width: 0;
+  padding: 2px 6px;
+  border: 1.5px solid var(--pw-line);
+  border-radius: 2px;
+  background: var(--pw-tape);
+  color: var(--pw-ink);
+  font-weight: 800;
+  box-shadow: none;
+}
+/* 30px sichtbar, 48px treffbar. */
+:root[data-design='pinnwand'] .sheet .star-btn {
+  border: 2px solid var(--pw-line);
+  border-radius: 2px;
+  background: none;
+  color: var(--pw-ink);
+  transition: none;
+}
+:root[data-design='pinnwand'] .sheet .star-btn::after { inset: -9px; }
+:root[data-design='pinnwand'] .sheet .star-btn:hover,
+:root[data-design='pinnwand'] .sheet .star-btn.active {
+  border-color: var(--pw-line);
+  background: var(--pw-tape);
+  color: var(--pw-ink);
+}
+
+/* ---- Naechste freie Zeile statt Formularfeld ----------------------------- */
+:root[data-design='pinnwand'] .add-line {
+  gap: 8px;
+  min-height: var(--touch-target-min);
+}
+:root[data-design='pinnwand'] .add-ghost-box {
+  display: block;
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  border: 2px dashed var(--pw-line);
+  opacity: 0.45;
+}
+:root[data-design='pinnwand'] .add-input {
+  height: 40px;
+  padding: 0 2px;
+  border: none;
+  border-bottom: 1px dashed rgba(36, 31, 26, 0.5);
+  border-radius: 0;
+  background: none;
+  color: var(--pw-ink);
+}
+:root[data-design='pinnwand'] .add-input:focus {
+  border-color: transparent;
+  border-bottom: 2px solid var(--pw-line);
+}
+:root[data-design='pinnwand'] .add-qty-toggle,
+:root[data-design='pinnwand'] .add-qty-input {
+  position: relative;
+  height: 40px;
+  min-width: 40px;
+  border: 1.5px solid var(--pw-line);
+  border-radius: 2px;
+  background: var(--pw-tape);
+  color: var(--pw-ink);
+  font-weight: 800;
+}
+:root[data-design='pinnwand'] .add-qty-toggle::after {
+  content: '';
+  position: absolute;
+  inset: -4px;
+}
+:root[data-design='pinnwand'] .add-qty-toggle:hover,
+:root[data-design='pinnwand'] .add-qty-toggle.active {
+  border-color: var(--pw-line);
+  color: var(--pw-ink);
+}
+:root[data-design='pinnwand'] .add-confirm {
+  position: relative;
+  width: 44px;
+  height: 44px;
+  border: 2px solid var(--pw-line);
+  border-radius: 2px;
+  background: var(--pw-accent);
+  color: var(--pw-paper);
+  box-shadow: 2px 2px 0 var(--pw-line);
+}
+:root[data-design='pinnwand'] .add-confirm::after {
+  content: '';
+  position: absolute;
+  inset: -2px;
+}
+
+/* ---- Gekauftes: ruhiger Block auf demselben Blatt, kein Abrissstapel ------ */
+:root[data-design='pinnwand'] .gekauft-section {
+  margin-top: 20px;
+}
+:root[data-design='pinnwand'] .gekauft-title {
+  min-height: 40px;
+  padding-bottom: 3px;
+  border-bottom: 3px double var(--pw-line);
+  color: var(--pw-ink);
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+:root[data-design='pinnwand'] .gekauft-list { gap: 0; }
+:root[data-design='pinnwand'] .bought-count-btn {
+  min-width: 34px;
+  height: 30px;
+  border: 2px solid var(--pw-line);
+  border-radius: 2px;
+  background: none;
+  color: var(--pw-ink);
+  font-weight: 700;
+}
+:root[data-design='pinnwand'] .bought-count-btn::after { inset: -9px -7px; }
+:root[data-design='pinnwand'] .bought-count-btn:hover,
+:root[data-design='pinnwand'] .bought-count-btn.open {
+  border-color: var(--pw-line);
+  background: var(--pw-tape);
+  color: var(--pw-ink);
+}
+:root[data-design='pinnwand'] .bought-delete-btn {
+  width: 30px;
+  height: 30px;
+  color: var(--pw-ink);
+}
+:root[data-design='pinnwand'] .bought-delete-btn::after { inset: -9px; }
+:root[data-design='pinnwand'] .bought-history { color: var(--pw-ink-soft); }
+
+/* ---- Leeres Blatt -------------------------------------------------------- */
+:root[data-design='pinnwand'] .list-empty {
+  display: block;
+  margin: 8px 0 0 30px;
+  color: var(--pw-ink-soft);
+  font-size: var(--font-md);
+  font-style: italic;
 }
 </style>

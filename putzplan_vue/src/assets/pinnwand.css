@@ -210,6 +210,13 @@
   padding: 0.7rem 1.3rem;
 }
 
+/* Modal-Fusszeile: `.btn` kommt mit 0.5rem Innenabstand auf 40,8px und bleibt
+   damit unter der Mindest-Trefferflaeche. Nur hier korrigiert und nicht global
+   an `.btn`, damit dichte Knopfreihen anderer Ansichten ihre Hoehe behalten. */
+:root[data-design='pinnwand'] .modal-footer .btn {
+  min-height: var(--touch-target-min);
+}
+
 /* ----------------------------------------------------------------------------
    2. Eingabefelder — bewusst nuechtern
    ----------------------------------------------------------------------------
@@ -217,16 +224,20 @@
    keine Papierkontur, kein Linienraster: Felder bekommen nur die neuen Farben
    und die knapperen Radien aus den Tokens. Die Regeln hier existieren nur,
    damit Bootstraps eigene Radien und der blaue Fokusring nicht durchschlagen.
+
+   NUR Klassenselektoren, KEINE nackten `input[type=…]`: die nackte Variante traf
+   auch Felder, die ihren Rahmen selbst mitbringen. Sichtbare Folgen waren ein
+   zweiter Rahmen um die `CategoryCombobox` (das Feld zeichnet den Rahmen am
+   Wrapper, das Kind ist bewusst rahmenlos) und ein durchgezogener statt
+   *gestrichelter* Rahmen an den „+ zu Kategorie…"-Zeilen — womit die
+   Unterscheidung zwischen Eingabezeile und echtem Artikel verschwand.
+   Alle bare Inputs im Repo (`combo-input`, `add-input`, `top-name-input`,
+   `history-search-input`, `search-overlay-input`, …) setzen Rahmen und
+   Hintergrund selbst; hier greift daher bewusst nichts mehr.
    --------------------------------------------------------------------------*/
 :root[data-design='pinnwand'] .form-control,
 :root[data-design='pinnwand'] .form-select,
 :root[data-design='pinnwand'] textarea,
-:root[data-design='pinnwand'] input[type='text'],
-:root[data-design='pinnwand'] input[type='email'],
-:root[data-design='pinnwand'] input[type='password'],
-:root[data-design='pinnwand'] input[type='number'],
-:root[data-design='pinnwand'] input[type='search'],
-:root[data-design='pinnwand'] input[type='date'],
 :root[data-design='pinnwand'] select {
   border: 1.5px solid var(--color-border);
   border-radius: var(--radius-md);
@@ -235,11 +246,55 @@
   box-shadow: none;
 }
 
+/* Gezielter Nachtrag zum Selektor-Fix darueber.
+   Die nackten Element-Selektoren waren zu Recht das Problem, aber zwei Felder
+   im Repo haben sich still auf sie verlassen: sie setzen `border: none` bzw.
+   `background: transparent`/`var(--color-background)` und bekamen Fuellung und
+   Kontur bisher aus der Regel oben. Ohne sie sass `.history-search-input`
+   transparent auf Kork (Verlauf ist nicht Teil dieses Tickets und darf sich
+   nicht veraendern) und `.add-qty-input` in Packliste/To-do wechselte von
+   Papier auf Kork. Also nicht die nackten Selektoren zurueckholen, sondern die
+   zwei Felder ueber ihre eigenen Klassennamen nachziehen.
+   `ShoppingView` ueberschreibt sein eigenes `.add-qty-input` mit hoeherer
+   Spezifitaet auf Klebeband — das bleibt so. */
+:root[data-design='pinnwand'] .history-search-input,
+:root[data-design='pinnwand'] .add-qty-input {
+  border: 1.5px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background-color: var(--pw-paper);
+  color: var(--color-text-primary);
+  box-shadow: none;
+}
+
+/* Bewusst NICHT in dieser Liste: `.combo-input` und `.search-overlay-input`.
+   Beide sitzen in einem Wrapper, der die Kontur zeichnet; eine eigene Fuellung
+   ergaebe dort den Kasten im Kasten, den dieser Fix gerade beseitigt hat. */
+
+/* Kehrseite davon: ohne eigenen Fokus-Eintrag faellt `.combo-input` auf
+   `input:focus` aus base.css zurueck und zieht den klassischen Indigo-Ring
+   (0 0 0 3px rgba(79,70,229,.1)) INNEN in ein Feld, dessen Rahmen aussen schon
+   den Zustand zeigt. Also ausdruecklich abschalten — den Fokus zeichnet hier
+   `.combo-field:focus-within`, in der oberen Leiste des Einkaufs zusaetzlich
+   eine noch spezifischere Regel in `ShoppingView.vue`. */
+:root[data-design='pinnwand'] .combo-input:focus {
+  box-shadow: none;
+}
+
 :root[data-design='pinnwand'] .form-control:focus,
 :root[data-design='pinnwand'] .form-select:focus,
 :root[data-design='pinnwand'] textarea:focus,
-:root[data-design='pinnwand'] input:focus,
-:root[data-design='pinnwand'] select:focus {
+:root[data-design='pinnwand'] select:focus,
+/* Dieselbe Ursache wie oben: `input:focus` musste raus, sonst haette die
+   rahmenlose `CategoryCombobox` einen zweiten Fokusring bekommen. Ohne Ersatz
+   fiel der Ring der uebrigen bare Inputs auf den klassischen Indigo-Wert aus
+   base.css zurueck. Auch hier: einzeln ueber die Klassennamen. `.combo-input`
+   bleibt aussen vor — dort zeichnet `.combo-field:focus-within` den Zustand. */
+:root[data-design='pinnwand'] .top-name-input:focus,
+:root[data-design='pinnwand'] .top-qty-input:focus,
+:root[data-design='pinnwand'] .add-input:focus,
+:root[data-design='pinnwand'] .add-qty-input:focus,
+:root[data-design='pinnwand'] .history-search-input:focus,
+:root[data-design='pinnwand'] .search-overlay-input:focus {
   border-color: var(--color-primary);
   outline: none;
   box-shadow: 0 0 0 3px rgba(43, 74, 143, 0.15);
@@ -248,7 +303,11 @@
 :root[data-design='pinnwand'] .form-control::placeholder,
 :root[data-design='pinnwand'] textarea::placeholder,
 :root[data-design='pinnwand'] input::placeholder {
-  color: var(--color-text-muted);
+  /* Nicht `--color-text-muted` (= `--pw-free` #8A7F6D): das liegt auf Papier bei
+     ~3,4:1 und auf Kork noch darunter. `--pw-ink-soft` erreicht auf Papier
+     ~8,9:1 und bleibt trotzdem sichtbar leiser als der eingegebene Text. */
+  color: var(--pw-ink-soft);
+  opacity: 0.85;
 }
 
 :root[data-design='pinnwand'] .form-check-input:checked {
@@ -350,6 +409,55 @@
 :root[data-design='pinnwand'] .alert-danger {
   background-color: rgba(194, 60, 40, 0.12);
   color: var(--color-danger-dark);
+}
+
+/* Kategorie-Schnellnav (`CategoryRail.vue`) — geteilt von Einkauf, Packliste und
+   To-do. Die Bubbles mischen ihre Fuellung aus Kategoriefarbe und
+   `--color-background`; im Pinnwand-Aussehen ist das Kork, und die Bubble stand
+   gemessen bei 1,09–1,28:1 gegen ihren Untergrund. Repariert wird nicht die
+   Mischung, sondern das Prinzip: Papier mit Tintenkante, die Kategoriefarbe
+   sitzt als breite Kante links und traegt keinen Text mehr.
+   Bewusst global und nicht nur im Einkauf: es ist eine reine
+   Kontrastreparatur — Packliste und To-do werden dadurch besser, nicht anders
+   bedienbar. `.cat-rail .rail-bubble` = (0,4,0) und schlaegt auch die scoped
+   Dichte-Regel `.cat-rail.dense .rail-bubble` (0,3,0). */
+:root[data-design='pinnwand'] .cat-rail .rail-bubble {
+  background: var(--pw-paper);
+  border: 2px solid var(--pw-line);
+  border-left: 6px solid var(--bubble-color);
+  border-radius: 3px;
+  color: var(--pw-ink);
+  box-shadow: 2px 2px 0 var(--pw-line);
+  font-weight: 700;
+}
+
+:root[data-design='pinnwand'] .cat-rail .rail-bubble.uncat {
+  opacity: 1;
+}
+
+:root[data-design='pinnwand'] .cat-rail .rail-bubble:hover,
+:root[data-design='pinnwand'] .cat-rail .rail-bubble.active {
+  background: var(--pw-tape);
+  box-shadow: 0 0 0 var(--pw-line);
+  transform: translate(2px, 2px);
+}
+
+/* 44px sichtbar, per Pseudo-Element auf 48px treffbar. */
+:root[data-design='pinnwand'] .rail-toggle {
+  position: relative;
+  width: 44px;
+  height: 44px;
+  border: 2px solid var(--pw-line);
+  border-radius: 3px;
+  background: var(--pw-paper);
+  color: var(--pw-ink);
+  box-shadow: 2px 2px 0 var(--pw-line);
+}
+
+:root[data-design='pinnwand'] .rail-toggle::after {
+  content: '';
+  position: absolute;
+  inset: -2px;
 }
 
 /* Weicher Streuschatten passt nicht zur harten Formsprache. Der Selektor ist

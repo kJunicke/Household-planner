@@ -385,12 +385,18 @@ select:focus {
   }
 }
 
-/* Disabled Button State Enhancement */
+/* Disabled Button State Enhancement
+   Ohne `!important`: die Regel ist (0,2,0) und schlaegt damit `.btn` (0,1,0)
+   sowie `.btn:hover`/`.btn:active` (0,2,0, weiter oben) auch so. Mit
+   `!important` liess sich der Zustand dagegen von keinem Aussehen mehr
+   beschreiben — im Pinnwand-Aussehen fiel deshalb der Offset-Schatten an
+   deaktivierten Knoepfen aus, und sie standen als 2px-Tintenkontur ohne
+   Schatten neben identisch geformten Knoepfen mit beidem. */
 .btn:disabled {
   opacity: 0.6;
   cursor: not-allowed;
-  transform: none !important;
-  box-shadow: none !important;
+  transform: none;
+  box-shadow: none;
 }
 
 .form-control:disabled,
