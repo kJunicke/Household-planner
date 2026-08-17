@@ -104,6 +104,21 @@ Skyline-Packing (`lib/wallLayout.ts`).
   in der Leiste. Vor dem Speichern benennt eine Bestätigung die Folgen: das Ziel gilt
   sofort, der neue Wochenstart erst ab einem genannten Datum, und die laufende Woche ist
   dadurch einmalig länger (→ [data-model.md](data-model.md)).
+- **Unteraufgaben**: ein Zettel mit Unteraufgaben klappt beim Antippen auf; die
+  Unteraufgaben hängen als kleine Zettelchen daran und werden an einem Griff abgerissen.
+  Ein Zettel ohne Unteraufgaben reagiert auf Antippen gar nicht. Der angetippte Zettel
+  bleibt stehen — er wird weder animiert noch verschoben. Antippen ist eine Aussage über
+  genau diesen Zettel; rutschte er dabei weg, läse sich das als Fehltipp. Die
+  Anheft-Bewegung gilt den *anderen* Zetteln. Zettel oberhalb bewegen sich nie, das folgt
+  schon aus der Reihenfolge des Packens. Aufgeklappt nimmt der Zettel die volle
+  Wandbreite und belegt eine Reihe allein. In der Fußzeile steht der Fortschritt (etwa
+  „3 / 7"), auch am zugeklappten Zettel. An einer täglichen Aufgabe gibt es weder
+  Fortschritt noch Durchstreichen — dort sind nur Bonus-Unteraufgaben erlaubt, und die
+  sind wiederholbare Belohnungen, kein „noch vier übrig". Statt eines bleibenden Zeichens
+  quittiert das Zettelchen kurz und kehrt zurück. Bekannte Randbedingung: klappt man den
+  letzten Zettel ganz unten auf der Seite zu, springt der Inhalt um rund 85 px. Das
+  Dokument schrumpft, während die Seite bereits am Anschlag steht — es bleibt kein
+  Bildlaufweg für die Korrektur. Überall sonst hält die Position auf einen halben Pixel.
 - **Erledigt-Streifen** unter der Wand — erledigte Aufgaben verschwinden nicht, sie sinken
   nach unten. Je Aufgabe eine ruhige Zeile von 36 px: Personenfarbe als Punkt,
   durchgestrichener Titel, Zeitstempel, und ein Knopf, der sie wieder auf „dran" setzt. Die

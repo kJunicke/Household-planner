@@ -233,6 +233,13 @@ ALTER TABLE shopping_items ADD COLUMN quantity int NOT NULL DEFAULT 1;
   farblosen Punkt. Am Wochenanfang ist damit fast die ganze Liste grau. Eine eigene
   Query für ältere Completions würde das beheben — bewusst nicht Teil von Ticket 05.
 
+- **Zuklappen ganz unten auf der Seite springt um rund 85 px.** Gemessen: das Dokument
+  schrumpft um 132 px, während die Seite am Anschlag steht, sodass die Positionskorrektur
+  keinen Bildlaufweg mehr hat. Beim Aufklappen am selben Ort sind es 0,23 px, in der
+  Seitenmitte 0,49 px — der Anker selbst arbeitet also einwandfrei. Bewusst als
+  Randbedingung hingenommen: ein Polster, das das Dokument künstlich hoch hält, erzeugte
+  vorübergehend leeren Raum unter der Wand.
+
 ### Task Management
 - **"Meine Aufgaben" View** - Extra Tab für zugewiesene Tasks (Option 1)
   - CategoryNav erweitern um 5. Tab: "Meine Aufgaben"
