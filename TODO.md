@@ -53,6 +53,10 @@ Aufbau: **Aktiv** (als Nächstes) · **Backlog** (irgendwann) · **Bekannte Rand
 - **Listen-DELETE kommt bei anderen Sessions nicht an** — Kanal filtert auf `household_id`,
   DELETE liefert ohne `REPLICA IDENTITY FULL` nur den PK. Betrifft Packliste + To-do.
 - **`currentHousehold` überlebt externen Logout** bis zur nächsten Navigation.
+- **Abhaken löscht die Priorität unwiderruflich** — `shoppingStore.ts:846` setzt beim Kauf
+  `is_priority: false`, `markUnpurchased` (Z. 871) stellt sie nicht wieder her. Wer aus
+  Versehen abhakt und zurückholt, verliert den Stern still. Beim QC zu Ticket 01 an zwei
+  Artikeln belegt.
 - **Etappen C–F der optimistischen Aktualisierungen** →
   `.scratch/ux-etappen-08-2026/optimistic-updates-plan.md`.
 
