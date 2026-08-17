@@ -324,8 +324,12 @@ const handlePostponeConfirm = async (targetDate: string) => {
 }
 
 /* Nur für die Breitenmessung durch WallView: Titel einzeilig, damit
-   `width: max-content` die natürliche Zettelbreite ergibt. */
-.zettel--measuring .title {
+   `width: max-content` die natürliche Zettelbreite ergibt.
+   Eigene Klasse neben `--measuring`, weil die zweite Messung (`min-content`,
+   die Breite, unter der ein Wort abgeschnitten würde) dieselbe entdrehte Lage
+   braucht, aber gerade den Umbruch NICHT abschalten darf — mit `nowrap` wäre
+   `min-content` identisch mit `max-content` und die Untergrenze wertlos. */
+.zettel--single-line .title {
   white-space: nowrap;
 }
 

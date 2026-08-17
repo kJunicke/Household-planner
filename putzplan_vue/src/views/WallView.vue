@@ -28,7 +28,13 @@ import { useTaskStore } from '../stores/taskStore'
 import { useHouseholdStore } from '../stores/householdStore'
 import { useTaskBoard } from '@/composables/useTaskBoard'
 import { searchTasks } from '@/lib/taskSearch'
-import { MIN_NOTE_WIDTH, packWall, rotationOf } from '@/lib/wallLayout'
+import {
+  defaultNoteWidth,
+  packWall,
+  planNoteWidths,
+  rotationOf,
+  type WallNoteShape
+} from '@/lib/wallLayout'
 import type { Task } from '@/types/Task'
 
 const taskStore = useTaskStore()
@@ -71,11 +77,15 @@ const EDGE = 6
 const MEASURE_SAFETY = 4
 
 /**
- * Obergrenze für Zettel mit **mehrwortigen** Titeln, als Anteil der Wandbreite.
- * Kurze Titel erreichen sie nie und bleiben einzeilig; lange brechen an einer
- * Wortgrenze um, statt eine ganze Reihe für sich zu beanspruchen.
+ * Wie viele Titelzeilen der zweite Packlauf einem Zettel zusätzlich zumuten
+ * darf. Ein Zettel, der in einen schmalen Streifen gequetscht wird und dadurch
+ * vierzeilig wird, kostet mehr Fläche, als er spart.
+ *
+ * Eins, nicht zwei: bei einem einzeiligen Zettel ist das die Verdopplung der
+ * Texthöhe. Wer mehr zulässt, tauscht eine waagerechte Lücke gegen eine
+ * senkrechte.
  */
-const MAX_WIDTH_RATIO = 0.68
+const MAX_EXTRA_LINES = 1
 
 const wallEl = ref<HTMLElement | null>(null)
 const wallHeight = ref(0)
@@ -97,10 +107,23 @@ const setNoteEl = (taskId: string, instance: unknown) => {
 }
 
 /**
- * Packt die Wand neu: Breite aus der Titellänge setzen, Höhe messen, Skyline
+ * Packt die Wand neu: Breiten messen, Breiten planen, Höhen messen, Skyline
  * rechnen, Positionen schreiben. Muss nach jedem Datenwechsel, nach dem Laden
  * der Schrift und nach jeder Breitenänderung laufen — sonst stünden die Zettel
  * auf Maßen, die nicht mehr gelten.
+ *
+ * Der Reihenfolge nach: erst wird **jeder** Zettel gemessen, dann werden **alle**
+ * Breiten geplant, dann werden sie gesetzt. Ein Zettel kann seine Breite nicht
+ * allein bestimmen, weil sie davon abhängt, was neben ihn passt — deshalb die
+ * getrennten Durchläufe statt einer Schleife.
+ *
+ * **Kosten.** Ein vollständiger Lauf über 23 Zettel wurde vom QC mit 8,1–19,2 ms
+ * gemessen, davon 5,5–13,0 ms allein in Schritt 1. Das ist fast vollständig
+ * DOM-Messung: jeder Zettel erzwingt dort zwei Layouts (`max-content` und
+ * `min-content`). Die Rechnung selbst — `planNoteWidths` plus `packWall` — liegt
+ * bei rund 0,05 ms und ist damit belanglos. Wer diese Zahlen zitiert, muss
+ * dazusagen, welche von beiden gemeint ist; die Messung skaliert linear mit der
+ * Zahl der Zettel und liegt bereits in der Größenordnung eines Frames.
  */
 const relayout = (animate: boolean) => {
   const wall = wallEl.value
@@ -111,46 +134,134 @@ const relayout = (animate: boolean) => {
 
   const before = new Map(lastPositions)
 
-  const metrics = []
+  // Schritt 1 — messen, was jeder Zettel an Breite braucht.
+  //
+  // Gemessen wird mit `getBoundingClientRect()`, NICHT mit `offsetWidth`.
+  // `offsetWidth` ist eine ganze Zahl und rundet ab: bei einer echten
+  // Textbreite von 123,4 px liefert es 123, wir setzen 123 als feste Breite
+  // — und der Titel passt um 0,4 px nicht mehr in seine Zeile und bricht um.
+  // Das trifft im Mittel jeden zweiten Titel und sieht wie ein Zufall aus.
+  // `getBoundingClientRect().width` liefert die Nachkommastellen; danach
+  // wird aufgerundet und `MEASURE_SAFETY` addiert. Was das garantiert, steht
+  // dort — kurz: die Marge ist bemessen, nicht bewiesen, und geht nach oben.
+  //
+  // Zwei Werte je Zettel:
+  // - `max-content` (Titel per Klasse einzeilig gestellt) = natürliche Breite,
+  // - `min-content` = die Breite, unter der ein Wort abgeschnitten würde.
+  //
+  // Die Untergrenze wird gemessen und nicht am Text abgelesen: `min-content`
+  // kennt die tatsächlichen Umbruchstellen des Browsers, eine Suche nach
+  // Leerzeichen im Titel nur die vermuteten. Wo beide Werte gleich sind, hat
+  // der Titel keine Umbruchstelle — genau die Zettel bleiben vom zweiten Lauf
+  // ausgenommen.
+  const shapes: WallNoteShape[] = []
+  const elements = new Map<string, HTMLElement>()
+  const lineHeights = new Map<string, number>()
+
   for (const task of wallTasks.value) {
     const el = noteEls.get(task.task_id)
     if (!el) continue
 
-    // Schritt 1 — natürliche Breite: Titel einzeilig, ohne Deckel.
-    //
-    // Gemessen wird mit `getBoundingClientRect()`, NICHT mit `offsetWidth`.
-    // `offsetWidth` ist eine ganze Zahl und rundet ab: bei einer echten
-    // Textbreite von 123,4 px liefert es 123, wir setzen 123 als feste Breite
-    // — und der Titel passt um 0,4 px nicht mehr in seine Zeile und bricht um.
-    // Das trifft im Mittel jeden zweiten Titel und sieht wie ein Zufall aus.
-    // `getBoundingClientRect().width` liefert die Nachkommastellen; danach
-    // wird aufgerundet und `MEASURE_SAFETY` addiert. Was das garantiert, steht
-    // dort — kurz: die Marge ist bemessen, nicht bewiesen, und geht nach oben.
-    el.classList.add('zettel--measuring')
-    el.style.width = 'max-content'
+    el.classList.add('zettel--measuring', 'zettel--single-line')
     el.style.maxWidth = 'none'
+    el.style.width = 'max-content'
     const natural = Math.ceil(el.getBoundingClientRect().width) + MEASURE_SAFETY
+
+    el.classList.remove('zettel--single-line')
+    el.style.width = 'min-content'
+    const minimum = Math.ceil(el.getBoundingClientRect().width) + MEASURE_SAFETY
+
     el.classList.remove('zettel--measuring')
     el.style.maxWidth = ''
 
-    // Schritt 2 — Breite festlegen.
-    //
-    // Kurze Titel bekommen genau ihre natürliche Breite und bleiben einzeilig.
-    // Der Deckel greift erst oberhalb davon und trifft kurze Titel deshalb nie:
-    // ein langer, mehrwortiger Titel soll lieber an einer Wortgrenze umbrechen,
-    // als die halbe Wand breit zu werden.
-    //
-    // Ein einzelnes langes Wort ist davon ausgenommen — es kann nicht
-    // umbrechen, ein Deckel würde es nur abschneiden. Es bekommt so viel
-    // Breite, wie es braucht, höchstens die ganze Wand.
-    const capped = Math.min(usableWidth, Math.round(usableWidth * MAX_WIDTH_RATIO))
-    const wraps = /\s/.test(task.title.trim())
-    const wanted = natural > capped && wraps ? capped : natural
+    const titleEl = el.querySelector<HTMLElement>('.title')
+    const lineHeight = titleEl ? parseFloat(getComputedStyle(titleEl).lineHeight) : NaN
 
-    const width = Math.max(MIN_NOTE_WIDTH, Math.min(usableWidth, wanted))
+    shapes.push({ id: task.task_id, natural, minimum })
+    elements.set(task.task_id, el)
+    // Ohne brauchbare Zeilenhöhe gibt es keine Zeilenobergrenze — dann bleibt
+    // es bei der natürlichen Breite (siehe Schritt 3).
+    lineHeights.set(task.task_id, Number.isFinite(lineHeight) && lineHeight > 0 ? lineHeight : 0)
+  }
+
+  // Schritt 2 — Breiten planen (zweiter Packlauf, siehe `planNoteWidths`).
+  const planned = planNoteWidths(shapes, usableWidth)
+
+  // Schritt 3 — geplante Breiten setzen, Zeilen prüfen, zu Hohes zurücknehmen.
+  //
+  // Ob eine geplante Verschmälerung den Zettel zu hoch macht, lässt sich nur
+  // messen: wie viele Zeilen ein Titel bei einer Breite braucht, weiß der
+  // Umbruch-Algorithmus des Browsers, keine Formel.
+  //
+  // **Bezugsgröße der Grenze ist `fallback`** — die Breite, die dieser Zettel
+  // ohne den zweiten Packlauf bekäme, also die bereits bei `MAX_WIDTH_RATIO`
+  // gedeckelte. NICHT die natürliche, einzeilige Breite. Gemessen wird also
+  // „eine Zeile mehr, als dieser Zettel ohnehin gehabt hätte"; ein Zettel, der
+  // schon gedeckelt zweizeilig ist, darf dreizeilig werden. Das ist Absicht:
+  // der Deckel ist der Bestand, gegen den dieses Ticket antritt.
+  const fallbacks = new Map<string, number>()
+  const widths = new Map<string, number>()
+  for (const shape of shapes) {
+    const el = elements.get(shape.id)
+    if (!el) continue
+    const fallback = defaultNoteWidth(shape, usableWidth)
+    const width = planned.get(shape.id)?.width ?? fallback
+    fallbacks.set(shape.id, fallback)
+    widths.set(shape.id, width)
     el.style.width = `${width}px`
-    // Höhe erst nach dem Setzen der Breite messen — vorher ist sie bedeutungslos.
-    metrics.push({ id: task.task_id, width, height: el.offsetHeight })
+  }
+
+  // Zeilen zählen — nur bei den wenigen Zetteln, die der zweite Lauf
+  // überhaupt verschmälert hat.
+  const rejected = new Set<string>()
+  for (const shape of shapes) {
+    const el = elements.get(shape.id)
+    const width = widths.get(shape.id) ?? 0
+    const fallback = fallbacks.get(shape.id) ?? width
+    const lineHeight = lineHeights.get(shape.id) ?? 0
+    // Ohne brauchbare Zeilenhöhe gibt es keine Grenze; dann bleibt die Planung.
+    if (!el || width >= fallback || lineHeight <= 0) continue
+
+    const titleEl = el.querySelector<HTMLElement>('.title')
+    if (!titleEl) continue
+    const lines = Math.round(titleEl.clientHeight / lineHeight)
+    // Bei `fallback` ist der Titel einzeilig, solange der Deckel nicht griff.
+    // Nur der bereits gedeckelte Langtitel muss dafür erneut gemessen werden.
+    let baseLines = 1
+    if (fallback < shape.natural) {
+      el.style.width = `${fallback}px`
+      baseLines = Math.round(titleEl.clientHeight / lineHeight)
+      el.style.width = `${width}px`
+    }
+    if (lines > baseLines + MAX_EXTRA_LINES) rejected.add(shape.id)
+  }
+
+  // Zurücknehmen — **immer paarweise**. Die schmale Breite einer Paarhälfte
+  // gilt nur, solange die andere Hälfte schmal daneben steht; bliebe sie
+  // allein, wäre sie schmaler UND höher als vorher, ohne Gegenwert. Die Kette
+  // bricht hier ab: zurückgenommen wird ausschließlich auf `fallback`, also
+  // auf den Stand ohne zweiten Packlauf — daraus kann kein neues Paar und
+  // damit keine neue Rücknahme entstehen.
+  for (const id of [...rejected]) {
+    const partner = planned.get(id)?.pairedWith
+    if (partner) rejected.add(partner)
+  }
+
+  for (const id of rejected) {
+    const el = elements.get(id)
+    const fallback = fallbacks.get(id)
+    if (!el || fallback === undefined) continue
+    widths.set(id, fallback)
+    el.style.width = `${fallback}px`
+  }
+
+  // Schritt 4 — Höhen messen. Erst hier, wenn keine Breite sich mehr ändert:
+  // eine Höhe zu einer überholten Breite wäre wertlos.
+  const metrics = []
+  for (const shape of shapes) {
+    const el = elements.get(shape.id)
+    if (!el) continue
+    metrics.push({ id: shape.id, width: widths.get(shape.id) ?? 0, height: el.offsetHeight })
   }
 
   const packed = packWall(metrics, usableWidth)

@@ -68,12 +68,197 @@ export function kindOfTaskType(taskType: string): WallNoteKind {
  */
 export const MIN_NOTE_WIDTH = 96
 
+/**
+ * Obergrenze für Zettel mit **mehrwortigen** Titeln, als Anteil der Wandbreite.
+ * Kurze Titel erreichen sie nie und bleiben einzeilig; lange brechen an einer
+ * Wortgrenze um, statt eine ganze Reihe für sich zu beanspruchen.
+ *
+ * Ein Titel ohne Wortgrenze ist ausgenommen — er kann nicht umbrechen, ein
+ * Deckel würde ihn nur abschneiden.
+ */
+export const MAX_WIDTH_RATIO = 0.68
+
+/**
+ * Waagerechte Luft, die zwei Zettel derselben Reihe voneinander trennen soll.
+ *
+ * Der x-Versatz aus `jitterOf` beträgt ±5 px **je Zettel**; zwei benachbarte
+ * Zettel können also um bis zu 10 px aufeinander zulaufen. 12 px lassen dann
+ * noch 2 px Luft. Die Zahl ist gerechnet, nicht gemessen — sie ist bewusst die
+ * kleinste, die den Versatz vollständig abdeckt.
+ */
+const PAIR_GAP = 12
+
 export interface WallNoteMetrics {
   id: string
   /** Bereits gesetzte Breite. */
   width: number
   /** Nach dem Setzen der Breite gemessene Höhe. */
   height: number
+}
+
+/**
+ * Was die Wand an einem Zettel gemessen hat, bevor sie seine Breite festlegt.
+ * Beide Werte sind ganzzahlig und enthalten bereits den Sicherheitszuschlag der
+ * Messung — das Planen rechnet ausschließlich in ganzen Zahlen, damit dieselben
+ * Eingaben immer dieselben Breiten ergeben.
+ */
+export interface WallNoteShape {
+  id: string
+  /** Breite bei `max-content`: der Titel steht in einer Zeile. */
+  natural: number
+  /**
+   * Breite bei `min-content`: das breiteste unteilbare Stück des Zettels —
+   * in der Regel das längste Wort des Titels, bei sehr kurzen Titeln die
+   * Fußzeile. Schmaler heißt **abschneiden**, nicht umbrechen.
+   */
+  minimum: number
+}
+
+/** Was der zweite Packlauf für einen Zettel vorschlägt. */
+export interface NoteWidthPlan {
+  width: number
+  /**
+   * Der Zettel, mit dem dieser zu einem Paar verschmälert wurde — oder `null`,
+   * wenn die Breite für sich allein steht (natürliche Breite, Deckel oder
+   * Reststreifen). Wer eine Paarhälfte verwirft, muss die andere mitverwerfen.
+   */
+  pairedWith: string | null
+}
+
+/** Ein Titel ohne Wortgrenze misst bei `min-content` so viel wie einzeilig. */
+const wraps = (shape: WallNoteShape) => shape.minimum < shape.natural
+
+/**
+ * Die Breite nach der Voreinstellung „Breite folgt dem Titel", ohne den zweiten
+ * Packlauf: die natürliche Breite, für **mehrwortige** Titel gedeckelt.
+ *
+ * Kurze Titel erreichen den Deckel nie und bleiben einzeilig; ein langer,
+ * mehrwortiger Titel bricht lieber an einer Wortgrenze um, als die halbe Wand
+ * zu beanspruchen. Ein einzelnes langes Wort ist ausgenommen — es kann nicht
+ * umbrechen, ein Deckel würde es nur abschneiden; es bekommt so viel Breite,
+ * wie es braucht, höchstens die ganze Wand.
+ *
+ * Auch die Rückfallbreite des zweiten Laufs: was er verwirft, landet wieder
+ * hier.
+ */
+export function defaultNoteWidth(shape: WallNoteShape, wallWidth: number): number {
+  const cap = Math.min(wallWidth, Math.round(wallWidth * MAX_WIDTH_RATIO))
+  const wanted = shape.natural > cap && wraps(shape) ? cap : shape.natural
+  return Math.max(MIN_NOTE_WIDTH, Math.min(wallWidth, wanted))
+}
+
+/**
+ * Zweiter Packlauf: Breiten so wählen, dass möglichst zwei Zettel
+ * nebeneinander stehen.
+ *
+ * Voreinstellung bleibt „Breite folgt dem Titel": jeder Zettel bekommt seine
+ * natürliche Breite (gedeckelt bei `MAX_WIDTH_RATIO`). Das erzeugt auf schmalen
+ * Wänden aber Reststreifen: ein Zettel misst 210 px auf einer 347-px-Wand,
+ * daneben bleiben 125 px, und dort passt nur hinein, wessen Titel zufällig
+ * darunter liegt. Bleibt keiner übrig, verkommt die Wand zur einspaltigen
+ * Liste.
+ *
+ * Zwei Eingriffe, in dieser Reihenfolge:
+ *
+ * 1. **Streifen füllen** — passt der nächste Zettel nicht mit seiner
+ *    natürlichen Breite in den Rest der Reihe, wohl aber an einer Wortgrenze,
+ *    bekommt er die Breite des Streifens.
+ * 2. **Paar erzwingen** — würde ein Zettel die Reihe allein belegen, weil
+ *    hinter ihm kein Streifen mehr bleibt, der den nächsten trägt, werden
+ *    **beide** auf die halbe Wandbreite gezogen.
+ *
+ * Beides greift nur, wenn der Zettel dabei kein Wort abschneidet
+ * (`minimum`) und `MIN_NOTE_WIDTH` gewahrt bleibt.
+ *
+ * **Das Reihenmodell ist eine Näherung.** Gepackt wird danach weiter mit der
+ * Skyline, die Höhen kennt und keine Reihen; dieses Modell entscheidet nur über
+ * Breiten. Es unterstellt gleich hohe Zettel — das ist der Regelfall, weil
+ * nahezu jeder Zettel einzeilig ist. Wo die Näherung danebenliegt, packt die
+ * Skyline trotzdem gültig, nur eben nicht so dicht wie erhofft.
+ *
+ * **Die Zeilenobergrenze steckt nicht hier.** Ob ein verschmälerter Zettel
+ * dadurch zu hoch wird, kann nur die Wand entscheiden, weil sie die Höhe misst
+ * (→ `WallView`). Diese Funktion liefert Vorschläge, keine Zusagen.
+ *
+ * Deshalb trägt jedes Paar aus Eingriff 2 den Partner im Ergebnis (`pairedWith`).
+ * Verwirft die Wand die eine Hälfte, muss sie die andere mitverwerfen: 165 px
+ * am ersten Zettel gelten **nur** unter der Annahme, dass der zweite daneben
+ * steht. Bleibt der erste breit, ist der zweite schmal und hoch ohne
+ * Gegenwert — genau der grundlos schmale Einzelzettel, den es zu vermeiden
+ * gilt. (Gefunden vom QC an „Fenster im Wohnzimmer putzen": 233,8 → 167,0 px
+ * breit, 61,0 → 75,0 px hoch, kein Nachbar.)
+ *
+ * Die Reihenfolge der Eingabe wird **nie** verändert — die dringendste Aufgabe
+ * bleibt vorn.
+ */
+export function planNoteWidths(
+  shapes: readonly WallNoteShape[],
+  wallWidth: number
+): Map<string, NoteWidthPlan> {
+  const pairWidth = Math.floor((wallWidth - PAIR_GAP) / 2)
+
+  /**
+   * Untergrenze dieses Zettels: schmaler schneidet ab. Bewusst **nicht** auf
+   * die Wandbreite geklemmt — ein einzelnes Wort, das breiter als die Wand
+   * ist, schließt sich dadurch von jeder Verschmälerung selbst aus.
+   */
+  const floorOf = (s: WallNoteShape) => Math.max(MIN_NOTE_WIDTH, s.minimum)
+  const defaultOf = (s: WallNoteShape) => defaultNoteWidth(s, wallWidth)
+  /** Passt der Zettel in `width`, ohne ein Wort zu zerschneiden? */
+  const fitsShrunk = (s: WallNoteShape, width: number) => wraps(s) && width >= floorOf(s)
+  /** Passt er dort, mit oder ohne Verschmälern? */
+  const fitsAt = (s: WallNoteShape, width: number) => defaultOf(s) <= width || fitsShrunk(s, width)
+
+  const plan = new Map<string, NoteWidthPlan>()
+
+  let index = 0
+  while (index < shapes.length) {
+    // Erster Zettel der Reihe.
+    const first = shapes[index]
+    let width = defaultOf(first)
+    const next = shapes[index + 1]
+
+    // Bliebe hinter ihm ein Streifen, der den nächsten Zettel trägt? Wenn
+    // nicht, stünde er allein — dann lohnt das Paar. Beide müssen die halbe
+    // Wand vertragen, sonst wird nur einer schmaler und steht trotzdem allein.
+    let partner: string | null = null
+    if (
+      next &&
+      !fitsAt(next, wallWidth - width - PAIR_GAP) &&
+      pairWidth >= MIN_NOTE_WIDTH &&
+      fitsAt(first, pairWidth) &&
+      fitsAt(next, pairWidth)
+    ) {
+      width = Math.min(width, pairWidth)
+      partner = next.id
+    }
+
+    plan.set(first.id, { width, pairedWith: partner })
+    let rest = wallWidth - width - PAIR_GAP
+    index++
+
+    // Weitere Zettel derselben Reihe.
+    while (index < shapes.length) {
+      const shape = shapes[index]
+      const wanted = defaultOf(shape)
+      // Nur der unmittelbar folgende Zettel ist die zweite Hälfte des Paares.
+      const pairedWith = shape.id === partner ? first.id : null
+      let taken: number
+      if (wanted <= rest) {
+        taken = wanted
+      } else if (fitsShrunk(shape, rest)) {
+        // Reststreifen füllen: der Titel bricht an einer Wortgrenze um.
+        taken = rest
+      } else {
+        break
+      }
+      plan.set(shape.id, { width: taken, pairedWith })
+      rest -= taken + PAIR_GAP
+      index++
+    }
+  }
+
+  return plan
 }
 
 export interface PackedNote {
