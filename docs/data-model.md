@@ -45,6 +45,14 @@ Wichtig für `.eq()`-Queries — die PKs heißen nicht `id`.
   - `is_quick` — Boolean (Default `FALSE`): markiert Quick-Aufgaben (einmalig + sofort
     abgeschlossen, nur in Historie sichtbar). HistoryView zeigt dafür ein „Quick"-Badge
     statt des „Gelöscht"-Badges (obwohl der Task soft-deleted ist)
+  - **Ausnahme vom Append-only**: **Zurückkleben** (Pinnwand) löscht die eigene jüngste
+    Zeile einer Aufgabe wieder. Solange der Fetzen hängt, sagt der Nutzer, dass die
+    Erledigung ein Fehlgriff war — sie beschreibt keine Tatsache. Eine Gegenbuchung wäre
+    ein erfundenes zweites Ereignis; `effort_override` ist als Punktwert einer Leistung
+    definiert, nicht als Vorzeichen. Abgesichert über die bestehende RLS-Policy, die
+    `DELETE` auf eigene Zeilen im eigenen Haushalt begrenzt. Zurückgeschrieben wird dabei
+    auch ein Schnappschuss der Aufgabe — insbesondere `last_completed_at`, weil es den
+    Kadenz-Anker bildet
 - `shopping_items` — PK: `shopping_item_id` (Einkaufsliste mit Purchase-Tracking)
   - `times_purchased` — Counter für Kaufhäufigkeit
   - `last_purchased_at`, `last_purchased_by` — Tracking von letztem Einkauf

@@ -207,6 +207,20 @@ ALTER TABLE shopping_items ADD COLUMN quantity int NOT NULL DEFAULT 1;
   Deckel hält die Segmentfarben mit exakt 70 % lesbar, und oberhalb trägt die exakte
   `+N`-Zahl das Ausmaß. Der QC hält 0,30 eher für zu kräftig als für zu schwach.
 
+- **Das Verschwinden des Fetzens bei fremder Löschung ist ungeprüft.** Löscht ein
+  anderes Mitglied die Aufgabe, während ein Fetzen hängt, soll er verschwinden, bevor
+  jemand ins Leere tippt. Der Pfad ist gebaut, aber in der Prüfumgebung nicht
+  auslösbar: ein direkter Datenbank-Schreibzugriff wird verweigert, und ein zweiter
+  Browser-Kontext hält den ersten an und damit genau das, was zu beobachten wäre.
+  Ungeprüft, nicht widerlegt.
+
+- **Ein einzelner nicht reproduzierbarer Vorfall beim Fetzen.** Beobachtet: Punkte
+  gebucht, Aufgabe aber nicht als erledigt geführt, Rückgängig still verschwunden —
+  auch nach dem Neuladen. Er trat zeitgleich mit einem eingefrorenen Renderer der
+  Automatisierungsschicht auf und war in 142 s sauberer Wiederholung sowie allen
+  Folgeläufen nicht erneut herbeizuführen. Auf einem echten Gerät ohne
+  Automatisierungsschicht nachzustellen, falls Gewissheit gewünscht ist.
+
 - **Die Schriftart Inter ist nirgends geladen** — kein `@font-face`, kein Font-Link,
   systemweit nicht installiert. Die Wand vermisst ihre Zettel also mit der
   System-Schrift. Das ist Bestand und war nicht Teil von Ticket 12, verschiebt aber

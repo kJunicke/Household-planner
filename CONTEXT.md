@@ -108,3 +108,19 @@ inhaltliche Aussage über den Zustand der Wohnung ist und keine Korrektur eines 
 Die angeknickte Ecke unten rechts an jedem Zettel — der Griff zum **Abreißen**. Es ist die
 einzige Stelle, an der die Geste beginnen darf, und es ist gesperrt, solange die Wand
 scrollt.
+
+### Fetzen
+
+Der Papierrest, der nach dem Abreißen einer Aufgabe unter der Wand hängen bleibt. Er trägt
+den Titel der Aufgabe und die Punkte, die sie eingebracht hat. Solange er hängt, ist die
+Erledigung widerrufbar. Er verfällt **nicht** von selbst: er verschwindet erst, wenn man die
+Pinnwand verlässt, das Aussehen umschaltet oder neu lädt. Es hängt immer nur **einer** — ein
+neuer Abriss ersetzt den vorigen, und der ältere ist damit endgültig.
+
+### Zurückkleben
+
+Der Tipp auf den Fetzen. Er macht die Erledigung rückgängig: die Aufgabe kehrt an die Wand
+zurück, die Punkte verschwinden aus dem Wochenziel, und die Erledigung wird aus der Historie
+**gelöscht** statt gegengebucht (sie hat nicht stattgefunden). Nicht zu verwechseln mit
+„wieder dreckig" im Erledigt-Streifen — das setzt die Aufgabe erneut auf „dran", **behält**
+aber die Punkte.

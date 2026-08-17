@@ -130,6 +130,26 @@ Skyline-Packing (`lib/wallLayout.ts`).
   - **Ein Abriss quittiert immer**, auch wenn es null Punkte gibt (weil die
     Unteraufgaben den Aufwand schon aufgezehrt haben). Dann fliegt „erledigt" statt einer
     Zahl — dieselbe Bahn, nur leiser. Kein Zettel verschwindet stumm.
+- **Fetzen**: Nach dem Abreißen hängt unter der Wand ein **Fetzen** mit Titel und
+  Punktwert. Ein Tipp darauf klebt den Zettel zurück: er kehrt an die Wand zurück, die
+  Punkte verschwinden aus dem Wochenziel, die Zeile aus dem Erledigt-Streifen.
+  - **Rückgängig heißt hier: die Erledigung wird gelöscht, nicht gegengebucht.** Sie hat
+    nicht stattgefunden — eine Gegenbuchung stünde als erfundenes zweites Ereignis in
+    Verlauf und Statistik. Gelöscht wird ausschließlich die eigene jüngste Erledigung
+    dieser Aufgabe; fremde bleiben unangetastet.
+  - Zurück kommt der **ganze Zustand**, nicht nur „erledigt": auch der Zeitpunkt der
+    letzten Erledigung (er ist der Anker der Kadenz — bliebe er stehen, verschöbe sich
+    die nächste Fälligkeit um ein volles Intervall), die Zuständigkeit und der Zustand
+    der Unteraufgaben.
+  - **Der Fetzen verfällt nicht.** Er verschwindet erst beim Verlassen der Pinnwand, beim
+    Umschalten des Aussehens oder beim Neuladen — also nie in einem Moment, den der
+    Nutzer nicht selbst herbeigeführt hat. Ein früherer Entwurf mit Zeitfenster ließ die
+    Erledigt-Liste beim Verfallen springen, sodass ein aufliegender Finger die falsche
+    Zeile traf.
+  - Es hängt immer nur **ein** Fetzen, der jüngste. Ein neuer Abriss ersetzt den
+    vorigen.
+  - Nicht zu verwechseln mit **„wieder dreckig"** im Erledigt-Streifen: das setzt die
+    Aufgabe erneut auf „dran", behält aber die Punkte.
   - **Preis der Geste:** auf dem Eselsohr scrollt die Seite nicht (rund 1500 px² je
     Zettel). Andernfalls würde der Browser beim Zug nach unten selbst zu scrollen beginnen
     und die Geste abbrechen, bevor sie erkannt ist. Überall sonst auf dem Zettel scrollt es
