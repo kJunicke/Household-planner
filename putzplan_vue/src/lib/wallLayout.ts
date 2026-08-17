@@ -94,6 +94,40 @@ export interface WallNoteMetrics {
   width: number
   /** Nach dem Setzen der Breite gemessene Höhe. */
   height: number
+  /**
+   * Aufgeklappt (Unteraufgaben sichtbar). Ein solcher Zettel nimmt die volle
+   * Wandbreite ein und bekommt **keinen** Versatz: der x-Versatz wäre bei voller
+   * Breite ohnehin weggeklemmt, und ein y-Versatz von bis zu −6,5 px würde ihn
+   * unter den Zettel darüber schieben. Statt des unregelmäßigen Abstands steht
+   * unter ihm ein fester (`EXPANDED_GAP`) — eine aufgeklappte Aufgabe ist ein
+   * Block, kein bepinnter Schnipsel.
+   */
+  expanded?: boolean
+}
+
+/**
+ * Abstand unter einem aufgeklappten Zettel. Übernommen aus dem Prototypen
+ * `r5-freiewand.html` (`gap = open ? 8 : gapOf(id)`) — gestalterisch gesetzt,
+ * nicht gemessen.
+ */
+const EXPANDED_GAP = 8
+
+/**
+ * Spaltenzahl der Zettelchen eines aufgeklappten Zettels: zwei, bei durchweg
+ * kurzen Titeln drei.
+ *
+ * Die Grenze von 12 Zeichen stammt aus dem Prototypen und ist eine Setzung,
+ * keine Messung: sie zählt Zeichen, nicht Pixel, und kennt die Schriftbreite
+ * nicht. Sie ist bewusst streng — drei Spalten sind der Sonderfall („Regale",
+ * „Boden", „Lampen"), zwei der Regelfall. Fällt ein Titel zu lang aus, verteilt
+ * die Zeile ihn auf zwei Zeilen; falsch wird nur die Dichte, nie die Lesbarkeit.
+ */
+export const SUBTASK_C3_MAX_TITLE = 12
+
+export function subtaskColumns(titles: readonly string[]): 2 | 3 {
+  if (titles.length === 0) return 2
+  const longest = titles.reduce((max, title) => Math.max(max, title.length), 0)
+  return longest <= SUBTASK_C3_MAX_TITLE ? 3 : 2
 }
 
 /**
@@ -311,12 +345,12 @@ export function packWall(notes: readonly WallNoteMetrics[], wallWidth: number): 
     }
     if (bestTop === Infinity) bestTop = 0
 
-    const dx = jitterOf(note.id, 'x', 5)
-    const dy = jitterOf(note.id, 'y', 4) - 2.5
+    const dx = note.expanded ? 0 : jitterOf(note.id, 'x', 5)
+    const dy = note.expanded ? 0 : jitterOf(note.id, 'y', 4) - 2.5
     const x = Math.max(0, Math.min(wallWidth - width, bestColumn * SKYLINE_RESOLUTION + dx))
     const y = Math.max(0, bestTop + dy)
 
-    const gap = gapOf(note.id)
+    const gap = note.expanded ? EXPANDED_GAP : gapOf(note.id)
     for (let k = bestColumn; k < bestColumn + span; k++) {
       skyline[k] = y + note.height + gap
     }

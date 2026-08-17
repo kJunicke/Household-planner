@@ -16,8 +16,11 @@
  * Unter der Wand liegt die Erledigt-Liste (Etappe 5), unten rechts der
  * schwebende Doppel-Knopf für Suche und neue Aufgabe.
  *
- * Noch nicht hier (spätere Etappen): Aufklappen von Unteraufgaben,
- * Abreiß-Geste.
+ * Ein Zettel mit Unteraufgaben klappt beim Antippen auf und nimmt dabei die
+ * volle Wandbreite ein. Welche Zettel offen sind, weiß die Wand und nicht der
+ * Zettel — sie muss es beim Packen wissen.
+ *
+ * Noch nicht hier (spätere Etappen): die Abreiß-Geste am Eselsohr.
  * Erledigen läuft in dieser Etappe weiter über die bestehenden Wege
  * (Such-Overlay mit der alten Karte, Quick-Aufgabe).
  */
@@ -103,6 +106,17 @@ const MAX_EXTRA_LINES = 1
 
 const wallEl = ref<HTMLElement | null>(null)
 const wallHeight = ref(0)
+
+/**
+ * Aufgeklappte Zettel. Mehrere dürfen gleichzeitig offen sein — ein Zettel, der
+ * sich beim Antippen eines anderen still schließt, nimmt dem Aufklappen die
+ * Verlässlichkeit, und der Scroll-Anker könnte nur noch einen von beiden halten.
+ *
+ * Geändert wird durch **Ersetzen** des Sets. Ein `ref` macht ein `Set` zwar
+ * tief reaktiv, aber die Zuweisung ist der Weg, der auch dann noch stimmt, wenn
+ * jemand hier später auf `shallowRef` umstellt.
+ */
+const expandedIds = ref(new Set<string>())
 const noteEls = new Map<string, HTMLElement>()
 /** Zuletzt gesetzte Positionen — Ausgangspunkt jeder FLIP-Animation. */
 const lastPositions = new Map<string, { x: number; y: number }>()
@@ -138,13 +152,29 @@ const setNoteEl = (taskId: string, instance: unknown) => {
  * bei rund 0,05 ms und ist damit belanglos. Wer diese Zahlen zitiert, muss
  * dazusagen, welche von beiden gemeint ist; die Messung skaliert linear mit der
  * Zahl der Zettel und liegt bereits in der Größenordnung eines Frames.
+ *
+ * **`anchorId`** ist der angetippte Zettel beim Auf- und Zuklappen. Er bleibt an
+ * seiner Bildschirmposition stehen; alles andere rutscht um ihn herum. Wie das
+ * geht, steht unten am Scroll-Anker.
  */
-const relayout = (animate: boolean) => {
+const relayout = (animate: boolean, anchorId?: string) => {
   const wall = wallEl.value
   if (!wall) return
 
   const usableWidth = wall.clientWidth - 2 * EDGE
   if (usableWidth <= 0) return
+
+  // Scroll-Anker, Teil 1: die Bildschirmposition des angetippten Zettels
+  // merken, BEVOR irgendetwas am DOM verändert wird.
+  //
+  // Gemessen wird das echte Rechteck und nicht — wie im Prototypen — die
+  // Differenz zweier gespeicherter `top`-Werte. Dort blieben rund 4 px Versatz
+  // stehen: die gespeicherte Zahl ist wandrelativ und weiß nichts davon, ob
+  // sich über der Wand noch etwas verschoben hat oder ob der Bildlauf sein
+  // Ziel überhaupt erreichen konnte. `getBoundingClientRect()` misst genau
+  // das, was der Anker eigentlich meint — den Abstand zur Fensteroberkante.
+  const anchorEl = anchorId ? (noteEls.get(anchorId) ?? null) : null
+  const anchorTopBefore = anchorEl ? anchorEl.getBoundingClientRect().top : 0
 
   const before = new Map(lastPositions)
 
@@ -175,6 +205,25 @@ const relayout = (animate: boolean) => {
   for (const task of wallTasks.value) {
     const el = noteEls.get(task.task_id)
     if (!el) continue
+
+    // Aufgeklappt heißt: volle Wandbreite, ohne Messung.
+    //
+    // Ein aufgeklappter Zettel darf hier NICHT durch die Messung laufen. Bei
+    // `width: max-content` misst sie nicht mehr den Titel, sondern die Reihe
+    // der Zettelchen daneben — ein Vielfaches der Wandbreite, aus dem der
+    // Planer dann eine Breite ableiten würde, die der Zettel nie haben soll.
+    //
+    // `natural = minimum = usableWidth` ist die Form, die dem Planer genau das
+    // sagt, was gilt: der Zettel ist so breit wie die Wand und lässt sich nicht
+    // verschmälern (`minimum` = `natural`, also keine Umbruchstelle). Er belegt
+    // damit von selbst eine Reihe allein.
+    if (expandedIds.value.has(task.task_id)) {
+      el.style.width = `${usableWidth}px`
+      shapes.push({ id: task.task_id, natural: usableWidth, minimum: usableWidth })
+      elements.set(task.task_id, el)
+      lineHeights.set(task.task_id, 0)
+      continue
+    }
 
     el.classList.add('zettel--measuring', 'zettel--single-line')
     el.style.maxWidth = 'none'
@@ -275,7 +324,12 @@ const relayout = (animate: boolean) => {
   for (const shape of shapes) {
     const el = elements.get(shape.id)
     if (!el) continue
-    metrics.push({ id: shape.id, width: widths.get(shape.id) ?? 0, height: el.offsetHeight })
+    metrics.push({
+      id: shape.id,
+      width: widths.get(shape.id) ?? 0,
+      height: el.offsetHeight,
+      expanded: expandedIds.value.has(shape.id)
+    })
   }
 
   const packed = packWall(metrics, usableWidth)
@@ -294,6 +348,19 @@ const relayout = (animate: boolean) => {
     el.style.zIndex = String(note.z)
     lastPositions.set(note.id, { x, y })
 
+    // Der angetippte Zettel wird NICHT animiert, auch wenn er wandert.
+    //
+    // Aufklappen ist eine Aussage über genau diesen Zettel. Rutscht er dabei
+    // selbst sichtbar weg, ist der Bezugspunkt der Handlung verloren: die
+    // Bewegung der anderen Zettel liest sich als „die Wand ordnet sich um mich
+    // herum" — richtig —, die eigene Bewegung als „ich habe danebengetippt" —
+    // falsch. Die Anheft-Bewegung der Spec gilt den ANDEREN Zetteln.
+    //
+    // Zusammen mit dem Scroll-Anker weiter unten steht er damit wirklich still:
+    // der Anker hält seine Bildschirmposition, das Auslassen hier verhindert,
+    // dass er trotzdem eine Flugbahn zeigt.
+    if (note.id === anchorId) continue
+
     const previous = before.get(note.id)
     if (previous) {
       const dx = previous.x - x
@@ -304,8 +371,55 @@ const relayout = (animate: boolean) => {
     }
   }
 
+  // Scroll-Anker, Teil 2: den Bildlauf um genau den Betrag nachziehen, um den
+  // der angetippte Zettel gewandert ist.
+  //
+  // Die Wandhöhe wird dafür **hier** direkt ans Element geschrieben, obwohl
+  // `wallHeight` sie oben schon gesetzt hat: `wallHeight` ist reaktiv und
+  // erreicht das DOM erst im nächsten Tick. Bis dahin ist das Dokument noch so
+  // hoch wie vorher — ein Bildlauf nach unten würde am alten Seitenende
+  // abgeschnitten und der Anker bliebe daneben stehen. Die Höhenanimation ist
+  // für diesen Moment abgeschaltet, weil eine über 0,42 s wachsende Wand
+  // dasselbe Problem hätte, nur langsamer.
+  if (anchorEl) {
+    wall.style.transition = 'none'
+    wall.style.height = `${packed.height}px`
+    // Erzwingt die Anwendung, bevor gemessen wird.
+    void wall.offsetHeight
+    const delta = anchorEl.getBoundingClientRect().top - anchorTopBefore
+    if (Math.abs(delta) > 0.5) window.scrollBy(0, delta)
+    // Erst im nächsten Frame zurück auf die Regel aus dem Stylesheet — im
+    // selben Tick würde die eben gesetzte Höhe nachträglich animiert.
+    requestAnimationFrame(() => {
+      wall.style.transition = ''
+    })
+  }
+
   if (!animate || prefersReducedMotion?.matches) return
   animateMoves(moved)
+}
+
+/**
+ * Auf- und Zuklappen eines Zettels mit Unteraufgaben.
+ *
+ * Warum die Zettel **oberhalb** sich dabei um exakt 0 px bewegen, liegt nicht
+ * an einer Sonderbehandlung, sondern am Packen selbst: die Skyline platziert in
+ * Eingabereihenfolge, und die Größe eines Zettels beeinflusst nur die Skyline,
+ * die den Zetteln NACH ihm zur Verfügung steht. Wer vor ihm liegt, ist längst
+ * gesetzt. Es gibt deshalb keine Zeile, die das durchsetzt — es gibt nur die
+ * Bedingung, die Reihenfolge nicht anzutasten.
+ *
+ * Der aufklappende Zettel selbst kann sehr wohl wandern: mit voller Wandbreite
+ * braucht er eine Stelle, an der die Skyline über die ganze Breite frei ist.
+ * Genau dagegen steht der Scroll-Anker.
+ */
+const toggleNote = (taskId: string) => {
+  const next = new Set(expandedIds.value)
+  if (!next.delete(taskId)) next.add(taskId)
+  expandedIds.value = next
+  // Erst nach dem Rendern der Zettelchen packen — vorher ist die Höhe des
+  // Zettels noch die alte.
+  nextTick(() => relayout(true, taskId))
 }
 
 /**
@@ -370,7 +484,16 @@ const layoutSignature = computed(() =>
   wallTasks.value.map(task => `${task.task_id}:${task.task_type}:${task.title}`).join('|')
 )
 
-watch(layoutSignature, () => scheduleRelayout(true))
+watch(layoutSignature, () => {
+  // Ein Zettel, der von der Wand verschwindet (erledigt, gelöscht), nimmt
+  // seinen Aufklapp-Zustand mit. Ohne das stünde er beim Wiederauftauchen —
+  // etwa nach „wieder dreckig" — unvermittelt offen da.
+  const onWall = new Set(wallTasks.value.map(task => task.task_id))
+  if ([...expandedIds.value].some(id => !onWall.has(id))) {
+    expandedIds.value = new Set([...expandedIds.value].filter(id => onWall.has(id)))
+  }
+  scheduleRelayout(true)
+})
 
 let resizeObserver: ResizeObserver | null = null
 let lastWidth = 0
@@ -491,6 +614,8 @@ const handleCreateQuickTask = async (data: {
         :key="task.task_id"
         :ref="instance => setNoteEl(task.task_id, instance)"
         :task="task"
+        :expanded="expandedIds.has(task.task_id)"
+        @toggle="toggleNote"
       />
     </div>
 
