@@ -36,6 +36,12 @@ const router = createRouter({
       redirect: '/listen'
     },
     {
+      // WEGWERF-PROTOTYP (Einkaufszettel im Pinnwand-Aussehen) — nicht dauerhaft.
+      path: '/prototype/einkauf',
+      name: 'prototype-einkauf',
+      component: () => import('../views/PrototypeEinkaufView.vue')
+    },
+    {
       path: '/notes',
       name: 'notes',
       component: () => import('../views/NotesView.vue')
