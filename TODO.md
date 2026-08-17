@@ -228,6 +228,11 @@ ALTER TABLE shopping_items ADD COLUMN quantity int NOT NULL DEFAULT 1;
   erreichtes Ziel sieht trotzdem voll aus, weil der Streifen außerhalb der Spur liegt.
   Bleibt eine leichte Asymmetrie (20 px links, 30 px rechts bis zur Papierkante).
 
+- **Ältere Erledigungen kennen ihren Erlediger nicht.** Der Store lädt nur die
+  Completions der laufenden Woche; alles davor bekommt im Erledigt-Streifen einen
+  farblosen Punkt. Am Wochenanfang ist damit fast die ganze Liste grau. Eine eigene
+  Query für ältere Completions würde das beheben — bewusst nicht Teil von Ticket 05.
+
 ### Task Management
 - **"Meine Aufgaben" View** - Extra Tab für zugewiesene Tasks (Option 1)
   - CategoryNav erweitern um 5. Tab: "Meine Aufgaben"

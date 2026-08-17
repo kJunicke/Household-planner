@@ -104,6 +104,26 @@ Skyline-Packing (`lib/wallLayout.ts`).
   in der Leiste. Vor dem Speichern benennt eine Bestätigung die Folgen: das Ziel gilt
   sofort, der neue Wochenstart erst ab einem genannten Datum, und die laufende Woche ist
   dadurch einmalig länger (→ [data-model.md](data-model.md)).
+- **Erledigt-Streifen** unter der Wand — erledigte Aufgaben verschwinden nicht, sie sinken
+  nach unten. Je Aufgabe eine ruhige Zeile von 36 px: Personenfarbe als Punkt,
+  durchgestrichener Titel, Zeitstempel, und ein Knopf, der sie wieder auf „dran" setzt. Die
+  Wand selbst bleibt dadurch frei von allem, was schon getan ist.
+  - Der Zeitstempel zeigt heute die Uhrzeit, älter das Datum — eine Uhrzeit ohne Datum an
+    einer zwei Wochen alten Aufgabe wäre irreführend.
+  - Die Personenfarbe kennt nur die **laufende Woche**; ältere Erledigungen fallen auf
+    `tasks.last_completed_at` zurück und bleiben farblos. Farblos heißt „unbekannt", und
+    das stimmt. Am Wochenanfang ist die Liste deshalb überwiegend grau.
+  - **Verschobene** Aufgaben landen in derselben Liste, tragen aber keinen Durchstreich und
+    keinen farbigen Punkt — der Punkt beantwortet „wer hat das gemacht", und bei einer
+    verschobenen Aufgabe hat es niemand gemacht. Sie zeigen stattdessen, worauf verschoben
+    wurde.
+  - Der Knopf ist bewusst nur so hoch wie die Zeile, statt der sonst üblichen 48 px. Dafür
+    ist die Trefferfläche an den Inhaltsbereich der Zeile gebunden statt an eine eigene
+    Zahl: ein Knopf, der seine Zeile um einen halben Pixel überragt, betätigt den der
+    **nächsten** Zeile — und setzt damit die falsche Aufgabe wieder auf dran.
+- **FAB**: ein Bedienelement für Suchen und Neuanlegen (Lupe mit Plus-Abzeichen), wie im
+  klassischen Screen. Der Header trägt dafür weder Lupe noch Plus. Die Wand reserviert
+  unten Platz für ihn, damit er keine Erledigt-Zeile und keinen Zettel verdeckt.
 
 ## `/history` — HistoryView
 
