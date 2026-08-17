@@ -13,13 +13,17 @@
  *
  * Oben klebt die Statusleiste mit dem gemeinsamen Wochenziel (Etappe 3).
  *
- * Noch nicht hier (spätere Etappen): Erledigt-Liste unter der Wand,
- * Aufklappen von Unteraufgaben, Abreiß-Geste.
+ * Unter der Wand liegt die Erledigt-Liste (Etappe 5), unten rechts der
+ * schwebende Doppel-Knopf für Suche und neue Aufgabe.
+ *
+ * Noch nicht hier (spätere Etappen): Aufklappen von Unteraufgaben,
+ * Abreiß-Geste.
  * Erledigen läuft in dieser Etappe weiter über die bestehenden Wege
  * (Such-Overlay mit der alten Karte, Quick-Aufgabe).
  */
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import WallNote from '../components/WallNote.vue'
+import WallDoneList from '../components/WallDoneList.vue'
 import WallStatusBar from '../components/WallStatusBar.vue'
 import TaskCard from '../components/TaskCard.vue'
 import TaskCreateModal from '../components/TaskCreateModal.vue'
@@ -51,6 +55,16 @@ const wallTasks = computed((): Task[] => [
   ...board.dailyTasks.value,
   ...board.projectTasks.value
 ])
+
+/**
+ * Erledigte Aufgaben — gehen unter die Wand, nicht auf sie. Reihenfolge
+ * unverändert aus dem gemeinsamen Composable; nicht sortiert, deshalb keine
+ * Kopie nötig.
+ *
+ * Eigene Konstante statt `board.completedTasks.value` im Template: in einem
+ * Objekt verschachtelte Refs werden im Template NICHT ausgepackt.
+ */
+const doneTasks = computed((): readonly Task[] => board.completedTasks.value)
 
 // --- Layout ------------------------------------------------------------------
 
@@ -484,8 +498,12 @@ const handleCreateQuickTask = async (data: {
       Nichts angepinnt.
     </p>
 
-    <!-- FAB: schwebende Papierkarte, nicht angepinnt. Sitzt so hoch, dass sie
-         die untere rechte Ecke des untersten Zettels frei lässt. -->
+    <!-- Erledigt: kompakter Streifen UNTER der Wand, nicht auf ihr. -->
+    <WallDoneList :tasks="doneTasks" />
+
+    <!-- FAB: schwebende Papierkarte, nicht angepinnt — Suche und Neuanlegen
+         bleiben hier und wandern nicht in den Header. Dass er nichts verdeckt,
+         regelt das Bodenpolster von `.wall-page`, nicht seine eigene Höhe. -->
     <div class="fab-card">
       <button
         class="fab-btn"
@@ -589,7 +607,12 @@ const handleCreateQuickTask = async (data: {
      kompakt und je nach Leck unterschiedlich hoch ist. Ohne dieses Polster
      bleiben am Seitenende Zettel dauerhaft unter der Leiste und ihr Eselsohr
      (Etappe 4) wäre unerreichbar. */
-  padding: 10px 8px calc(96px + var(--wall-status-height, 0px));
+  /* Der untere Wert ist gerechnet, nicht gemessen: der FAB sitzt 64 + 18 px
+     über der Unterkante, ist 52 px hoch und trägt Rahmen samt Schlagschatten —
+     zusammen rund 138 px. Mit 148 px bleibt am Seitenende Luft unter ihm, statt
+     dass er die letzte Zeile bzw. das Eselsohr des untersten Zettels verdeckt.
+     Nachmessen, wenn sich `.fab-card` ändert. */
+  padding: 10px 8px calc(148px + env(safe-area-inset-bottom) + var(--wall-status-height, 0px));
 }
 
 /* Der Bezugsrahmen der absolut positionierten Zettel. Die Höhe kommt aus dem
