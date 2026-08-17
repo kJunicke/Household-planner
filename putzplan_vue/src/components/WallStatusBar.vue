@@ -334,7 +334,12 @@ onUnmounted(() => {
         :class="{ 'status-bars--burst': isOverflowing }"
         :style="burstStyle"
       >
-        <div class="status-track">
+        <!-- `data-points-target` ist das Ziel des Punkteflugs aus Ticket 09.
+             Ein Attribut und keine Klasse, weil `lib/pointsFlight.ts` von
+             ausserhalb dieser Komponente sucht: Klassennamen in scoped Styles
+             sind zwar stabil, aber als Vertrag nach aussen nicht erkennbar —
+             ein Attribut sagt „hieran haengt jemand". -->
+        <div class="status-track" data-points-target>
           <div class="status-fill" :style="{ width: `${fillPercent}%` }">
             <div
               v-for="segment in segments"
@@ -520,6 +525,16 @@ onUnmounted(() => {
     var(--pw-accent) calc(var(--pw-burst-strength) * 100%),
     var(--pw-line)
   );
+}
+
+/* Ankunftsquittung des Punkteflugs (Ticket 09). Nur ein kurzer Ring um die
+   Spur — die eigentliche Aussage macht der wachsende Balken. Die Klasse setzt
+   `lib/pointsFlight.ts` fuer rund 420 ms; sie greift auch imperativ gesetzt,
+   weil scoped Styles ueber das Datenattribut des ELEMENTS matchen und nicht
+   ueber die Herkunft der Klasse. */
+.status-track.is-hit {
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--pw-accent) 55%, transparent);
+  transition: box-shadow 0.18s ease-out;
 }
 
 .status-fill {

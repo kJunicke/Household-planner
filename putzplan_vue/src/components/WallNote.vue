@@ -15,7 +15,12 @@
  * - nur EIN sichtbarer Knopf: Bearbeiten. Die bis zu sieben Icon-Buttons der
  *   alten Karte entfallen; die Folgedialoge des Bearbeiten-Modals bleiben aber
  *   vollständig erreichbar.
- * - die Abreiß-Geste am Eselsohr und der Long-Press (Etappe 4).
+ * - der Long-Press mit den vier beschrifteten Richtungen (Ticket 10) und der
+ *   Fetzen zum Zurückkleben (Ticket 11).
+ *
+ * **Das Eselsohr** unten rechts ist der Abreiß-Griff (Ticket 09): von dort aus
+ * nach unten ziehen erledigt die Aufgabe, sofort und ohne vorheriges langes
+ * Drücken. Die Geste selbst steckt in `useTearGesture`.
  *
  * **Antippen der Fläche** klappt die Unteraufgaben auf — aber nur bei einem
  * Zettel, der welche hat. Ein Zettel ohne Unteraufgaben reagiert auf ein
@@ -26,19 +31,32 @@
  * kennen, bevor sie packt — ein aufgeklappter Zettel bekommt die volle
  * Wandbreite, und die Zettel darunter müssen dafür weichen.
  */
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import type { Task } from '@/types/Task'
 import { useTaskStore } from '@/stores/taskStore'
 import { useHouseholdStore } from '@/stores/householdStore'
 import { scheduleOf } from '@/lib/taskSchedule'
 import { kindOfTaskType, rotationOf, subtaskColumns } from '@/lib/wallLayout'
+import { useTearGesture } from '@/composables/useTearGesture'
+import { flyPoints } from '@/lib/pointsFlight'
 import TaskEditModal from './TaskEditModal.vue'
 import TaskAssignmentModal from './TaskAssignmentModal.vue'
 import SubtaskManagementModal from './SubtaskManagementModal.vue'
 import TaskPostponeModal from './TaskPostponeModal.vue'
 
 const props = defineProps<{ task: Task; expanded?: boolean }>()
-const emit = defineEmits<{ toggle: [taskId: string] }>()
+/**
+ * `tear-start` / `tear-end`: solange am Zettel gezogen wird, darf ihn ein
+ * Neupacken der Wand nicht gleichzeitig durch die Gegend fliegen lassen — sonst
+ * kämpfen die FLIP-Animation und der Finger um dasselbe `transform`. Die Wand
+ * merkt sich die ID und lässt genau diesen Zettel aus, wie sie es beim
+ * angetippten Zettel schon tut.
+ */
+const emit = defineEmits<{
+  (e: 'toggle', taskId: string): void
+  (e: 'tear-start', taskId: string): void
+  (e: 'tear-end', taskId: string): void
+}>()
 
 const taskStore = useTaskStore()
 const householdStore = useHouseholdStore()
@@ -97,6 +115,57 @@ const onSurfaceTap = () => {
   emit('toggle', props.task.task_id)
 }
 
+// --- Abreißen (Etappe 4 / Ticket 09) ----------------------------------------
+
+/**
+ * Der Griff des Zettels selbst braucht eine ID, weil das Gesten-Composable
+ * mehrere Griffe derselben Komponente auseinanderhalten muss (ein Eselsohr am
+ * Zettel, je eines an jedem Zettelchen). Eine echte `task_id` wäre hier falsch:
+ * die des Elternteils ist auch eine gültige Unteraufgaben-ID in anderen
+ * Zusammenhängen, und die Verwechslung wäre lautlos.
+ */
+const NOTE_HANDLE = '#note'
+
+/**
+ * Was dieser Zettel beim Abreißen **wirklich** noch einbringt.
+ *
+ * Bewusst dieselbe Rechnung wie `estimateCompletionEffort` im Store: der Balken
+ * wächst um genau diesen Wert, also müssen die fliegende Zahl UND die Zahl in
+ * der Fußzeile dieselbe sein.
+ *
+ * **Hier lag ein Fehler, und er war teuer.** Die Fußzeile zeigte vorher den
+ * ungekürzten `tasks.effort`. Der QC hat den Fall nachgestellt: „Badezimmer
+ * putzen", `effort 1`, eine erledigte `deduct`-Unteraufgabe — die Fußzeile
+ * versprach „1 P", geflogen ist nichts, die Statusleiste stand vor und nach dem
+ * Abriss auf 11, und die Datenbank schrieb `effort_override 0`. App, Flug und
+ * Datenbank waren einig; allein der Zettel log. Eine Zahl am Zettel ist ein
+ * Versprechen — sie muss die sein, die gleich fliegt.
+ *
+ * Verbindlich rechnet weiterhin die Edge Function; das hier ist die Schätzung
+ * fürs Auge, wie im Store auch.
+ */
+const effectivePoints = computed(() => {
+  const deductSum = taskStore
+    .getSubtasks(props.task.task_id)
+    .filter(s => s.completed && s.subtask_points_mode === 'deduct')
+    .reduce((sum, s) => sum + s.effort, 0)
+  return Math.max(0, props.task.effort - deductSum)
+})
+
+/**
+ * Startpunkt des Punkteflugs: die Mitte des Griffs in **Fensterkoordinaten**.
+ *
+ * Das Rechteck eines geneigten Zettels ist größer als der Zettel selbst — seine
+ * Ecken liegen außerhalb. Für den Startpunkt spielt das keine Rolle: die
+ * **Mitte** des Rechtecks ist auch bei jeder Drehung die Mitte des Elements,
+ * und ein Startpunkt ist ohnehin nur der Anfang einer Zierbewegung, keine
+ * Trefferprüfung. Wer hier später eine Ecke bräuchte, müsste rechnen.
+ */
+const centerOf = (el: HTMLElement) => {
+  const rect = el.getBoundingClientRect()
+  return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 }
+}
+
 /**
  * Ein Zettelchen abreißen = die Unteraufgabe erledigen.
  *
@@ -104,15 +173,121 @@ const onSurfaceTap = () => {
  * wird `completionsInFlight` geprüft und noch vor dem ersten `await` gesetzt,
  * ein zweiter Tap im selben Tick kommt also nicht durch. Hier steht bewusst
  * KEIN eigenes `:disabled` — das Attribut schreibt Vue erst im nächsten Tick
- * und schützt gegen drei synchrone Taps nicht.
+ * und schützt gegen drei synchrone Taps nicht. Aus demselben Grund entscheidet
+ * über den Punkteflug der **Rückgabewert** von `completeTask`: ein
+ * abgewiesener Doppelgriff darf keine zweite Zahl fliegen lassen.
  *
  * Punkte je nach `subtask_points_mode` der Unteraufgabe: `checklist` = 0,
  * `deduct` = wird vom Elternaufwand abgezogen, `bonus` = zusätzlich. Gerechnet
  * wird das ausschließlich in der Edge Function `complete-task`.
+ *
+ * **Was fliegt:** bei `bonus` und bei `deduct` der volle `effort` der
+ * Unteraufgabe — beide erhöhen die Wochenpunkte um genau diesen Betrag (siehe
+ * `estimateCompletionEffort`). Dass `deduct` am Zettelchen mit einem Minus
+ * steht, meint den späteren Abzug beim Elternteil, nicht die Woche. Bei
+ * `checklist` fliegt nichts, weil auch nichts dazukommt. Stumm ist das trotzdem
+ * nicht — anders als beim ganzen Zettel bleibt das Zettelchen ja stehen und
+ * quittiert selbst: `mini--torn` knickt es weg, und bei Aufgaben mit
+ * Fortschritt kommt der Durchstrich dazu.
  */
-const tearSubtask = (subtaskId: string) => {
-  void taskStore.completeTask(subtaskId)
+const tearSubtask = async (subtaskId: string, handle: HTMLElement) => {
+  const subtask = subtasks.value.find(s => s.task_id === subtaskId)
+  const origin = centerOf(handle)
   markTorn(subtaskId)
+  const applied = await taskStore.completeTask(subtaskId)
+  if (!applied || !subtask) return
+  if (subtask.subtask_points_mode === 'checklist') return
+  flyPoints(`+${subtask.effort} P`, origin)
+}
+
+/**
+ * Den ganzen Zettel abreißen = die Aufgabe erledigen.
+ *
+ * **Ein Abriss quittiert immer**, auch wenn er null Punkte bringt. Ein Zettel,
+ * dessen Punkte schon über seine `deduct`-Unteraufgaben eingesammelt wurden,
+ * ist kein Sonderfall, sondern das erwartete Ende genau dieser Zettel — er
+ * verschwand vorher stumm von der Wand, und stumm sieht aus wie ein Fehlgriff.
+ *
+ * Kein „+0 P": eine Null in derselben Aufmachung wie ein Punktgewinn liest sich
+ * wie ein Verlust oder wie ein Fehler. Stattdessen fliegt „erledigt" in der
+ * ruhigen Papiervariante — dieselbe Bahn, dieselbe Ankunft, nur ohne
+ * Punktbehauptung.
+ */
+const tearNote = async (handle: HTMLElement) => {
+  const origin = centerOf(handle)
+  const points = effectivePoints.value
+  const applied = await taskStore.completeTask(props.task.task_id)
+  if (!applied) return
+  if (points > 0) flyPoints(`+${points} P`, origin)
+  else flyPoints('erledigt', origin, { muted: true })
+}
+
+/**
+ * Die Abreiß-Geste. Ein Composable für **alle** Griffe dieses Zettels: das
+ * Eselsohr und jedes Zettelchen. Es kann ohnehin nur einer gleichzeitig gezogen
+ * werden, und ein Composable je Zettelchen hieße ein Scroll-Zuhörer je
+ * Zettelchen.
+ */
+const tear = useTearGesture({
+  onTear: (id, handle) => {
+    if (id === NOTE_HANDLE) void tearNote(handle)
+    else void tearSubtask(id, handle)
+  }
+})
+
+// Einzeln herausgezogen, weil verschachtelte Refs im Template NICHT ausgepackt
+// werden — `tear.pull` wäre dort das Ref-Objekt und nie eine Zahl.
+const {
+  scrolling: tearScrolling,
+  activeId: tearActiveId,
+  pull: tearPull,
+  tearDistance,
+  onPointerDown: onTearDown,
+  onPointerMove: onTearMove,
+  onPointerUp: onTearUp,
+  onPointerCancel: onTearCancel,
+  swallowClick: swallowTearClick
+} = tear
+
+/** Wird gerade am Eselsohr DIESES Zettels gezogen (nicht an einem Zettelchen)? */
+const isNoteTearing = computed(() => tearActiveId.value === NOTE_HANDLE)
+
+/** Weit genug für ein Abreißen — der Zettel sagt es, bevor losgelassen wird. */
+const isTearReady = computed(() => isNoteTearing.value && tearPull.value >= tearDistance)
+
+watch(isNoteTearing, active => {
+  if (active) emit('tear-start', props.task.task_id)
+  else emit('tear-end', props.task.task_id)
+})
+
+/**
+ * Ein Zettelchen folgt dem Finger. Inline, weil der Wert je Zettelchen
+ * unterschiedlich ist und nur für genau eines gleichzeitig gilt.
+ */
+const miniStyle = (subtaskId: string): Record<string, string> | undefined => {
+  if (tearActiveId.value !== subtaskId) return undefined
+  const pull = tearPull.value
+  return {
+    transform: `translate(${(pull * 0.1).toFixed(1)}px, ${pull.toFixed(1)}px) rotate(${Math.min(9, pull * 0.11).toFixed(2)}deg)`,
+    zIndex: '3',
+    boxShadow: '4px 6px 0 rgba(36, 31, 26, 0.34)'
+  }
+}
+
+/**
+ * Antippen eines Zettelchen-Griffs erledigt weiterhin sofort — das ist der
+ * Weg aus Ticket 06 und bleibt. Die Zieh-Geste kommt daneben, nicht an seine
+ * Stelle. Hat sie ausgelöst, wird der nachlaufende Klick geschluckt; käme er
+ * durch, finge ihn ohnehin der synchrone Riegel im Store ab.
+ *
+ * Der Scroll-Schutz gilt auch für dieses Antippen. Er hängt sonst nur am
+ * `pointerdown` der Geste — der Klick liefe daran vorbei und erledigte mitten
+ * im Bildlauf doch etwas.
+ */
+const onMiniEarClick = (subtaskId: string, event: MouseEvent) => {
+  if (swallowTearClick(event)) return
+  if (tearScrolling.value) return
+  void tearSubtask(subtaskId, event.currentTarget as HTMLElement)
 }
 
 /**
@@ -158,9 +333,25 @@ const ownerColor = computed(() => {
  * `--owner` wird nur gesetzt, wenn es wirklich eine Person gibt. Ohne die
  * Eigenschaft greift in jeder Regel der zweite Parameter von
  * `var(--owner, …)` — der zurücktretende Rand.
+ *
+ * Hier hängt auch die Zieh-Bewegung des Abreißens dran: die Neigung ist bereits
+ * ein Inline-`transform`, ein zweites daneben gäbe es nicht — die letzte
+ * Deklaration gewänne und die Neigung wäre weg. Beides steht deshalb in
+ * derselben Zeichenkette.
+ *
+ * Der z-index bleibt bewusst **draußen**: den schreibt `WallView` direkt ans
+ * Element. Würde Vue ihn hier zeitweise mitverwalten, entfernte es ihn beim
+ * Loslassen wieder — der Zettel verlöre seine Stapelposition bis zum nächsten
+ * Packen. Das Anheben während des Ziehens macht deshalb eine Klasse mit
+ * `!important` (`.zettel--tearing`).
  */
 const noteStyle = computed((): Record<string, string> => {
-  const style: Record<string, string> = { transform: `rotate(${rotation.value.toFixed(2)}deg)` }
+  const pull = isNoteTearing.value ? tearPull.value : 0
+  const transform =
+    pull > 0
+      ? `translate(${(pull * 0.1).toFixed(1)}px, ${pull.toFixed(1)}px) rotate(${(rotation.value + Math.min(9, pull * 0.09)).toFixed(2)}deg)`
+      : `rotate(${rotation.value.toFixed(2)}deg)`
+  const style: Record<string, string> = { transform }
   if (ownerColor.value) style['--owner'] = ownerColor.value
   return style
 })
@@ -260,7 +451,14 @@ const handlePostponeConfirm = async (targetDate: string) => {
   <div
     ref="root"
     class="zettel"
-    :class="[`zettel--${kind}`, { 'zettel--tappable': hasSubtasks }]"
+    :class="[
+      `zettel--${kind}`,
+      {
+        'zettel--tappable': hasSubtasks,
+        'zettel--tearing': isNoteTearing,
+        'zettel--tear-ready': isTearReady
+      }
+    ]"
     :style="noteStyle"
     @click="onSurfaceTap"
   >
@@ -278,7 +476,10 @@ const handlePostponeConfirm = async (targetDate: string) => {
     <!-- Fußzeile im normalen Fluss: Punktwert und Rückstand können dem Titel
          damit strukturell nicht mehr ins Gehege kommen, egal wie lang er ist. -->
     <div class="foot">
-      <span class="points">{{ props.task.effort }} P</span>
+      <!-- NICHT `task.effort`: hier steht, was das Abreißen wirklich noch
+           einbringt (→ `effectivePoints`). Die Zahl ist das Versprechen, das
+           der Punkteflug gleich einlöst — beide kommen aus derselben Quelle. -->
+      <span class="points">{{ effectivePoints }} P</span>
       <!-- Fortschritt am EINGEKLAPPTEN Zettel: „3 / 7" ohne Aufklappen. Er
            bleibt auch aufgeklappt stehen — die Zahl ist die Zusammenfassung
            der Zettelchen, nicht ihr Ersatz.
@@ -300,8 +501,10 @@ const handlePostponeConfirm = async (targetDate: string) => {
         class="mini"
         :class="{
           'mini--done': tracksProgress && subtask.completed,
-          'mini--torn': recentlyTorn.has(subtask.task_id)
+          'mini--torn': recentlyTorn.has(subtask.task_id),
+          'mini--tearing': tearActiveId === subtask.task_id
         }"
+        :style="miniStyle(subtask.task_id)"
         @click.stop
       >
         <span class="mini-title">{{ subtask.title }}</span>
@@ -316,8 +519,13 @@ const handlePostponeConfirm = async (targetDate: string) => {
         <button
           v-if="!tracksProgress || !subtask.completed"
           class="mini-ear"
+          :class="{ 'ear--locked': tearScrolling }"
           :title="`„${subtask.title}“ abreißen`"
-          @click.stop="tearSubtask(subtask.task_id)"
+          @pointerdown="onTearDown(subtask.task_id, $event)"
+          @pointermove="onTearMove"
+          @pointerup="onTearUp"
+          @pointercancel="onTearCancel"
+          @click="onMiniEarClick(subtask.task_id, $event)"
         ></button>
       </div>
     </div>
@@ -325,6 +533,34 @@ const handlePostponeConfirm = async (targetDate: string) => {
     <button class="edit" title="Aufgabe bearbeiten" @click.stop="showEditModal = true">
       <i class="bi bi-pencil" aria-hidden="true"></i>
     </button>
+
+    <!-- Das Eselsohr: der Abreiß-Griff. Kein Text daneben — die angeknickte
+         Ecke mit der Perforationslinie sagt „hier anfassen".
+
+         Ein Antippen tut ausdrücklich NICHTS (der Klick wird nur geschluckt,
+         damit er den Zettel nicht aufklappt): Erledigen ist eine Zieh-Geste.
+         Ein Griff, der schon auf Antippen erledigt, wäre die versehentlichste
+         Erledigung der ganzen App.
+
+         **Am AUFGEKLAPPTEN Zettel gibt es ihn nicht.** Dort sitzt in derselben
+         Ecke der Griff des letzten Zettelchens: die untere rechte Ecke des
+         Zettels IST die untere rechte Ecke des letzten Zettelchens, und beide
+         Trefferflächen lägen übereinander. Der Zettel steht im DOM später und
+         gewänne — ein Zug am letzten Zettelchen würde also die ganze Aufgabe
+         erledigen statt der Unteraufgabe. Genau die Art Fehlgriff, die man
+         nicht sieht und nur ertastet. Wer die ganze Aufgabe abreißen will,
+         klappt zu und zieht; eingeklappt ist die Ecke frei. -->
+    <button
+      v-if="!props.expanded"
+      class="ear"
+      :class="{ 'ear--locked': tearScrolling, 'ear--ready': isTearReady }"
+      :title="`„${props.task.title}“ nach unten abreißen`"
+      @pointerdown="onTearDown(NOTE_HANDLE, $event)"
+      @pointermove="onTearMove"
+      @pointerup="onTearUp"
+      @pointercancel="onTearCancel"
+      @click="swallowTearClick"
+    ></button>
 
     <TaskEditModal
       v-if="showEditModal"
@@ -602,6 +838,29 @@ const handlePostponeConfirm = async (targetDate: string) => {
   border: 0;
   background: none;
   cursor: pointer;
+  /* Wie am großen Eselsohr: erst `none` macht aus dem Zug nach unten eine
+     Geste. Ohne `clip-path` — auf einem Zettelchen sitzt kein zweiter Knopf,
+     mit dem sich der Griff die Ecke teilen müsste. */
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* Perforationslinie wie am großen Eselsohr, nur schmaler. */
+.mini-ear::after {
+  content: '';
+  position: absolute;
+  right: 1px;
+  bottom: 19px;
+  width: 19px;
+  height: 0;
+  border-top: 1.2px dashed rgba(36, 31, 26, 0.4);
+}
+
+/* Am Finger: das Zettelchen liegt über seinen Nachbarn (Rest inline, weil der
+   Betrag am Zug hängt). */
+.mini--tearing {
+  border-style: dashed;
 }
 
 .mini-ear::before {
@@ -642,27 +901,253 @@ const handlePostponeConfirm = async (targetDate: string) => {
 }
 
 /* Die einzige sichtbare Aktion. Oben rechts, weil unten rechts das Eselsohr
-   der späteren Abreiß-Geste liegt. 40 px wie in dichten Listen — 48 px wären
-   auf einem 48-px-Zettel die ganze Fläche. */
+   liegt. 40 px wie in dichten Listen — 48 px wären auf einem 44-px-Zettel die
+   ganze Fläche.
+
+   **Warum das Stiftsymbol nicht in der Mitte seines Knopfes sitzt.** Ein Zettel
+   ist mindestens 44 px hoch, und genau so hoch ist auch das Eselsohr. Auf einem
+   Zettel dieser Mindesthöhe liegen beide Trefferflächen übereinander; senkrecht
+   ist kein Platz für zwei Ziele. Das Eselsohr lässt deshalb per `clip-path`
+   eine Ecke frei, und das Stiftsymbol rückt dort hinein.
+
+   **Eine diagonale Trennlinie war dafür zu knapp — hier stehen die Messwerte,
+   nicht meine Rechnung.** Erster Entwurf: 45°-Schnitt mit 34 px Schenkeln, dazu
+   der Stift bei Schriftgröße 14 und 3 px Polster. Gerechnet kam ich auf „rund
+   10 px" Abstand zur Trennlinie. Der QC hat im **gedrehten** Koordinatensystem
+   bei 0,25 px Raster nachgemessen:
+
+     Abstand Stiftmitte zur Trennlinie   4,16 px   (gerechnet: „rund 10")
+     Stiftfläche auf dem Eselsohr        20,6 %
+     Trefferfläche des Eselsohrs         1328 px²  (gerechnet: 1358)
+     betroffen                           11 von 23 Zetteln
+
+   Ein Fünftel des sichtbaren Stiftes lag also auf dem Eselsohr, auf knapp der
+   halben Wand: sichtbares Ziel, keine Reaktion.
+
+   **Die Lösung ist jetzt ein rechteckiger Ausschnitt statt einer Diagonalen.**
+   Eine Diagonale schneidet dort am meisten weg, wo der Stift sitzt, und lässt
+   dort am meisten stehen, wo ohnehin niemand hingreift. Der Ausschnitt (24 ×
+   18 px in der oberen linken Ecke des Eselsohr-Kastens) gibt dem Stift eine
+   eigene, rechteckige Zone und kostet das Eselsohr weniger Fläche als vorher
+   die Diagonale.
+
+   Symbolgröße 12, Polster 1 px oben / 4 px links.
+
+   **Die Höhe war erst 16 px und das war um Haaresbreite zu wenig.** Gemessen:
+   das Glyphenkästchen endet bei Zettel-lokal y ≈ 15,9 — es stand also bündig
+   an der Kante des Ausschnitts, und jedes Antialiasing-Pixel darunter gehörte
+   dem Eselsohr. Ergebnis: **13,2 % des sichtbaren Stiftes auf dem Ohr, auf 10
+   von 20 Zetteln**, konkret die unteren rund 2,4 px. Mit 18 px bleiben
+   **2,1 px** Luft. Das ist knapp, und es ist **absichtlich** knapp
+   aufgeschrieben: wer an Symbolgröße, Polster oder Schriftart dreht, kippt es
+   sofort wieder. Nachmessen ist hier Pflicht, nicht Kür.
+
+   Messwerte zum jeweiligen Stand (alle vom QC, nicht gerechnet):
+
+     Trefferfläche Eselsohr    Diagonale 34 px   1328 px²
+                               Ausschnitt 24×16  1512 px²  (gerechnet 1552)
+                               Ausschnitt 24×18  gerechnet 1504 — ungemessen
+     Restfläche Bearbeiten     Ausschnitt 24×16   273 px², Stift zu 86,8 %
+                               trefferwirksam; ein Klick auf die Glyphmitte
+                               öffnet das Modal nachweislich
+                               Ausschnitt 24×18  gerechnet +48 px² — ungemessen
+
+   Dass der Bearbeiten-Knopf dabei von 399 auf 273 px² gefallen ist, ist in
+   Ordnung: entscheidend ist, dass das **sichtbare** Ziel trifft, nicht wie
+   groß die unsichtbare Fläche darum herum ist.
+
+   Was einen Fehlgriff harmlos macht: ein Tipp, der doch im Eselsohr landet,
+   tut **nichts** (es reagiert nur auf Ziehen). Er erledigt nie versehentlich —
+   gemessen liegt der sichtbare Knick zu 97,7 % im Eselsohr, ein Griff dorthin
+   öffnet also auch kein Modal mitten in der Geste. */
 .edit {
   position: absolute;
   top: 0;
   right: 0;
   width: 40px;
   height: 40px;
-  padding: 0;
+  padding: 1px 0 0 4px;
   border: 0;
   background: none;
   color: var(--pw-ink-soft);
-  font-size: 15px;
+  font-size: 12px;
   line-height: 1;
   display: grid;
-  place-items: center;
+  place-items: start start;
   cursor: pointer;
 }
 
 .edit:active {
   transform: translate(1px, 1px);
+}
+
+/* --- Das Eselsohr: der Abreiß-Griff (Etappe 4) ---------------------------- */
+
+/* 44 × 44 px Kasten in der unteren rechten Ecke SEINES Zettels — `right: 0;
+   bottom: 0`, kein negativer Versatz. Der Prototyp setzt hier −2 px; das würde
+   den Griff über die Kante schieben und im dichten Packen den Nachbarzettel
+   betätigen, also die falsche Aufgabe erledigen. Unsichtbar, nur durch Abtasten
+   der Ecken zu finden — deshalb bündig.
+
+   `clip-path` nimmt aus der oberen linken Ecke ein **Rechteck** von 24 × 18 px
+   heraus und überlässt es dem Bearbeiten-Knopf; warum ein Rechteck und keine
+   Diagonale, steht ausführlich dort. 24/44 = 54,5 %, 18/44 = 40,9 %.
+
+   **Wie eng es zwischen Ausschnitt und Zeichnung wirklich ist** (Ohr-lokale
+   y-Werte, 0 = Oberkante des Kastens; eine frühere Fassung dieses Kommentars
+   nannte das „strukturell sicher" — das war zu großzügig, der QC hat genau hier
+   einen Anschnitt gemessen):
+
+     Unterkante des Ausschnitts                 y = 18
+     Oberkante des Knicks (44 − 2 − 22)         y = 20   → 2 px frei
+     Perforationslinie (44 − 22)                y = 22   → 4 px frei
+
+   Zwei Pixel sind kein Puffer. Was hier **doch** strukturell hält, ist etwas
+   anderes: die **Höhe** des Knicks ändert sich in keinem Zustand mehr, auch
+   nicht im „reißt gleich" (siehe dort — er wächst nur noch in die Breite). Der
+   Anschnitt kann damit nicht mehr aus einem Zustandswechsel entstehen, sondern
+   nur noch daraus, dass jemand an einer dieser drei Zahlen dreht. Dann bitte
+   alle drei nachrechnen und nachmessen.
+
+   Trefferfläche, gemessen und gerechnet nebeneinander:
+
+     Ausschnitt 24 × 16   gemessen 1512 px²   (gerechnet 1552, −2,6 %)
+     Ausschnitt 24 × 18   gerechnet 1504 px², ungemessen
+     Diagonale 34 px      gemessen 1328 px²   (der Vorgänger)
+
+   Der Griff ist mit dem Ausschnitt also größer als mit der Diagonalen — und
+   der Stift trotzdem frei.
+
+   `touch-action: none` ist die zweite Hälfte des Scroll-Schutzes: nur so wird
+   aus einem Zug nach unten überhaupt eine Geste statt eines Bildlaufs. Solange
+   die Seite scrollt (plus Nachlauf), schaltet `.ear--locked` auf `pan-y` zurück
+   — wer in eine fliegende Wand greift, scrollt weiter und reißt nichts ab.
+
+   **Was das kostet, ist vermessen** (QC, beide Stände):
+
+     Diagonale 34 px      1329 px² je Ohr = 68,6 % des Kastens,
+                          über die Wand rund 6,4 % der Fläche
+     Ausschnitt 24 × 16   1538 px² je Ohr = 79,4 % des Kastens
+     Ausschnitt 24 × 18   gerechnet rund 1490 px², ungemessen
+
+   Der weggeschnittene Teil scrollt in allen Ständen korrekt durch. Der
+   Wandanteil ist nur für den diagonalen Stand gemessen; mit dem größeren Griff
+   liegt er höher als 6,4 % — das ist die Untergrenze, nicht der neue Wert. Wer
+   den Preis für zu hoch hält, kann den Kasten
+   verkleinern; `touch-action: pan-y` als Dauerzustand ist **keine** Option:
+   damit beginnt der Browser beim Zug nach unten zu scrollen und schickt
+   `pointercancel`, bevor die Geste je erkannt würde. */
+.ear {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  /* Rechteckiger Ausschnitt oben links: 24 px breit (54,5 %), 18 px hoch
+     (40,9 %). Der Umriss läuft um ihn herum. Die 18 sind gemessen erzwungen —
+     mit 16 stand die Glyphe des Bearbeiten-Knopfes bündig auf der Kante. */
+  clip-path: polygon(54.5% 0, 100% 0, 100% 100%, 0 100%, 0 40.9%, 54.5% 40.9%);
+}
+
+.ear--locked {
+  /* Während des Scrollens gehört die Geste wieder dem Browser. */
+  touch-action: pan-y;
+}
+
+/* Die angeknickte Ecke selbst. */
+.ear::before {
+  content: '';
+  position: absolute;
+  right: 2px;
+  bottom: 2px;
+  width: 22px;
+  height: 22px;
+  background: linear-gradient(
+    225deg,
+    var(--pw-cork) 0 50%,
+    rgba(0, 0, 0, 0.16) 50% 54%,
+    #efe7d3 54%
+  );
+  border-left: 1.2px solid rgba(36, 31, 26, 0.6);
+  border-top: 1.2px solid rgba(36, 31, 26, 0.6);
+}
+
+/* Die Perforationslinie über dem Knick — sie sagt, wo der Zettel reißt. Sie
+   liegt 22 px über dem unteren Rand, der Ausschnitt endet 18 px unter der
+   Oberkante. Die Länge ist damit gleichgültig, die *Dicke* aber nicht:
+
+     normal (1 px)                 Oberkante y = 20  →  2,0 px frei
+     reißt gleich (2,5 px Akzent)  Oberkante y = 18  →  0,0 px frei
+
+   Beide gemessen. Im Alarmzustand liegt die Linie also **exakt bündig** auf der
+   Ausschnittkante — sie schneidet nicht an, aber die Reserve ist null. Wächst
+   die Akzentlinie je über 2,5 px, entsteht dieselbe Kerbe, die der Knick hier
+   schon zweimal erzeugt hat (siehe die Knickregeln oben: dort ist die Höhe
+   deshalb in allen Zuständen festgenagelt). Wer diese Linie dicker macht, muss
+   den Ausschnitt mitwachsen lassen. */
+.ear::after {
+  content: '';
+  position: absolute;
+  right: 2px;
+  bottom: 22px;
+  width: 24px;
+  height: 0;
+  border-top: 1.5px dashed rgba(36, 31, 26, 0.45);
+}
+
+/* Auch beim Anfassen wächst nur die Breite — dieselbe Begründung wie beim
+   Zustand „reißt gleich" weiter unten. Die Höhe des Knicks ist an dieser Ecke
+   die einzige Zahl, die den Ausschnitt des Bearbeiten-Knopfes treffen kann, und
+   sie ist deshalb in allen Zuständen fest. */
+.ear:active::before {
+  width: 26px;
+}
+
+/* Am Finger: der Zettel hebt ab und liegt über allen anderen. `!important`,
+   weil `WallView` den z-index als Inline-Style schreibt — und ihn dort auch
+   behalten muss (siehe `noteStyle` im Skript). */
+.zettel--tearing {
+  z-index: 800 !important;
+  box-shadow: var(--pw-shadow-lift);
+  cursor: grabbing;
+}
+
+/* Weit genug gezogen: Loslassen erledigt. Die Perforation reißt sichtbar auf. */
+.zettel--tear-ready {
+  border-style: dashed;
+}
+
+.zettel--tear-ready .ear::after {
+  border-top-color: var(--pw-accent);
+  border-top-width: 2.5px;
+}
+
+/* Der Knick wächst **nur in die Breite**, seine Höhe bleibt bei 22 px.
+ *
+ * Vorgeschichte: erst wuchs er auf 30 × 30, dann auf 27 × 27, und beides ragte
+ * in den Ausschnitt des Bearbeiten-Knopfes. Der QC hat den zweiten Versuch
+ * nachgemessen — bei 27 px liegt die Oberkante bei y = 15, der Ausschnitt
+ * reichte bis y = 16: **−1 px über eine Breite von 9 px**. Eine Kerbe an der
+ * Wahrnehmungsgrenze, aber eine Kerbe.
+ *
+ * Zweimal knapp danebenliegen heißt, dass die Zahl das falsche Werkzeug ist.
+ * Deshalb wächst hier keine Höhe mehr: die Oberkante des Knicks steht in JEDEM
+ * Zustand bei y = 20 und damit unter dem Ausschnitt (y = 18). Der Anschnitt
+ * kann aus diesem Zustandswechsel nicht mehr entstehen — unabhängig davon,
+ * welche Breite hier künftig steht.
+ *
+ * Als Ankündigung reicht die Breite: ein breiterer Knick liest sich als
+ * größeres Eselsohr, und daneben stehen ohnehin schon der gestrichelte Rand des
+ * Zettels und die aufleuchtende Perforationslinie. */
+.zettel--tear-ready .ear::before {
+  width: 27px;
 }
 
 /* --- Typ 1: offene Putzaufgabe — weißes Papier, Reißzwecke ---------------- */

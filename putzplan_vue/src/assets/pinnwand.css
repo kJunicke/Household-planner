@@ -447,3 +447,45 @@
   opacity: 0.92;
   transform: rotate(-0.4deg);
 }
+
+/* ----------------------------------------------------------------------------
+   Punkteflug (Etappe 4 / Ticket 09)
+   ----------------------------------------------------------------------------
+   Der fliegende Punktwert haengt an `<body>` und nicht am Zettel: er muss ueber
+   der oben klebenden Statusleiste (z-index 900) und ueber dem FAB (1000)
+   liegen, und ein Vorfahr mit `overflow: clip` (die Wand) wuerde ihn sonst
+   abschneiden. Deshalb `position: fixed` — es rechnet im selben Bezugssystem
+   wie `getBoundingClientRect()` des Ziels (siehe `lib/pointsFlight.ts`).
+
+   `translate(-50%, -50%)` steckt in JEDEM Keyframe der Animation, nicht hier:
+   die Web Animations API ersetzt `transform` vollstaendig, eine Regel an
+   dieser Stelle waere waehrend des Flugs wirkungslos. Der Wert hier gilt nur
+   fuer den Fall ohne Bewegung (`prefers-reduced-motion`).
+   --------------------------------------------------------------------------*/
+:root[data-design='pinnwand'] .pw-points-flight {
+  position: fixed;
+  z-index: 1100;
+  transform: translate(-50%, -50%);
+  padding: 3px 8px;
+  background: var(--pw-tape);
+  border: 2px solid var(--pw-line);
+  border-radius: 3px;
+  box-shadow: 2px 2px 0 var(--pw-line);
+  color: var(--pw-ink);
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1.1;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+/* Die ruhige Variante: ein Abriss, der nichts mehr einbringt, weil die Punkte
+   schon ueber die `deduct`-Unteraufgaben eingesammelt wurden. Papier statt
+   Klebeband, kein Plus, keine Zahl — er quittiert die Handlung, ohne einen
+   Punktgewinn zu behaupten. Ohne ihn verschwand so ein Zettel stumm von der
+   Wand (QC-Befund: „Badezimmer putzen", effort 1, Leiste 11 → 11, 0 Chips). */
+:root[data-design='pinnwand'] .pw-points-flight--muted {
+  background: var(--pw-paper);
+  color: var(--pw-ink-soft);
+  font-size: 12px;
+}

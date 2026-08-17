@@ -20,9 +20,12 @@
  * volle Wandbreite ein. Welche Zettel offen sind, weiß die Wand und nicht der
  * Zettel — sie muss es beim Packen wissen.
  *
- * Noch nicht hier (spätere Etappen): die Abreiß-Geste am Eselsohr.
- * Erledigen läuft in dieser Etappe weiter über die bestehenden Wege
- * (Such-Overlay mit der alten Karte, Quick-Aufgabe).
+ * Erledigt wird am **Eselsohr** des Zettels (Etappe 4, Ticket 09) — die Geste
+ * steckt im Zettel, die Wand weiß davon nur, dass sie einen gezogenen Zettel
+ * nicht gleichzeitig durch die Gegend animieren darf (→ `tearingId`).
+ *
+ * Noch nicht hier (spätere Tickets): der Long-Press mit den vier beschrifteten
+ * Richtungen und der Fetzen zum Zurückkleben.
  */
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import WallNote from '../components/WallNote.vue'
@@ -117,6 +120,19 @@ const wallHeight = ref(0)
  * jemand hier später auf `shallowRef` umstellt.
  */
 const expandedIds = ref(new Set<string>())
+
+/**
+ * Der Zettel, an dem gerade gezogen wird (Abreißen, Ticket 09) — höchstens
+ * einer, weil ein Finger nur an einem Griff hängen kann.
+ *
+ * Er wird beim Neupacken **nicht animiert**, aus demselben Grund wie der
+ * angetippte Zettel: die FLIP-Animation schreibt `transform`, und genau das
+ * schreibt auch die Zieh-Geste. Ohne diese Ausnahme flöge der Zettel unter dem
+ * Finger davon, wenn währenddessen ein anderes Mitglied etwas ändert. Seine
+ * neue **Position** (`left`/`top`) bekommt er trotzdem — die Wand bleibt
+ * korrekt gepackt, der Zettel springt nur dorthin, statt zu fliegen.
+ */
+const tearingId = ref<string | null>(null)
 const noteEls = new Map<string, HTMLElement>()
 /** Zuletzt gesetzte Positionen — Ausgangspunkt jeder FLIP-Animation. */
 const lastPositions = new Map<string, { x: number; y: number }>()
@@ -359,7 +375,8 @@ const relayout = (animate: boolean, anchorId?: string) => {
     // Zusammen mit dem Scroll-Anker weiter unten steht er damit wirklich still:
     // der Anker hält seine Bildschirmposition, das Auslassen hier verhindert,
     // dass er trotzdem eine Flugbahn zeigt.
-    if (note.id === anchorId) continue
+    // Ebenso der Zettel, an dem gerade gezogen wird (→ `tearingId`).
+    if (note.id === anchorId || note.id === tearingId.value) continue
 
     const previous = before.get(note.id)
     if (previous) {
@@ -492,6 +509,11 @@ watch(layoutSignature, () => {
   if ([...expandedIds.value].some(id => !onWall.has(id))) {
     expandedIds.value = new Set([...expandedIds.value].filter(id => onWall.has(id)))
   }
+  // Dasselbe für den gezogenen Zettel: verschwindet er von der Wand (erledigt,
+  // gelöscht), kommt das `tear-end` seiner Komponente nicht mehr an — sie ist
+  // ausgehängt. Ohne diese Zeile bliebe seine ID hängen und genau dieser Zettel
+  // würde nach einem „wieder dreckig" nie wieder mitfliegen.
+  if (tearingId.value !== null && !onWall.has(tearingId.value)) tearingId.value = null
   scheduleRelayout(true)
 })
 
@@ -616,6 +638,8 @@ const handleCreateQuickTask = async (data: {
         :task="task"
         :expanded="expandedIds.has(task.task_id)"
         @toggle="toggleNote"
+        @tear-start="tearingId = $event"
+        @tear-end="tearingId = tearingId === $event ? null : tearingId"
       />
     </div>
 
