@@ -133,6 +133,30 @@ const wallHeight = ref(0)
 const expandedIds = ref(new Set<string>())
 
 /**
+ * Zettel, deren Punktwert oben rechts statt in der Fußzeile steht
+ * (Karten-Redesign, Ticket 00a, Handoff Punkt 6 — ursprünglich „Punktwert
+ * UND Rückstand"; der Rückstandstext ist seither entfernt, siehe `urgency`
+ * im Skript von `WallNote.vue`, die Fußzeile ist dadurch etwas schmaler
+ * geworden). Die Entscheidung fällt während der Messung in `relayout` — nur
+ * dort sind Titel- und Fußzeilenbreite bekannt —, wird aber HIER als
+ * Vue-Zustand festgehalten und über das `meta-top`-Prop an `WallNote`
+ * gereicht.
+ *
+ * **`relayout` fasst diese Klasse an KEINER Stelle mehr per `classList` an
+ * — weder setzend noch entfernend.** Ein Blocker-Befund des QC zeigte, dass
+ * schon das ENTFERNEN allein genügt, um sie dauerhaft zu verlieren: Vue
+ * vergleicht bei jedem Patch nur seinen eigenen zuletzt berechneten
+ * Klassen-String gegen den neu berechneten, sieht dort keine Änderung (die
+ * Entscheidung blieb ja gleich) und schreibt `className` gar nicht neu — die
+ * extern entfernte Klasse kommt dann NIE zurück, außer eine völlig
+ * UNABHÄNGIGE Bindungsänderung am selben Element patcht zufällig die ganze
+ * Klassenliste neu. Einzige Quelle ist deshalb ausschließlich dieses Set
+ * über das `meta-top`-Prop — siehe die Messung in `relayout` für die Technik,
+ * mit der die nötige Breite OHNE DOM-Mutation ermittelt wird.
+ */
+const metaTopIds = ref(new Set<string>())
+
+/**
  * Der Zettel, der gerade **unter einer Geste des Fingers steht** — und deshalb
  * von der Animation ausgenommen ist.
  *
@@ -192,6 +216,12 @@ const setNoteEl = (taskId: string, instance: unknown) => {
  * dazusagen, welche von beiden gemeint ist; die Messung skaliert linear mit der
  * Zahl der Zettel und liegt bereits in der Größenordnung eines Frames.
  *
+ * Die Zahlen stammen von VOR dem Karten-Redesign (Ticket 00a): Schritt 1 misst
+ * seither pro Zettel zusätzlich `.foot` und `.title` einzeln (für
+ * `zettel--meta-top`, siehe dort) — zwei weitere erzwungene Layouts. Neu
+ * gemessen ist das nicht; erwartbar ist ein spürbarer, aber kein
+ * größenordnungsmäßiger Aufschlag auf Schritt 1.
+ *
  * **`anchorId`** ist der angetippte Zettel beim Auf- und Zuklappen. Er bleibt an
  * seiner Bildschirmposition stehen; alles andere rutscht um ihn herum. Wie das
  * geht, steht unten am Scroll-Anker.
@@ -248,6 +278,7 @@ const relayout = (animate: boolean, anchorId?: string) => {
   // der Titel keine Umbruchstelle — genau die Zettel bleiben vom zweiten Lauf
   // ausgenommen.
   const shapes: WallNoteShape[] = []
+  const nextMetaTopIds = new Set<string>()
   const elements = new Map<string, HTMLElement>()
   const lineHeights = new Map<string, number>()
 
@@ -276,17 +307,87 @@ const relayout = (animate: boolean, anchorId?: string) => {
 
     el.classList.add('zettel--measuring', 'zettel--single-line')
     el.style.maxWidth = 'none'
-    el.style.width = 'max-content'
-    const natural = Math.ceil(el.getBoundingClientRect().width) + MEASURE_SAFETY
 
+    const titleEl = el.querySelector<HTMLElement>('.title')
+    const footEl = el.querySelector<HTMLElement>('.foot')
+
+    // --- Punktwert oben rechts? (Karten-Redesign, Ticket 00a, Handoff
+    // Punkt 6) ----------------------------------------------------------
+    //
+    // Nur wenn die Fußzeile sonst breiter als der Titel wäre — sonst bliebe
+    // oben ungenutzter Platz, während die Fußzeile den Zettel aufbläht.
+    // Titel UND Fußzeile stehen dafür auf `max-content` (Regeln dazu in
+    // `WallNote.vue`, `.zettel--measuring .title`/`.foot`).
+    //
+    // **`zettel--meta-top` gehört AUSSCHLIESSLICH Vue** (Prop `metaTop`,
+    // siehe `metaTopIds` oben und `WallNote.vue`). Weder `add`/`toggle` NOCH
+    // `remove` dürfen diese Klasse hier anfassen — auch das Entfernen nicht,
+    // so wie es vorher hier stand. QC-Befund: Vue vergleicht bei jedem Patch
+    // nur den von IHM zuletzt berechneten Klassen-String mit dem NEUEN
+    // berechneten; eine extern (per `classList`) veränderte Klasse fällt aus
+    // diesem Vergleich komplett heraus. Blieb die Entscheidung über zwei
+    // Läufe gleich (der Normalfall — nichts an DIESEM Zettel hat sich
+    // geändert), hielt Vue seinen Klassen-String für unverändert und schrieb
+    // `className` gar nicht neu — die extern entfernte Klasse kam NIE
+    // zurück. Nur eine völlig UNABHÄNGIGE Bindungsänderung am selben Element
+    // (z. B. `zettel--tear-ready` beim Abreißen) brachte sie zufällig wieder
+    // mit, weil Vue dabei den GANZEN Klassen-String neu schreibt.
+    //
+    // Die Breite, die die Fußzeile MIT Punkte-Sticker hätte, wird deshalb aus
+    // dem GERADE gerenderten Zustand REKONSTRUIERT statt am DOM erzwungen:
+    // `wasMetaTop` sagt, ob der Sticker aktuell in der Ecke sitzt (dann fehlt
+    // er der Fußzeile und wird rechnerisch wieder dazugezählt) oder schon in
+    // der Fußzeile steht (dann ist nichts zu tun). Gemessen wird der Sticker
+    // an der Stelle, an der er GERADE TATSÄCHLICH im DOM steht — Ecke oder
+    // Fußzeile —, weil `.points--sN` an beiden Orten dieselbe Größe vorgibt.
+    const wasMetaTop = metaTopIds.value.has(task.task_id)
+    el.style.width = 'max-content'
+    const footWidthCurrent = footEl?.getBoundingClientRect().width ?? 0
+    const titleWidth = titleEl?.getBoundingClientRect().width ?? 0
+    const visiblePointsEl = wasMetaTop
+      ? el.querySelector<HTMLElement>('.corner .points')
+      : el.querySelector<HTMLElement>('.foot > .points')
+    const pointsWidth = visiblePointsEl?.getBoundingClientRect().width ?? 0
+    // Ob die Fußzeile außer dem Punktwert noch etwas trägt (Unteraufgaben-
+    // Zeichen, Stempel) — entscheidet, ob beim Herausrechnen des Punktwerts
+    // ein Flex-`gap` mitzählt: ein `gap` entsteht nur ZWISCHEN Geschwistern,
+    // bei einem einzelnen Kind gibt es keinen.
+    const hasOtherFootContent = !!el.querySelector('.subs-badge, .due-stamp')
+    const footGap = hasOtherFootContent ? 6 : 0 // `.foot { gap: 6px }`
+    const footWidthFull = wasMetaTop ? footWidthCurrent + pointsWidth + footGap : footWidthCurrent
+    const footWidthWithoutPoints = wasMetaTop
+      ? footWidthCurrent
+      : Math.max(0, footWidthCurrent - pointsWidth - footGap)
+
+    const metaTop = footWidthFull > titleWidth + 1
+    if (metaTop) nextMetaTopIds.add(task.task_id)
+
+    // **Zweiter, unabhängiger Punkt (ebenfalls QC-Befund):** `natural`/
+    // `minimum` müssen die Fußzeilenbreite verwenden, die zu der GERADE
+    // GETROFFENEN Entscheidung `metaTop` gehört — NICHT die von `wasMetaTop`.
+    // Ändert sich die Entscheidung in diesem Lauf, rendert der Zettel gleich
+    // mit der jeweils ANDEREN Fußzeile, und die Breitenplanung muss dafür
+    // Platz einräumen, nicht für die, die gerade verschwindet.
+    const correctedFootWidth = metaTop ? footWidthWithoutPoints : footWidthFull
+
+    // `natural`: der Titel einzeilig (`zettel--single-line`, noch aktiv),
+    // mindestens so breit wie die Fußzeile es verlangt.
+    const natural = Math.ceil(Math.max(titleWidth, correctedFootWidth)) + MEASURE_SAFETY
+
+    // `minimum`: dieselbe Fußzeilen-Untergrenze, aber der Titel darf jetzt an
+    // Wortgrenzen umbrechen — gemessen wird `.title` SELBST auf `min-content`
+    // gestellt (nicht mehr der ganze Zettel, dessen Breite von der jetzt
+    // Vue-exklusiven `zettel--meta-top`-Klasse mitbestimmt würde).
     el.classList.remove('zettel--single-line')
-    el.style.width = 'min-content'
-    const minimum = Math.ceil(el.getBoundingClientRect().width) + MEASURE_SAFETY
+    if (titleEl) titleEl.style.width = 'min-content'
+    const titleMinimum = titleEl?.getBoundingClientRect().width ?? titleWidth
+    if (titleEl) titleEl.style.width = ''
+    const minimum = Math.ceil(Math.max(titleMinimum, correctedFootWidth)) + MEASURE_SAFETY
 
     el.classList.remove('zettel--measuring')
     el.style.maxWidth = ''
+    el.style.width = ''
 
-    const titleEl = el.querySelector<HTMLElement>('.title')
     const lineHeight = titleEl ? parseFloat(getComputedStyle(titleEl).lineHeight) : NaN
 
     shapes.push({ id: task.task_id, natural, minimum })
@@ -295,6 +396,8 @@ const relayout = (animate: boolean, anchorId?: string) => {
     // es bei der natürlichen Breite (siehe Schritt 3).
     lineHeights.set(task.task_id, Number.isFinite(lineHeight) && lineHeight > 0 ? lineHeight : 0)
   }
+
+  metaTopIds.value = nextMetaTopIds
 
   // Schritt 2 — Breiten planen (zweiter Packlauf, siehe `planNoteWidths`).
   const planned = planNoteWidths(shapes, usableWidth)
@@ -672,6 +775,7 @@ const handleCreateQuickTask = async (data: {
         :ref="instance => setNoteEl(task.task_id, instance)"
         :task="task"
         :expanded="expandedIds.has(task.task_id)"
+        :meta-top="metaTopIds.has(task.task_id)"
         @toggle="toggleNote"
         @gesture-start="gestureNoteId = $event"
         @gesture-end="gestureNoteId = gestureNoteId === $event ? null : gestureNoteId"

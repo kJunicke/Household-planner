@@ -117,6 +117,24 @@ export function rowGapOf(taskId: string): number {
   return ROW_GAP_BASE + jitterOf(taskId, 'hgap', ROW_GAP_JITTER)
 }
 
+/**
+ * Zusätzliche Einrückung für einen Zettel an der LINKEN Wandkante, in Pixeln
+ * (Karten-Redesign, Ticket 00a). Die Skyline setzt jeden Zettel, der links
+ * Platz findet, exakt auf x = 0 — dadurch stehen fast alle Zettel auf einer
+ * perfekten Linie untereinander. So pinnt kein Mensch: der Versatz aus
+ * `jitterOf` (±5 px) fällt dagegen nicht ins Gewicht, um die Linie zu brechen.
+ *
+ * **0…12 px.** Der Handoff (`HANDOFF-kartengroesse.md`, Punkt 8) hatte 0…26 px
+ * erprobt; Ticket 02 hat den Wert vorab auf 12 px gesenkt, deshalb wird hier
+ * gleich der niedrigere Wert eingebaut.
+ */
+const LEFT_INDENT_MAX = 12
+
+/** Einrückung dieses Zettels: 0…`LEFT_INDENT_MAX`, deterministisch aus der `task_id`. */
+export function indentOf(taskId: string): number {
+  return fnv1a(`${taskId}#indent`) % (LEFT_INDENT_MAX + 1)
+}
+
 export interface WallNoteMetrics {
   id: string
   /** Bereits gesetzte Breite. */
@@ -398,13 +416,12 @@ const SKYLINE_RESOLUTION = 4
  * Positionen werden auf `[0, wallWidth − Breite]` geklemmt — kein Zettel ragt
  * über den Rand, auch nicht durch den Versatz.
  *
- * **Keine linke Einrückung.** Die Spec sieht hier eine deterministische
- * Einrückung an der linken Wandkante vor (26 px → 12 px). Der Mechanismus
- * dafür existiert nur auf dem Prototyp-Branch `proto/kartengroesse`
- * (`indentOf`/`LEFT_INDENT_MAX`), zusammen mit dem dort ebenfalls noch nicht
- * gelandeten Karten-Redesign. Ihn hier isoliert nachzubauen hieße, eine
- * Zahl zu senken, die es auf diesem Branch noch nicht gibt — deshalb bewusst
- * ausgelassen, nicht vergessen.
+ * **Linke Einrückung** (`indentOf`, Karten-Redesign Ticket 00a): nur wenn ein
+ * Zettel tatsächlich in der linken Spalte landet (`bestColumn === 0`) und
+ * nicht aufgeklappt ist, kommt zum x-Jitter zusätzlich 0…12 px hinzu. Ein
+ * Zettel, der irgendwo MITTEN in einer Reihe steht, bekommt keine Einrückung
+ * — dort würde sie ein Loch in die Reihe reißen, statt nur die Kante
+ * aufzulockern.
  */
 export function packWall(notes: readonly WallNoteMetrics[], wallWidth: number): PackedWall {
   const columns = Math.max(1, Math.ceil(wallWidth / SKYLINE_RESOLUTION))
@@ -477,7 +494,8 @@ export function packWall(notes: readonly WallNoteMetrics[], wallWidth: number): 
       const width = Math.min(note.width, wallWidth)
       const span = Math.min(columns, Math.max(1, Math.ceil(width / SKYLINE_RESOLUTION)))
 
-      const dx = note.expanded ? 0 : jitterOf(note.id, 'x', 5)
+      const indent = note.expanded || bestColumn !== 0 ? 0 : indentOf(note.id)
+      const dx = (note.expanded ? 0 : jitterOf(note.id, 'x', 5)) + indent
       const dy = note.expanded ? 0 : jitterOf(note.id, 'y', 4) - 2.5
 
       const x = Math.max(0, Math.min(wallWidth - width, bestColumn * SKYLINE_RESOLUTION + dx))

@@ -53,7 +53,24 @@ import TaskAssignmentModal from './TaskAssignmentModal.vue'
 import SubtaskManagementModal from './SubtaskManagementModal.vue'
 import TaskPostponeModal from './TaskPostponeModal.vue'
 
-const props = defineProps<{ task: Task; expanded?: boolean }>()
+const props = defineProps<{
+  task: Task
+  expanded?: boolean
+  /**
+   * Karten-Redesign (Ticket 00a): der Punktwert steht oben rechts statt in
+   * der Fußzeile. Die Wand entscheidet das, nicht der Zettel — nur sie misst
+   * während des Layout-Laufs, ob die Fußzeile sonst breiter als der Titel
+   * wäre (→ `WallView`, `relayout`).
+   *
+   * **Bewusst ein Prop, keine per `classList` gesetzte Klasse.** Eine Klasse,
+   * die `WallView` direkt ans DOM schreibt, überlebt kein Vue-Update: Vue
+   * ersetzt `className` bei jedem Patch komplett aus dem berechneten
+   * Klassen-Array, unregelmäßig und unabhängig davon, ob sich an DIESEM
+   * Zettel gerade etwas geändert hat. Über ein Prop bleibt die Entscheidung
+   * dagegen Teil des von Vue selbst verwalteten Zustands.
+   */
+  metaTop?: boolean
+}>()
 /**
  * `gesture-start` / `gesture-end`: solange der Finger auf diesem Zettel eine
  * Geste ausführt — Ziehen am Eselsohr (Ticket 09) **oder** langes Drücken mit
@@ -355,9 +372,16 @@ const markTorn = (subtaskId: string) => {
  * im aufgeklappten Zettel als eigene Fläche darin, und ein Long-Press auf einer
  * Unteraufgabe, der Richtungen für den ELTERN-Zettel einblendet, wäre eine
  * Aussage über das falsche Ding.
+ *
+ * **`.subs-badge` dazugekommen (Karten-Redesign, Ticket 00a).** Das
+ * Unteraufgaben-Zeichen in der Fußzeile ist jetzt ein echter Knopf mit
+ * eigenem `@click.stop` (auf-/zuklappen) — ohne diesen Eintrag würde ein
+ * langes Drücken darauf denselben Fehler reproduzieren, den dieser Wächter für
+ * Eselsohr, Zettelchen und Stift verhindert: die Richtungen blendeten sich
+ * ein, statt dass der Knopf sein eigenes Antippen bekommt.
  */
 const isPressControl = (target: EventTarget | null): boolean =>
-  target instanceof Element && target.closest('.ear, .mini, .edit') !== null
+  target instanceof Element && target.closest('.ear, .mini, .edit, .subs-badge') !== null
 
 /**
  * Die Belegung ist in `WallDirectionMenu` beschriftet und hier ausgeführt —
@@ -420,14 +444,19 @@ watch(pressOpen, open => {
 const rotation = computed(() => rotationOf(props.task.task_id))
 
 /**
- * Personenfarbe als Umrandung — unverändert so, wie das Mitglied sie gewählt
- * hat. Es wird zur Laufzeit **nichts** umgefärbt, aufgehellt oder auf eine
- * Palette gerundet: die gewählte Farbe muss die angezeigte sein.
+ * Personenfarbe für die Reißzwecke — unverändert so, wie das Mitglied sie
+ * gewählt hat. Es wird zur Laufzeit **nichts** umgefärbt, aufgehellt oder auf
+ * eine Palette gerundet: die gewählte Farbe muss die angezeigte sein.
  *
  * `null` heißt „niemand zuständig". Dann bleibt `--owner` ungesetzt und an
  * der Reißzwecke greift die neutrale CSS-Rückfallfarbe (siehe `--owner-none`
- * unten); der Rahmen des Zettels bleibt in diesem Fall ganz unsichtbar
- * (`.zettel--assigned` greift nicht, siehe `isAssigned`).
+ * unten).
+ *
+ * Seit der Korrektur zu Ticket 10 steht die Zuweisungsfarbe **ausschließlich**
+ * an der Reißzwecke (`.pin`) — der Nutzer mochte den zwischenzeitlich
+ * gebauten dicken farbigen Rahmen nicht. Der Zettelrahmen selbst bleibt
+ * unabhängig von `ownerColor` immer konturlos (`transparent`, siehe
+ * `.zettel` unten).
  */
 const ownerColor = computed(() => {
   if (!props.task.assigned_to) return null
@@ -436,12 +465,16 @@ const ownerColor = computed(() => {
 })
 
 /**
- * Ob der Zettel einen deutlich sichtbaren, dickeren Rahmen in der
- * Zuweisungsfarbe bekommt (Ticket 10). Eigene Ableitung statt eines rohen
- * `!!props.task.assigned_to`, damit derselbe Fall wie bei `ownerColor`
- * gilt: ein `assigned_to`, das auf kein (mehr) existierendes Mitglied
- * zeigt, zählt als „niemand zuständig" — sonst bekäme der Rahmen eine
- * Farbe, die `--owner` gar nicht gesetzt hat.
+ * Ob jemand zuständig ist. Eigene Ableitung statt eines rohen
+ * `!!props.task.assigned_to`, damit derselbe Fall wie bei `ownerColor` gilt:
+ * ein `assigned_to`, das auf kein (mehr) existierendes Mitglied zeigt, zählt
+ * als „niemand zuständig".
+ *
+ * Aktuell OHNE CSS-Wirkung am Zettel selbst (die frühere `.zettel--assigned`-
+ * Regel mit dem dicken farbigen Rahmen ist nach der Nutzerkorrektur zu
+ * Ticket 10 entfernt) — die Klasse bleibt am Element als Hook stehen, falls
+ * die im Ticket angekündigte „zurückhaltendere Auszeichnung" später dort
+ * andockt. Bis dahin ist sie totes Markup, bewusst belassen statt entfernt.
  */
 const isAssigned = computed(() => ownerColor.value !== null)
 
@@ -475,25 +508,41 @@ const noteStyle = computed((): Record<string, string> => {
 const schedule = computed(() => scheduleOf(props.task))
 
 /**
- * Der Rückstand — so knapp wie möglich, weil er neben dem Punktwert in der
- * Fußzeile steht und jede Zeile Höhe kostet.
+ * Dringlichkeitsstufe für den Gummistempel (Karten-Redesign, Ticket 00a).
  *
- * Das Wort „überfällig" fehlt bewusst: die rote Farbe sagt es bereits, der
- * Text sagt nur noch, wie lange. Aus demselben Grund heißt „noch nie gemacht"
- * hier nur „nie" — der Zustand ist selten genug, dass er auffällt, und lang
- * genug beschrieben durch das Rot daneben.
+ *   'hot'   überfällig oder nie gemacht  → NIE / FÄLLIG
+ *   'today' heute fällig geworden        → HEUTE
+ *   null    hat Zeit                     → kein Stempel
  *
- * Tägliche Aufgaben tragen hier nichts: dass sie täglich sind, steht am
- * gelben Papier und am Klebestreifen. Ein Wort daneben wäre Doppelung.
+ * **Kein Ring an der Reißzwecke.** Der Handoff (Punkt 7) sah zusätzlich einen
+ * farbigen Ring um die Reißzwecke vor — Ticket 10 hat die Reißzwecke seither
+ * der Zuweisungsfarbe gegeben (`--owner`), ein Ring wäre sofort wieder
+ * entfernt worden. Der Stempel hier ist deshalb der EINZIGE Träger der
+ * Dringlichkeit am Zettel (→ CONTEXT.md, „Dringlichkeit").
+ *
+ * **Es gibt bewusst keinen zweiten Text mit der genauen Tageszahl daneben**
+ * (früher `metaLabel`/`.meta`, „3 Tage" / „heute" / „nie" in Rot — entfernt,
+ * QC-Befund: die Dringlichkeit stand damit zweimal in der Fußzeile, einmal
+ * am Stempel, einmal an einer Farbe, die das Glossar für Dringlichkeit
+ * ausdrücklich ausschließt, siehe CONTEXT.md). Die Tageszahl selbst fehlt
+ * damit auch als Information — gewollt: auf der Wand gelten alle fälligen
+ * Aufgaben als GLEICH dringend, eine Zählung „3 Tage überfällig" widerspräche
+ * dem. Kein Verlust, sondern die Auflösung eines Widerspruchs. Wer hier
+ * wieder eine Tageszahl anzeigen will, widerspricht damit dem Glossareintrag
+ * „Dringlichkeit" — das ist eine Domänenentscheidung, keine UI-Petitesse.
  */
-const metaLabel = computed((): string | null => {
+const urgency = computed((): 'hot' | 'today' | null => {
   if (props.task.task_type === 'daily') return null
-  if (schedule.value.status === 'never-done') return 'nie'
-  if (schedule.value.status === 'overdue') {
-    const days = schedule.value.daysOverdue ?? 0
-    if (days === 0) return 'heute'
-    return `${days} ${days === 1 ? 'Tag' : 'Tage'}`
-  }
+  const { status, daysOverdue } = schedule.value
+  if (status === 'never-done') return 'hot'
+  if (status === 'overdue') return (daysOverdue ?? 0) > 0 ? 'hot' : 'today'
+  return null
+})
+
+/** Was der Gummistempel sagt. */
+const stampLabel = computed((): string | null => {
+  if (urgency.value === 'hot') return schedule.value.status === 'never-done' ? 'NIE' : 'FÄLLIG'
+  if (urgency.value === 'today') return 'HEUTE'
   return null
 })
 
@@ -604,6 +653,7 @@ const handlePostponeConfirm = async (targetDate: string) => {
       `zettel--${kind}`,
       {
         'zettel--tappable': hasSubtasks,
+        'zettel--meta-top': props.metaTop,
         'zettel--tearing': isNoteTearing,
         'zettel--tear-ready': isTearReady,
         'zettel--pressed': pressOpen,
@@ -627,24 +677,78 @@ const handlePostponeConfirm = async (targetDate: string) => {
       <span class="clip clip--r" aria-hidden="true"></span>
     </template>
 
-    <p class="title">{{ props.task.title }}</p>
+    <!-- Kopf: der Titel bekommt die ganze obere Kante (Karten-Redesign,
+         Ticket 00a). Der Punktwert steht HIER ein zweites Mal im DOM —
+         sichtbar ist immer nur eine der beiden Stellen, gesteuert über
+         `zettel--meta-top` (Prop `metaTop`, siehe Skript und `WallView`). -->
+    <div class="head">
+      <!-- Schwimmt nach rechts, der Titel fließt darum herum: ein kurzer
+           Titel steht daneben, ein langer läuft darunter weiter — beides ohne
+           eigene Messung. Nur sichtbar mit `zettel--meta-top`. -->
+      <div class="corner">
+        <span class="points" :class="`points--s${Math.min(5, Math.max(0, effectivePoints))}`">
+          {{ effectivePoints }}
+        </span>
+      </div>
 
-    <!-- Fußzeile im normalen Fluss: Punktwert und Rückstand können dem Titel
-         damit strukturell nicht mehr ins Gehege kommen, egal wie lang er ist. -->
+      <p class="title">{{ props.task.title }}</p>
+    </div>
+
+    <!-- Fußzeile im normalen Fluss, zugleich die GRIFFZEILE: links der
+         Punktwert, rechts Stift und Eselsohr — beide 44×44 px nebeneinander
+         (Karten-Redesign, Ticket 00a). -->
     <div class="foot">
       <!-- NICHT `task.effort`: hier steht, was das Abreißen wirklich noch
            einbringt (→ `effectivePoints`). Die Zahl ist das Versprechen, das
-           der Punkteflug gleich einlöst — beide kommen aus derselben Quelle. -->
-      <span class="points">{{ effectivePoints }} P</span>
-      <!-- Fortschritt am EINGEKLAPPTEN Zettel: „3 / 7" ohne Aufklappen. Er
-           bleibt auch aufgeklappt stehen — die Zahl ist die Zusammenfassung
-           der Zettelchen, nicht ihr Ersatz.
+           der Punkteflug gleich einlöst — beide kommen aus derselben Quelle.
 
-           Am täglichen Zettel fehlt er ABSICHTLICH → `tracksProgress`. -->
-      <span v-if="hasSubtasks && tracksProgress" class="progress">
-        {{ doneSubtasks }} / {{ subtasks.length }}
+           Punkte als aufgeklebter Sticker: die FORM trägt den Wert (Kreis 1,
+           Quadrat 2, Sechseck 3, Wappen 4, Stern 5), die Zahl bestätigt ihn
+           nur — auf einen Blick erkennbar, ohne zu lesen. Funktioniert auch
+           bei Farbenblindheit, weil die Silhouette trägt, nicht nur die
+           Farbe. Werte über 5 (Bonus-Unteraufgaben) fallen alle auf den
+           Stern — bekannt offen, siehe `HANDOFF-kartengroesse.md`. -->
+      <span class="points" :class="`points--s${Math.min(5, Math.max(0, effectivePoints))}`">
+        {{ effectivePoints }}
       </span>
-      <span v-if="metaLabel" class="meta">{{ metaLabel }}</span>
+      <!-- Unteraufgaben haben jetzt IMMER ein eigenes Zeichen — ein
+           angeklammerter Zettelstapel. Vorher verriet nur die Fortschrittszahl
+           ihre Existenz, und die fehlte bei `daily` und reinen Checklisten
+           ganz (→ `tracksProgress`); dort war das Aufklappen unsichtbar.
+
+           Es ist ein echter Knopf, kein bloßes Zeichen: die ganze Zettelfläche
+           klappt zwar weiterhin auf, aber sie sagt es niemandem. Der Zähler
+           steht nur, wo Fortschritt etwas bedeutet; sonst die blanke Anzahl. -->
+      <button
+        v-if="hasSubtasks"
+        class="subs-badge"
+        :class="{ 'subs-badge--open': props.expanded }"
+        :title="props.expanded ? 'Unteraufgaben zuklappen' : 'Unteraufgaben aufklappen'"
+        @click.stop="emit('toggle', props.task.task_id)"
+      >
+        <i class="bi bi-list-task" aria-hidden="true"></i>
+        <span class="subs-count">
+          {{ tracksProgress ? `${doneSubtasks}/${subtasks.length}` : subtasks.length }}
+        </span>
+      </button>
+      <!-- Der Gummistempel: erscheint NUR, wenn es brennt — ein Zettel, der
+           Zeit hat, zeigt nichts, und deshalb sieht man den einen, der
+           schreit. Er steht IM FLUSS der Fußzeile, nicht darüber: so kann er
+           sich mit keinem Knopf überschneiden, egal wie schmal der Zettel
+           wird — die Zeile schiebt ihn zur Seite, statt ihn zu überlagern.
+
+           **Er ist der EINZIGE Träger der Dringlichkeit am Zettel** (→
+           CONTEXT.md, „Dringlichkeit"). Vorher stand daneben zusätzlich die
+           genaue Tageszahl in Rot (`.meta`, „3 Tage" / „heute" / „nie") — das
+           war eine zweite Anzeige derselben Aussage, und dazu eine Farbe, die
+           das Glossar für Dringlichkeit ausdrücklich ausschließt. Die
+           Tageszahl fehlt jetzt bewusst: auf der Wand gelten alle fälligen
+           Aufgaben als GLEICH dringend, eine Zählung „3 Tage überfällig"
+           widerspräche dem. Das ist kein Informationsverlust, sondern die
+           Auflösung eines Widerspruchs — nicht wieder einführen. -->
+      <span v-if="stampLabel" class="due-stamp" :class="`due-stamp--${urgency}`">
+        {{ stampLabel }}
+      </span>
     </div>
 
     <!-- Unteraufgaben als angeheftete Zettelchen. Erst im aufgeklappten
@@ -687,10 +791,12 @@ const handlePostponeConfirm = async (targetDate: string) => {
     </div>
 
     <!-- Der nachlaufende Klick eines Long-Press kann sehr wohl hier landen: der
-         Knopf sitzt oben rechts, also genau dort, wo ein Zug nach oben oder
-         rechts hinführt. Dass er das Modal trotzdem nicht öffnet, regelt der
-         Klick-Wächter am Fenster (→ `useDirectionPress`) — er sieht den Klick
-         in der Einfangphase, vor diesem `@click.stop`. -->
+         Knopf sitzt jetzt unten rechts (Karten-Redesign, Ticket 00a), also
+         genau dort, wo ein Zug nach unten oder rechts enden kann. Dass er das
+         Modal trotzdem nicht öffnet, regelt der Klick-Wächter am Fenster (→
+         `useDirectionPress`) — er sieht den Klick in der Einfangphase, vor
+         diesem `@click.stop`. Der Long-Press startet auf diesem Knopf selbst
+         ohnehin nicht: `.edit` steht in `isPressControl` (siehe Skript). -->
     <button class="edit" title="Aufgabe bearbeiten" @click.stop="showEditModal = true">
       <i class="bi bi-pencil" aria-hidden="true"></i>
     </button>
@@ -803,29 +909,32 @@ const handlePostponeConfirm = async (targetDate: string) => {
      Als benutzerdefinierte Eigenschaft hier deklariert (nicht direkt bei
      `.pin`), damit sie an die Reißzwecke als Kindelement vererbt wird. */
   --owner-none: color-mix(in srgb, var(--pw-free) 45%, var(--pw-paper));
-  /* Rahmen (Ticket 10 „Reißzwecke trägt die Zuweisungsfarbe"): ohne
-     Zuständige unsichtbar (`transparent`) — der farbige Rahmen ist ein
-     Signal für Zuständigkeit, kein Grundrauschen. Sichtbar wird er erst über
-     `.zettel--assigned` unten, das nur `border-color` auf `var(--owner)`
-     setzt (dort garantiert gesetzt, siehe `noteStyle`/`isAssigned` im
-     Skript).
+  /* Rahmen: bewusst konturlos (`transparent`), die Zuweisungsfarbe steht nach
+     der Korrektur zu Ticket 10 ausschließlich an der Reißzwecke (`.pin`
+     unten) — kein farbiger Rahmen mehr, das mochte der Nutzer nicht.
 
-     5px statt vormals 2px (bzw. 3px beim Projekt-Zettel) — deutlich dicker,
-     wie gefordert. Die Dicke steht schon HIER und bleibt bei Zu- und
-     Abweisung konstant: nur die Farbe wechselt. Würde stattdessen die Dicke
-     selbst zwischen 0 und 5px springen, veränderte sich bei jeder
-     Zuweisungsänderung zusätzlich der Innenraum des Zettels (Rahmen zählt
-     bei `box-sizing: border-box` gegen den Innenraum) — unnötige Unruhe für
-     ein Signal, das ohnehin schon über die Farbe ankommt. */
-  border: 5px solid transparent;
+     Trotzdem keine `0`: die Breite bleibt als stabile Fläche stehen, auf der
+     `.zettel--tear-ready` weiter unten den neutralen „reißt gleich
+     ab"-Umriss zeichnet (eigene Farbe und eigener Stil, nur die Breite kommt
+     von hier). Ohne Breite hätte dieser Umriss nichts zum Zeichnen — genauer
+     Fehlgriff aus der vorigen Runde, siehe Kommentar dort.
+
+     2px ist der Wert von vor Ticket 10 (die zwischenzeitlichen 5px trugen
+     „deutlich dicker als bisher" für den inzwischen wieder entfernten
+     Zuweisungs-Rahmen; die Forderung ist mit ihm entfallen). Konstant für
+     alle Zustände, damit Zuweisen/Zurücknehmen keinen Sprung im Innenraum
+     auslöst (`box-sizing: border-box`). */
+  border: 2px solid transparent;
   border-radius: 3px;
   background: var(--pw-paper);
   color: var(--pw-ink);
   box-shadow: var(--pw-shadow);
-  /* Rechts bleibt Platz für den Bearbeiten-Knopf, der als einziges Element
-     noch absolut sitzt. Unten reserviert nichts mehr Platz — die Fußzeile
-     steht im Fluss. */
-  padding: 6px 36px 5px 8px;
+  /* Stift und Eselsohr sitzen jetzt UNTEN nebeneinander (Karten-Redesign,
+     Ticket 00a) — oben ist deshalb nichts mehr für den Bearbeiten-Knopf
+     reserviert, der Titel bekommt die ganze obere Kante. Den Platz für die
+     beiden Griffe (je 44 px) reserviert stattdessen `.foot` selbst über ihr
+     `padding-right`, weil dort auch der Text drumherum fließen muss. */
+  padding: 5px 7px 0 7px;
   min-height: 44px;
   text-align: left;
   will-change: transform;
@@ -841,22 +950,13 @@ const handlePostponeConfirm = async (targetDate: string) => {
   -webkit-touch-callout: none;
 }
 
-/* Zugewiesene Aufgabe: der Rahmen wird sichtbar (Ticket 10). `--owner` ist
-   garantiert gesetzt, wenn diese Klasse steht — beide hängen an derselben
-   Bedingung (`ownerColor`/`isAssigned` im Skript) — deshalb hier bewusst
-   OHNE Rückfallwert in `var(--owner)`. Die Dicke selbst steht schon an der
-   Basisregel oben; hier wechselt nur die Farbe. Zwei Klassen im Selektor
-   (`.zettel.zettel--assigned`) heben die Spezifität über die der
-   typspezifischen Regeln (`.zettel--project` u. a.), damit dieselbe Dicke
-   und Farbe unabhängig vom Zetteltyp gilt, ganz gleich in welcher
-   Reihenfolge die Regeln im Stylesheet stehen. */
-.zettel.zettel--assigned {
-  border-color: var(--owner);
-}
 
 .title {
   margin: 0;
-  font-size: 13px;
+  /* ×1,2 (Karten-Redesign, Ticket 00a): 13 → 15,6 px. Recherche im Handoff —
+     Material 3 Body-Large 16 sp, Apple Body 17 pt, Material Label-Small 11 sp
+     als Untergrenze — der vorige Wert lag mit 13/10 px unter allem davon. */
+  font-size: 15.6px;
   font-weight: 800;
   line-height: 1.15;
   letter-spacing: -0.15px;
@@ -881,41 +981,218 @@ const handlePostponeConfirm = async (targetDate: string) => {
   text-overflow: ellipsis;
 }
 
-/* Fußzeile: Punktwert links, Rückstand daneben — eine gemeinsame Zeile statt
-   zwei, und im Fluss statt absolut. */
+/* Fußzeile, zugleich die GRIFFZEILE (Karten-Redesign, Ticket 00a): links der
+   Punktwert (plus Stempel/Unteraufgaben-Zeichen, wenn vorhanden), rechts
+   Stift und Eselsohr — beide 44 px, deshalb `min-height` UND das rechte
+   Polster, das die beiden Griffe freihält. */
 .foot {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   gap: 6px;
-  margin-top: 2px;
-  font-size: 10px;
+  margin-top: 0;
+  min-height: 44px;
+  padding-right: 88px;
+  /* ×1,2 wie der Titel — Begründung dort. */
+  font-size: 12px;
   font-weight: 800;
   line-height: 1.1;
   letter-spacing: 0.3px;
   white-space: nowrap;
 }
 
-.points {
-  color: var(--pw-ink-soft);
-  opacity: 0.85;
-}
-
-/* Rot trägt die Bedeutung „überfällig" — deshalb steht daneben nur noch die
-   Dauer, nicht das Wort. */
-.meta {
-  color: var(--color-danger);
-}
-
-/* Fortschritt der Unteraufgaben. Ruhig wie der Punktwert: er sagt, wie viel
-   noch aussteht, und ist kein zweites Signal neben dem Rückstand. */
-.progress {
-  color: var(--pw-ink-soft);
-  opacity: 0.85;
-}
-
 /* Nur ein Zettel mit Unteraufgaben reagiert auf ein Antippen der Fläche. */
 .zettel--tappable {
   cursor: pointer;
+}
+
+/* --- Kopf: Titel plus die Ecke oben rechts (Ticket 00a) -------------------- */
+
+/* Der Zettel selbst ist ein Flex-Container; ein `float` wäre darin
+   wirkungslos. Der Kopf ist deshalb ein eigener Block — nur dort fließt der
+   Titel um die Ecke herum.
+
+   `flow-root`, nicht `block`: die Ecke (34 px hoch) kann höher sein als eine
+   einzeilige Titelzeile (~18 px) — bei einem kurzen Titel wie „Müll" mit
+   aktivem `zettel--meta-top`. Ein bloßer `block` umschließt einen Float
+   NICHT automatisch; die Ecke überstünde dann `.head` nach unten und liefe
+   sichtbar in die Fußzeile hinein. `flow-root` öffnet einen eigenen
+   Block-Formatierungskontext und fängt den Float korrekt ein, ohne sonst am
+   Verhalten von `block` etwas zu ändern. */
+.head {
+  display: flow-root;
+  position: relative;
+}
+
+/* Der Punktwert steht an ZWEI Stellen im DOM zugleich (Ecke UND Fußzeile);
+   sichtbar ist immer nur eine, gesteuert über `zettel--meta-top` (Prop
+   `metaTop`, siehe Skript). Ein `v-if` wäre hier falsch: die Wand entscheidet
+   das während der Messung, nicht im Render. */
+.corner {
+  display: none;
+}
+
+.zettel--meta-top .corner {
+  display: flex;
+}
+
+.zettel--meta-top .foot > .points {
+  display: none;
+}
+
+/* Schwimmt nach rechts — bewusst KEIN `display` in dieser Regel, das steht
+   bereits oben. */
+.corner {
+  float: right;
+  align-items: center;
+  gap: 5px;
+  margin: -1px 0 2px 7px;
+}
+
+/* --- Der Gummistempel: NIE / FÄLLIG / HEUTE (Ticket 00a) -------------------
+   Einziger Träger der Dringlichkeit am Zettel (→ CONTEXT.md, „Dringlichkeit")
+   — kein Ring an der Reißzwecke, siehe `urgency` im Skript. Erscheint NUR,
+   wenn es brennt: ein Zettel, der Zeit hat, zeigt nichts.
+   Steht IM FLUSS der Fußzeile (ein normales Flex-Kind, keine Überlagerung) —
+   dadurch schiebt die Zeile ihn zur Seite, statt dass er einen Knopf
+   überdeckt. */
+.due-stamp {
+  flex: 0 0 auto;
+  padding: 1px 5px;
+  border: 2px solid currentColor;
+  border-radius: 3px;
+  transform: rotate(-9deg);
+  opacity: 0.55;
+  font-size: 10.8px;
+  font-weight: 900;
+  letter-spacing: 0.8px;
+  white-space: nowrap;
+}
+
+.due-stamp--hot {
+  color: var(--color-danger);
+}
+
+.due-stamp--today {
+  color: var(--pw-accent);
+}
+
+/* --- Punkte als aufgeklebter Sticker (Ticket 00a) --------------------------
+   Die Form ist die Botschaft: ein Kreis ist eine Kleinigkeit, ein Stern die
+   dickste Aufgabe auf der Wand. Wer die Wand überfliegt, sucht die Sterne —
+   und muss dafür keine Zahl lesen. Funktioniert auch bei Farbenblindheit,
+   weil die Silhouette trägt, nicht nur die Farbe.
+
+     0–1 P  Kreis                ruhig, blass
+       2 P  abgerundetes Quadrat
+       3 P  Sechseck
+       4 P  Wappen
+       5 P  Stern                Gold, der Blickfang
+
+   Alle Formen haben dieselbe Kantenlänge (der Stern fällt bewusst aus der
+   Reihe, siehe dort); nur Silhouette und Farbe unterscheiden sie. Der
+   Schatten kommt aus `drop-shadow`, nicht `box-shadow`: ein `box-shadow` legt
+   sich um das RECHTECK und wäre am Stern als Kasten sichtbar.
+
+   Die Farben sind geraten (blass/blau/grün/orange/gold) und konkurrieren mit
+   den Personenfarben am Zettelrand — eine kuratierte Palette ist bewusst
+   Out of Scope für dieses Ticket (siehe `HANDOFF-kartengroesse.md`). */
+.points {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 34px;
+  height: 34px;
+  /* Leicht schief aufgeklebt — wie alles auf dieser Wand. */
+  transform: rotate(-6deg);
+  color: var(--pw-ink);
+  font-size: 14.3px;
+  font-weight: 900;
+  line-height: 1;
+  filter: drop-shadow(1.5px 2px 0 rgba(36, 31, 26, 0.35));
+}
+
+.points--s0,
+.points--s1 {
+  border-radius: 50%;
+  background: #e8e0cd;
+  box-shadow: inset 0 0 0 1.5px rgba(36, 31, 26, 0.35);
+}
+
+.points--s2 {
+  border-radius: 7px;
+  background: #bcd3e8;
+  box-shadow: inset 0 0 0 1.5px rgba(36, 31, 26, 0.35);
+}
+
+.points--s3 {
+  background: #bfdcc0;
+  clip-path: polygon(25% 4%, 75% 4%, 100% 50%, 75% 96%, 25% 96%, 0 50%);
+}
+
+.points--s4 {
+  background: #f0c78a;
+  clip-path: polygon(50% 0, 100% 18%, 100% 62%, 50% 100%, 0 62%, 0 18%);
+}
+
+/* Der Stern ist absichtlich der einzige, der aus der Reihe fällt: größer,
+   golden, stärker geneigt. Fünf Punkte sind der Ausreißer. Werte über 5
+   (Bonus-Unteraufgaben) fallen ebenfalls hierauf — bekannt offen. */
+.points--s5 {
+  width: 39.1px;
+  height: 39.1px;
+  transform: rotate(-10deg);
+  background: #f4cf4a;
+  font-size: 13.6px;
+  clip-path: polygon(
+    50% 0%,
+    61% 35%,
+    98% 35%,
+    68% 57%,
+    79% 91%,
+    50% 70%,
+    21% 91%,
+    32% 57%,
+    2% 35%,
+    39% 35%
+  );
+}
+
+/* --- Zeichen für Unteraufgaben (Ticket 00a) --------------------------------
+   Ein angeklammerter Stapel: Papier mit gestricheltem Rand, damit er zu den
+   Zettelchen gehört, die er ankündigt — und nicht zu den beiden Griffen
+   rechts, die etwas mit dem GANZEN Zettel tun.
+
+   Immer sichtbar, auch bei `daily` und reinen Checklisten — vorher verriet
+   nur die Fortschrittszahl die Existenz von Unteraufgaben, und die fehlte an
+   genau diesen beiden Zetteltypen ganz (→ `tracksProgress` im Skript).
+   Aufgeklappt kippt die Farbe um, damit man den Weg zurück findet. */
+.subs-badge {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  flex: 0 0 auto;
+  height: 34px;
+  padding: 0 7px;
+  border: 1.5px dashed var(--pw-line);
+  border-radius: 3px;
+  background: var(--pw-paper);
+  color: var(--pw-ink);
+  font-size: 11.6px;
+  font-weight: 800;
+  line-height: 1;
+  transform: rotate(2deg);
+  box-shadow: 1.5px 2px 0 rgba(36, 31, 26, 0.28);
+  cursor: pointer;
+}
+
+.subs-badge--open {
+  border-style: solid;
+  background: var(--pw-ink);
+  color: var(--pw-paper);
+}
+
+.subs-count {
+  font-variant-numeric: tabular-nums;
 }
 
 /* --- Unteraufgaben: eigene Zettelchen, mehrspaltig ------------------------- */
@@ -936,12 +1213,12 @@ const handlePostponeConfirm = async (targetDate: string) => {
   margin: 11px 0 2px;
   padding-top: 9px;
   border-top: 1.5px dashed rgba(36, 31, 26, 0.35);
-  /* Die 36px rechter Innenabstand des Zettels halten den Bearbeiten-Knopf vom
-     Titel frei. Der Knopf ist aber nur 40px hoch; unterhalb davon wäre der
-     Streifen bei voller Wandbreite bloß Leerraum — genau das, wogegen das
-     Aufklappen antritt. Die Zettelchen holen ihn sich zurück, bis auf die 8px
-     Innenabstand der linken Seite. */
-  margin-right: -28px;
+  /* Unten Platz für den Bearbeiten-Knopf lassen (Karten-Redesign, Ticket
+     00a): der sitzt jetzt UNTEN rechts (44 px, `bottom: 0`) statt oben — bei
+     aufgeklapptem Zettel gibt es KEIN `.ear` mehr (siehe dort), aber `.edit`
+     bleibt, und ohne dieses Polster läge die letzte Zeile der Zettelchen
+     genau darunter. */
+  padding-bottom: 44px;
 }
 
 .mini {
@@ -965,7 +1242,8 @@ const handlePostponeConfirm = async (targetDate: string) => {
   border: 1.5px solid var(--pw-line);
   border-radius: 2px;
   box-shadow: 2px 2px 0 rgba(36, 31, 26, 0.42);
-  font-size: 12px;
+  /* ×1,2 wie der Zetteltitel — Begründung dort. */
+  font-size: 14.4px;
   font-weight: 700;
   line-height: 1.15;
 }
@@ -978,7 +1256,7 @@ const handlePostponeConfirm = async (targetDate: string) => {
 .subs--c3 .mini {
   flex-basis: calc(33.333% - 4.667px);
   padding: 6px 42px 6px 10px;
-  font-size: 11.5px;
+  font-size: 13.8px;
 }
 
 .subs--c3 {
@@ -994,7 +1272,7 @@ const handlePostponeConfirm = async (targetDate: string) => {
 }
 
 .mini-points {
-  font-size: 9.5px;
+  font-size: 11.4px;
   font-weight: 800;
   letter-spacing: 0.3px;
   color: var(--pw-ink-soft);
@@ -1116,80 +1394,39 @@ const handlePostponeConfirm = async (targetDate: string) => {
   transform: none !important;
 }
 
-/* Die einzige sichtbare Aktion. Oben rechts, weil unten rechts das Eselsohr
-   liegt. 40 px wie in dichten Listen — 48 px wären auf einem 44-px-Zettel die
-   ganze Fläche.
+/* Während der Messung nehmen Titel und Fußzeile ihre EIGENE natürliche
+   Breite an. Ohne das sind beide so breit wie der Zettel, und die Wand könnte
+   nicht entscheiden, welcher von beiden ihn breit macht (→ `WallView`,
+   `zettel--meta-top`). Die gemessene Zettelbreite ändert das nicht: sie ist
+   ohnehin das Maximum der beiden. */
+.zettel--measuring .title,
+.zettel--measuring .foot {
+  width: max-content;
+}
 
-   **Warum das Stiftsymbol nicht in der Mitte seines Knopfes sitzt.** Ein Zettel
-   ist mindestens 44 px hoch, und genau so hoch ist auch das Eselsohr. Auf einem
-   Zettel dieser Mindesthöhe liegen beide Trefferflächen übereinander; senkrecht
-   ist kein Platz für zwei Ziele. Das Eselsohr lässt deshalb per `clip-path`
-   eine Ecke frei, und das Stiftsymbol rückt dort hinein.
+/* Der Bearbeiten-Knopf sitzt jetzt UNTEN rechts, unmittelbar links neben dem
+   Eselsohr — beide 44 × 44 px, nebeneinander in der Griffzeile (Karten-
+   Redesign, Ticket 00a). Vorher saß er oben rechts und nahm dem Titel eine
+   ganze Zeile weg; jetzt bekommt der Titel die ganze obere Kante.
 
-   **Eine diagonale Trennlinie war dafür zu knapp — hier stehen die Messwerte,
-   nicht meine Rechnung.** Erster Entwurf: 45°-Schnitt mit 34 px Schenkeln, dazu
-   der Stift bei Schriftgröße 14 und 3 px Polster. Gerechnet kam ich auf „rund
-   10 px" Abstand zur Trennlinie. Der QC hat im **gedrehten** Koordinatensystem
-   bei 0,25 px Raster nachgemessen:
-
-     Abstand Stiftmitte zur Trennlinie   4,16 px   (gerechnet: „rund 10")
-     Stiftfläche auf dem Eselsohr        20,6 %
-     Trefferfläche des Eselsohrs         1328 px²  (gerechnet: 1358)
-     betroffen                           11 von 23 Zetteln
-
-   Ein Fünftel des sichtbaren Stiftes lag also auf dem Eselsohr, auf knapp der
-   halben Wand: sichtbares Ziel, keine Reaktion.
-
-   **Die Lösung ist jetzt ein rechteckiger Ausschnitt statt einer Diagonalen.**
-   Eine Diagonale schneidet dort am meisten weg, wo der Stift sitzt, und lässt
-   dort am meisten stehen, wo ohnehin niemand hingreift. Der Ausschnitt (24 ×
-   18 px in der oberen linken Ecke des Eselsohr-Kastens) gibt dem Stift eine
-   eigene, rechteckige Zone und kostet das Eselsohr weniger Fläche als vorher
-   die Diagonale.
-
-   Symbolgröße 12, Polster 1 px oben / 4 px links.
-
-   **Die Höhe war erst 16 px und das war um Haaresbreite zu wenig.** Gemessen:
-   das Glyphenkästchen endet bei Zettel-lokal y ≈ 15,9 — es stand also bündig
-   an der Kante des Ausschnitts, und jedes Antialiasing-Pixel darunter gehörte
-   dem Eselsohr. Ergebnis: **13,2 % des sichtbaren Stiftes auf dem Ohr, auf 10
-   von 20 Zetteln**, konkret die unteren rund 2,4 px. Mit 18 px bleiben
-   **2,1 px** Luft. Das ist knapp, und es ist **absichtlich** knapp
-   aufgeschrieben: wer an Symbolgröße, Polster oder Schriftart dreht, kippt es
-   sofort wieder. Nachmessen ist hier Pflicht, nicht Kür.
-
-   Messwerte zum jeweiligen Stand (alle vom QC, nicht gerechnet):
-
-     Trefferfläche Eselsohr    Diagonale 34 px   1328 px²
-                               Ausschnitt 24×16  1512 px²  (gerechnet 1552)
-                               Ausschnitt 24×18  gerechnet 1504 — ungemessen
-     Restfläche Bearbeiten     Ausschnitt 24×16   273 px², Stift zu 86,8 %
-                               trefferwirksam; ein Klick auf die Glyphmitte
-                               öffnet das Modal nachweislich
-                               Ausschnitt 24×18  gerechnet +48 px² — ungemessen
-
-   Dass der Bearbeiten-Knopf dabei von 399 auf 273 px² gefallen ist, ist in
-   Ordnung: entscheidend ist, dass das **sichtbare** Ziel trifft, nicht wie
-   groß die unsichtbare Fläche darum herum ist.
-
-   Was einen Fehlgriff harmlos macht: ein Tipp, der doch im Eselsohr landet,
-   tut **nichts** (es reagiert nur auf Ziehen). Er erledigt nie versehentlich —
-   gemessen liegt der sichtbare Knick zu 97,7 % im Eselsohr, ein Griff dorthin
-   öffnet also auch kein Modal mitten in der Geste. */
+   Der `clip-path`-Ausschnitt im Eselsohr, der ihn dort früher vor dem Ohr
+   schützte, entfällt damit ERSATZLOS (samt der vermessenen Geometrie, siehe
+   `.ear` unten) — beide Griffe teilen sich keine Fläche mehr, jeder hat seine
+   eigenen vollen 44 × 44 px. */
 .edit {
   position: absolute;
-  top: 0;
-  right: 0;
-  width: 40px;
-  height: 40px;
-  padding: 1px 0 0 4px;
+  bottom: 0;
+  right: 44px;
+  width: 44px;
+  height: 44px;
+  padding: 0;
   border: 0;
   background: none;
   color: var(--pw-ink-soft);
-  font-size: 12px;
+  font-size: 18px;
   line-height: 1;
   display: grid;
-  place-items: start start;
+  place-items: center;
   cursor: pointer;
 }
 
@@ -1200,59 +1437,25 @@ const handlePostponeConfirm = async (targetDate: string) => {
 /* --- Das Eselsohr: der Abreiß-Griff (Etappe 4) ---------------------------- */
 
 /* 44 × 44 px Kasten in der unteren rechten Ecke SEINES Zettels — `right: 0;
-   bottom: 0`, kein negativer Versatz. Der Prototyp setzt hier −2 px; das würde
-   den Griff über die Kante schieben und im dichten Packen den Nachbarzettel
-   betätigen, also die falsche Aufgabe erledigen. Unsichtbar, nur durch Abtasten
-   der Ecken zu finden — deshalb bündig.
+   bottom: 0`, kein negativer Versatz: der würde den Griff über die Kante
+   schieben und im dichten Packen den Nachbarzettel betätigen, also die
+   falsche Aufgabe erledigen. Unsichtbar, nur durch Abtasten der Ecken zu
+   finden — deshalb bündig.
 
-   `clip-path` nimmt aus der oberen linken Ecke ein **Rechteck** von 24 × 18 px
-   heraus und überlässt es dem Bearbeiten-Knopf; warum ein Rechteck und keine
-   Diagonale, steht ausführlich dort. 24/44 = 54,5 %, 18/44 = 40,9 %.
-
-   **Wie eng es zwischen Ausschnitt und Zeichnung wirklich ist** (Ohr-lokale
-   y-Werte, 0 = Oberkante des Kastens; eine frühere Fassung dieses Kommentars
-   nannte das „strukturell sicher" — das war zu großzügig, der QC hat genau hier
-   einen Anschnitt gemessen):
-
-     Unterkante des Ausschnitts                 y = 18
-     Oberkante des Knicks (44 − 2 − 22)         y = 20   → 2 px frei
-     Perforationslinie (44 − 22)                y = 22   → 4 px frei
-
-   Zwei Pixel sind kein Puffer. Was hier **doch** strukturell hält, ist etwas
-   anderes: die **Höhe** des Knicks ändert sich in keinem Zustand mehr, auch
-   nicht im „reißt gleich" (siehe dort — er wächst nur noch in die Breite). Der
-   Anschnitt kann damit nicht mehr aus einem Zustandswechsel entstehen, sondern
-   nur noch daraus, dass jemand an einer dieser drei Zahlen dreht. Dann bitte
-   alle drei nachrechnen und nachmessen.
-
-   Trefferfläche, gemessen und gerechnet nebeneinander:
-
-     Ausschnitt 24 × 16   gemessen 1512 px²   (gerechnet 1552, −2,6 %)
-     Ausschnitt 24 × 18   gerechnet 1504 px², ungemessen
-     Diagonale 34 px      gemessen 1328 px²   (der Vorgänger)
-
-   Der Griff ist mit dem Ausschnitt also größer als mit der Diagonalen — und
-   der Stift trotzdem frei.
+   **Kein `clip-path`-Ausschnitt mehr** (Karten-Redesign, Ticket 00a): er
+   existierte nur, damit das Stiftsymbol des Bearbeiten-Knopfes — der vorher
+   OBEN rechts saß — nicht unter dem Eselsohr verschwand. Jetzt sitzt der
+   Stift UNTEN links daneben (→ `.edit`), beide teilen sich keine Fläche mehr,
+   und das Eselsohr ist ein volles Quadrat: seine Trefferfläche wächst von
+   rund 1500 auf rund 1936 px².
 
    `touch-action: none` ist die zweite Hälfte des Scroll-Schutzes: nur so wird
    aus einem Zug nach unten überhaupt eine Geste statt eines Bildlaufs. Solange
-   die Seite scrollt (plus Nachlauf), schaltet `.ear--locked` auf `pan-y` zurück
-   — wer in eine fliegende Wand greift, scrollt weiter und reißt nichts ab.
-
-   **Was das kostet, ist vermessen** (QC, beide Stände):
-
-     Diagonale 34 px      1329 px² je Ohr = 68,6 % des Kastens,
-                          über die Wand rund 6,4 % der Fläche
-     Ausschnitt 24 × 16   1538 px² je Ohr = 79,4 % des Kastens
-     Ausschnitt 24 × 18   gerechnet rund 1490 px², ungemessen
-
-   Der weggeschnittene Teil scrollt in allen Ständen korrekt durch. Der
-   Wandanteil ist nur für den diagonalen Stand gemessen; mit dem größeren Griff
-   liegt er höher als 6,4 % — das ist die Untergrenze, nicht der neue Wert. Wer
-   den Preis für zu hoch hält, kann den Kasten
-   verkleinern; `touch-action: pan-y` als Dauerzustand ist **keine** Option:
-   damit beginnt der Browser beim Zug nach unten zu scrollen und schickt
-   `pointercancel`, bevor die Geste je erkannt würde. */
+   die Seite scrollt (plus Nachlauf), schaltet `.ear--locked` auf `pan-y`
+   zurück — wer in eine fliegende Wand greift, scrollt weiter und reißt nichts
+   ab; `touch-action: pan-y` als Dauerzustand ist dagegen **keine** Option,
+   damit beginnt der Browser beim Zug nach unten selbst zu scrollen und
+   schickt `pointercancel`, bevor die Geste je erkannt würde. */
 .ear {
   position: absolute;
   right: 0;
@@ -1266,10 +1469,6 @@ const handlePostponeConfirm = async (targetDate: string) => {
   touch-action: none;
   user-select: none;
   -webkit-user-select: none;
-  /* Rechteckiger Ausschnitt oben links: 24 px breit (54,5 %), 18 px hoch
-     (40,9 %). Der Umriss läuft um ihn herum. Die 18 sind gemessen erzwungen —
-     mit 16 stand die Glyphe des Bearbeiten-Knopfes bündig auf der Kante. */
-  clip-path: polygon(54.5% 0, 100% 0, 100% 100%, 0 100%, 0 40.9%, 54.5% 40.9%);
 }
 
 .ear--locked {
@@ -1295,19 +1494,7 @@ const handlePostponeConfirm = async (targetDate: string) => {
   border-top: 1.2px solid rgba(36, 31, 26, 0.6);
 }
 
-/* Die Perforationslinie über dem Knick — sie sagt, wo der Zettel reißt. Sie
-   liegt 22 px über dem unteren Rand, der Ausschnitt endet 18 px unter der
-   Oberkante. Die Länge ist damit gleichgültig, die *Dicke* aber nicht:
-
-     normal (1 px)                 Oberkante y = 20  →  2,0 px frei
-     reißt gleich (2,5 px Akzent)  Oberkante y = 18  →  0,0 px frei
-
-   Beide gemessen. Im Alarmzustand liegt die Linie also **exakt bündig** auf der
-   Ausschnittkante — sie schneidet nicht an, aber die Reserve ist null. Wächst
-   die Akzentlinie je über 2,5 px, entsteht dieselbe Kerbe, die der Knick hier
-   schon zweimal erzeugt hat (siehe die Knickregeln oben: dort ist die Höhe
-   deshalb in allen Zuständen festgenagelt). Wer diese Linie dicker macht, muss
-   den Ausschnitt mitwachsen lassen. */
+/* Die Perforationslinie über dem Knick — sie sagt, wo der Zettel reißt. */
 .ear::after {
   content: '';
   position: absolute;
@@ -1318,10 +1505,8 @@ const handlePostponeConfirm = async (targetDate: string) => {
   border-top: 1.5px dashed rgba(36, 31, 26, 0.45);
 }
 
-/* Auch beim Anfassen wächst nur die Breite — dieselbe Begründung wie beim
-   Zustand „reißt gleich" weiter unten. Die Höhe des Knicks ist an dieser Ecke
-   die einzige Zahl, die den Ausschnitt des Bearbeiten-Knopfes treffen kann, und
-   sie ist deshalb in allen Zuständen fest. */
+/* Auch beim Anfassen wächst nur die Breite, nicht die Höhe — dieselbe
+   Begründung wie beim Zustand „reißt gleich" weiter unten. */
 .ear:active::before {
   width: 26px;
 }
@@ -1351,17 +1536,18 @@ const handlePostponeConfirm = async (targetDate: string) => {
 
 /* Weit genug gezogen: Loslassen erledigt. Die Perforation reißt sichtbar auf.
 
-   `border-color` steht hier bewusst dazu (QC-Befund, Ticket 10): ohne
-   Zuweisung ist `border-color` an der Basisregel `transparent` — ein
-   `dashed`-Umriss in Transparent zeigt nichts an. Bei 48 von 49 Zetteln auf
-   der Testwand war „reißt gleich ab" damit faktisch stumm, nur die
-   Perforationslinie am Eselsohr blieb (24 × 2 px statt einem Umriss ums
-   ganze Papier). Neutrale Tintenfarbe (`--pw-line`, dieselbe wie an
-   Reißzwecken-Kontur, Büroklammern und Projekt-Umriss) macht den Umriss auch
-   ohne Zuweisung sichtbar. Die Zuweisungsfarbe gewinnt weiterhin: der
-   Selektor `.zettel.zettel--assigned` hat mit zwei Klassen höhere
-   Spezifität (0,2,0) als dieser hier (0,1,0) und überschreibt
-   `border-color`, unabhängig von der Reihenfolge im Stylesheet. */
+   `border-color` steht hier bewusst dazu (QC-Befund, Ticket 10): ohne sie
+   erbt der Umriss `transparent` von der Basisregel, und ein `dashed`-Umriss
+   in Transparent zeigt nichts an. Bei 48 von 49 Zetteln auf der Testwand war
+   „reißt gleich ab" damit faktisch stumm, nur die Perforationslinie am
+   Eselsohr blieb (24 × 2 px statt einem Umriss ums ganze Papier). Neutrale
+   Tintenfarbe (`--pw-line`, dieselbe wie an Reißzwecken-Kontur,
+   Büroklammern und Projekt-Umriss) macht den Umriss sichtbar — jetzt auf
+   JEDEM Zettel gleich, seit die Zuweisungsfarbe nach der Korrektur zu
+   Ticket 10 nicht mehr am Rahmen steht, sondern nur noch an der Reißzwecke.
+   (Vorher überschrieb `.zettel.zettel--assigned` diese Farbe an zugewiesenen
+   Zetteln mit der Personenfarbe — die Regel gibt es seit der Korrektur nicht
+   mehr.) */
 .zettel--tear-ready {
   border-style: dashed;
   border-color: var(--pw-line);
@@ -1372,22 +1558,13 @@ const handlePostponeConfirm = async (targetDate: string) => {
   border-top-width: 2.5px;
 }
 
-/* Der Knick wächst **nur in die Breite**, seine Höhe bleibt bei 22 px.
- *
- * Vorgeschichte: erst wuchs er auf 30 × 30, dann auf 27 × 27, und beides ragte
- * in den Ausschnitt des Bearbeiten-Knopfes. Der QC hat den zweiten Versuch
- * nachgemessen — bei 27 px liegt die Oberkante bei y = 15, der Ausschnitt
- * reichte bis y = 16: **−1 px über eine Breite von 9 px**. Eine Kerbe an der
- * Wahrnehmungsgrenze, aber eine Kerbe.
- *
- * Zweimal knapp danebenliegen heißt, dass die Zahl das falsche Werkzeug ist.
- * Deshalb wächst hier keine Höhe mehr: die Oberkante des Knicks steht in JEDEM
- * Zustand bei y = 20 und damit unter dem Ausschnitt (y = 18). Der Anschnitt
- * kann aus diesem Zustandswechsel nicht mehr entstehen — unabhängig davon,
- * welche Breite hier künftig steht.
- *
- * Als Ankündigung reicht die Breite: ein breiterer Knick liest sich als
- * größeres Eselsohr, und daneben stehen ohnehin schon der gestrichelte Rand des
+/* Der Knick wächst beim Ziehen nur in die Breite, seine Höhe bleibt bei
+ * 22 px. Vorgeschichte: er wuchs früher auch in der Höhe, was in den (jetzt
+ * entfallenen) `clip-path`-Ausschnitt des Bearbeiten-Knopfes ragte — seit
+ * `.edit` unten neben statt oben über dem Eselsohr sitzt (Karten-Redesign,
+ * Ticket 00a), gibt es diese Kollision gar nicht mehr. Die Breite genügt
+ * trotzdem als Ankündigung: ein breiterer Knick liest sich als größeres
+ * Eselsohr, und daneben stehen ohnehin schon der gestrichelte Rand des
  * Zettels und die aufleuchtende Perforationslinie. */
 .zettel--tear-ready .ear::before {
   width: 27px;
@@ -1423,7 +1600,8 @@ const handlePostponeConfirm = async (targetDate: string) => {
 }
 
 .zettel--daily .title {
-  font-size: 12.5px;
+  /* ×1,2 wie der Zetteltitel — Begründung dort. */
+  font-size: 15px;
 }
 
 .tape {
@@ -1448,17 +1626,19 @@ const handlePostponeConfirm = async (targetDate: string) => {
     transparent 1px 7px
   );
   /* Keine eigene `border-width` mehr (vormals 3px): die Basisregel liefert
-     jetzt für alle drei Zetteltypen dieselbe Dicke, sichtbar nur bei
-     Zuständigkeit (→ `.zettel--assigned`). Eine schmalere Ausnahme hier hätte
-     den Projekt-Zettel bei Zuweisung dünner umrandet als die anderen beiden
-     Typen — derselbe Rahmen soll aber überall dasselbe aussagen. */
+     jetzt für alle drei Zetteltypen dieselbe Dicke (2px, konturlos, siehe
+     `.zettel` oben) — sie trägt nur noch die Fläche für den neutralen
+     „reißt gleich ab"-Umriss (`.zettel--tear-ready`), gleich breit auf jedem
+     Zetteltyp. Eine schmalere Ausnahme hier hätte diesen Umriss am
+     Projekt-Zettel dünner gemacht als an den anderen beiden Typen. */
   border-radius: 0;
   box-shadow: 4px 4px 0 var(--pw-line);
   padding-top: 11px;
 }
 
 .zettel--project .title {
-  font-size: 15px;
+  /* ×1,2 wie der Zetteltitel — Begründung dort. */
+  font-size: 18px;
 }
 
 .clip {
