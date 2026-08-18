@@ -78,11 +78,12 @@ export const MIN_NOTE_WIDTH = 96
  * unbeteiligte Zettel umbrechen lassen. Vorher 68 %.
  *
  * Ein Titel ohne Wortgrenze ist ausgenommen — er kann nicht umbrechen, ein
- * Deckel würde ihn nur abschneiden. Ein solcher Zettel bekommt stattdessen
- * so viel Breite, wie er braucht, höchstens die ganze Wand (`defaultNoteWidth`
- * fällt dann auf `shape.natural` zurück, nur gegen `wallWidth` geklemmt).
- * Verhalten unverändert gegenüber dem Stand vor diesem Ticket — nur der
- * Deckelwert selbst ist gesunken.
+ * Deckel würde ihn nur abschneiden. Ein solcher Zettel bekommt stattdessen so
+ * viel Breite, wie er braucht, höchstens die ganze Wand. Bewusste Entscheidung
+ * von vor diesem Ticket, unverändert übernommen — nur der Deckelwert selbst
+ * ist gesunken (68 % → 45 %). In der Praxis betrifft das seltene, sehr lange
+ * Komposita; ein alltägliches wie „Dunstabzugshaubenfilter" (23 Zeichen)
+ * bleibt deutlich unter der vollen Wandbreite.
  */
 export const MAX_WIDTH_RATIO = 0.45
 
@@ -210,11 +211,14 @@ const wraps = (shape: WallNoteShape) => shape.minimum < shape.natural
  * umbrechen, ein Deckel würde es nur abschneiden; es bekommt so viel Breite,
  * wie es braucht, höchstens die ganze Wand (`wraps(shape)` ist dann `false`,
  * der Rückgabewert fällt auf `shape.natural` zurück und wird nur noch gegen
- * `wallWidth` geklemmt). Gemessen an einem 347-px-Wand-Beispiel mit
- * 156-px-Deckel: ein 44 Zeichen langes unbrechbares Wort landete bei 341 px,
- * ein noch längeres bei der vollen Wandbreite. Verhalten unverändert
- * gegenüber dem Stand vor diesem Ticket, nur der Deckelwert ist gesunken; ob
- * die Ausnahme bleiben soll, ist eine offene Spec-Frage.
+ * `wallWidth` geklemmt). Bewusste Entscheidung von vor diesem Ticket,
+ * unverändert übernommen — nur der Deckelwert ist gesunken.
+ *
+ * Zum Maßstab: an einem 347-px-Wand-Beispiel mit 156-px-Deckel landete ein
+ * 42–43 Zeichen langes, eigens dafür erdachtes Scherzwort bei 341 px bzw. der
+ * vollen Wandbreite. Alltägliche Komposita sind kürzer — „Dunstabzugshaubenfilter"
+ * (23 Zeichen) landet bei grob der halben Wandbreite. Der Fall ist real, aber
+ * schmaler, als das Extrembeispiel vermuten lässt.
  *
  * Auch die Rückfallbreite des zweiten Laufs: was er verwirft, landet wieder
  * hier. Nie schmaler als `MIN_NOTE_WIDTH` (siehe dort).
