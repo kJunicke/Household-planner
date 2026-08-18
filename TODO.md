@@ -89,16 +89,27 @@ Aufbau: **Aktiv** (als Nächstes) · **Backlog** (irgendwann) · **Bekannte Rand
   „fast immer", der Abstand nach rechts ist zu gering, und rechts bleibt oft
   Platz übrig. Gewünscht: mehr Streuung in der Waagerechten **und** eine
   Obergrenze für den Überlapp. Heutige Größen: `rowGapOf` 8…16 px Luft nach
-  rechts, `jitterOf` ±5 px Versatz, `indentOf` 0…12 px nur links. Vermutlich
-  entsteht der sichtbare Überlapp aus der **Neigung** — der Packer rechnet mit
-  achsenparallelen Rechtecken, die Zettel sind gedreht und ragen an den Ecken
-  darüber hinaus. Erst zählen, dann bauen.
+  rechts, `jitterOf` ±5 px Versatz, `indentOf` 0…12 px nur links.
+  **Nicht die Neigung deckeln** — die überlappenden Ecken sind ausdrücklich
+  gewollt („durch z. B. Drehung der Karten passiert das ja manchmal, das sieht
+  ganz gut aus"). Der Deckel gehört auf die Layout-Rechtecke. Die Ursache liegt
+  woanders: `packWall` reserviert die Spalten ab `bestColumn`, gezeichnet wird
+  aber bei `bestColumn × 4 + dx` — die Reservierung kennt den Versatz nicht.
+  Dazu zieht `dy` (−6,5…+1,5 px) einen Zettel nach oben, während `gapOf` nur
+  2…15 px Abstand lässt: bis zu −4,5 px echte Überlappung. Beides hängt am Hash,
+  trifft also immer dieselben Zettel — daher „fast immer".
+  Der Reststreifen rechts ist dagegen Arithmetik: bei 45 % Deckel bleiben auf
+  374 px rund 26 px liegen.
 - **Punkte-Sticker erst ab vier Fußzeilen-Elementen (15).** Wandert der Punktwert
   bei einer dreiteiligen Fußzeile (Punkte, Stift, Eselsohr) nach oben rechts,
   bleibt unten ein großes Loch — die beiden Griffe stehen rechtsbündig, links ist
   nichts. Die Entscheidung ist heute rein über die Breite gefällt und kennt die
   Elementzahl nicht. Das Merkmal existiert im Code bereits als
-  `hasOtherFootContent`.
+  `hasOtherFootContent`. **Zu dieser Bedingung gibt es keine
+  Nutzerentscheidung** — sie stammt aus der Prototyp-Sitzung, ihre Begründung
+  (die Paar-Packung retten) ist mit Ticket 02 entfallen. Sie darf ohne
+  Rückfrage geändert werden. Zu prüfen ist nur, dass weiterhin zwei Zettel auf
+  ~374 px nebeneinander passen — das verlangt 02.
 - **Wochenziel-Leiste in jede Ansicht (08).** Heute liegt sie in
   `WallStatusBar.vue` und ist damit **nur auf der Pinnwand** sichtbar; in Einkauf,
   Notizen und Historie fehlt sie. Der Header soll überall gleich aussehen: Papier,
