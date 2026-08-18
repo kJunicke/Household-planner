@@ -49,6 +49,60 @@ Aufbau: **Aktiv** (als Nächstes) · **Backlog** (irgendwann) · **Bekannte Rand
 - **`docs/data-model.md` kennt `emphasis_level` nicht.** Beschrieben ist die Spalte nur im
   Glossar (`CONTEXT.md`) und in den Migrationskommentaren.
 
+### Pinnwand-Ausbau — die fünf offenen Tickets
+
+> Der Ausbau ist am 18.08.2026 nach `main` gemergt (`d8f0aa7`). Abgenommen sind
+> Karten-Redesign, Wand-Anordnung, Erledigt-Streifen, gedämpfte Kategorien, langer
+> Zettel, Nachdruck-Datenmodell, Zuweisungsfarbe, Stapelreihenfolge und Titelbreite.
+> **Diese fünf hier sind nicht gebaut.** Die ausführlichen Tickets liegen unter
+> `.scratch/pinnwand-ausbau/issues/` — und das ist **gitignored**, hängt also an
+> dieser Platte. Was hier steht, ist die haltbare Fassung.
+
+- **Richtungskranz einbauen (00b).** Lang drücken zeigt heute noch den alten
+  Chip-Kranz um die Karte. Gebaut werden soll das Vollbild-Overlay mit
+  Beschriftungen an den vier **Bildschirmrändern**: Randnebel + Pfeil, dunkelgrüner
+  Schleier, blass (0,3) in Ruhe und voll deckend (1,0) bei anliegender Richtung,
+  Pfeil kurz an der Karte und frei zum Finger drehend, in der Diagonale leuchtet
+  **nichts**. Beschriftung fett mit dunkler Kontur, ausdrücklich **keine**
+  Kreideschrift (getestet, wegen Lesbarkeit verworfen). Dazu zufälliger
+  Randabstand links/rechts der Zettel (8–34 px) gegen die Randbeschwerde links.
+  **Der Entwurf ist vom Nutzer abgenommen** („Sieht super aus") und vollständig in
+  [HANDOFF-ziehgeste.md](HANDOFF-ziehgeste.md) beschrieben — offen ist nur der
+  Umbau von `WallDirectionMenu.vue`. Beim Einbau zu entscheiden: `COMMIT_DISTANCE`
+  (48 px, der ursprüngliche Grund ist mit den Randbeschriftungen entfallen) und die
+  Schleier-Deckkraft (0,82 schluckt die Zettel, ~0,6 wäre besser).
+  Der Prototyp liegt auf `proto/kartengroesse` als `PrototypeKranzView.vue` unter
+  `/proto-kranz` — **Wegwerfcode, kommt nicht mit.** Blockiert Projekte (03).
+- **Wochenziel-Leiste in jede Ansicht (08).** Heute liegt sie in
+  `WallStatusBar.vue` und ist damit **nur auf der Pinnwand** sichtbar; in Einkauf,
+  Notizen und Historie fehlt sie. Der Header soll überall gleich aussehen: Papier,
+  Wochenziel-Leiste, keine Rangliste, kein Logo — in allen Ansichten und in
+  **beiden** Aussehen. Der Header ist damit die **bewusste Ausnahme** vom
+  Aussehen-Schalter, der einzige Teil der Papier-Optik ohne `data-design`-Gate;
+  das gehört im Code als Absicht kommentiert. Dafür wandern die `--pw-*`-Tokens
+  aufs blanke Wurzelelement, die Papier-*Regeln* bleiben gegated. Die Leiste muss
+  ihre Höhe weiter als CSS-Variable melden — die Wand reserviert danach ihr unteres
+  Polster. Unabhängig von allem anderen, kann sofort starten.
+- **Projekte auf der Pinnwand (03).** Projekte bekommen **gar keinen**
+  Richtungskranz. Die Geste bleibt: nach unten ziehen öffnet den
+  `ProjectWorkModal` — dasselbe Fenster wie „Am Projekt arbeiten" im klassischen
+  Aussehen, mit Eintrag was gemacht wurde und wie viel Aufwand. Kein einfaches
+  Erledigen, kein Verschieben; zuweisen läuft über den Stift am Zettel. Baut auf
+  00b auf.
+- **FAB wechselt keine Ansicht (01).** Eigenständig, kleines Ticket.
+- **Nachdruck-Stempel am Zettel (09b).** Die Spalte `emphasis_level`, die Migration
+  und die drei Reset-Fälle stehen (09a, `ccc1dd4`, Edge Function als v22 deployt) —
+  die **Bedienung fehlt**. Vorbedingung 00a ist inzwischen erfüllt. Vorher die drei
+  Nachdruck-Randfälle weiter unten in dieser Datei klären: sie betreffen genau die
+  Unteraufgaben, die 09b stempeln würde.
+
+**Prototypen-Zweige** (Wegwerfcode, aber mit abgenommenen Entscheidungen darin):
+`proto/kartengroesse` (9 Commits, Kartengröße + Kranz-Prototyp) und
+`prototype/einkauf-pinnwand`. Ihre Ergebnisse stehen in
+[HANDOFF-kartengroesse.md](HANDOFF-kartengroesse.md) und
+[HANDOFF-ziehgeste.md](HANDOFF-ziehgeste.md); die Zweige selbst gehören **nicht**
+nach `main`.
+
 ### Pinnwand — offene Arbeit
 - **Kuratierte Personenfarben-Palette + Migration bestehender `user_color`-Werte.**
   Die Umrandung ist die einzige Person-Info am Zettel, `#4A90E2` misst nur 3,23 gegen Papier

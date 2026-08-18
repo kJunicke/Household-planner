@@ -2,6 +2,11 @@
 
 Grundüberholung der Karten-Ziehgeste auf der Pinnwand (`WallView`).
 
+> **OFFEN — Stand 18.08.2026.** Dieser Handoff ist **nicht** eingelöst. Der
+> Einbau ist Ticket 00b und steht in `TODO.md` unter „Pinnwand-Ausbau — die fünf
+> offenen Tickets". In `main` liegt weiterhin die **alte** Fassung von
+> `WallDirectionMenu.vue` mit dem Chip-Kranz um die Karte.
+
 **Stand: Grilling und Prototyp sind durch, die Optik ist vom Nutzer abgenommen
 („Sieht super aus").** Was unter „Entschieden" steht, ist nicht mehr offen. Was
 noch fehlt, ist der echte Umbau von `WallDirectionMenu.vue`.

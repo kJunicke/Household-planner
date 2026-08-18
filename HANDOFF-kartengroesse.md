@@ -1,5 +1,12 @@
 # Handoff: Lesbarkeit der Pinnwand-Karten
 
+> **ERLEDIGT — 18.08.2026.** Dieser Handoff ist eingelöst: der Einbau lief als
+> Ticket 00a und liegt in `main` (Commit `46592b6`, gemergt mit `d8f0aa7`).
+> Nachträglich geändert wurde nur die Zuweisungsfarbe: der dicke farbige Rahmen
+> ist auf Nutzerwunsch wieder entfallen, die Farbe steht allein an der
+> Reißzwecke (Ticket 10). Das Dokument bleibt als Begründungsspeicher stehen —
+> **nicht noch einmal umsetzen.**
+
 **Stand: Prototyp durch, vom Nutzer abgenommen („sieht gut aus").** Was folgt,
 ist Ergebnis, nicht Vorschlag. Offen ist nur noch der saubere Einbau.
 
