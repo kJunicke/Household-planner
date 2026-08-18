@@ -224,6 +224,7 @@ Deno.serve(async (req) => {
       completed?: boolean
       last_completed_at: string
       assigned_to?: null
+      emphasis_level?: number
     } = {
       last_completed_at: now  // ← Always update timestamp
     }
@@ -237,6 +238,20 @@ Deno.serve(async (req) => {
     // Clear assignment if not permanent (using taskDetails.assignment_permanent fetched earlier)
     if (!taskDetails.assignment_permanent) {
       updateData.assigned_to = null
+    }
+
+    // Nachdruck (emphasis_level) gilt für EINEN Durchlauf, siehe CONTEXT.md
+    // "Nachdruck". Reset beim Erledigen — ABER NICHT für:
+    // - 'daily': wird nie completed=true (bleibt dauerhaft in "Alltagsaufgaben"
+    //   sichtbar) und kann mehrmals am Tag erledigt werden; ihr Nachdruck-Reset
+    //   passiert stattdessen nächtlich im Cron (reset_recurring_tasks), sonst
+    //   würde ein Stempel mitten am Tag durch den nächsten Handgriff verschwinden.
+    // - 'project': wird nie fertig, ihr Nachdruck bleibt stehen. (In der Praxis
+    //   ist taskId hier ohnehin nie ein Projekt selbst — Projekt-Arbeit läuft
+    //   über den "Am Projekt arbeiten"-Subtask — aber die Ausnahme steht
+    //   trotzdem explizit da, statt sich auf diesen Nebeneffekt zu verlassen.)
+    if (taskDetails.task_type !== 'daily' && taskDetails.task_type !== 'project') {
+      updateData.emphasis_level = 0
     }
 
     const { error: updateError } = await supabase

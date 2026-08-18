@@ -86,6 +86,12 @@ npx supabase migration new my_feature_name
 npx supabase db push
 ```
 
+**Edge Functions deployt `db push` nicht mit.** Wer `supabase/functions/` ändert,
+braucht zusätzlich `npx supabase functions deploy <name>` und prüft danach mit
+`npx supabase functions list`, welche Fassung wirklich läuft. Das Auslassen ist
+ein **stiller** Fehler — die Function antwortet weiter mit 200 und lässt nur das
+Neue weg. Einmal acht Monate lang unbemerkt geblieben.
+
 Details → [docs/migrations.md](docs/migrations.md)
 
 ## Credentials

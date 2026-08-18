@@ -21,7 +21,57 @@ const emit = defineEmits<Emits>()
 
 // Verschieben gibt es nur, wo es Sinn ergibt (nicht bei täglich und Projekt).
 // Die Regel steht im Zeitplan-Modul, damit Karte und Modal dieselbe meinen.
-const showPostpone = computed(() => canPostpone(props.task))
+//
+// **Zusätzlich NICHT an einer wirklich erledigten Aufgabe** (`completed`,
+// kein Verschiebe-Datum): „verschieben" räumt eine Aufgabe aus dem Weg, die
+// noch dran ist (siehe CONTEXT.md, „verschieben" — „ohne dass jemand sie
+// erledigt hat"). An einer erledigten Aufgabe ist die Frage „wann wieder
+// dran?" sinnlos, weil die nächste Fälligkeit bereits aus
+// `last_completed_at` und der Kadenz folgt. Ein Verschiebe-Datum ERSETZT
+// diese Ableitung durch eine Handeingabe: `reset_recurring_tasks()`
+// schaltet die Kadenz-Weckklausel ab, sobald `postponed_until` gesetzt ist,
+// und macht das gewählte Datum zur ALLEINIGEN Weckquelle — an einer
+// erledigten Aufgabe holt das die nächste Fälligkeit zu früh zurück
+// (Ticket 04 / QC-Befund 1).
+//
+// **`task.completed` allein taugt dafür NICHT als Wächter**, weil
+// `taskStore.postponeTask` es bei jeder Verschiebung selbst auf `true`
+// setzt — auch bei einer, die von einer noch offenen (`dran`) Aufgabe
+// ausgeht (muss es: sonst bliebe sie fälschlich „dran"). Eine bereits
+// verschobene Aufgabe ist damit PER DEFINITION `completed`, und an dieser
+// einen Spalte sind „wirklich erledigt" und „bereits verschoben"
+// ununterscheidbar — dieselbe Falle wie in `WallDoneList.vue` (dortiger
+// Kommentar zu `rows()`, QC-Befund 2), nur beim Schreiben statt beim Lesen.
+// Das zweite Feld `postponed_until` trennt die beiden:
+//
+// - **wirklich erledigt** (`completed`, kein Datum) → verborgen. Befund 1
+//   bleibt geschlossen.
+// - **dran** (`!completed`) → sichtbar, unverändert.
+// - **bereits verschoben** (`completed` UND `postponed_until` gesetzt) →
+//   sichtbar. Ein neues Datum ist dort harmlos: die Aufgabe steht ohnehin
+//   schon im Verschoben-Zustand, `postponed_until` ist bereits die alleinige
+//   Weckquelle, und ein zweites Verschieben tauscht nur eine Handeingabe
+//   gegen eine andere — es entsteht kein Zustand, den es vorher nicht gab.
+//   (Eine Zeile mit ECHTER Erledigung UND gesetztem Verschiebe-Datum — die
+//   Altdaten aus Befund 2 — zeigt den Knopf hier ebenfalls wieder. Das ist
+//   kein neuer Fehler, sondern der Weg, genau diese Zeilen zu bereinigen.)
+//
+// **Betrifft auch das klassische Aussehen**, nicht nur die Pinnwand:
+// `TaskCard.vue` rendert den Bearbeiten-Stift ohne `completed`-Bedingung,
+// verschobene Aufgaben laufen dort unter der Kategorie „Erledigt" und nutzen
+// dasselbe Modal. Ohne den `postponed_until`-Zweig ließe sich dort ein
+// bereits gesetztes Verschiebe-Datum nicht mehr ändern oder aufheben, ohne
+// den Umweg über „wieder dreckig" — das war vor diesem Kommentar kurzzeitig
+// genau der Stand, und Ticket 04 nennt nur die Pinnwand. Wer diese Bedingung
+// künftig anfasst, MUSS beide Ansichten im Kopf haben, nicht nur den
+// Erledigt-Streifen.
+//
+// `canPostpone` prüft nur den `task_type` und kennt keinen der drei
+// Zustände oben — dieser zweite Teil der Bedingung ist deshalb Pflicht,
+// nicht optional.
+const showPostpone = computed(
+  () => canPostpone(props.task) && (!props.task.completed || props.task.postponed_until !== null)
+)
 
 const editForm = ref({
   title: props.task.title,

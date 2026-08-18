@@ -20,6 +20,7 @@ import CategoryRail from '@/components/CategoryRail.vue'
 import ShoppingCategoryCreateModal from '@/components/ShoppingCategoryCreateModal.vue'
 import CategoryEditModal from '@/components/CategoryEditModal.vue'
 import CategoryCombobox from '@/components/CategoryCombobox.vue'
+import LongSheet from '@/components/LongSheet.vue'
 
 const shoppingStore = useShoppingStore()
 const householdStore = useHouseholdStore()
@@ -56,6 +57,19 @@ const vFocus = { mounted: (el: HTMLElement) => el.focus() }
 // --- Grace window (delayed move to the Gekauft block) -----------------------
 const { graceIds, markGrace, clearGrace, clearAllGrace } = useGraceWindow(6000)
 
+// --- Gedämpfte (leere) Kategorien — Ticket 05 --------------------------------
+// Abgeleiteter Zustand, nichts Gespeichertes: eine Kategorie ohne Produkte
+// (`items.length === 0`, dieselbe „leer"-Definition wie in `compareCategoryGroups`)
+// ist gedämpft, bis sie in dieser Sitzung angetippt wurde. `undampedCategories`
+// hält NUR den Tipp fest — die Prüfung "ist sie noch leer" bleibt live in
+// `isCategoryDamped`, sonst würde eine später wieder geleerte Kategorie
+// normal groß hängen bleiben (siehe Watcher unten).
+const undampedCategories = ref<Set<string>>(new Set())
+const isCategoryEmpty = (group: ShoppingCategoryGroup): boolean => group.items.length === 0
+const isCategoryDamped = (group: ShoppingCategoryGroup): boolean =>
+  isCategoryEmpty(group) && !undampedCategories.value.has(group.key)
+const touchCategory = (key: string) => { undampedCategories.value.add(key) }
+
 watch(
   () => shoppingStore.currentListId,
   () => {
@@ -65,6 +79,7 @@ watch(
     sectionOverride.value = new Map()
     forcedAddOpen.value = new Set()
     suggestFocusKey.value = null
+    undampedCategories.value = new Set()
     clearAllGrace()
     // Auch die obere Leiste: eine stehengebliebene Zielkategorie gehört zur alten
     // Liste und würde hier sonst als neue Kategorie angelegt.
@@ -117,6 +132,15 @@ const displaySections = computed<ShoppingCategoryGroup[]>(() => {
   // hält, gilt als gefüllt und darf nicht schon ans Ende gerutscht sein.
   base.sort(compareCategoryGroups)
   return base
+})
+
+// Sobald eine Kategorie wieder Produkte trägt, verfällt ihr Tipp-Vermerk. Bleibt
+// er stehen, würde eine später erneut geleerte Kategorie fälschlich normal groß
+// bleiben — der Tipp darf nicht ewig nachwirken.
+watch(displaySections, (groups) => {
+  for (const group of groups) {
+    if (!isCategoryEmpty(group)) undampedCategories.value.delete(group.key)
+  }
 })
 
 const gekauftItems = computed(() =>
@@ -172,6 +196,22 @@ const isAddOpen = (group: ShoppingCategoryGroup): boolean =>
 const openAddLine = (group: ShoppingCategoryGroup) => {
   forcedAddOpen.value.add(group.key)
   sectionOverride.value.set(group.key, true)
+}
+
+// Ein Tipp auf eine GEDÄMPFTE Kategorie heißt „hier will ich etwas hineinlegen":
+// entdämpfen, Abschnitt offen, Eingabezeile offen — über `openAddLine`, denselben
+// Vorrang-Mechanismus, den auch der „+"-Knopf im Kopf benutzt (siehe die
+// ENTSCHEIDUNG-DES-NUTZERS-Notiz oben: die bleibt unangetastet, hier wird sie nur
+// zusätzlich ausgelöst). Eine normale (gefüllte oder bereits entdämpfte)
+// Kategorie klappt weiterhin ganz gewöhnlich über `toggleSection` auf und zu —
+// dort ändert sich nichts.
+const onCatHeaderClick = (group: ShoppingCategoryGroup) => {
+  if (isCategoryDamped(group)) {
+    touchCategory(group.key)
+    openAddLine(group)
+    return
+  }
+  toggleSection(group)
 }
 
 // --- Top add-bar autocomplete ----------------------------------------------
@@ -468,51 +508,43 @@ onUnmounted(() => {
 <template>
   <div class="page-container">
     <div class="container-fluid">
-      <!-- Einkaufslisten Chip-Leiste -->
-      <div class="list-chip-bar">
-        <div class="list-chip-container">
-          <button
-            v-for="list in shoppingStore.lists"
-            :key="list.list_id"
-            :class="['list-chip', shoppingStore.currentListId === list.list_id && 'active']"
-            @click="shoppingStore.currentListId = list.list_id"
-          >
-            <span>{{ list.name }}</span>
-            <button
-              class="chip-edit-btn"
-              @click.stop="openEditModal(list)"
-              :title="`'${list.name}' bearbeiten`"
-            >
-              <i class="bi bi-pencil"></i>
-            </button>
-          </button>
-          <button
-            class="list-chip add-chip"
-            @click="showCreateListModal = true"
-            title="Neue Liste erstellen"
-          >
-            <i class="bi bi-plus-lg"></i>
-          </button>
-        </div>
-      </div>
+      <!-- Der lange Zettel (Ticket 07/pinnwand-ausbau): Kante + Kopfzeile kommen
+           aus `LongSheet`, geteilt mit Packlisten und To-do. Die Chip-Leiste
+           rendert unconditional (wie vorher), das Blatt selbst nur, wenn es
+           eine aktuelle Liste gibt — sonst zeigte ShoppingView vorher auch
+           kein `.sheet` an. -->
+      <LongSheet :has-content="!!shoppingStore.currentListId">
+        <template #tabs>
+          <!-- Einkaufslisten Chip-Leiste -->
+          <div class="list-chip-bar">
+            <div class="list-chip-container">
+              <button
+                v-for="list in shoppingStore.lists"
+                :key="list.list_id"
+                :class="['list-chip', shoppingStore.currentListId === list.list_id && 'active']"
+                @click="shoppingStore.currentListId = list.list_id"
+              >
+                <span>{{ list.name }}</span>
+                <button
+                  class="chip-edit-btn"
+                  @click.stop="openEditModal(list)"
+                  :title="`'${list.name}' bearbeiten`"
+                >
+                  <i class="bi bi-pencil"></i>
+                </button>
+              </button>
+              <button
+                class="list-chip add-chip"
+                @click="showCreateListModal = true"
+                title="Neue Liste erstellen"
+              >
+                <i class="bi bi-plus-lg"></i>
+              </button>
+            </div>
+          </div>
+        </template>
 
-      <!-- Kein Sync-Banner im Seiteninhalt: es schob beim Abhaken alles darunter
-           nach unten. Der Zustand steht jetzt im Header (SyncIndicator). -->
-
-      <!-- Keine Listen vorhanden -->
-      <div v-if="shoppingStore.lists.length === 0 && !shoppingStore.isLoading" class="empty-state">
-        <i class="bi bi-cart-x"></i>
-        <p>Noch keine Einkaufsliste vorhanden</p>
-        <button class="btn btn-primary" @click="showCreateListModal = true">
-          <i class="bi bi-plus-lg me-1"></i> Liste erstellen
-        </button>
-      </div>
-
-      <template v-else-if="shoppingStore.currentListId">
-        <!-- `.sheet` ist im klassischen Aussehen ein reiner Gruppierungs-Container
-             ohne einen einzigen Style. Im Pinnwand-Aussehen wird daraus das eine
-             Blatt Papier, auf dem die ganze Liste steht. -->
-        <div class="sheet">
+        <template v-if="shoppingStore.currentListId">
         <!-- Obere Leiste: Produkt · Menge · Zielkategorie · Hinzufügen · Kategorie anlegen -->
         <div class="search-container">
           <div class="top-bar">
@@ -605,7 +637,7 @@ onUnmounted(() => {
                 :key="group.key"
                 :ref="(el) => setSectionEl(group.key, el)"
                 class="cat-section"
-                :class="{ 'cat-uncategorized': group.isUncategorized }"
+                :class="{ 'cat-uncategorized': group.isUncategorized, 'cat-damped': isCategoryDamped(group) }"
               >
                 <!-- Die Kopfzeile ist selbst Ablageziel: eine eingeklappte
                      Kategorie hat sonst keine Fläche zum Hineinziehen. -->
@@ -615,9 +647,9 @@ onUnmounted(() => {
                   :data-cat-name="group.category ?? ''"
                   role="button"
                   tabindex="0"
-                  @click="toggleSection(group)"
-                  @keydown.enter.prevent="toggleSection(group)"
-                  @keydown.space.prevent="toggleSection(group)"
+                  @click="onCatHeaderClick(group)"
+                  @keydown.enter.prevent="onCatHeaderClick(group)"
+                  @keydown.space.prevent="onCatHeaderClick(group)"
                 >
                   <span class="cat-dot" :style="{ background: categoryColor(group.category) }"></span>
                   <span class="cat-name">{{ group.label }}</span>
@@ -814,8 +846,20 @@ onUnmounted(() => {
             />
           </div>
         </template>
-        </div>
-      </template>
+        </template>
+      </LongSheet>
+
+      <!-- Kein Sync-Banner im Seiteninhalt: es schob beim Abhaken alles darunter
+           nach unten. Der Zustand steht jetzt im Header (SyncIndicator). -->
+
+      <!-- Keine Listen vorhanden -->
+      <div v-if="shoppingStore.lists.length === 0 && !shoppingStore.isLoading" class="empty-state">
+        <i class="bi bi-cart-x"></i>
+        <p>Noch keine Einkaufsliste vorhanden</p>
+        <button class="btn btn-primary" @click="showCreateListModal = true">
+          <i class="bi bi-plus-lg me-1"></i> Liste erstellen
+        </button>
+      </div>
     </div>
   </div>
 
@@ -1152,6 +1196,16 @@ onUnmounted(() => {
   margin-right: 6px;
 }
 .cat-chevron { color: var(--color-text-muted); font-size: var(--font-sm); }
+
+/* ---- Gedämpfte (leere) Kategorien — Ticket 05 -----------------------------
+   Verhalten (leer ⇒ gedämpft, Antippen hebt es für die Sitzung auf) sitzt in
+   <script setup> und gilt in beiden Aussehen. Hier nur die Optik; die
+   Kopfzeile behält ihre Mindesthöhe/Trefferfläche unverändert (Touch-Target),
+   nur Schriftgröße und Deckkraft gehen zurück. */
+.cat-section.cat-damped { margin-bottom: 4px; }
+.cat-section.cat-damped .cat-header { opacity: 0.5; }
+.cat-section.cat-damped .cat-name { font-size: var(--font-sm); font-weight: 500; }
+.cat-section.cat-damped .cat-dot { width: 6px; height: 6px; }
 .cat-body {
   padding: 0;
   display: flex;
@@ -1337,116 +1391,20 @@ onUnmounted(() => {
    greift keine einzige Regel — das klassische Aussehen oben bleibt Wort fuer
    Wort der Normalfall.
 
-   ADDITIV, NICHT UMGEBAUT: die geteilten Bausteine (`ListItemRow`,
-   `CategoryCombobox`) werden ausschliesslich ueber `:deep()` unterhalb von
-   `.sheet` angefasst. `.sheet` gibt es nur in dieser View, also kann keine
-   dieser Regeln die Packliste oder das To-do erreichen — die benutzen dieselben
-   Komponenten ueber `ChecklistView.vue` und bleiben unveraendert, bis sie ihre
-   eigenen Tickets (02/03) bekommen.
+   Die Papierhuelle selbst (`.sheet`, `.list-chip-bar` samt Kindern) lebt seit
+   Ticket 07 (pinnwand-ausbau) in `components/LongSheet.vue` — geteilt mit
+   Packliste und To-do. Was hier unten steht, ist bewusst NICHT umgezogen: die
+   Zeilen. `ListItemRow` (`:deep(.list-row)` & Co.) und `CategoryCombobox`
+   werden weiterhin ausschliesslich innerhalb dieser View angefasst, verankert
+   an `.cat-column` bzw. `.container-fluid` statt an `.sheet` — das Element
+   gehoert jetzt LongSheet, seine eigene Scope-ID reicht hier nicht mehr hin.
+   Packliste/To-do benutzen dieselben Komponenten ueber `ChecklistView.vue`
+   und bleiben unveraendert, bis sie ihre eigenen Tickets bekommen.
 
    Die einzige geteilte Datei, die dieses Ticket wirklich umbaut, ist
    `pinnwand.css` (Eingabefeld-Selektoren, Rail-Kontrast) — dort steht jeweils
    die Begruendung.
    ========================================================================== */
-
-/* ---- Listenwechsel: Klebestreifen-Reiter an der Blattkante ---------------- */
-:root[data-design='pinnwand'] .list-chip-bar {
-  background: none;
-  border-radius: 0;
-  padding: 0 4px;
-  /* Die Reiter kleben auf der Oberkante des Blattes. */
-  margin-bottom: -6px;
-  position: relative;
-  z-index: 2;
-}
-:root[data-design='pinnwand'] .list-chip-container {
-  gap: 6px;
-  padding: 0;
-  align-items: flex-end;
-}
-:root[data-design='pinnwand'] .list-chip {
-  min-height: var(--touch-target-min);
-  padding: 4px 12px 10px;
-  border: 2px solid var(--pw-line);
-  border-bottom: none;
-  border-radius: 0;
-  background: var(--pw-tape);
-  color: var(--pw-ink);
-  font-weight: 700;
-  transform: rotate(-0.6deg);
-  transition: none;
-}
-:root[data-design='pinnwand'] .list-chip:hover {
-  border-color: var(--pw-line);
-  color: var(--pw-ink);
-}
-/* Aktiv = derselbe Papierton wie das Blatt darunter, zwei Pixel tiefer gesetzt
-   und fetter: der Reiter geht in das Blatt ueber, statt darauf zu liegen. */
-:root[data-design='pinnwand'] .list-chip.active {
-  background: var(--pw-paper);
-  color: var(--pw-ink);
-  font-weight: 800;
-  transform: translateY(2px);
-  padding-bottom: 12px;
-}
-:root[data-design='pinnwand'] .list-chip.add-chip {
-  background: var(--pw-cork-deep);
-  color: var(--pw-ink);
-  padding: 4px 12px 10px;
-}
-:root[data-design='pinnwand'] .list-chip.add-chip:hover {
-  background: var(--pw-tape);
-  color: var(--pw-ink);
-}
-/* Der Stift im Reiter mass 12×12px. Sichtbar bleibt er klein, treffbar wird er
-   ueber das Pseudo-Element — 28 + 2×10 = 48px in beiden Richtungen. */
-:root[data-design='pinnwand'] .chip-edit-btn {
-  position: relative;
-  width: 28px;
-  height: 28px;
-  justify-content: center;
-  margin-left: 4px;
-  opacity: 1;
-  color: var(--pw-ink);
-  font-size: var(--font-sm);
-}
-:root[data-design='pinnwand'] .chip-edit-btn::after {
-  content: '';
-  position: absolute;
-  inset: -10px;
-}
-
-/* ---- Das Blatt ----------------------------------------------------------
-   Der Kontrast entsteht nicht mehr aus einer Fuellung gegen Kork, sondern aus
-   einer Papierflaeche mit harter Tintenkante. Seiten hart geschnitten, oben und
-   unten abgerissen. */
-:root[data-design='pinnwand'] .sheet {
-  position: relative;
-  background: var(--pw-paper);
-  border-left: 2px solid var(--pw-line);
-  border-right: 2px solid var(--pw-line);
-  box-shadow: 3px 3px 0 var(--pw-line);
-  padding: 14px 8px 18px;
-  margin-top: 10px;
-  margin-bottom: 14px;
-}
-/* Abrisskante: Papierzacken auf einer um 2px versetzten Tintenzacke. */
-:root[data-design='pinnwand'] .sheet::before,
-:root[data-design='pinnwand'] .sheet::after {
-  content: '';
-  position: absolute;
-  left: -2px;
-  right: -2px;
-  height: 10px;
-  background:
-    linear-gradient(135deg, var(--pw-paper) 50%, transparent 50%) 0 0 / 14px 10px repeat-x,
-    linear-gradient(-135deg, var(--pw-paper) 50%, transparent 50%) 7px 0 / 14px 10px repeat-x,
-    linear-gradient(135deg, var(--pw-line) 50%, transparent 50%) 0 2px / 14px 10px repeat-x,
-    linear-gradient(-135deg, var(--pw-line) 50%, transparent 50%) 7px 2px / 14px 10px repeat-x;
-  pointer-events: none;
-}
-:root[data-design='pinnwand'] .sheet::before { top: -10px; transform: scaleY(-1); }
-:root[data-design='pinnwand'] .sheet::after { bottom: -10px; }
 
 /* ---- Obere Leiste auf dem Blatt ------------------------------------------ */
 :root[data-design='pinnwand'] .search-container {
@@ -1559,14 +1517,14 @@ onUnmounted(() => {
 :root[data-design='pinnwand'] .top-combo :deep(.combo-clear) {
   color: var(--pw-ink);
 }
-:root[data-design='pinnwand'] .sheet :deep(.combo-list),
-:root[data-design='pinnwand'] .sheet .suggestions-dropdown {
+:root[data-design='pinnwand'] .container-fluid :deep(.combo-list),
+:root[data-design='pinnwand'] .container-fluid .suggestions-dropdown {
   border: 2px solid var(--pw-line);
   border-radius: 2px;
   background: var(--pw-paper);
   box-shadow: var(--pw-shadow);
 }
-:root[data-design='pinnwand'] .sheet .suggestion-item {
+:root[data-design='pinnwand'] .container-fluid .suggestion-item {
   color: var(--pw-ink);
   border-bottom-color: rgba(36, 31, 26, 0.2);
   min-height: var(--touch-target-min);
@@ -1625,9 +1583,28 @@ onUnmounted(() => {
 }
 :root[data-design='pinnwand'] .cat-icon-btn::after { inset: -10px -9px; }
 
+/* ---- Gedämpfte (leere) Kategorien — eigene Optik fürs Pinnwand-Papier -----
+   Höhere Spezifität als die Basisregeln oben (`:root[data-design] .cat-name`
+   & Co.), damit die Dämpfung trotz gleicher Selektorlänge gewinnt statt von
+   der spaeter im Stylesheet stehenden Papier-Regel überschrieben zu werden.
+   Die Trefferfläche der Kopfzeile bleibt unangetastet. */
+:root[data-design='pinnwand'] .cat-section.cat-damped .cat-header {
+  opacity: 0.55;
+  border-bottom-style: solid;
+  border-bottom-width: 1px;
+}
+:root[data-design='pinnwand'] .cat-section.cat-damped .cat-name {
+  font-size: var(--font-sm);
+  letter-spacing: normal;
+}
+:root[data-design='pinnwand'] .cat-section.cat-damped .cat-dot {
+  width: 7px;
+  height: 7px;
+}
+
 /* ---- Produktzeile: kein Rahmen, kein Hintergrund — Schrift auf Papier ----- */
 :root[data-design='pinnwand'] .cat-body { gap: 0; }
-:root[data-design='pinnwand'] .sheet :deep(.list-row) {
+:root[data-design='pinnwand'] .cat-column :deep(.list-row) {
   min-height: var(--touch-target-min);
   padding: 0 2px;
   background: none;
@@ -1636,39 +1613,39 @@ onUnmounted(() => {
   border-radius: 0;
   color: var(--pw-ink);
 }
-:root[data-design='pinnwand'] .sheet :deep(.list-row:hover) {
+:root[data-design='pinnwand'] .cat-column :deep(.list-row:hover) {
   background: rgba(36, 31, 26, 0.04);
 }
 /* Ein abgehakter Artikel bleibt lesbar: durchgestrichen und eine Spur leiser,
    aber nicht auf 55 % heruntergeblendet. */
-:root[data-design='pinnwand'] .sheet :deep(.list-row.checked) { opacity: 1; }
-:root[data-design='pinnwand'] .sheet :deep(.list-row.checked .list-name) {
+:root[data-design='pinnwand'] .cat-column :deep(.list-row.checked) { opacity: 1; }
+:root[data-design='pinnwand'] .cat-column :deep(.list-row.checked .list-name) {
   color: var(--pw-ink-soft);
   text-decoration: line-through 2px var(--pw-line);
 }
-:root[data-design='pinnwand'] .sheet :deep(.list-check) {
+:root[data-design='pinnwand'] .cat-column :deep(.list-check) {
   width: 22px;
   height: 22px;
   border: 2px solid var(--pw-line);
   border-radius: 0;
   color: var(--pw-ink);
 }
-:root[data-design='pinnwand'] .sheet :deep(.list-check.on) {
+:root[data-design='pinnwand'] .cat-column :deep(.list-check.on) {
   background: none;
   border-color: var(--pw-line);
   color: var(--pw-ink);
 }
-:root[data-design='pinnwand'] .sheet :deep(.row-trailing) { gap: 18px; }
-:root[data-design='pinnwand'] .sheet :deep(.row-edit-btn) {
+:root[data-design='pinnwand'] .cat-column :deep(.row-trailing) { gap: 18px; }
+:root[data-design='pinnwand'] .cat-column :deep(.row-edit-btn) {
   width: 30px;
   height: 30px;
   color: var(--pw-ink);
 }
-:root[data-design='pinnwand'] .sheet :deep(.row-edit-btn)::after { inset: -9px; }
+:root[data-design='pinnwand'] .cat-column :deep(.row-edit-btn)::after { inset: -9px; }
 /* Prioritaet ohne Rahmen: die Zeile hat keinen mehr. Rot unterstrichen wie im
    Original — der Text bleibt Tinte, das Rot traegt keine Information allein
    (das Sternchen daneben tut es). */
-:root[data-design='pinnwand'] .sheet :deep(.row-priority .list-name) {
+:root[data-design='pinnwand'] .cat-column :deep(.row-priority .list-name) {
   text-decoration: underline 2px #b03a28;
   text-underline-offset: 3px;
 }
@@ -1677,14 +1654,14 @@ onUnmounted(() => {
    Trennlinie unter der Zeile — die wurde also bernsteinfarben, zusaetzlich zur
    roten Unterstreichung. Gegen `!important` hilft nur `!important`; die
    Trennlinie bleibt Trennlinie, die Unterstreichung traegt das Signal. */
-:root[data-design='pinnwand'] .sheet :deep(.list-row.row-priority) {
+:root[data-design='pinnwand'] .cat-column :deep(.list-row.row-priority) {
   border-bottom-color: rgba(36, 31, 26, 0.16) !important;
 }
 
 /* Menge: umrandeter Chip auf Klebebandgelb (uebernommen aus Variante C — er hat
    eine echte Flaeche und ist damit ablesbar, wo A nur einen roten Randvermerk
    hatte). */
-:root[data-design='pinnwand'] .sheet .qty-badge {
+:root[data-design='pinnwand'] .cat-column .qty-badge {
   min-width: 0;
   padding: 2px 6px;
   border: 1.5px solid var(--pw-line);
@@ -1695,16 +1672,16 @@ onUnmounted(() => {
   box-shadow: none;
 }
 /* 30px sichtbar, 48px treffbar. */
-:root[data-design='pinnwand'] .sheet .star-btn {
+:root[data-design='pinnwand'] .cat-column .star-btn {
   border: 2px solid var(--pw-line);
   border-radius: 2px;
   background: none;
   color: var(--pw-ink);
   transition: none;
 }
-:root[data-design='pinnwand'] .sheet .star-btn::after { inset: -9px; }
-:root[data-design='pinnwand'] .sheet .star-btn:hover,
-:root[data-design='pinnwand'] .sheet .star-btn.active {
+:root[data-design='pinnwand'] .cat-column .star-btn::after { inset: -9px; }
+:root[data-design='pinnwand'] .cat-column .star-btn:hover,
+:root[data-design='pinnwand'] .cat-column .star-btn.active {
   border-color: var(--pw-line);
   background: var(--pw-tape);
   color: var(--pw-ink);

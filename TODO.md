@@ -23,6 +23,32 @@ Aufbau: **Aktiv** (als Nächstes) · **Backlog** (irgendwann) · **Bekannte Rand
   Ursache: `.btn:disabled` (0,2,0) schlägt den Override `.btn-primary` (0,1,0) in `base.css`.
   Im Pinnwand-Aussehen bereits behoben.
 
+### Listen — vorbestehend, aus der 07/05-Abnahme belegt
+- **`.reset-inline-btn` ist 27×32 px**, das Projekt verlangt 48. In **beiden** Aussehen
+  identisch, also keine Folge von Ticket 07. Braucht eine `::after`-Erweiterung wie die
+  übrigen kleinen Knöpfe.
+- **Klassisches `.add-confirm:disabled` ist praktisch unsichtbar**: `rgb(79,70,229)` mit
+  `opacity: 0.4`, weißes Plus darauf ≈ **1,9:1**. Der bereits notierte `.btn-primary`-Fall
+  weiter oben beschreibt Bootstrap-Blau `#0d6efd` — `.add-confirm` ist ein davon getrennter
+  Fall und dort nicht erfasst. Im Pinnwand-Aussehen bereits richtig gelöst.
+- **„Leere Kategorien nach unten" wirkt in den Listentypen verschieden.** Im Einkauf steht
+  die leere Kategorie **hinter** `Unkategorisiert`, in Packlisten und To-do **davor**
+  (gemessen: Bad, Kueche, Schlafzimmer, Wohnzimmer, *leer*, *vollständig*, Unkategorisiert).
+  Ob das Absicht ist, klärt die Spec nicht.
+
+### Nachdruck (`emphasis_level`) — Randfälle aus der 09a-Abnahme
+- **Tägliche Unteraufgaben unter einem Projekt verlieren ihren Nachdruck nächtlich.**
+  `Am Projekt arbeiten` trägt `task_type = 'daily'`, der Elternknoten ist ein Projekt;
+  Step 4 von `reset_recurring_tasks()` greift nach `task_type`, nicht nach dem Elternknoten.
+  Die Spec sagt für Projekte „Nachdruck bleibt". Folgenlos, solange 09b nur Elternzettel
+  stempelt — **vor** einem Stempel an Unteraufgaben zu klären.
+- **Der Checklisten-Zweig der Edge Function setzt `emphasis_level` nicht zurück.**
+  Früher Return bei `parent_task_id !== null && subtask_points_mode === 'checklist' &&
+  effortOverride === undefined`: schreibt nur `completed` und `last_completed_at`, liefert
+  auch kein `warning`-Feld. Betrifft nur Unteraufgaben — dieselbe Bedingung wie oben.
+- **`docs/data-model.md` kennt `emphasis_level` nicht.** Beschrieben ist die Spalte nur im
+  Glossar (`CONTEXT.md`) und in den Migrationskommentaren.
+
 ### Pinnwand — offene Arbeit
 - **Kuratierte Personenfarben-Palette + Migration bestehender `user_color`-Werte.**
   Die Umrandung ist die einzige Person-Info am Zettel, `#4A90E2` misst nur 3,23 gegen Papier
@@ -44,6 +70,19 @@ Aufbau: **Aktiv** (als Nächstes) · **Backlog** (irgendwann) · **Bekannte Rand
   (aus `WallNote.vue`), `.fab-card`/`.fab-btn`/`.fab-plus` + Such-Overlay (aus `WallView.vue`).
   `.wall` bleibt scoped.
 
+### Pinnwand — aus der 12er-Abnahme (Titel/Sticker)
+- **`footGap = 6` ist verdrahtet** (`WallView.vue`, Messblock) und kommentiert mit
+  `// .foot { gap: 6px }`. Dieselbe Fehlerklasse, gegen die `chromeWidth` und
+  `cornerExtra` gerade angetreten sind — messbar über `getComputedStyle(footEl).columnGap`.
+- **Die Packung des ersten Laufs ist eine andere als danach.** Frisch geladen 3355,52 px
+  Wandhöhe, nach dem ersten Relayout 3548,12 und dann stabil — bei identischen Breiten,
+  Höhen, Reihenfolge und `metaTop`-Menge, also allein andere Positionen aus `packWall`.
+  Der alte Stand lieferte beide Male denselben Wert. Vermutlich vorbestehend, Ursache
+  liegt in den Höhen, die der erste Lauf an `packWall` übergibt. Nicht weiterverfolgt.
+- **`relayout` schreibt `wall.style.height` inline und nimmt es nie zurück**
+  (Scroll-Anker-Zweig). Im Ruhezustand deckt sich der Inline-Wert mit dem gerechneten;
+  beim Messen ist er eine Fehlerquelle.
+
 ### Korrektheit / Robustheit
 - **`runLoadTasks` ersetzt `tasks.value` komplett** — ein Realtime-Echo für eine *fremde*
   Zeile zwischen SELECT und Zuweisung wird überschrieben (Echo-Schutz greift nur für eigene
@@ -53,6 +92,32 @@ Aufbau: **Aktiv** (als Nächstes) · **Backlog** (irgendwann) · **Bekannte Rand
 - **Listen-DELETE kommt bei anderen Sessions nicht an** — Kanal filtert auf `household_id`,
   DELETE liefert ohne `REPLICA IDENTITY FULL` nur den PK. Betrifft Packliste + To-do.
 - **`currentHousehold` überlebt externen Logout** bis zur nächsten Navigation.
+- **Verschieben wird auch an *erledigten* Aufgaben angeboten.** `canPostpone`
+  (`taskSchedule.ts`) prüft nur `task_type`, nicht `completed` — obwohl der eigene
+  Kommentar sagt, Verschieben ergebe nur Sinn, „wo eine Aufgabe überhaupt drängelt".
+  Eine erledigte Aufgabe drängelt nicht: sie hat gerade ein `last_completed_at` bekommen,
+  aus dem ihre nächste Fälligkeit folgt. Ein Verschiebe-Datum ersetzt diese Ableitung durch
+  eine Handeingabe (`postponed_until` ist die alleinige Weckquelle, `reset_recurring_tasks()`
+  schaltet die Kadenz-Klausel ab, solange sie steht) und **tilgt nebenbei die Erledigung
+  optisch**: die Zeile im Erledigt-Streifen zeigt danach „verschoben auf …" statt Uhrzeit,
+  und der Personenpunkt wird neutral — wer es getan hat, ist nicht mehr ablesbar, obwohl die
+  Punkte verbucht bleiben. Beim QC zu Ticket 04 gefunden; der Zugang ist dort geschlossen —
+  aber an der **Aufrufstelle** (`TaskEditModal.vue`: `canPostpone(task) && !task.completed`),
+  nicht in `canPostpone` selbst.
+  **Warum nicht einfach `!completed` in `canPostpone` ziehen:** `postponeTask` setzt selbst
+  `completed = true`. „Erledigt" und „verschoben" sehen auf der Spalte identisch aus, sie
+  trennen sich nur über einen Eintrag in `task_completions`. Ein `!completed` in `canPostpone`
+  nähme damit auch **verschobenen** Aufgaben das Verschieben — ein gesetztes Datum ließe sich
+  nur noch über „wieder dreckig" korrigieren. Ob das gewollt ist, ist eine Entscheidung, keine
+  Aufräumarbeit. Wer hier weitermacht, muss zuerst diese Frage beantworten.
+  *Aus dem Code abgeleitet, nicht gemessen:* ein Ziel unterhalb von
+  `last_completed_at + recurrence_days` holt die Aufgabe dabei heran statt sie wegzuschieben —
+  die freie Tageszahl darf ausdrücklich unter der Kadenz liegen. Wird vom Zugangs-Fix
+  miterledigt.
+  *Nebenpunkt, kosmetisch:* die Vorauswahl „nach Intervall" rechnet `heute + recurrence_days`
+  statt `last_completed_at + recurrence_days` und verzögert dadurch um `heute − last_completed_at`
+  Tage. Für eine überfällige Aufgabe vertretbar. **Nicht mit anfassen**, solange niemand es
+  ausdrücklich beauftragt.
 - **Abhaken löscht die Priorität unwiderruflich** — `shoppingStore.ts:846` setzt beim Kauf
   `is_priority: false`, `markUnpurchased` (Z. 871) stellt sie nicht wieder her. Wer aus
   Versehen abhakt und zurückholt, verliert den Stern still. Beim QC zu Ticket 01 an zwei
@@ -141,6 +206,11 @@ Kandidat 1 erledigt (Changelog). Reihenfolge = Empfehlung, Stärke in Klammern.
 - **Gezogener Zettel springt bei fremdem Realtime-Relayout** bis 114,7 px unter dem Finger
   (bewusst von der Animation ausgenommen).
 - **Akzent-Perforation am Eselsohr** liegt mit 0 px Reserve auf der Ausschnittkante.
+- **Acht Zettel sind sechs- oder siebenzeilig** (vorher einer). Die Regel, die den
+  Punkte-Sticker nach oben schickt, minimiert die Breite des einzelnen Zettels und
+  schaut nie auf seine Höhe — ein schmaler Zettel ist ein hoher Zettel. Die Wand ist
+  unterm Strich trotzdem kürzer (3548,12 gegen 3596,72). Vom Nutzer gesehen und so
+  entschieden. Wer hier Höhe optimieren will, baut eine andere Regel, nicht diese um.
 - **Zuklappen ganz unten springt ~85 px** (Dokument schrumpft am Scroll-Anschlag);
   Aufklappen 0,23 px, Seitenmitte 0,49 px.
 - **Inter ist nirgends geladen** — kein `@font-face`, kein Link; die Wand rechnet mit Inter,

@@ -229,6 +229,256 @@ mitgezogen wurde.
 
 ---
 
+## 🐛 Bug #6: Eine per `classList` gesetzte Klasse überlebt kein Vue-Update (18.08.2026)
+
+### Problem
+`WallView.relayout` misst jeden Zettel und entscheidet dabei, ob der Punkte-Sticker
+in die obere rechte Ecke wandert (`zettel--meta-top`). Die Entscheidung stand korrekt
+im Vue-Zustand — **im DOM kam sie nie an**: `metaTopIds.size = 30`, DOM-Anzahl **0**.
+
+### Root Cause
+Der Messlauf setzte und entfernte die Klasse per `classList`, obwohl sie **auch** an
+einer Vue-Bindung hing. Vue vergleicht bei jedem Patch nur den von **ihm** zuletzt
+berechneten Klassen-String mit dem neu berechneten — der tatsächliche DOM-Zustand
+kommt in diesem Vergleich nicht vor. Blieb die Entscheidung über zwei Läufe gleich
+(der Normalfall), hielt Vue seinen String für unverändert und schrieb `className` gar
+nicht neu. Die extern entfernte Klasse kam **nie** zurück.
+
+### Symptome
+- Eine Klasse ist im Vue-Zustand gesetzt, `classList.contains` sagt `false`
+- Sie erscheint **manchmal** wieder — nämlich wenn sich am selben Element eine
+  völlig unabhängige Bindung ändert, weil Vue dann den ganzen String neu schreibt
+- Genau das macht den Fehler so zäh: er sieht sporadisch aus, ist aber deterministisch
+
+### Lösung
+**Eine Klasse gehört entweder Vue oder dem imperativen Code — nie beiden.**
+`zettel--meta-top` gehört jetzt ausschließlich einem Prop. Was der Messlauf früher
+durch Umschalten der Klasse erzwang, wird arithmetisch aus dem gerade gerenderten
+Zustand rekonstruiert.
+
+### Prävention
+- Vor jedem `classList.add/remove/toggle` prüfen, ob dieselbe Klasse in einer
+  `:class`-Bindung vorkommt. **Auch `remove` ist betroffen**, nicht nur `add`.
+- Der Beleg ist immer derselbe: DOM-Anzahl gegen die Größe der Zustandsmenge.
+  Und eine **Negativkontrolle** — Klasse von Hand entfernen und zeigen, dass die
+  Messung anschlägt und die Klasse über zwei erzwungene Renders **nicht** zurückkommt.
+
+---
+
+## 🐛 Bug #7: Content-Box gemessen, Border-Box gesetzt (18.08.2026)
+
+### Problem
+Zettel auf der Pinnwand wurden systematisch **18 px zu schmal** gesetzt. Sichtbare
+Folge: die Fußzeile lief über den Bearbeiten-Stift und das Eselsohr hinaus und wurde
+vom Zettelrand abgeschnitten — der Dringlichkeits-Stempel las sich als „FALLIG" ohne G.
+
+### Root Cause
+Der Messlauf bildete `natural`/`minimum` aus den Rechteckbreiten der **Kindelemente**
+`.title` und `.foot` — das sind Content-Box-Maße des Zettels — und setzte sie als
+**Border-Box**-Breite (`box-sizing: border-box` gilt global). Rahmen und Innenabstand
+(2×2 + 2×7 = 18 px) fehlten nie berechnet. Die Sicherheitsmarge von 4 px deckte
+weniger als ein Viertel davon und kaschierte den Rest so weit, dass es lange nicht auffiel.
+
+### Symptome
+- Ein Element ragt um einen **konstanten** Betrag über seinen Container hinaus
+  (hier: 14,72 px an allen fußzeilengebundenen Zetteln)
+- Konstant ist der Hinweis: ein Rechenfehler skaliert nicht mit dem Inhalt
+
+### Lösung
+Chrome per `getComputedStyle` je Element messen (`border*Width` + `padding*`) und zur
+gemessenen Content-Breite addieren. **Gemessen statt verdrahtet**: eine Konstante 18
+läuft still auseinander, sobald jemand das Polster ändert.
+
+### Prävention
+- Wer eine Kindbreite misst und sie am Elternelement setzt, muss die Differenz
+  zwischen beiden Box-Modellen bewusst überbrücken.
+- Der Beleg für „richtig" ist **nicht** „0 Überstände" — das käme auch bei einer zu
+  großzügigen Rechnung heraus. Es ist `gesetzte Breite − (Bedarf + Chrome)`: hier
+  4,00…4,86 px, also exakt die Marge plus Aufrundungsrest, kein Loch und kein Überschuss.
+
+---
+
+## 🐛 Bug #8: `completed` unterscheidet nicht zwischen erledigt und verschoben (18.08.2026)
+
+### Problem
+Das Verschieben wurde an bereits **erledigten** Aufgaben angeboten. Die Vorauswahl
+rechnete dann von heute statt von der letzten Erledigung, und `postponed_until` schaltet
+gleichzeitig die Kadenz-Weckklausel ab — die Aufgabe kam Wochen zu früh zurück.
+
+### Root Cause
+`postponeTask` setzt **selbst** `completed: true`. Auf der Spalte `tasks.completed` sind
+„erledigt" und „verschoben" damit ununterscheidbar. Wer `completed` als Wächter benutzt,
+trifft immer beide Zustände.
+
+### Symptome
+- Ein Wächter auf `completed` wirkt richtig und schaltet trotzdem den falschen Fall ab
+- Fünf aufeinanderfolgende Ursachenerzählungen zu **einem** korrekt gemessenen
+  Endzustand — drei davon rückwärts aus Zahlen und Code rekonstruiert
+
+### Lösung
+An der **Aufrufstelle** entschieden, nicht in der Prüffunktion:
+`canPostpone(task) && (!task.completed || task.postponed_until !== null)`.
+Der erste Entwurf (`&& !completed`) hätte im klassischen Aussehen das Ändern eines
+gesetzten Verschiebe-Datums ersatzlos gestrichen.
+
+### Prävention
+- **Ein Ersatzsignal dort nachlesen, wo es geschrieben wird**, nicht wo es gelesen wird.
+- Folgt eine gemessene Zahl nicht aus dem Code, ist die fehlende **Bedienreihenfolge**
+  die erste Hypothese — und die steht im Verlauf, nicht im Bericht. Die 87 Tage dieses
+  Falls waren am Ende ein Testartefakt (Kadenz nach dem Verschieben geändert).
+
+---
+
+## 🐛 Bug #9: Edge Function seit acht Monaten nicht deployt (18.08.2026) — Wiederholung von Bug #2
+
+### Problem
+`complete-task` lief in Produktion als **v21 vom 22.12.2025**. Der ausgelieferte
+Funktionsrumpf enthielt **null** Vorkommen des neuen Feldes `emphasis_level`. Der
+häufigste Reset-Pfad — jede normale und einmalige Aufgabe — hat nie gefeuert.
+
+### Root Cause
+`npx supabase db push` deployt keine Edge Functions. **Bug #2 wusste das bereits** und
+führt „Edge Function deployen" als Schritt 6 seiner Checkliste — die Erkenntnis stand
+aber nur hier, nicht in `docs/migrations.md` oder `CLAUDE.md`, also nicht dort, wo beim
+Arbeiten nachgeschlagen wird. Mit dem Nachhol-Deploy ging außerdem ein Commit vom
+02.01.2026 live, der ebenfalls nie deployt war.
+
+### Symptome
+- **Der Fehler ist still**: die Function antwortet weiter mit `HTTP 200`, schreibt alles
+  Alte korrekt und lässt nur das Neue weg
+- Mit optimistischer Anzeige sieht es kurz sogar richtig aus, bis das Nachladen den
+  alten Serverwert zurückholt und der Wert sichtbar zurückspringt
+- Ein Prüfschritt kann dadurch „bestanden" heißen, weil seine **Vorbedingung nie
+  eintrat** — hier: „Zurückkleben stellt den Wert wieder her", wo der Wert nie 0 wurde
+
+### Lösung
+`npx supabase functions deploy complete-task`. Der Schritt steht jetzt in
+`docs/migrations.md` **und** `CLAUDE.md`, samt Prüfanweisung.
+
+### Prävention
+- Nach dem Deploy die Version aus `npx supabase functions list` gegen das Commit-Datum
+  halten. **Ein Deploy, der durchlief, ist nicht dasselbe wie eine Function, die das
+  Neue enthält.**
+- Vor der Deutung eines Messergebnisses prüfen, ob der geänderte Code überhaupt
+  ausgeliefert wird — sonst misst man denselben stillen Fehlzustand zweimal und deutet
+  ihn beim zweiten Mal falsch herum.
+- **Eine Lehre gehört dorthin, wo gearbeitet wird.** Dass sie in dieser Datei steht,
+  hat die Wiederholung nicht verhindert.
+
+---
+
+## 🐛 Bug #10: Ein `overflow: hidden`-Kasten fließt nicht um einen Float (18.08.2026)
+
+### Problem
+Der Zetteltitel sollte um den gefloateten Punkte-Sticker herumfließen — kurzer Titel
+daneben, langer darunter weiter. Zwei Kommentare in `WallNote.vue` beschrieben es so.
+Er tut es nicht: 21 von 60 Zetteln setzten ihren Titel mehrzeilig, obwohl sie ihre
+volle gemessene Breite hatten.
+
+### Root Cause
+`.title` trägt `overflow: hidden` und öffnet damit einen eigenen
+**Block-Formatierungskontext**. Ein BFC-Kasten darf den Float-Margin-Kasten nach
+CSS 2.1 § 9.5 nicht überlappen — der Titelkasten wird deshalb über seine **ganze
+Höhe** verengt, nicht nur in den Zeilen neben dem Float. Der Text steht in einer
+schmaleren Spalte, jede Zeile gleich kurz.
+
+### Symptome
+- Gemessen: `head.clientWidth − title.clientWidth` = 41 px bei jedem Zettel mit
+  Sticker oben, 0 bei allen anderen. Bei einem Float wäre die Differenz 0.
+- Die Breitenmessung an `.title` allein beschrieb einen Titel, den es so nie gab.
+- Zweiter, gefährlicherer Teil: die Untergrenze `minimum`. Bei einem Float rutscht
+  ein zu langes Wort unter ihn und ist vollständig sichtbar; im BFC wird es still
+  mit Ellipse abgeschnitten — gemessen 14, 23 und 35 px.
+
+### Lösung
+Die Sticker-Breite plus ihre Ränder zählt in `natural` **und** in `minimum`.
+
+### Prävention
+- **Eine Layout-Annahme ist erst dann bekannt, wenn sie gemessen ist.** Der Unterschied
+  zwischen „fließt herum" und „steht daneben" ist eine einzige Zahl:
+  `parent.clientWidth − child.clientWidth`.
+- **`overflow: hidden` ist nie nur Clipping.** Es erzeugt einen BFC und ändert damit,
+  wie der Kasten auf Floats reagiert. Wer es setzt oder entfernt, ändert Layout.
+- Der falsche Kommentar stand hier **zweimal** und hat die Fehlannahme über Monate
+  getragen. Ein Kommentar, der ein Verhalten behauptet, gehört an eine Messung geknüpft.
+
+### Related Patterns
+Bug #7 (Content-Box gemessen, Border-Box gesetzt) — dieselbe Klasse: die Messung
+beschreibt eine andere Größe als die, die am Ende gesetzt wird.
+
+---
+
+## 🐛 Bug #11: Entschieden nach der gewünschten Breite, gebunden wird die geplante (18.08.2026)
+
+### Problem
+Eine Regel wählt zwischen zwei Zettel-Varianten die schmalere. Ergebnis: die Wand
+wurde **13,4 % höher**, obwohl die Zettel zusammen kürzer und flächengleich waren —
+reiner Packverlust.
+
+### Root Cause
+Verglichen wurden die **gewünschten** Breiten. Gebunden wird aber die **geplante**:
+`defaultNoteWidth` klemmt jede Breite auf einen 45-%-Deckel. Lagen beide Varianten
+über dem Deckel, waren sie in Wahrheit gleich breit — die Regel wählte trotzdem die
+mit dem nominell kleineren Wunsch und nahm dem Titel dabei 41 px pro Zeile weg.
+13 Zettel wurden dadurch 13…20 px breiter, **ohne eine Zeile zu gewinnen**.
+
+### Symptome
+- Summe der Zettelhöhen sinkt um 5 %, Wandhöhe steigt um 13,4 %.
+- Einzelne Zettel: 145 px / 2 Zeilen → 161 px / 2 Zeilen. Breiter, gleich hoch.
+
+### Lösung
+Beide Varianten durch die **echte** Regel schicken (`defaultNoteWidth`) statt den
+Deckel an der Entscheidungsstelle nachzubauen, und die Ergebnisse vergleichen.
+
+### Prävention
+- **Vergleiche nie Eingaben, wenn die Ausgabe nichtlinear ist.** Ein Deckel, ein
+  `Math.max`, ein Runden — alles davon macht zwei verschiedene Wünsche zu einem
+  gleichen Ergebnis.
+- **Die Entscheidung nicht zweimal schreiben.** Eine nachgebaute Kopie der Regel an
+  der Entscheidungsstelle läuft irgendwann auseinander; importieren ist billiger.
+- Belegt wird so etwas nur mit einem A/B auf **identischem** Bestand. Am Einzelbeispiel
+  sieht der breitere Zettel harmlos aus.
+
+### Related Patterns
+Bug #10 — beide fielen im selben Ticket an, beide betreffen die Kette
+„messen → planen → setzen".
+
+---
+
+## 🐛 Bug #12: `getBoundingClientRect` an einem gedrehten Element (18.08.2026)
+
+### Problem
+Die Breite des Punkte-Stickers wurde mit `getBoundingClientRect().width` gemessen.
+`.points` trägt `transform: rotate(-6deg)` (beim Fünf-Punkte-Stern −10°). Gemessen
+wurden 37,37 px statt der Layoutbreite 34,00 px — jeder betroffene Zettel war
+3 px zu breit, und der Wert speiste zusätzlich eine Entscheidungsregel.
+
+### Root Cause
+`getBoundingClientRect` liefert das **achsenparallele Umschließungsrechteck nach
+der Transformation**. Eine Drehung bläht es auf. `transform` ändert das Layout
+aber nicht — für eine Layoutrechnung ist der Wert schlicht falsch.
+
+### Symptome
+Systematischer Aufschlag, kein Ausreißer: bei −6° rund +10 %, bei −10° rund +16 %.
+Fällt in keinem Klickpfad auf, weil das Ergebnis nur zu großzügig ist, nie zu knapp.
+
+### Lösung
+Die Neigung für den Moment der Messung per Inline-`transform: none` abschalten und
+danach auf `''` zurücksetzen. **Nicht** `offsetWidth`: das rundet auf ganze Zahlen
+ab und erzeugt die Umbrüche, gegen die derselbe Messblock schon `Math.ceil` einsetzt.
+
+### Prävention
+- Diese Falle stand als Falle 3 in `docs/testing.md` — als **Messfalle für QC-Agenten**.
+  Sie ist dann im Produktivcode gelandet. Eine Lehre, die nur in der Testanleitung
+  steht, schützt den Code nicht.
+- Faustregel: `getBoundingClientRect` für Positionen auf dem Bildschirm,
+  `getComputedStyle` / entdrehte Messung für Layoutbreiten.
+
+### Related Patterns
+Bug #7, Bug #10 — alle drei sind „gemessen wurde etwas anderes als das, was gesetzt wird".
+
+---
+
 ## 📝 Template für neue Bug-Einträge
 
 ```markdown

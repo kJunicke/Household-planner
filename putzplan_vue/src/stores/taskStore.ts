@@ -20,7 +20,7 @@ const isOptimistic = (c: TaskCompletion | EnrichedCompletion): c is OptimisticCo
     'clientMutationId' in c
 
 /** Die Task-Felder, die eine Erledigung anfasst — und die ein Rückgängig zurückschreibt. */
-type RowSnapshot = Pick<Task, 'task_id' | 'completed' | 'last_completed_at' | 'postponed_until' | 'assigned_to'>
+type RowSnapshot = Pick<Task, 'task_id' | 'completed' | 'last_completed_at' | 'postponed_until' | 'assigned_to' | 'emphasis_level'>
 
 /**
  * Was nötig ist, um eine Erledigung zurückzunehmen (→ `undoCompletion`).
@@ -233,6 +233,15 @@ export const useTaskStore = defineStore('tasks', () => {
                 if (!task.assignment_permanent) {
                     task.assigned_to = null
                 }
+                // Nachdruck gilt für EINEN Durchlauf (→ CONTEXT.md, "Nachdruck").
+                // Spiegelt die Edge Function: tägliche Aufgaben setzen ihren
+                // Nachdruck NICHT beim Erledigen zurück, sondern nächtlich per
+                // Cron (reset_recurring_tasks) — sie werden nie „completed" und
+                // können mehrfach am Tag erledigt werden. Projekte werden nie
+                // fertig und sind hier ebenfalls ausgenommen.
+                if (task.task_type !== 'daily' && task.task_type !== 'project') {
+                    task.emphasis_level = 0
+                }
 
                 // Die Edge Function setzt alle Subtasks eines Parents zurück
                 if (task.parent_task_id === null && !isChecklistSubtask) {
@@ -373,7 +382,8 @@ export const useTaskStore = defineStore('tasks', () => {
         completed: task.completed,
         last_completed_at: task.last_completed_at,
         postponed_until: task.postponed_until,
-        assigned_to: task.assigned_to
+        assigned_to: task.assigned_to,
+        emphasis_level: task.emphasis_level
     })
 
     /**
@@ -398,7 +408,7 @@ export const useTaskStore = defineStore('tasks', () => {
      * (nachladen, nur bei Nichtexistenz Schnappschuss).
      */
     const restoreRows = async (
-        snapshot: Pick<Task, 'task_id' | 'completed' | 'last_completed_at' | 'postponed_until' | 'assigned_to'>[],
+        snapshot: RowSnapshot[],
         skipReload = false
     ) => {
         await revertRows({
@@ -485,6 +495,56 @@ export const useTaskStore = defineStore('tasks', () => {
         return true
     }
 
+    // NACHDRUCK — Stempel-Automat 0 (kein Nachdruck) → 1 WICHTIG → 2 DRINGEND → 0
+    // (→ CONTEXT.md, "Nachdruck"; Ticket 09a). Der Automat liegt bewusst hier im
+    // Store statt im Zettel-Component: die Fußzeile muss nur antippen und den
+    // aktuellen Wert anzeigen, nicht die Modulo-Logik kennen.
+    //
+    // Optimistisch wie completeTask — ein Stempel soll sich wie ein Stempel
+    // anfühlen, nicht auf einen Server-Roundtrip warten, gerade weil User Story
+    // 29 mehrfaches schnelles Antippen ausdrücklich vorsieht. Rein optisch: kein
+    // Effekt auf Gruppe oder Reihenfolge, deshalb kein Toast bei Erfolg (würde
+    // bei drei Taps hintereinander dreimal aufblitzen).
+    const cycleEmphasisLevel = async (taskId: string): Promise<boolean> => {
+        const toastStore = useToastStore()
+
+        const { applied } = runOptimistic<RowSnapshot>({
+            entityId: taskId,
+            apply: () => {
+                const task = tasks.value.find(t => t.task_id === taskId)
+                if (!task) {
+                    console.error('Cannot cycle emphasis: task not in local state', taskId)
+                    return null
+                }
+                const snapshot = snapshotOf(task)
+                task.emphasis_level = ((task.emphasis_level + 1) % 3) as 0 | 1 | 2
+                return snapshot
+            },
+
+            commit: async () => {
+                const task = tasks.value.find(t => t.task_id === taskId)
+                if (!task) throw new Error('Task not found')
+
+                const { error } = await supabase
+                    .from('tasks')
+                    .update({ emphasis_level: task.emphasis_level })
+                    .eq('task_id', taskId)
+
+                if (error) throw error
+            },
+
+            revert: async (snapshot, error) => {
+                await restoreRows([snapshot], isNetworkError(error))
+            },
+
+            onError: () => {
+                toastStore.showToast('Nachdruck konnte nicht gespeichert werden', 'error')
+            }
+        })
+
+        return applied
+    }
+
     /**
      * Fahrschein wegwerfen, ohne ihn einzulösen — das Fenster ist zu.
      * Danach ist die Erledigung endgültig; ein späteres Zurücknehmen geht nur
@@ -522,8 +582,14 @@ export const useTaskStore = defineStore('tasks', () => {
      * Wert stehen, wäre die Aufgabe zwar wieder dran, aber ihre nächste
      * Fälligkeit um ein volles Intervall verschoben. Ebenso zurück: das von der
      * Edge Function gelöschte `assigned_to`, das beim Erledigen geräumte
-     * `postponed_until` und der `completed`-Zustand aller Unteraufgaben, die die
-     * Edge Function zurückgesetzt hat.
+     * `postponed_until`, der `completed`-Zustand aller Unteraufgaben, die die
+     * Edge Function zurückgesetzt hat — UND `emphasis_level` (Nachdruck):
+     * Abreißen ist „ein Griff, kein Urteil" (→ CONTEXT.md, „Abreißen"), die
+     * Erledigung hat nicht stattgefunden, darf also auch keinen gesetzten
+     * Nachdruck verzehrt haben. Anders als bei „wieder dreckig" (`markAsDirty`,
+     * eine inhaltliche Aussage über die Wohnung, keine Korrektur eines
+     * Fehlgriffs) — die Erledigung bleibt dort Tatsache, `markAsDirty` fasst
+     * `emphasis_level` deshalb bewusst nicht an.
      *
      * **Warum das Warten auf `settled` sein muss:** vor der Bestätigung gibt es
      * keine Zeile zum Löschen. Wer hier nicht wartet, löscht nichts und die
@@ -604,7 +670,8 @@ export const useTaskStore = defineStore('tasks', () => {
                         completed: snapshot.completed,
                         last_completed_at: snapshot.last_completed_at,
                         postponed_until: snapshot.postponed_until,
-                        assigned_to: snapshot.assigned_to
+                        assigned_to: snapshot.assigned_to,
+                        emphasis_level: snapshot.emphasis_level
                     })
                     .eq('task_id', snapshot.task_id)
                 if (error) return error
@@ -1261,6 +1328,7 @@ export const useTaskStore = defineStore('tasks', () => {
         discardUndoTicket,
         canUndoCompletion,
         markAsDirty,
+        cycleEmphasisLevel,
         postponeTask,
         createTask,
         createQuickTask,
