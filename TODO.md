@@ -64,15 +64,19 @@ Aufbau: **Aktiv** (als Nächstes) · **Backlog** (irgendwann) · **Bekannte Rand
   Schleier, blass (0,3) in Ruhe und voll deckend (1,0) bei anliegender Richtung,
   Pfeil kurz an der Karte und frei zum Finger drehend, in der Diagonale leuchtet
   **nichts**. Beschriftung fett mit dunkler Kontur, ausdrücklich **keine**
-  Kreideschrift (getestet, wegen Lesbarkeit verworfen). Dazu zufälliger
-  Randabstand links/rechts der Zettel (8–34 px) gegen die Randbeschwerde links.
+  Kreideschrift (getestet, wegen Lesbarkeit verworfen).
   **Der Entwurf ist vom Nutzer abgenommen** („Sieht super aus") und vollständig in
   [HANDOFF-ziehgeste.md](HANDOFF-ziehgeste.md) beschrieben — offen ist nur der
   Umbau von `WallDirectionMenu.vue`. Beim Einbau zu entscheiden: `COMMIT_DISTANCE`
   (48 px, der ursprüngliche Grund ist mit den Randbeschriftungen entfallen) und die
   Schleier-Deckkraft (0,82 schluckt die Zettel, ~0,6 wäre besser).
   Der Prototyp liegt auf `proto/kartengroesse` als `PrototypeKranzView.vue` unter
-  `/proto-kranz` — **Wegwerfcode, kommt nicht mit.** Blockiert Projekte (03).
+  `/proto-kranz` — **Wegwerfcode, kommt nicht mit**, und die Voreinstellung dort
+  ist `aether`, nicht die abgenommene Fassung `tafel` (`?v=tafel` anhängen).
+  **Nicht bauen:** der im Handoff genannte „zufällige Randabstand 8–34 px" ist
+  eine dritte, nie ins Layout übernommene Größe — das Anliegen ist mit Ticket 02
+  bereits gelöst (`indentOf`, 12 px, deterministisch aus der `task_id`).
+  Blockiert Projekte (03).
 - **Wochenziel-Leiste in jede Ansicht (08).** Heute liegt sie in
   `WallStatusBar.vue` und ist damit **nur auf der Pinnwand** sichtbar; in Einkauf,
   Notizen und Historie fehlt sie. Der Header soll überall gleich aussehen: Papier,
@@ -132,6 +136,13 @@ nach `main`.
 - **Kosmetik außerhalb des Bootstrap-Perimeters** sticht auf Kork heraus:
   `.list-chip.active`, `.cat-count`, `.rail-bubble`, weiche Schatten an
   `.category-nav-container` und `.fab`.
+- **Punktwerte über 5 fallen alle auf denselben Sticker** (goldener Stern) —
+  Bonus-Unteraufgaben sind damit optisch nicht unterscheidbar. Die
+  Prototyp-Sitzung hat eine sechste Stufe (Rosette) als denkbar notiert; das
+  steht nur in `HANDOFF-kartengroesse.md` und in keinem Ticket.
+- **„Langer Zettel" als Begriff** ist zugestimmt, aber ohne Bindung — wörtlich
+  „Ja, Zettel oder langer Zettel ist okay." Wem ein besseres Wort begegnet, darf
+  es vorschlagen.
 - **Badge-Kontur auf gesättigten Füllungen kaum lesbar** (1,93:1 gegen `effort-badge`,
   3,60:1 gegen `completed-badge`). Zierde, keine Information.
 
