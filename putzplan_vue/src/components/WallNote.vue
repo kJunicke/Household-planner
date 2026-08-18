@@ -658,14 +658,6 @@ const handlePostponeConfirm = async (targetDate: string) => {
       <span class="clip clip--r" :class="urgency ? `clip--${urgency}` : null" aria-hidden="true"></span>
     </template>
 
-    <!-- PROTOTYP: Der Gummistempel. Er erscheint NUR, wenn es brennt — das ist
-         sein ganzer Wert: ein Zettel, der Zeit hat, zeigt nichts, und deshalb
-         sieht man den einen, der schreit. Halbtransparent und schraeg ueber
-         die obere Kante, wie ein Abdruck im Posteingang. -->
-    <span v-if="protoStamp && stampLabel" class="due-stamp" :class="`due-stamp--${urgency}`">
-      {{ stampLabel }}
-    </span>
-
     <!-- PROTOTYP: die Ecke oben rechts. Hier steht, was NICHTS tut — Punktwert
          und Rueckstand. Auf einem schmalen Zettel wurde die Fusszeile sonst
          breiter als der Titel und hat den ganzen Zettel aufgeblasen; die drei
@@ -716,6 +708,17 @@ const handlePostponeConfirm = async (targetDate: string) => {
           {{ tracksProgress ? `${doneSubtasks}/${subtasks.length}` : subtasks.length }}
         </span>
       </button>
+      <!-- PROTOTYP: Der Gummistempel. Er erscheint NUR, wenn es brennt — das
+           ist sein ganzer Wert: ein Zettel, der Zeit hat, zeigt nichts, und
+           deshalb sieht man den einen, der schreit.
+
+           Er steht IM FLUSS der Fußzeile und schwebt nicht darüber: so kann er
+           sich mit keinem Knopf überschneiden, egal wie schmal der Zettel wird
+           — die Zeile schiebt ihn zur Seite, statt ihn zu überlagern. -->
+      <span v-if="protoStamp && stampLabel" class="due-stamp" :class="`due-stamp--${urgency}`">
+        {{ stampLabel }}
+      </span>
+
       <span v-if="metaLabel" class="meta">{{ metaLabel }}</span>
     </div>
 
@@ -1006,19 +1009,16 @@ const handlePostponeConfirm = async (targetDate: string) => {
    und bleibt durchscheinend. `pointer-events: none`, sonst schluckt er die
    Zieh-Geste. */
 .due-stamp {
-  position: absolute;
-  top: 50%;
-  left: 4px;
-  z-index: 2;
-  max-width: 62%;
+  flex: 0 0 auto;
   padding: 1px 5px;
   border: 2px solid currentColor;
   border-radius: 3px;
-  transform: translateY(-50%) rotate(-9deg);
+  transform: rotate(-9deg);
   opacity: 0.55;
   font-size: calc(9px * var(--proto-scale, 1));
   font-weight: 900;
   letter-spacing: 0.8px;
+  white-space: nowrap;
   pointer-events: none;
 }
 
