@@ -367,6 +367,118 @@ Arbeiten nachgeschlagen wird. Mit dem Nachhol-Deploy ging außerdem ein Commit v
 
 ---
 
+## 🐛 Bug #10: Ein `overflow: hidden`-Kasten fließt nicht um einen Float (18.08.2026)
+
+### Problem
+Der Zetteltitel sollte um den gefloateten Punkte-Sticker herumfließen — kurzer Titel
+daneben, langer darunter weiter. Zwei Kommentare in `WallNote.vue` beschrieben es so.
+Er tut es nicht: 21 von 60 Zetteln setzten ihren Titel mehrzeilig, obwohl sie ihre
+volle gemessene Breite hatten.
+
+### Root Cause
+`.title` trägt `overflow: hidden` und öffnet damit einen eigenen
+**Block-Formatierungskontext**. Ein BFC-Kasten darf den Float-Margin-Kasten nach
+CSS 2.1 § 9.5 nicht überlappen — der Titelkasten wird deshalb über seine **ganze
+Höhe** verengt, nicht nur in den Zeilen neben dem Float. Der Text steht in einer
+schmaleren Spalte, jede Zeile gleich kurz.
+
+### Symptome
+- Gemessen: `head.clientWidth − title.clientWidth` = 41 px bei jedem Zettel mit
+  Sticker oben, 0 bei allen anderen. Bei einem Float wäre die Differenz 0.
+- Die Breitenmessung an `.title` allein beschrieb einen Titel, den es so nie gab.
+- Zweiter, gefährlicherer Teil: die Untergrenze `minimum`. Bei einem Float rutscht
+  ein zu langes Wort unter ihn und ist vollständig sichtbar; im BFC wird es still
+  mit Ellipse abgeschnitten — gemessen 14, 23 und 35 px.
+
+### Lösung
+Die Sticker-Breite plus ihre Ränder zählt in `natural` **und** in `minimum`.
+
+### Prävention
+- **Eine Layout-Annahme ist erst dann bekannt, wenn sie gemessen ist.** Der Unterschied
+  zwischen „fließt herum" und „steht daneben" ist eine einzige Zahl:
+  `parent.clientWidth − child.clientWidth`.
+- **`overflow: hidden` ist nie nur Clipping.** Es erzeugt einen BFC und ändert damit,
+  wie der Kasten auf Floats reagiert. Wer es setzt oder entfernt, ändert Layout.
+- Der falsche Kommentar stand hier **zweimal** und hat die Fehlannahme über Monate
+  getragen. Ein Kommentar, der ein Verhalten behauptet, gehört an eine Messung geknüpft.
+
+### Related Patterns
+Bug #7 (Content-Box gemessen, Border-Box gesetzt) — dieselbe Klasse: die Messung
+beschreibt eine andere Größe als die, die am Ende gesetzt wird.
+
+---
+
+## 🐛 Bug #11: Entschieden nach der gewünschten Breite, gebunden wird die geplante (18.08.2026)
+
+### Problem
+Eine Regel wählt zwischen zwei Zettel-Varianten die schmalere. Ergebnis: die Wand
+wurde **13,4 % höher**, obwohl die Zettel zusammen kürzer und flächengleich waren —
+reiner Packverlust.
+
+### Root Cause
+Verglichen wurden die **gewünschten** Breiten. Gebunden wird aber die **geplante**:
+`defaultNoteWidth` klemmt jede Breite auf einen 45-%-Deckel. Lagen beide Varianten
+über dem Deckel, waren sie in Wahrheit gleich breit — die Regel wählte trotzdem die
+mit dem nominell kleineren Wunsch und nahm dem Titel dabei 41 px pro Zeile weg.
+13 Zettel wurden dadurch 13…20 px breiter, **ohne eine Zeile zu gewinnen**.
+
+### Symptome
+- Summe der Zettelhöhen sinkt um 5 %, Wandhöhe steigt um 13,4 %.
+- Einzelne Zettel: 145 px / 2 Zeilen → 161 px / 2 Zeilen. Breiter, gleich hoch.
+
+### Lösung
+Beide Varianten durch die **echte** Regel schicken (`defaultNoteWidth`) statt den
+Deckel an der Entscheidungsstelle nachzubauen, und die Ergebnisse vergleichen.
+
+### Prävention
+- **Vergleiche nie Eingaben, wenn die Ausgabe nichtlinear ist.** Ein Deckel, ein
+  `Math.max`, ein Runden — alles davon macht zwei verschiedene Wünsche zu einem
+  gleichen Ergebnis.
+- **Die Entscheidung nicht zweimal schreiben.** Eine nachgebaute Kopie der Regel an
+  der Entscheidungsstelle läuft irgendwann auseinander; importieren ist billiger.
+- Belegt wird so etwas nur mit einem A/B auf **identischem** Bestand. Am Einzelbeispiel
+  sieht der breitere Zettel harmlos aus.
+
+### Related Patterns
+Bug #10 — beide fielen im selben Ticket an, beide betreffen die Kette
+„messen → planen → setzen".
+
+---
+
+## 🐛 Bug #12: `getBoundingClientRect` an einem gedrehten Element (18.08.2026)
+
+### Problem
+Die Breite des Punkte-Stickers wurde mit `getBoundingClientRect().width` gemessen.
+`.points` trägt `transform: rotate(-6deg)` (beim Fünf-Punkte-Stern −10°). Gemessen
+wurden 37,37 px statt der Layoutbreite 34,00 px — jeder betroffene Zettel war
+3 px zu breit, und der Wert speiste zusätzlich eine Entscheidungsregel.
+
+### Root Cause
+`getBoundingClientRect` liefert das **achsenparallele Umschließungsrechteck nach
+der Transformation**. Eine Drehung bläht es auf. `transform` ändert das Layout
+aber nicht — für eine Layoutrechnung ist der Wert schlicht falsch.
+
+### Symptome
+Systematischer Aufschlag, kein Ausreißer: bei −6° rund +10 %, bei −10° rund +16 %.
+Fällt in keinem Klickpfad auf, weil das Ergebnis nur zu großzügig ist, nie zu knapp.
+
+### Lösung
+Die Neigung für den Moment der Messung per Inline-`transform: none` abschalten und
+danach auf `''` zurücksetzen. **Nicht** `offsetWidth`: das rundet auf ganze Zahlen
+ab und erzeugt die Umbrüche, gegen die derselbe Messblock schon `Math.ceil` einsetzt.
+
+### Prävention
+- Diese Falle stand als Falle 3 in `docs/testing.md` — als **Messfalle für QC-Agenten**.
+  Sie ist dann im Produktivcode gelandet. Eine Lehre, die nur in der Testanleitung
+  steht, schützt den Code nicht.
+- Faustregel: `getBoundingClientRect` für Positionen auf dem Bildschirm,
+  `getComputedStyle` / entdrehte Messung für Layoutbreiten.
+
+### Related Patterns
+Bug #7, Bug #10 — alle drei sind „gemessen wurde etwas anderes als das, was gesetzt wird".
+
+---
+
 ## 📝 Template für neue Bug-Einträge
 
 ```markdown
