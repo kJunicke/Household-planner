@@ -39,6 +39,12 @@ export interface Task {
   // 'checklist': This subtask counts 0 points (only for tracking completion)
   // 'deduct': This subtask effort is deducted from parent effort when completed
   // 'bonus': This subtask gives full effort points in addition to parent
+
+  // Nachdruck (→ CONTEXT.md, "Nachdruck"): von Hand gesetzte Aussage "diesmal ist
+  // es wichtig", NICHT die berechnete Dringlichkeit. Automat 0 → 1 WICHTIG →
+  // 2 DRINGEND → 0, siehe taskStore.cycleEmphasisLevel. Rein optisch — ändert
+  // weder Gruppe noch Reihenfolge auf der Pinnwand.
+  emphasis_level: 0 | 1 | 2
   }
 
 export interface TaskCompletion {
