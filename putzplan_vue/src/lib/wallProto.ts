@@ -46,9 +46,9 @@ export const IST: ProtoConfig = {
 
 /** Der besprochene Entwurf. */
 export const ENTWURF: ProtoConfig = {
-  scale: 1.3,
-  minWidth: 150,
-  hit: 48,
+  scale: 1.2,
+  minWidth: 96,
+  hit: 44,
   sticker: 34
 }
 

@@ -628,14 +628,27 @@ const handlePostponeConfirm = async (targetDate: string) => {
       <span class="points" :class="`points--s${Math.min(5, Math.max(0, effectivePoints))}`">
         {{ effectivePoints }}
       </span>
-      <!-- Fortschritt am EINGEKLAPPTEN Zettel: „3 / 7" ohne Aufklappen. Er
-           bleibt auch aufgeklappt stehen — die Zahl ist die Zusammenfassung
-           der Zettelchen, nicht ihr Ersatz.
+      <!-- PROTOTYP: Unteraufgaben haben jetzt IMMER ein eigenes Zeichen — ein
+           angeklammerter Zettelstapel. Vorher verriet nur die Fortschrittszahl,
+           dass es welche gibt, und die fehlt am täglichen Zettel und bei reinen
+           Checklisten ganz: dort war das Aufklappen unsichtbar.
 
-           Am täglichen Zettel fehlt er ABSICHTLICH → `tracksProgress`. -->
-      <span v-if="hasSubtasks && tracksProgress" class="progress">
-        {{ doneSubtasks }} / {{ subtasks.length }}
-      </span>
+           Es ist ein Knopf, nicht nur ein Zeichen — die ganze Zettelfläche
+           klappt zwar weiterhin auf, aber sie sagt es niemandem. Der Zähler
+           steht nur dort, wo Fortschritt überhaupt etwas bedeutet
+           (→ `tracksProgress`); sonst steht die blanke Anzahl. -->
+      <button
+        v-if="hasSubtasks"
+        class="subs-badge"
+        :class="{ 'subs-badge--open': props.expanded }"
+        :title="props.expanded ? 'Unteraufgaben zuklappen' : 'Unteraufgaben aufklappen'"
+        @click.stop="emit('toggle', props.task.task_id)"
+      >
+        <i class="bi bi-list-task" aria-hidden="true"></i>
+        <span class="subs-count">
+          {{ tracksProgress ? `${doneSubtasks}/${subtasks.length}` : subtasks.length }}
+        </span>
+      </button>
       <span v-if="metaLabel" class="meta">{{ metaLabel }}</span>
     </div>
 
@@ -947,6 +960,43 @@ const handlePostponeConfirm = async (targetDate: string) => {
     2% 35%,
     39% 35%
   );
+}
+
+/* --- PROTOTYP: Zeichen fuer Unteraufgaben --------------------------------- */
+
+/* Ein angeklammerter Stapel: Papier mit gestricheltem Rand, damit er zu den
+   Zettelchen gehoert, die er ankuendigt — und NICHT zu den beiden Griffen
+   rechts, die etwas mit dem Zettel selbst tun.
+
+   Gleiche Hoehe wie der Punkte-Sticker, aber breiter: er traegt Zeichen UND
+   Zahl. Aufgeklappt kippt er die Farbe um, damit man den Weg zurueck findet. */
+.subs-badge {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  flex: 0 0 auto;
+  height: var(--proto-sticker, 34px);
+  padding: 0 7px;
+  border: 1.5px dashed rgba(36, 31, 26, 0.5);
+  border-radius: 3px;
+  background: #f3ece0;
+  color: #2b241c;
+  font-size: calc(var(--proto-sticker, 34px) * 0.34);
+  font-weight: 800;
+  line-height: 1;
+  transform: rotate(2deg);
+  box-shadow: 1.5px 2px 0 rgba(36, 31, 26, 0.28);
+  cursor: pointer;
+}
+
+.subs-badge--open {
+  border-style: solid;
+  background: #2b241c;
+  color: #f3ece0;
+}
+
+.subs-count {
+  font-variant-numeric: tabular-nums;
 }
 
 /* Fortschritt der Unteraufgaben. Ruhig wie der Punktwert: er sagt, wie viel
