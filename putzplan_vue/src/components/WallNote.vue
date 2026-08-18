@@ -1579,6 +1579,16 @@ const handlePostponeConfirm = async (targetDate: string) => {
   width: 14px;
   height: 14px;
   border-radius: 50%;
+  /* Reines Ornament, kein Bedienelement (`aria-hidden`, keine Handler) — ragt
+     mit `top: -7px` über den eigenen Zettelrand hinaus und lag als Kind mit
+     eigener Box im Trefferbereich des Nachbarn darunter, obwohl der
+     Zettelkörper selbst sich gar nicht überlappte (QC-Befund, Ticket 11).
+     `pointer-events: none` nimmt sie aus dem Hit-Test: der Teil über dem
+     EIGENEN Zettel fällt durch auf `.zettel` selbst (unverändertes
+     Verhalten, die Handler sitzen am Wurzelelement, nicht hier), nur der
+     überstehende Teil gibt jetzt an den wirklich darunterliegenden Nachbarn
+     weiter. */
+  pointer-events: none;
   /* Trägt die Zuweisungsfarbe (Ticket 10) — mit Zuständigkeit `--owner`,
      ohne die gedämpfte `--owner-none` von oben. Ihre eigene Tintenkontur
      (`border` gleich darunter) hält sie auch farblos sichtbar. Anders als
@@ -1615,6 +1625,8 @@ const handlePostponeConfirm = async (targetDate: string) => {
   border: 1.5px solid rgba(36, 31, 26, 0.42);
   transform: rotate(-4deg);
   box-shadow: 0 1px 0 rgba(0, 0, 0, 0.12);
+  /* Ornament, kein Bedienelement — Begründung bei `.pin`. */
+  pointer-events: none;
 }
 
 /* --- Typ 3: Projekt — Packpapier, doppelte Büroklammer, kantig ------------ */
@@ -1650,6 +1662,10 @@ const handlePostponeConfirm = async (targetDate: string) => {
   border-radius: 3px;
   background: #b9b3a6;
   box-shadow: 1px 2px 0 rgba(0, 0, 0, 0.25);
+  /* Ornament, kein Bedienelement — Begründung bei `.pin`. `pointer-events`
+     ist eine vererbte Eigenschaft, `.clip::after` bekommt sie also automatisch
+     mit. */
+  pointer-events: none;
 }
 
 .clip::after {

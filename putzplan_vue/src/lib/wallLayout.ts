@@ -52,21 +52,6 @@ export function kindOfTaskType(taskType: string): WallNoteKind {
 }
 
 /**
- * Untergrenze der Zettelbreite, damit ein Zettel mit sehr kurzem Titel
- * („Müll") nicht zum Schnipsel wird und der Bearbeiten-Knopf seinen Platz
- * behält.
- *
- * **Bleibt vorerst stehen.** Die Spec (Ticket 02) begründet den ersatzlosen
- * Wegfall damit, dass die Griffzeile aus dem Karten-Redesign (Bearbeiten-Stift
- * und Eselsohr, je 44 px nebeneinander) die Untergrenze inzwischen selbst
- * setzt — dieses Redesign ist auf diesem Branch aber (noch) nicht gelandet,
- * es existiert nur auf `proto/kartengroesse`. Ohne die Griffzeile würde ein
- * ersatzloser Wegfall hier echten Schaden anrichten: ein Zettel mit kurzem
- * Titel würde zum Schnipsel. Nachzuholen, sobald das Karten-Redesign landet.
- */
-export const MIN_NOTE_WIDTH = 96
-
-/**
  * Obergrenze für Zettel mit **mehrwortigen** Titeln, als Anteil der Wandbreite.
  * Kurze Titel erreichen sie nie und bleiben einzeilig; lange brechen an einer
  * Wortgrenze um, statt eine ganze Reihe für sich zu beanspruchen.
@@ -239,12 +224,36 @@ const wraps = (shape: WallNoteShape) => shape.minimum < shape.natural
  * schmaler, als das Extrembeispiel vermuten lässt.
  *
  * Auch die Rückfallbreite des zweiten Laufs: was er verwirft, landet wieder
- * hier. Nie schmaler als `MIN_NOTE_WIDTH` (siehe dort).
+ * hier.
+ *
+ * **Keine eigene Untergrenzen-Konstante mehr.** Bis Ticket 11 gab es
+ * zusätzlich `MIN_NOTE_WIDTH` (96 px) als Auffangnetz. QC-Beleg: kleinster
+ * `shape.minimum`-Wert im ganzen Bestand war 110 — `MIN_NOTE_WIDTH` griff
+ * nirgends mehr, entfernt. Kein Zufall des Bestands, sondern strukturell:
+ * `shape.minimum` enthält immer die volle Fußzeile, und darin reserviert
+ * allein die Griffzeile (Karten-Redesign, Ticket 00a) `padding-right: 88px`
+ * für Bearbeiten-Stift und Eselsohr (je 44 px, `WallNote.vue`, `.foot`) —
+ * dazu kommen 18 px waagerechte Zettel-Chrome (`chromeWidth`) und 4 px
+ * `MEASURE_SAFETY` (beide `WallView.vue`). 88 + 18 + 4 = **110**, exakt der
+ * Wert der schmalsten gemessenen Zettel — die mit leerer sichtbarer
+ * Fußzeile, ohne Punkte-Sticker, Stempel oder Unteraufgaben-Zeichen; jeder
+ * Zettel mit Fußzeileninhalt liegt darüber. Wer die Griffe verkleinert oder
+ * `padding-right` senkt, senkt damit auch diese Untergrenze — ohne diesen
+ * Kommentar fiele das niemandem auf, und ein kurzer Titel würde wieder zum
+ * Schnipsel.
  */
 export function defaultNoteWidth(shape: WallNoteShape, wallWidth: number): number {
   const cap = Math.min(wallWidth, Math.round(wallWidth * MAX_WIDTH_RATIO))
   const wanted = shape.natural > cap && wraps(shape) ? cap : shape.natural
-  return Math.max(MIN_NOTE_WIDTH, Math.min(wallWidth, wanted))
+  // `shape.minimum` sticht den 45-%-Deckel: eine Fußzeile mit Punkte-Sticker,
+  // Unteraufgaben-Zeichen und Dringlichkeits-Stempel kann breiter sein als
+  // 45 % der Wand, und `wanted` darf dann nicht darunter fallen — sonst läuft
+  // die Fußzeile über den Zettelrand und die Griffzeile (Stift, Eselsohr)
+  // hinaus. Die Wandklemmung (`Math.min(wallWidth, …)`) bleibt trotzdem außen:
+  // ein unbrechbarer Titel, dessen `minimum` selbst die Wand übersteigt, darf
+  // weiterhin über den Deckel hinausgezogen werden, aber nie über die Wand
+  // hinaus (siehe Funktionskommentar oben, „Ein einzelnes langes Wort").
+  return Math.min(wallWidth, Math.max(wanted, shape.minimum))
 }
 
 /**
@@ -270,9 +279,9 @@ export function defaultNoteWidth(shape: WallNoteShape, wallWidth: number): numbe
  * zwei Zettel, und was hier nicht nebeneinandersteht, findet die Skyline
  * ohnehin frei einen Platz.
  *
- * **`MIN_NOTE_WIDTH` bleibt vorerst als Untergrenze bestehen** (siehe dort) —
- * die Spec sieht ihren ersatzlosen Wegfall vor, das setzt aber die Griffzeile
- * des Karten-Redesigns voraus, die auf diesem Branch noch nicht gelandet ist.
+ * **`MIN_NOTE_WIDTH` ist entfallen** (Ticket 11 QC-Beleg): die Griffzeile des
+ * Karten-Redesigns setzt die Untergrenze jetzt strukturell selbst, über
+ * `shape.minimum` — Herleitung der 110 px bei `defaultNoteWidth`.
  *
  * **Das Reihenmodell ist eine Näherung.** Gepackt wird danach weiter mit der
  * Skyline, die Höhen kennt und keine Reihen; dieses Modell entscheidet nur über
@@ -294,14 +303,14 @@ export function planNoteWidths(
 ): Map<string, number> {
   const defaultOf = (s: WallNoteShape) => defaultNoteWidth(s, wallWidth)
   /**
-   * Untergrenze dieses Zettels: schmaler schneidet ab oder unterschreitet
-   * `MIN_NOTE_WIDTH`. Bewusst **nicht** auf die Wandbreite geklemmt — ein
+   * Passt der Zettel in `width`, ohne ein Wort zu zerschneiden? Die
+   * Untergrenze ist `s.minimum` selbst (früher zusätzlich gegen
+   * `MIN_NOTE_WIDTH` geklemmt, seit Ticket 11 entfallen — siehe
+   * `defaultNoteWidth`). Bewusst **nicht** auf die Wandbreite geklemmt — ein
    * einzelnes Wort, das breiter als die Wand ist, schließt sich dadurch von
    * jeder Verschmälerung selbst aus.
    */
-  const floorOf = (s: WallNoteShape) => Math.max(MIN_NOTE_WIDTH, s.minimum)
-  /** Passt der Zettel in `width`, ohne ein Wort zu zerschneiden? */
-  const fitsShrunk = (s: WallNoteShape, width: number) => wraps(s) && width >= floorOf(s)
+  const fitsShrunk = (s: WallNoteShape, width: number) => wraps(s) && width >= s.minimum
 
   const plan = new Map<string, number>()
 
@@ -340,7 +349,17 @@ export interface PackedNote {
   id: string
   x: number
   y: number
-  /** Stapelreihenfolge: spätere Zettel liegen über früheren. */
+  /**
+   * Stapelreihenfolge (Ticket 11). **Nicht** die Packreihenfolge — die folgt
+   * der Skyline und weiß nichts von links und rechts. Kleineres `x` gewinnt:
+   * der linke Zettel liegt über dem rechten, sein Eselsohr (untere rechte
+   * Ecke, Karten-Redesign Ticket 00a) bleibt frei statt vom rechten Nachbarn
+   * verdeckt. Bei gleichem `x` gewinnt kleineres `y` — aus derselben
+   * Begründung: zwei Zettel untereinander überlappen an der UNTEREN Kante des
+   * oberen, wo Stift und Eselsohr sitzen, also gewinnt wieder der frühere.
+   * Vergeben wird `z` erst NACH dem Packen, aus der fertigen Position — siehe
+   * `packWall`.
+   */
   z: number
 }
 
@@ -439,7 +458,6 @@ export function packWall(notes: readonly WallNoteMetrics[], wallWidth: number): 
   }
   const groupKeys = [...byGroup.keys()].sort((a, b) => a - b)
 
-  let z = 0
   /** Weiche Untergrenze für die aktuell gepackte Gruppe, siehe Funktionskommentar. */
   let floor = 0
 
@@ -521,8 +539,11 @@ export function packWall(notes: readonly WallNoteMetrics[], wallWidth: number): 
         }
       }
 
-      z++
-      placed.push({ id: note.id, x, y, z })
+      // `z` ist hier nur ein Platzhalter — die Stapelreihenfolge wird NICHT
+      // aus der Packreihenfolge übernommen, sondern erst unten aus der
+      // fertigen Position vergeben (siehe „Stapelreihenfolge" nach der
+      // Schleife und `PackedNote.z`).
+      placed.push({ id: note.id, x, y, z: 0 })
       // `y`, nicht `bestTop` — siehe Funktionskommentar, „Weiche
       // Gruppengrenze". Über die ganze Gruppe maximiert, nicht nur über den
       // zuletzt platzierten Zettel.
@@ -532,5 +553,36 @@ export function packWall(notes: readonly WallNoteMetrics[], wallWidth: number): 
     floor = groupFloor
   }
 
+  // Stapelreihenfolge (Ticket 11) — siehe `PackedNote.z`: kleineres `x`
+  // gewinnt, bei Gleichstand kleineres `y`, bei erneutem Gleichstand ein Hash
+  // der Aufgaben-Kennung statt der Position im Feld (dieselbe Begründung wie
+  // beim Tiebreak weiter oben, „Der Tiebreak…" — eine verschobene Aufgabe im
+  // Store-Feld darf den Stapel nicht ändern).
+  //
+  // Sortiert wird eine KOPIE (`sortedAsc`); mutiert werden die `z`-Felder der
+  // ORIGINAL-Objekte in `placed` — deren Reihenfolge im Array bleibt die
+  // Packreihenfolge, das ist unbeobachtbar, weil kein Aufrufer sich auf die
+  // Array-Reihenfolge verlässt (jeder Konsument liest `note.z`).
+  //
+  // `sortedAsc[0]` hat das kleinste `x` (bzw. `y`) und muss das HÖCHSTE `z`
+  // bekommen — deshalb rückwärts durchgezählt (`length − index`), nicht
+  // `index + 1`.
+  const sortedAsc = [...placed].sort((a, b) => {
+    if (a.x !== b.x) return a.x - b.x
+    if (a.y !== b.y) return a.y - b.y
+    return fnv1a(a.id) - fnv1a(b.id)
+  })
+  sortedAsc.forEach((note, index) => {
+    note.z = sortedAsc.length - index
+  })
+
+  // Obergrenze, benannt statt gehofft: `z` reicht höchstens von 1 bis
+  // `placed.length`. Bei realistischen Haushaltsgrößen bleibt das um
+  // Größenordnungen unter den `z-index`-Werten, die `WallNote.vue` per
+  // `!important` für den gezogenen (800) bzw. lang gedrückten (810) Zettel
+  // reserviert — dorthin darf dieser Wert nicht reichen, sonst könnte ein
+  // ruhender Zettel einen aktiv gezogenen verdecken. `WallView.vue` nutzt
+  // zusätzlich 600…(600+n) für die Fluganimation, ebenfalls oberhalb dieses
+  // Bereichs.
   return { notes: placed, height: Math.max(0, ...skyline) }
 }

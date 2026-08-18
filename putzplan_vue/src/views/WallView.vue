@@ -96,11 +96,41 @@ const EDGE = 6
  * herleitbare Differenz: der Browser rundet die Auflösung von Rahmen und
  * Innenabstand sowie die Breite des Textlaufs unabhängig voneinander.
  *
+ * **War bisher teilweise, aber nie vollständig, ein Ersatz für die fehlende
+ * Zettel-Chrome.** Bevor `chromeWidth` (siehe `relayout`) Rahmen und
+ * Innenabstand von `.zettel` selbst zu `natural`/`minimum` dazuzählte,
+ * fehlten dort 18 px (2 px Rahmen + 7 px Polster, je Seite — `WallNote.vue`,
+ * Regel `.zettel`). Diese 4 px deckten davon nur einen Teil; der Rest
+ * (18 − 4 = 14 px) blieb Loch — sichtbar als der vom QC gemessene, über die
+ * fußzeilengebundenen Zettel konstante Überstand von 14,72 px. Mit
+ * `chromeWidth` ist dieses Loch eigenständig und exakt geschlossen; diese
+ * Marge trägt jetzt wieder nur die Rolle aus ihrem Namen: den kleinen,
+ * nicht herleitbaren Rundungsrest aus Rahmen-/Innenabstand-Auflösung und
+ * Textlauf, nicht die Chrome selbst.
+ *
  * Diese Marge ist deshalb **bemessen, nicht bewiesen**. Bei einem Zuschlag von
  * 1 px lag die geringste gemessene Restluft über 25 Zettel bei 0,50 px
  * („Keller entrümpeln"), danach 0,61 px und 0,96 px — es ist nie umgebrochen,
  * aber die nächste Änderung an Schriftgröße oder Innenabstand hätte darüber
- * entschieden. Mit 4 px liegt dieselbe Restluft bei rund 3,5 px.
+ * entschieden. Mit 4 px lag derselbe Wert bei rund 3,5 px.
+ *
+ * **Nachgemessen mit `chromeWidth`:** bei den 29 Zetteln, die ihre volle
+ * `natural`-Breite bekommen, liegt die Restluft gegen die bindende Größe bei
+ * 4,00…4,86 px — diese 4 px plus der `Math.ceil`-Rest. Die übrigen 31 sind
+ * durch den 45-%-Deckel oder den Streifenfüller **absichtlich** schmaler als
+ * einzeilig; für sie zählt allein die Fußzeilen-Untergrenze, und die hält über
+ * **alle** 60 Zettel mit mindestens 4,00 px Luft. 4 px ist damit die richtige
+ * Größenordnung, nicht nur eine Vermutung.
+ *
+ * Die 3,5 px im Absatz davor sind **nicht dieselbe Größe**: sie stammen von
+ * vor `chromeWidth` und messen den Platz, den der Titel tatsächlich hatte, in
+ * einer Welt mit 14 px Loch. Nebeneinander gelesen sieht es aus, als sei die
+ * Luft durch die Korrektur gewachsen — sie ist zum ersten Mal die Größe, die
+ * die Formel vorsieht.
+ *
+ * Die frühere Doppelrolle ist rückwirkend bestätigt, nicht nur plausibel:
+ * 18 (Chrome) − 4 (diese Marge) = 14, nahe an den vorher gemessenen 14,72 px
+ * Überstand; die 0,72 sind der `Math.ceil`-Rest.
  *
  * Ein paar Pixel zusätzliche Zettelbreite sieht niemand; ein fehlendes halbes
  * Pixel bricht den Titel um. Die Marge geht deshalb immer nach oben.
@@ -311,6 +341,34 @@ const relayout = (animate: boolean, anchorId?: string) => {
     const titleEl = el.querySelector<HTMLElement>('.title')
     const footEl = el.querySelector<HTMLElement>('.foot')
 
+    // Waagerechte Zettel-CHROME: `titleWidth`/`correctedFootWidth` (unten)
+    // sind Content-Box-Breiten von `.title`/`.foot`, den KINDERN von
+    // `.zettel`. Gesetzt wird später aber die Border-Box-Breite von `.zettel`
+    // SELBST (`box-sizing: border-box`, `base.css` Universalregel) — Rahmen
+    // und Innenabstand von `.zettel` liegen AUSSERHALB dieser Kindbreiten und
+    // müssen extra dazugerechnet werden, sonst schneidet die gesetzte Breite
+    // die Fußzeile ab (QC-Befund).
+    //
+    // Aus `WallNote.vue`, Regel `.zettel`: `border: 2px solid transparent`
+    // plus `padding: 5px 7px 0 7px` — links und rechts also je 2 px Rahmen +
+    // 7 px Polster. Gilt unverändert für alle drei Zetteltypen: weder
+    // `.zettel--daily` noch `.zettel--project` überschreiben Rahmenbreite
+    // oder linkes/rechtes Polster, nur `padding-top` (siehe Kommentar bei
+    // `.zettel--project`, „Keine eigene border-width mehr").
+    //
+    // Gemessen statt fest verdrahtet: `getComputedStyle` liefert, was am
+    // Element tatsächlich gilt, eine Konstante hier würde bei einer
+    // künftigen Änderung an Rahmen oder Polster still auseinanderlaufen —
+    // genau die Fehlerklasse, die dieser Fix beseitigt. Der Mehrpreis ist
+    // ein `getComputedStyle`-Aufruf je Zettel, im selben Messlauf, der
+    // ohnehin mehrere `getBoundingClientRect`-Aufrufe je Zettel macht.
+    const zettelStyle = getComputedStyle(el)
+    const chromeWidth =
+      parseFloat(zettelStyle.borderLeftWidth) +
+      parseFloat(zettelStyle.borderRightWidth) +
+      parseFloat(zettelStyle.paddingLeft) +
+      parseFloat(zettelStyle.paddingRight)
+
     // --- Punktwert oben rechts? (Karten-Redesign, Ticket 00a, Handoff
     // Punkt 6) ----------------------------------------------------------
     //
@@ -371,18 +429,22 @@ const relayout = (animate: boolean, anchorId?: string) => {
     const correctedFootWidth = metaTop ? footWidthWithoutPoints : footWidthFull
 
     // `natural`: der Titel einzeilig (`zettel--single-line`, noch aktiv),
-    // mindestens so breit wie die Fußzeile es verlangt.
-    const natural = Math.ceil(Math.max(titleWidth, correctedFootWidth)) + MEASURE_SAFETY
+    // mindestens so breit wie die Fußzeile es verlangt, plus die Chrome von
+    // `.zettel` selbst (siehe `chromeWidth` oben) — ohne sie fehlt der
+    // gesetzten Border-Box-Breite genau der Rand, den Rahmen und Innenabstand
+    // brauchen.
+    const natural = Math.ceil(Math.max(titleWidth, correctedFootWidth) + chromeWidth) + MEASURE_SAFETY
 
     // `minimum`: dieselbe Fußzeilen-Untergrenze, aber der Titel darf jetzt an
     // Wortgrenzen umbrechen — gemessen wird `.title` SELBST auf `min-content`
     // gestellt (nicht mehr der ganze Zettel, dessen Breite von der jetzt
-    // Vue-exklusiven `zettel--meta-top`-Klasse mitbestimmt würde).
+    // Vue-exklusiven `zettel--meta-top`-Klasse mitbestimmt würde). Auch hier
+    // zählt `chromeWidth` dazu — dieselbe Begründung wie bei `natural`.
     el.classList.remove('zettel--single-line')
     if (titleEl) titleEl.style.width = 'min-content'
     const titleMinimum = titleEl?.getBoundingClientRect().width ?? titleWidth
     if (titleEl) titleEl.style.width = ''
-    const minimum = Math.ceil(Math.max(titleMinimum, correctedFootWidth)) + MEASURE_SAFETY
+    const minimum = Math.ceil(Math.max(titleMinimum, correctedFootWidth) + chromeWidth) + MEASURE_SAFETY
 
     el.classList.remove('zettel--measuring')
     el.style.maxWidth = ''
@@ -588,7 +650,18 @@ const animateMoves = (
   moved.forEach(({ el, id, dx, dy, z }, index) => {
     const rot = rotationOf(id)
     const lift = `translate(${dx * 0.6}px, ${dy * 0.6 - 8}px) rotate(${rot * 0.25}deg) scale(1.07)`
-    el.style.zIndex = String(600 + index)
+    // Während des Flugs über die ruhenden Zettel gehoben (600), aber NICHT
+    // nach Laufnummer sortiert: `z` ist der bereits von `packWall` berechnete
+    // Stapelwert (Ticket 11, kleineres x/y oben) — damit gilt „der linke
+    // Zettel liegt oben" auch WÄHREND der Bewegung, nicht erst danach.
+    // `z` reicht von 1 bis `placed.length` (real deutlich unter 100), also
+    // bleibt `600 + z` sicher unter den 800/810, die `WallNote.vue` per
+    // `!important` für den gezogenen bzw. lang gedrückten Zettel reserviert
+    // (siehe Obergrenze in `packWall`). Die Staffelung der Verzögerung
+    // (`delay` unten) bleibt an der Laufnummer `index` hängen — sie sagt nur,
+    // WANN ein Zettel losfliegt, nicht wer oben liegt; das sind zwei
+    // verschiedene Aussagen.
+    el.style.zIndex = String(600 + z)
     const animation = el.animate(
       [
         {
