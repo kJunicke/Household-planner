@@ -70,6 +70,19 @@ Aufbau: **Aktiv** (als Nächstes) · **Backlog** (irgendwann) · **Bekannte Rand
   (aus `WallNote.vue`), `.fab-card`/`.fab-btn`/`.fab-plus` + Such-Overlay (aus `WallView.vue`).
   `.wall` bleibt scoped.
 
+### Pinnwand — aus der 12er-Abnahme (Titel/Sticker)
+- **`footGap = 6` ist verdrahtet** (`WallView.vue`, Messblock) und kommentiert mit
+  `// .foot { gap: 6px }`. Dieselbe Fehlerklasse, gegen die `chromeWidth` und
+  `cornerExtra` gerade angetreten sind — messbar über `getComputedStyle(footEl).columnGap`.
+- **Die Packung des ersten Laufs ist eine andere als danach.** Frisch geladen 3355,52 px
+  Wandhöhe, nach dem ersten Relayout 3548,12 und dann stabil — bei identischen Breiten,
+  Höhen, Reihenfolge und `metaTop`-Menge, also allein andere Positionen aus `packWall`.
+  Der alte Stand lieferte beide Male denselben Wert. Vermutlich vorbestehend, Ursache
+  liegt in den Höhen, die der erste Lauf an `packWall` übergibt. Nicht weiterverfolgt.
+- **`relayout` schreibt `wall.style.height` inline und nimmt es nie zurück**
+  (Scroll-Anker-Zweig). Im Ruhezustand deckt sich der Inline-Wert mit dem gerechneten;
+  beim Messen ist er eine Fehlerquelle.
+
 ### Korrektheit / Robustheit
 - **`runLoadTasks` ersetzt `tasks.value` komplett** — ein Realtime-Echo für eine *fremde*
   Zeile zwischen SELECT und Zuweisung wird überschrieben (Echo-Schutz greift nur für eigene
@@ -193,6 +206,11 @@ Kandidat 1 erledigt (Changelog). Reihenfolge = Empfehlung, Stärke in Klammern.
 - **Gezogener Zettel springt bei fremdem Realtime-Relayout** bis 114,7 px unter dem Finger
   (bewusst von der Animation ausgenommen).
 - **Akzent-Perforation am Eselsohr** liegt mit 0 px Reserve auf der Ausschnittkante.
+- **Acht Zettel sind sechs- oder siebenzeilig** (vorher einer). Die Regel, die den
+  Punkte-Sticker nach oben schickt, minimiert die Breite des einzelnen Zettels und
+  schaut nie auf seine Höhe — ein schmaler Zettel ist ein hoher Zettel. Die Wand ist
+  unterm Strich trotzdem kürzer (3548,12 gegen 3596,72). Vom Nutzer gesehen und so
+  entschieden. Wer hier Höhe optimieren will, baut eine andere Regel, nicht diese um.
 - **Zuklappen ganz unten springt ~85 px** (Dokument schrumpft am Scroll-Anschlag);
   Aufklappen 0,23 px, Seitenmitte 0,49 px.
 - **Inter ist nirgends geladen** — kein `@font-face`, kein Link; die Wand rechnet mit Inter,
