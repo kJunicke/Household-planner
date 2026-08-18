@@ -12,8 +12,8 @@
  * nach unten (`packWall`, Ticket 02: ein Projekt landet nie oberhalb einer
  * fälligen Aufgabe), aber **innerhalb** einer Gruppe packt die Skyline frei —
  * nicht nach Dringlichkeit. Auf der Wand gelten alle fälligen Aufgaben als
- * gleich dringend (→ CONTEXT.md, „Dringlichkeit"); den Typ trägt ohnehin das
- * Papier.
+ * gleich dringend (→ CONTEXT.md, „Stempel"; ADR docs/adr/0002-stempel-ordnet-nicht.md:
+ * der Stempel ordnet nichts um); den Typ trägt ohnehin das Papier.
  *
  * Oben klebt die Statusleiste mit dem gemeinsamen Wochenziel (Etappe 3).
  *

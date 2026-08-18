@@ -382,7 +382,7 @@ const SKYLINE_RESOLUTION = 4
  * Oberkante gewinnt den Platz. Das ist „freies Packen" im Sinn des Tickets —
  * die dringendste Aufgabe steht deshalb NICHT mehr zwingend oben; auf der Wand
  * gelten ohnehin alle fälligen Aufgaben als gleich dringend (→ CONTEXT.md,
- * „Dringlichkeit").
+ * „Stempel").
  *
  * **Der Tiebreak bei exaktem Gleichstand ist ein Hash der Aufgaben-Kennung
  * (`fnv1a`), NICHT die Position im Pool.** Bei nie erledigten Aufgaben ist

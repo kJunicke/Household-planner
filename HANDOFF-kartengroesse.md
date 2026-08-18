@@ -5,6 +5,11 @@
 > Nachträglich geändert wurde nur die Zuweisungsfarbe: der dicke farbige Rahmen
 > ist auf Nutzerwunsch wieder entfallen, die Farbe steht allein an der
 > Reißzwecke (Ticket 10). Das Dokument bleibt als Begründungsspeicher stehen —
+> Ebenfalls überholt: die **Stempelnamen** in Punkt 7. NIE / FÄLLIG / HEUTE ist
+> seit Ticket 09b ersetzt — ein Stempel je Zettel, jeder Zettel trägt ihn, HEUTE
+> entfällt (→ `docs/adr/0002-stempel-ordnet-nicht.md`); der farbige Ring um die
+> Reißzwecke ist gestrichen (Ticket 10).
+> Das Dokument bleibt als Begründungsspeicher stehen —
 > **nicht noch einmal umsetzen.**
 
 **Stand: Prototyp durch, vom Nutzer abgenommen („sieht gut aus").** Was folgt,

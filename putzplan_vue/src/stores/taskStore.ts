@@ -233,7 +233,7 @@ export const useTaskStore = defineStore('tasks', () => {
                 if (!task.assignment_permanent) {
                     task.assigned_to = null
                 }
-                // Nachdruck gilt für EINEN Durchlauf (→ CONTEXT.md, "Nachdruck").
+                // Überstempeln gilt für EINEN Durchlauf (→ CONTEXT.md, "Überstempeln").
                 // Spiegelt die Edge Function: tägliche Aufgaben setzen ihren
                 // Nachdruck NICHT beim Erledigen zurück, sondern nächtlich per
                 // Cron (reset_recurring_tasks) — sie werden nie „completed" und
@@ -496,7 +496,7 @@ export const useTaskStore = defineStore('tasks', () => {
     }
 
     // NACHDRUCK — Stempel-Automat 0 (kein Nachdruck) → 1 WICHTIG → 2 DRINGEND → 0
-    // (→ CONTEXT.md, "Nachdruck"; Ticket 09a). Der Automat liegt bewusst hier im
+    // (→ CONTEXT.md, "Überstempeln"; Ticket 09a). Der Automat liegt bewusst hier im
     // Store statt im Zettel-Component: die Fußzeile muss nur antippen und den
     // aktuellen Wert anzeigen, nicht die Modulo-Logik kennen.
     //

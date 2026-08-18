@@ -518,18 +518,18 @@ const schedule = computed(() => scheduleOf(props.task))
  * farbigen Ring um die Reißzwecke vor — Ticket 10 hat die Reißzwecke seither
  * der Zuweisungsfarbe gegeben (`--owner`), ein Ring wäre sofort wieder
  * entfernt worden. Der Stempel hier ist deshalb der EINZIGE Träger der
- * Dringlichkeit am Zettel (→ CONTEXT.md, „Dringlichkeit").
+ * Dringlichkeit am Zettel (→ CONTEXT.md, „Stempel").
  *
  * **Es gibt bewusst keinen zweiten Text mit der genauen Tageszahl daneben**
  * (früher `metaLabel`/`.meta`, „3 Tage" / „heute" / „nie" in Rot — entfernt,
  * QC-Befund: die Dringlichkeit stand damit zweimal in der Fußzeile, einmal
- * am Stempel, einmal an einer Farbe, die das Glossar für Dringlichkeit
+ * am Stempel, einmal an einer Farbe, die das Glossar für den Stempel
  * ausdrücklich ausschließt, siehe CONTEXT.md). Die Tageszahl selbst fehlt
  * damit auch als Information — gewollt: auf der Wand gelten alle fälligen
  * Aufgaben als GLEICH dringend, eine Zählung „3 Tage überfällig" widerspräche
  * dem. Kein Verlust, sondern die Auflösung eines Widerspruchs. Wer hier
  * wieder eine Tageszahl anzeigen will, widerspricht damit dem Glossareintrag
- * „Dringlichkeit" — das ist eine Domänenentscheidung, keine UI-Petitesse.
+ * „Stempel" — das ist eine Domänenentscheidung, keine UI-Petitesse.
  */
 const urgency = computed((): 'hot' | 'today' | null => {
   if (props.task.task_type === 'daily') return null
@@ -754,10 +754,10 @@ const handlePostponeConfirm = async (targetDate: string) => {
            wird — die Zeile schiebt ihn zur Seite, statt ihn zu überlagern.
 
            **Er ist der EINZIGE Träger der Dringlichkeit am Zettel** (→
-           CONTEXT.md, „Dringlichkeit"). Vorher stand daneben zusätzlich die
+           CONTEXT.md, „Stempel"). Vorher stand daneben zusätzlich die
            genaue Tageszahl in Rot (`.meta`, „3 Tage" / „heute" / „nie") — das
            war eine zweite Anzeige derselben Aussage, und dazu eine Farbe, die
-           das Glossar für Dringlichkeit ausdrücklich ausschließt. Die
+           das Glossar für den Stempel ausdrücklich ausschließt. Die
            Tageszahl fehlt jetzt bewusst: auf der Wand gelten alle fälligen
            Aufgaben als GLEICH dringend, eine Zählung „3 Tage überfällig"
            widerspräche dem. Das ist kein Informationsverlust, sondern die
@@ -1066,7 +1066,7 @@ const handlePostponeConfirm = async (targetDate: string) => {
 }
 
 /* --- Der Gummistempel: NIE / FÄLLIG / HEUTE (Ticket 00a) -------------------
-   Einziger Träger der Dringlichkeit am Zettel (→ CONTEXT.md, „Dringlichkeit")
+   Einziger Träger der Dringlichkeit am Zettel (→ CONTEXT.md, „Stempel")
    — kein Ring an der Reißzwecke, siehe `urgency` im Skript. Erscheint NUR,
    wenn es brennt: ein Zettel, der Zeit hat, zeigt nichts.
    Steht IM FLUSS der Fußzeile (ein normales Flex-Kind, keine Überlagerung) —

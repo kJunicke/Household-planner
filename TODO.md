@@ -36,8 +36,8 @@ Aufbau: **Aktiv** (als Nächstes) · **Backlog** (irgendwann) · **Bekannte Rand
   (gemessen: Bad, Kueche, Schlafzimmer, Wohnzimmer, *leer*, *vollständig*, Unkategorisiert).
   Ob das Absicht ist, klärt die Spec nicht.
 
-### Nachdruck (`emphasis_level`) — Randfälle aus der 09a-Abnahme
-- **Tägliche Unteraufgaben unter einem Projekt verlieren ihren Nachdruck nächtlich.**
+### Überstempeln (`emphasis_level`) — Randfälle aus der 09a-Abnahme
+- **Tägliche Unteraufgaben unter einem Projekt verlieren ihr Überstempeln nächtlich.**
   `Am Projekt arbeiten` trägt `task_type = 'daily'`, der Elternknoten ist ein Projekt;
   Step 4 von `reset_recurring_tasks()` greift nach `task_type`, nicht nach dem Elternknoten.
   Die Spec sagt für Projekte „Nachdruck bleibt". Folgenlos, solange 09b nur Elternzettel
@@ -126,10 +126,10 @@ Aufbau: **Aktiv** (als Nächstes) · **Backlog** (irgendwann) · **Bekannte Rand
   Erledigen, kein Verschieben; zuweisen läuft über den Stift am Zettel. Baut auf
   00b auf.
 - **FAB wechselt keine Ansicht (01).** Eigenständig, kleines Ticket.
-- **Nachdruck-Stempel am Zettel (09b).** Die Spalte `emphasis_level`, die Migration
+- **Überstempeln am Zettel (09b).** Die Spalte `emphasis_level`, die Migration
   und die drei Reset-Fälle stehen (09a, `ccc1dd4`, Edge Function als v22 deployt) —
   die **Bedienung fehlt**. Vorbedingung 00a ist inzwischen erfüllt. Vorher die drei
-  Nachdruck-Randfälle weiter unten in dieser Datei klären: sie betreffen genau die
+  Überstempeln-Randfälle weiter unten in dieser Datei klären: sie betreffen genau die
   Unteraufgaben, die 09b stempeln würde.
 
 **Richtungsentscheidungen ohne Ticket** — aus der Grilling-Session, bewusst als

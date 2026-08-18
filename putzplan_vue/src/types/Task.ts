@@ -40,7 +40,7 @@ export interface Task {
   // 'deduct': This subtask effort is deducted from parent effort when completed
   // 'bonus': This subtask gives full effort points in addition to parent
 
-  // Nachdruck (→ CONTEXT.md, "Nachdruck"): von Hand gesetzte Aussage "diesmal ist
+  // Überstempeln (→ CONTEXT.md, "Überstempeln"): von Hand gesetzte Aussage "diesmal ist
   // es wichtig", NICHT die berechnete Dringlichkeit. Automat 0 → 1 WICHTIG →
   // 2 DRINGEND → 0, siehe taskStore.cycleEmphasisLevel. Rein optisch — ändert
   // weder Gruppe noch Reihenfolge auf der Pinnwand.
