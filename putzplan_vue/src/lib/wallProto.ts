@@ -6,7 +6,8 @@
  * - Der Bearbeiten-Stift sitzt **unten rechts neben dem Eselsohr**. Dort ist
  *   ohnehin die Ecke für Griffe reserviert, und der Titel gewinnt die ganze
  *   obere Kante — bisher hat der Stift oben rechts 36 px davon weggenommen.
- * - Punkte, Rückstand und Fortschritt stehen unten in der Fußzeile.
+ * - Die Fußzeile ist die Griffzeile: Punkte und Fälligkeit links, Stift und
+ *   Eselsohr rechts — beide gleich groß.
  * - Alle Schriften wachsen um rund 30 %.
  *
  * Diese Datei hält nur noch, was **offen** ist (→ `WallProtoBar.vue`):
@@ -29,26 +30,22 @@ export interface ProtoConfig {
   scale: number
   /** `MIN_NOTE_WIDTH` — Untergrenze der Zettelbreite. */
   minWidth: number
-  /** Kantenlänge der Trefferfläche des Stifts in px. */
-  editHit: number
-  /** Fußzeile teilt sich die untere Zeile mit dem Stift (spart Höhe). */
-  footInline: boolean
+  /** Kantenlänge BEIDER Griffe — Stift und Eselsohr sind gleich groß. */
+  hit: number
 }
 
 /** Der Ist-Zustand — nur noch als Vergleichspunkt. */
 export const IST: ProtoConfig = {
   scale: 1,
   minWidth: 96,
-  editHit: 40,
-  footInline: false
+  hit: 44
 }
 
 /** Der besprochene Entwurf. */
 export const ENTWURF: ProtoConfig = {
   scale: 1.3,
   minWidth: 150,
-  editHit: 48,
-  footInline: true
+  hit: 48
 }
 
 export const config = reactive<ProtoConfig>({ ...ENTWURF })
@@ -63,8 +60,7 @@ function readUrl(): void {
   for (const part of raw.split(',')) {
     const [key, value] = part.split(':') as [keyof ProtoConfig, string]
     if (!KEYS.includes(key) || value === undefined) continue
-    if (key === 'footInline') config.footInline = value === 'true'
-    else (config[key] as number) = Number(value)
+    (config[key] as number) = Number(value)
   }
 }
 
@@ -81,17 +77,7 @@ export function applyProtoConfig(): void {
   setMinNoteWidth(config.minWidth)
   const s = document.documentElement.style
   s.setProperty('--proto-scale', String(config.scale))
-  s.setProperty('--proto-edit-hit', `${config.editHit}px`)
-  // Wie viel Platz die Griffzeile unten braucht, und ob die Fusszeile ihr
-  // ausweichen muss. Der Eselsohr-Griff ist 44 px breit und sitzt ganz rechts.
-  const EAR = 44
-  if (config.footInline) {
-    s.setProperty('--proto-foot-reserve', `${EAR + config.editHit - 4}px`)
-    s.setProperty('--proto-bottom', `${Math.round(config.editHit * 0.55)}px`)
-  } else {
-    s.setProperty('--proto-foot-reserve', '0px')
-    s.setProperty('--proto-bottom', `${config.editHit + 2}px`)
-  }
+  s.setProperty('--proto-hit', `${config.hit}px`)
 }
 
 // Einmal beim Laden: sonst misst der erste Layout-Lauf noch die alten

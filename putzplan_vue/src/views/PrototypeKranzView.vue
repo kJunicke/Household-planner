@@ -92,6 +92,8 @@ const edgeOf = (n: { jitter: number }) =>
 const open = ref(false)
 const dir = ref<Dir | null>(null)
 const anchor = ref<{ x: number; y: number } | null>(null)
+/** Wo der Daumen gerade liegt — der Pfeil zeigt DORTHIN, nicht auf die Option. */
+const tip = ref<{ x: number; y: number } | null>(null)
 const toast = ref('')
 
 let timer: number | null = null
@@ -105,7 +107,7 @@ const reset = () => {
   if (timer !== null) { clearTimeout(timer); timer = null }
   if (open.value && el?.hasPointerCapture?.(pid)) el.releasePointerCapture(pid)
   active = false; el = null; pid = -1
-  open.value = false; dir.value = null; anchor.value = null
+  open.value = false; dir.value = null; anchor.value = null; tip.value = null
 }
 
 const onDown = (e: PointerEvent) => {
@@ -119,6 +121,7 @@ const onDown = (e: PointerEvent) => {
     if (!active) return
     const r = el!.getBoundingClientRect()
     anchor.value = { x: r.left + r.width / 2, y: r.top + r.height / 2 }
+    tip.value = { x: sx, y: sy }
     open.value = true
     try { el?.setPointerCapture?.(pid) } catch { /* egal */ }
   }, 420)
@@ -141,6 +144,7 @@ const onMove = (e: PointerEvent) => {
     if (Math.abs(dx) > 10 || Math.abs(dy) > 10) reset()
     return
   }
+  tip.value = { x: e.clientX, y: e.clientY }
   dir.value = pick(dx, dy)
   e.preventDefault()
 }
@@ -192,27 +196,40 @@ const band = (d: Dir) => {
 }
 
 const ARROW_GAP = 30
-const ARROW_LEN = 64
 const ARROW_HEAD = 15
+const ARROW_MIN = 18
 
-const arrow = (a: { x: number; y: number }, d: Dir) => {
-  const ux = d === 'left' ? -1 : d === 'right' ? 1 : 0
-  const uy = d === 'up' ? -1 : d === 'down' ? 1 : 0
+/**
+ * Zwei getrennte Aussagen, absichtlich:
+ * der **Pfeil** zeigt, wohin der Daumen zieht (frei drehend, jeder Winkel),
+ * das **Aufleuchten** am Rand zeigt, was beim Loslassen passiert.
+ *
+ * Der Schaft endet am Ansatz der Spitze, nicht an ihrer Kerbe — sonst ragt er
+ * sichtbar durch das Dreieck hindurch.
+ */
+const arrow = (a: { x: number; y: number }, t: { x: number; y: number }) => {
+  const dx = t.x - a.x
+  const dy = t.y - a.y
+  const dist = Math.hypot(dx, dy)
+  if (dist < ARROW_GAP + ARROW_MIN) return null
+  const ux = dx / dist
+  const uy = dy / dist
   const x1 = a.x + ux * ARROW_GAP
   const y1 = a.y + uy * ARROW_GAP
-  const x2 = a.x + ux * (ARROW_GAP + ARROW_LEN)
-  const y2 = a.y + uy * (ARROW_GAP + ARROW_LEN)
-  const px = -uy, py = ux
-  const bx = x2 - ux * ARROW_HEAD, by = y2 - uy * ARROW_HEAD
-  const wingA = { x: bx + px * ARROW_HEAD * 0.7, y: by + py * ARROW_HEAD * 0.7 }
-  const wingB = { x: bx - px * ARROW_HEAD * 0.7, y: by - py * ARROW_HEAD * 0.7 }
+  // Spitze sitzt am Finger, Schaft hoert davor auf
+  const tx = t.x
+  const ty = t.y
+  const bx = tx - ux * ARROW_HEAD
+  const by = ty - uy * ARROW_HEAD
+  const px = -uy
+  const py = ux
+  const wingA = { x: bx + px * ARROW_HEAD * 0.62, y: by + py * ARROW_HEAD * 0.62 }
+  const wingB = { x: bx - px * ARROW_HEAD * 0.62, y: by - py * ARROW_HEAD * 0.62 }
   return {
-    line: `M ${x1} ${y1} L ${x2} ${y2}`,
-    // leicht verzogene Zweitlinie — nur die Skizze nutzt sie
-    line2: `M ${x1 + px * 1.5} ${y1 + py * 1.5} L ${x2 - px * 2} ${y2 - py * 2}`,
-    head: `M ${x2} ${y2} L ${wingA.x} ${wingA.y} L ${wingB.x} ${wingB.y} Z`,
-    // offene Spitze, wie mit zwei Strichen gezeichnet
-    headOpen: `M ${wingA.x} ${wingA.y} L ${x2} ${y2} L ${wingB.x} ${wingB.y}`
+    line: `M ${x1} ${y1} L ${bx} ${by}`,
+    line2: `M ${x1 + px * 1.5} ${y1 + py * 1.5} L ${bx - px * 2} ${by - py * 2}`,
+    head: `M ${tx} ${ty} L ${wingA.x} ${wingA.y} L ${wingB.x} ${wingB.y} Z`,
+    headOpen: `M ${wingA.x} ${wingA.y} L ${tx} ${ty} L ${wingB.x} ${wingB.y}`
   }
 }
 </script>
@@ -309,27 +326,27 @@ const arrow = (a: { x: number; y: number }, d: Dir) => {
         </template>
 
         <!-- Der kurze Pfeil an der Karte -->
-        <template v-if="anchor && dir">
+        <template v-if="anchor && tip && arrow(anchor, tip)">
           <template v-if="variant === 'skizze'">
-            <path :d="arrow(anchor, dir).line" :stroke="skin.ink" stroke-width="2.4"
+            <path :d="arrow(anchor, tip)!.line" :stroke="skin.ink" stroke-width="2.4"
                   stroke-linecap="round" fill="none" />
-            <path :d="arrow(anchor, dir).line2" :stroke="skin.ink" stroke-width="1.2"
+            <path :d="arrow(anchor, tip)!.line2" :stroke="skin.ink" stroke-width="1.2"
                   stroke-linecap="round" fill="none" opacity="0.6" />
-            <path :d="arrow(anchor, dir).headOpen" :stroke="skin.ink" stroke-width="2.4"
+            <path :d="arrow(anchor, tip)!.headOpen" :stroke="skin.ink" stroke-width="2.4"
                   stroke-linecap="round" stroke-linejoin="round" fill="none" />
           </template>
           <!-- Kreidepfeil: kraeftiger Schaft plus Spitze, koernig gefiltert -->
           <template v-else-if="variant === 'tafel'">
             <g filter="url(#chalk)" opacity="0.92">
-              <path :d="arrow(anchor, dir).line" :stroke="skin.ink" stroke-width="6"
+              <path :d="arrow(anchor, tip)!.line" :stroke="skin.ink" stroke-width="6"
                     stroke-linecap="round" fill="none" />
-              <path :d="arrow(anchor, dir).head" :fill="skin.ink" />
+              <path :d="arrow(anchor, tip)!.head" :fill="skin.ink" />
             </g>
           </template>
           <template v-else>
-            <path :d="arrow(anchor, dir).line" :stroke="skin.ink" stroke-width="3"
+            <path :d="arrow(anchor, tip)!.line" :stroke="skin.ink" stroke-width="3"
                   stroke-linecap="round" fill="none" :filter="filt" />
-            <path :d="arrow(anchor, dir).head" :fill="skin.ink" :filter="filt" />
+            <path :d="arrow(anchor, tip)!.head" :fill="skin.ink" :filter="filt" />
           </template>
         </template>
 

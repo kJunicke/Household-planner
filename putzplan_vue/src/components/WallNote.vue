@@ -798,8 +798,7 @@ const handlePostponeConfirm = async (targetDate: string) => {
   /* PROTOTYP: rechts oben ist nichts mehr reserviert — der Titel bekommt die
      ganze obere Kante. Unten liegt die Griffzeile (Stift + Eselsohr); wie viel
      Platz sie braucht, haengt davon ab, ob die Fusszeile sich die Zeile teilt. */
-  padding: 6px 8px 5px 8px;
-  padding-bottom: var(--proto-bottom, 5px);
+  padding: 6px 8px 0 8px;
   min-height: 44px;
   text-align: left;
   will-change: transform;
@@ -845,13 +844,16 @@ const handlePostponeConfirm = async (targetDate: string) => {
 /* Fußzeile: Punktwert links, Rückstand daneben — eine gemeinsame Zeile statt
    zwei, und im Fluss statt absolut. */
 .foot {
+  /* PROTOTYP: die Fusszeile ist die GRIFFZEILE des Zettels. Links stehen
+     Punktwert und Faelligkeit, rechts sitzen Stift und Eselsohr — beide gleich
+     gross (`--proto-hit`) und nebeneinander. Ihre Hoehe gibt die Zeilenhoehe
+     vor, deshalb `min-height`; ihre Breite haelt das `padding-right` frei. */
   display: flex;
-  align-items: baseline;
+  align-items: center;
   gap: 6px;
   margin-top: 2px;
-  /* PROTOTYP: rechts stehen Stift und Eselsohr. Teilt sich die Fusszeile die
-     Zeile mit ihnen, muss sie deren Breite freihalten. */
-  padding-right: var(--proto-foot-reserve, 0px);
+  min-height: var(--proto-hit, 48px);
+  padding-right: calc(2 * var(--proto-hit, 48px));
   font-size: calc(10px * var(--proto-scale, 1));
   font-weight: 800;
   line-height: 1.1;
@@ -1151,14 +1153,14 @@ const handlePostponeConfirm = async (targetDate: string) => {
   position: absolute;
   top: auto;
   bottom: 0;
-  right: 44px;
-  width: var(--proto-edit-hit, 48px);
-  height: var(--proto-edit-hit, 48px);
+  right: var(--proto-hit, 48px);
+  width: var(--proto-hit, 48px);
+  height: var(--proto-hit, 48px);
   padding: 0;
   border: 0;
   background: none;
   color: var(--pw-ink-soft);
-  font-size: calc(var(--proto-edit-hit, 48px) * 0.42);
+  font-size: calc(var(--proto-hit, 48px) * 0.42);
   line-height: 1;
   display: grid;
   place-items: center center;
@@ -1229,8 +1231,8 @@ const handlePostponeConfirm = async (targetDate: string) => {
   position: absolute;
   right: 0;
   bottom: 0;
-  width: 44px;
-  height: 44px;
+  width: var(--proto-hit, 48px);
+  height: var(--proto-hit, 48px);
   padding: 0;
   border: 0;
   background: none;
@@ -1238,10 +1240,10 @@ const handlePostponeConfirm = async (targetDate: string) => {
   touch-action: none;
   user-select: none;
   -webkit-user-select: none;
-  /* Rechteckiger Ausschnitt oben links: 24 px breit (54,5 %), 18 px hoch
-     (40,9 %). Der Umriss läuft um ihn herum. Die 18 sind gemessen erzwungen —
-     mit 16 stand die Glyphe des Bearbeiten-Knopfes bündig auf der Kante. */
-  clip-path: polygon(54.5% 0, 100% 0, 100% 100%, 0 100%, 0 40.9%, 54.5% 40.9%);
+  /* PROTOTYP: KEIN Ausschnitt mehr. Er existierte nur, damit der Stift oben
+     rechts nicht unter dem Eselsohr verschwand — jetzt stehen beide
+     nebeneinander in der Fusszeile und teilen sich keine Flaeche mehr. Das
+     Eselsohr ist damit ein volles Quadrat, seine Trefferflaeche waechst. */
 }
 
 .ear--locked {

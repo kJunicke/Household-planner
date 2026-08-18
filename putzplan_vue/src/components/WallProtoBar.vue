@@ -33,12 +33,12 @@ const SLIDERS = [
     note: 'zu klein = Titel bricht um, zu groß = keine zwei Zettel nebeneinander'
   },
   {
-    key: 'editHit',
-    label: 'Stift-Fläche',
-    min: 32,
+    key: 'hit',
+    label: 'Griffe',
+    min: 36,
     max: 64,
     step: 2,
-    note: 'Apple HIG 44 · Material Design 48'
+    note: 'Stift und Eselsohr, gleich groß — Apple HIG 44 · Material Design 48'
   }
 ] as const
 </script>
@@ -69,10 +69,6 @@ const SLIDERS = [
         <span class="proto-note">{{ slider.note }}</span>
       </label>
 
-      <label class="proto-check">
-        <input v-model="config.footInline" type="checkbox" />
-        <span>Fußzeile teilt sich die Zeile mit den Griffen (spart Höhe)</span>
-      </label>
     </div>
   </div>
 </template>
