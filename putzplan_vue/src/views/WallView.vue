@@ -7,9 +7,13 @@
  * wird. Beide arbeiten auf denselben Stores und derselben Auswahl
  * (`useTaskBoard`), damit ein Umschalten nichts verliert.
  *
- * Es gibt keine Kategorie-Chipleiste, keine Gruppierung und keine
- * Überschriften. Die Reihenfolge auf der Wand ist: offene Aufgaben nach
- * Dringlichkeit, dann tägliche, dann Projekte — den Typ trägt das Papier.
+ * Es gibt keine Kategorie-Chipleiste und keine Überschriften. Die drei Gruppen
+ * fällig → täglich → Projekt bestimmen zwar die grobe Leserichtung von oben
+ * nach unten (`packWall`, Ticket 02: ein Projekt landet nie oberhalb einer
+ * fälligen Aufgabe), aber **innerhalb** einer Gruppe packt die Skyline frei —
+ * nicht nach Dringlichkeit. Auf der Wand gelten alle fälligen Aufgaben als
+ * gleich dringend (→ CONTEXT.md, „Dringlichkeit"); den Typ trägt ohnehin das
+ * Papier.
  *
  * Oben klebt die Statusleiste mit dem gemeinsamen Wochenziel (Etappe 3).
  *
@@ -213,6 +217,16 @@ const relayout = (animate: boolean, anchorId?: string) => {
 
   const before = new Map(lastPositions)
 
+  // Gruppenzuordnung je Zettel (0 = fällig, 1 = täglich, 2 = Projekt) — steuert
+  // die freie Packreihenfolge und die weiche Gruppengrenze in `packWall`. Die
+  // drei Listen aus dem Composable sind bereits genau diese drei Gruppen; hier
+  // wird nur zurück auf die `task_id` gemappt, weil `packWall` keine Task-
+  // Objekte kennt.
+  const taskGroups = new Map<string, number>()
+  board.pendingTasks.value.forEach(task => taskGroups.set(task.task_id, 0))
+  board.dailyTasks.value.forEach(task => taskGroups.set(task.task_id, 1))
+  board.projectTasks.value.forEach(task => taskGroups.set(task.task_id, 2))
+
   // Schritt 1 — messen, was jeder Zettel an Breite braucht.
   //
   // Gemessen wird mit `getBoundingClientRect()`, NICHT mit `offsetWidth`.
@@ -303,7 +317,7 @@ const relayout = (animate: boolean, anchorId?: string) => {
     const el = elements.get(shape.id)
     if (!el) continue
     const fallback = defaultNoteWidth(shape, usableWidth)
-    const width = planned.get(shape.id)?.width ?? fallback
+    const width = planned.get(shape.id) ?? fallback
     fallbacks.set(shape.id, fallback)
     widths.set(shape.id, width)
     el.style.width = `${width}px`
@@ -334,17 +348,15 @@ const relayout = (animate: boolean, anchorId?: string) => {
     if (lines > baseLines + MAX_EXTRA_LINES) rejected.add(shape.id)
   }
 
-  // Zurücknehmen — **immer paarweise**. Die schmale Breite einer Paarhälfte
-  // gilt nur, solange die andere Hälfte schmal daneben steht; bliebe sie
-  // allein, wäre sie schmaler UND höher als vorher, ohne Gegenwert. Die Kette
-  // bricht hier ab: zurückgenommen wird ausschließlich auf `fallback`, also
-  // auf den Stand ohne zweiten Packlauf — daraus kann kein neues Paar und
-  // damit keine neue Rücknahme entstehen.
-  for (const id of [...rejected]) {
-    const partner = planned.get(id)?.pairedWith
-    if (partner) rejected.add(partner)
-  }
-
+  // Zurücknehmen — auf `fallback`, also auf den Stand ohne zweiten Packlauf.
+  //
+  // Vorher gab es hier eine Kette „Paar zurücknehmen, wenn zu hoch": die
+  // Paar-Erzwingung in `planNoteWidths` konnte zwei Zettel gemeinsam
+  // verschmälern, und wer davon zu hoch wurde, musste den Partner mitverwerfen
+  // (sonst stünde die andere Hälfte schmal UND ohne Gegenwert allein). Die
+  // Paar-Erzwingung ist entfallen (Ticket 02) — übrig bleibt nur noch der
+  // Streifen-Füller, der Zettel einzeln verschmälert, also braucht es keine
+  // Partner-Rücknahme mehr.
   for (const id of rejected) {
     const el = elements.get(id)
     const fallback = fallbacks.get(id)
@@ -363,7 +375,8 @@ const relayout = (animate: boolean, anchorId?: string) => {
       id: shape.id,
       width: widths.get(shape.id) ?? 0,
       height: el.offsetHeight,
-      expanded: expandedIds.value.has(shape.id)
+      expanded: expandedIds.value.has(shape.id),
+      group: taskGroups.get(shape.id) ?? 0
     })
   }
 
@@ -438,12 +451,15 @@ const relayout = (animate: boolean, anchorId?: string) => {
 /**
  * Auf- und Zuklappen eines Zettels mit Unteraufgaben.
  *
- * Warum die Zettel **oberhalb** sich dabei um exakt 0 px bewegen, liegt nicht
- * an einer Sonderbehandlung, sondern am Packen selbst: die Skyline platziert in
- * Eingabereihenfolge, und die Größe eines Zettels beeinflusst nur die Skyline,
- * die den Zetteln NACH ihm zur Verfügung steht. Wer vor ihm liegt, ist längst
- * gesetzt. Es gibt deshalb keine Zeile, die das durchsetzt — es gibt nur die
- * Bedingung, die Reihenfolge nicht anzutasten.
+ * Seit Ticket 02 packt die Skyline **frei innerhalb ihrer Gruppe** (→
+ * `packWall`): sie wählt bei jedem Schritt den Zettel mit der aktuell
+ * niedrigsten möglichen Oberkante, nicht strikt die Eingabereihenfolge. Ändert
+ * sich dadurch die Höhe des aufklappenden Zettels, kann sich deshalb auch die
+ * Platzierung **anderer** Zettel derselben Gruppe verschieben — nicht nur die
+ * der nachfolgenden. Es gibt hier bewusst keine Garantie „Zettel oberhalb
+ * bewegen sich um 0 px" mehr; das FLIP-Animationssystem (`animateMoves`)
+ * behandelt das bereits: es animiert jeden Zettel, dessen Position sich
+ * tatsächlich ändert, und lässt den Rest unangetastet.
  *
  * Der aufklappende Zettel selbst kann sehr wohl wandern: mit voller Wandbreite
  * braucht er eine Stelle, an der die Skyline über die ganze Breite frei ist.
