@@ -424,14 +424,26 @@ const rotation = computed(() => rotationOf(props.task.task_id))
  * hat. Es wird zur Laufzeit **nichts** umgefärbt, aufgehellt oder auf eine
  * Palette gerundet: die gewählte Farbe muss die angezeigte sein.
  *
- * `null` heißt „niemand zuständig". Dann bleibt `--owner` ungesetzt und die
- * CSS-Rückfallfarbe greift (siehe `--owner-none` unten).
+ * `null` heißt „niemand zuständig". Dann bleibt `--owner` ungesetzt und an
+ * der Reißzwecke greift die neutrale CSS-Rückfallfarbe (siehe `--owner-none`
+ * unten); der Rahmen des Zettels bleibt in diesem Fall ganz unsichtbar
+ * (`.zettel--assigned` greift nicht, siehe `isAssigned`).
  */
 const ownerColor = computed(() => {
   if (!props.task.assigned_to) return null
   const member = householdStore.householdMembers.find(m => m.user_id === props.task.assigned_to)
   return member?.user_color || null
 })
+
+/**
+ * Ob der Zettel einen deutlich sichtbaren, dickeren Rahmen in der
+ * Zuweisungsfarbe bekommt (Ticket 10). Eigene Ableitung statt eines rohen
+ * `!!props.task.assigned_to`, damit derselbe Fall wie bei `ownerColor`
+ * gilt: ein `assigned_to`, das auf kein (mehr) existierendes Mitglied
+ * zeigt, zählt als „niemand zuständig" — sonst bekäme der Rahmen eine
+ * Farbe, die `--owner` gar nicht gesetzt hat.
+ */
+const isAssigned = computed(() => ownerColor.value !== null)
 
 /**
  * `--owner` wird nur gesetzt, wenn es wirklich eine Person gibt. Ohne die
@@ -594,7 +606,8 @@ const handlePostponeConfirm = async (targetDate: string) => {
         'zettel--tappable': hasSubtasks,
         'zettel--tearing': isNoteTearing,
         'zettel--tear-ready': isTearReady,
-        'zettel--pressed': pressOpen
+        'zettel--pressed': pressOpen,
+        'zettel--assigned': isAssigned
       }
     ]"
     :style="noteStyle"
@@ -774,20 +787,37 @@ const handlePostponeConfirm = async (targetDate: string) => {
   top: 0;
   display: flex;
   flex-direction: column;
-  /* Rand ohne Zuständige: derselbe Grauton, aber auf 45 % gegen das Papier
-     gemischt. Die Umrandung ist die EINZIGE Person-Information am Zettel,
-     also darf „niemand zuständig" nie kräftiger wirken als „X ist zuständig".
-     Vorher trat genau das ein: `--pw-free` erreichte 3,87:1 gegen das Papier,
-     die blasseste vergebene Personenfarbe (#4A90E2) nur 3,23:1 — „niemand"
-     las sich lauter als „jemand". Jetzt sind es 1,71:1 gegen Papier und
-     1,28:1 gegen Kork, also klar zurücktretend gegenüber jeder Personenfarbe.
+  /* Rückfallfarbe der Reißzwecke ohne Zuständige (`.pin` unten): derselbe
+     Grauton wie zuvor, aber auf 45 % gegen das Papier gemischt, damit
+     „niemand zuständig" nie kräftiger wirkt als „X ist zuständig". Gemessen:
+     `--pw-free` erreichte 3,87:1 gegen das Papier, die blasseste vergebene
+     Personenfarbe (#4A90E2) nur 3,23:1 — „niemand" las sich lauter als
+     „jemand". Jetzt sind es 1,71:1 gegen Papier und 1,28:1 gegen Kork, also
+     klar zurücktretend gegenüber jeder Personenfarbe.
 
      Bewusst NICHT die Lösung des eigentlichen Problems: dass eine helle
      `user_color` auf Kork wenig hergibt, klärt die kuratierte Palette samt
      Migration in einer eigenen Etappe. Hier wird nur der farblose Zustand
-     leiser gedreht, keine gewählte Farbe angetastet. */
+     leiser gedreht, keine gewählte Farbe angetastet.
+
+     Als benutzerdefinierte Eigenschaft hier deklariert (nicht direkt bei
+     `.pin`), damit sie an die Reißzwecke als Kindelement vererbt wird. */
   --owner-none: color-mix(in srgb, var(--pw-free) 45%, var(--pw-paper));
-  border: 2px solid var(--owner, var(--owner-none));
+  /* Rahmen (Ticket 10 „Reißzwecke trägt die Zuweisungsfarbe"): ohne
+     Zuständige unsichtbar (`transparent`) — der farbige Rahmen ist ein
+     Signal für Zuständigkeit, kein Grundrauschen. Sichtbar wird er erst über
+     `.zettel--assigned` unten, das nur `border-color` auf `var(--owner)`
+     setzt (dort garantiert gesetzt, siehe `noteStyle`/`isAssigned` im
+     Skript).
+
+     5px statt vormals 2px (bzw. 3px beim Projekt-Zettel) — deutlich dicker,
+     wie gefordert. Die Dicke steht schon HIER und bleibt bei Zu- und
+     Abweisung konstant: nur die Farbe wechselt. Würde stattdessen die Dicke
+     selbst zwischen 0 und 5px springen, veränderte sich bei jeder
+     Zuweisungsänderung zusätzlich der Innenraum des Zettels (Rahmen zählt
+     bei `box-sizing: border-box` gegen den Innenraum) — unnötige Unruhe für
+     ein Signal, das ohnehin schon über die Farbe ankommt. */
+  border: 5px solid transparent;
   border-radius: 3px;
   background: var(--pw-paper);
   color: var(--pw-ink);
@@ -809,6 +839,19 @@ const handlePostponeConfirm = async (targetDate: string) => {
   user-select: none;
   -webkit-user-select: none;
   -webkit-touch-callout: none;
+}
+
+/* Zugewiesene Aufgabe: der Rahmen wird sichtbar (Ticket 10). `--owner` ist
+   garantiert gesetzt, wenn diese Klasse steht — beide hängen an derselben
+   Bedingung (`ownerColor`/`isAssigned` im Skript) — deshalb hier bewusst
+   OHNE Rückfallwert in `var(--owner)`. Die Dicke selbst steht schon an der
+   Basisregel oben; hier wechselt nur die Farbe. Zwei Klassen im Selektor
+   (`.zettel.zettel--assigned`) heben die Spezifität über die der
+   typspezifischen Regeln (`.zettel--project` u. a.), damit dieselbe Dicke
+   und Farbe unabhängig vom Zetteltyp gilt, ganz gleich in welcher
+   Reihenfolge die Regeln im Stylesheet stehen. */
+.zettel.zettel--assigned {
+  border-color: var(--owner);
 }
 
 .title {
@@ -1306,9 +1349,22 @@ const handlePostponeConfirm = async (targetDate: string) => {
   box-shadow: var(--pw-shadow-lift);
 }
 
-/* Weit genug gezogen: Loslassen erledigt. Die Perforation reißt sichtbar auf. */
+/* Weit genug gezogen: Loslassen erledigt. Die Perforation reißt sichtbar auf.
+
+   `border-color` steht hier bewusst dazu (QC-Befund, Ticket 10): ohne
+   Zuweisung ist `border-color` an der Basisregel `transparent` — ein
+   `dashed`-Umriss in Transparent zeigt nichts an. Bei 48 von 49 Zetteln auf
+   der Testwand war „reißt gleich ab" damit faktisch stumm, nur die
+   Perforationslinie am Eselsohr blieb (24 × 2 px statt einem Umriss ums
+   ganze Papier). Neutrale Tintenfarbe (`--pw-line`, dieselbe wie an
+   Reißzwecken-Kontur, Büroklammern und Projekt-Umriss) macht den Umriss auch
+   ohne Zuweisung sichtbar. Die Zuweisungsfarbe gewinnt weiterhin: der
+   Selektor `.zettel.zettel--assigned` hat mit zwei Klassen höhere
+   Spezifität (0,2,0) als dieser hier (0,1,0) und überschreibt
+   `border-color`, unabhängig von der Reihenfolge im Stylesheet. */
 .zettel--tear-ready {
   border-style: dashed;
+  border-color: var(--pw-line);
 }
 
 .zettel--tear-ready .ear::after {
@@ -1346,8 +1402,12 @@ const handlePostponeConfirm = async (targetDate: string) => {
   width: 14px;
   height: 14px;
   border-radius: 50%;
-  /* Dieselbe Rückfallregel wie beim Rand — die Reißzwecke ist Teil derselben
-     Aussage. Ihre eigene Tintenkontur hält sie auch farblos sichtbar. */
+  /* Trägt die Zuweisungsfarbe (Ticket 10) — mit Zuständigkeit `--owner`,
+     ohne die gedämpfte `--owner-none` von oben. Ihre eigene Tintenkontur
+     (`border` gleich darunter) hält sie auch farblos sichtbar. Anders als
+     der Rahmen des Zettels bleibt die Reißzwecke IMMER sichtbar: sie ist die
+     einzige Stelle am Zettel, die auch „niemand zuständig" aktiv zeigt statt
+     nur das Fehlen eines Signals. */
   background: var(--owner, var(--owner-none));
   border: 2px solid var(--pw-line);
   box-shadow:
@@ -1387,7 +1447,11 @@ const handlePostponeConfirm = async (targetDate: string) => {
     rgba(0, 0, 0, 0.045) 0 1px,
     transparent 1px 7px
   );
-  border-width: 3px;
+  /* Keine eigene `border-width` mehr (vormals 3px): die Basisregel liefert
+     jetzt für alle drei Zetteltypen dieselbe Dicke, sichtbar nur bei
+     Zuständigkeit (→ `.zettel--assigned`). Eine schmalere Ausnahme hier hätte
+     den Projekt-Zettel bei Zuweisung dünner umrandet als die anderen beiden
+     Typen — derselbe Rahmen soll aber überall dasselbe aussagen. */
   border-radius: 0;
   box-shadow: 4px 4px 0 var(--pw-line);
   padding-top: 11px;
