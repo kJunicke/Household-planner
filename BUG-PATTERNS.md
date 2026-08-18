@@ -229,6 +229,144 @@ mitgezogen wurde.
 
 ---
 
+## 🐛 Bug #6: Eine per `classList` gesetzte Klasse überlebt kein Vue-Update (18.08.2026)
+
+### Problem
+`WallView.relayout` misst jeden Zettel und entscheidet dabei, ob der Punkte-Sticker
+in die obere rechte Ecke wandert (`zettel--meta-top`). Die Entscheidung stand korrekt
+im Vue-Zustand — **im DOM kam sie nie an**: `metaTopIds.size = 30`, DOM-Anzahl **0**.
+
+### Root Cause
+Der Messlauf setzte und entfernte die Klasse per `classList`, obwohl sie **auch** an
+einer Vue-Bindung hing. Vue vergleicht bei jedem Patch nur den von **ihm** zuletzt
+berechneten Klassen-String mit dem neu berechneten — der tatsächliche DOM-Zustand
+kommt in diesem Vergleich nicht vor. Blieb die Entscheidung über zwei Läufe gleich
+(der Normalfall), hielt Vue seinen String für unverändert und schrieb `className` gar
+nicht neu. Die extern entfernte Klasse kam **nie** zurück.
+
+### Symptome
+- Eine Klasse ist im Vue-Zustand gesetzt, `classList.contains` sagt `false`
+- Sie erscheint **manchmal** wieder — nämlich wenn sich am selben Element eine
+  völlig unabhängige Bindung ändert, weil Vue dann den ganzen String neu schreibt
+- Genau das macht den Fehler so zäh: er sieht sporadisch aus, ist aber deterministisch
+
+### Lösung
+**Eine Klasse gehört entweder Vue oder dem imperativen Code — nie beiden.**
+`zettel--meta-top` gehört jetzt ausschließlich einem Prop. Was der Messlauf früher
+durch Umschalten der Klasse erzwang, wird arithmetisch aus dem gerade gerenderten
+Zustand rekonstruiert.
+
+### Prävention
+- Vor jedem `classList.add/remove/toggle` prüfen, ob dieselbe Klasse in einer
+  `:class`-Bindung vorkommt. **Auch `remove` ist betroffen**, nicht nur `add`.
+- Der Beleg ist immer derselbe: DOM-Anzahl gegen die Größe der Zustandsmenge.
+  Und eine **Negativkontrolle** — Klasse von Hand entfernen und zeigen, dass die
+  Messung anschlägt und die Klasse über zwei erzwungene Renders **nicht** zurückkommt.
+
+---
+
+## 🐛 Bug #7: Content-Box gemessen, Border-Box gesetzt (18.08.2026)
+
+### Problem
+Zettel auf der Pinnwand wurden systematisch **18 px zu schmal** gesetzt. Sichtbare
+Folge: die Fußzeile lief über den Bearbeiten-Stift und das Eselsohr hinaus und wurde
+vom Zettelrand abgeschnitten — der Dringlichkeits-Stempel las sich als „FALLIG" ohne G.
+
+### Root Cause
+Der Messlauf bildete `natural`/`minimum` aus den Rechteckbreiten der **Kindelemente**
+`.title` und `.foot` — das sind Content-Box-Maße des Zettels — und setzte sie als
+**Border-Box**-Breite (`box-sizing: border-box` gilt global). Rahmen und Innenabstand
+(2×2 + 2×7 = 18 px) fehlten nie berechnet. Die Sicherheitsmarge von 4 px deckte
+weniger als ein Viertel davon und kaschierte den Rest so weit, dass es lange nicht auffiel.
+
+### Symptome
+- Ein Element ragt um einen **konstanten** Betrag über seinen Container hinaus
+  (hier: 14,72 px an allen fußzeilengebundenen Zetteln)
+- Konstant ist der Hinweis: ein Rechenfehler skaliert nicht mit dem Inhalt
+
+### Lösung
+Chrome per `getComputedStyle` je Element messen (`border*Width` + `padding*`) und zur
+gemessenen Content-Breite addieren. **Gemessen statt verdrahtet**: eine Konstante 18
+läuft still auseinander, sobald jemand das Polster ändert.
+
+### Prävention
+- Wer eine Kindbreite misst und sie am Elternelement setzt, muss die Differenz
+  zwischen beiden Box-Modellen bewusst überbrücken.
+- Der Beleg für „richtig" ist **nicht** „0 Überstände" — das käme auch bei einer zu
+  großzügigen Rechnung heraus. Es ist `gesetzte Breite − (Bedarf + Chrome)`: hier
+  4,00…4,86 px, also exakt die Marge plus Aufrundungsrest, kein Loch und kein Überschuss.
+
+---
+
+## 🐛 Bug #8: `completed` unterscheidet nicht zwischen erledigt und verschoben (18.08.2026)
+
+### Problem
+Das Verschieben wurde an bereits **erledigten** Aufgaben angeboten. Die Vorauswahl
+rechnete dann von heute statt von der letzten Erledigung, und `postponed_until` schaltet
+gleichzeitig die Kadenz-Weckklausel ab — die Aufgabe kam Wochen zu früh zurück.
+
+### Root Cause
+`postponeTask` setzt **selbst** `completed: true`. Auf der Spalte `tasks.completed` sind
+„erledigt" und „verschoben" damit ununterscheidbar. Wer `completed` als Wächter benutzt,
+trifft immer beide Zustände.
+
+### Symptome
+- Ein Wächter auf `completed` wirkt richtig und schaltet trotzdem den falschen Fall ab
+- Fünf aufeinanderfolgende Ursachenerzählungen zu **einem** korrekt gemessenen
+  Endzustand — drei davon rückwärts aus Zahlen und Code rekonstruiert
+
+### Lösung
+An der **Aufrufstelle** entschieden, nicht in der Prüffunktion:
+`canPostpone(task) && (!task.completed || task.postponed_until !== null)`.
+Der erste Entwurf (`&& !completed`) hätte im klassischen Aussehen das Ändern eines
+gesetzten Verschiebe-Datums ersatzlos gestrichen.
+
+### Prävention
+- **Ein Ersatzsignal dort nachlesen, wo es geschrieben wird**, nicht wo es gelesen wird.
+- Folgt eine gemessene Zahl nicht aus dem Code, ist die fehlende **Bedienreihenfolge**
+  die erste Hypothese — und die steht im Verlauf, nicht im Bericht. Die 87 Tage dieses
+  Falls waren am Ende ein Testartefakt (Kadenz nach dem Verschieben geändert).
+
+---
+
+## 🐛 Bug #9: Edge Function seit acht Monaten nicht deployt (18.08.2026) — Wiederholung von Bug #2
+
+### Problem
+`complete-task` lief in Produktion als **v21 vom 22.12.2025**. Der ausgelieferte
+Funktionsrumpf enthielt **null** Vorkommen des neuen Feldes `emphasis_level`. Der
+häufigste Reset-Pfad — jede normale und einmalige Aufgabe — hat nie gefeuert.
+
+### Root Cause
+`npx supabase db push` deployt keine Edge Functions. **Bug #2 wusste das bereits** und
+führt „Edge Function deployen" als Schritt 6 seiner Checkliste — die Erkenntnis stand
+aber nur hier, nicht in `docs/migrations.md` oder `CLAUDE.md`, also nicht dort, wo beim
+Arbeiten nachgeschlagen wird. Mit dem Nachhol-Deploy ging außerdem ein Commit vom
+02.01.2026 live, der ebenfalls nie deployt war.
+
+### Symptome
+- **Der Fehler ist still**: die Function antwortet weiter mit `HTTP 200`, schreibt alles
+  Alte korrekt und lässt nur das Neue weg
+- Mit optimistischer Anzeige sieht es kurz sogar richtig aus, bis das Nachladen den
+  alten Serverwert zurückholt und der Wert sichtbar zurückspringt
+- Ein Prüfschritt kann dadurch „bestanden" heißen, weil seine **Vorbedingung nie
+  eintrat** — hier: „Zurückkleben stellt den Wert wieder her", wo der Wert nie 0 wurde
+
+### Lösung
+`npx supabase functions deploy complete-task`. Der Schritt steht jetzt in
+`docs/migrations.md` **und** `CLAUDE.md`, samt Prüfanweisung.
+
+### Prävention
+- Nach dem Deploy die Version aus `npx supabase functions list` gegen das Commit-Datum
+  halten. **Ein Deploy, der durchlief, ist nicht dasselbe wie eine Function, die das
+  Neue enthält.**
+- Vor der Deutung eines Messergebnisses prüfen, ob der geänderte Code überhaupt
+  ausgeliefert wird — sonst misst man denselben stillen Fehlzustand zweimal und deutet
+  ihn beim zweiten Mal falsch herum.
+- **Eine Lehre gehört dorthin, wo gearbeitet wird.** Dass sie in dieser Datei steht,
+  hat die Wiederholung nicht verhindert.
+
+---
+
 ## 📝 Template für neue Bug-Einträge
 
 ```markdown
