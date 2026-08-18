@@ -114,13 +114,30 @@ const EDGE = 6
  * aber die nächste Änderung an Schriftgröße oder Innenabstand hätte darüber
  * entschieden. Mit 4 px lag derselbe Wert bei rund 3,5 px.
  *
- * **Nachgemessen mit `chromeWidth`:** bei den 29 Zetteln, die ihre volle
+ * **Nachgemessen mit `chromeWidth`:** bei den 15 Zetteln, die ihre volle
  * `natural`-Breite bekommen, liegt die Restluft gegen die bindende Größe bei
- * 4,00…4,86 px — diese 4 px plus der `Math.ceil`-Rest. Die übrigen 31 sind
- * durch den 45-%-Deckel oder den Streifenfüller **absichtlich** schmaler als
- * einzeilig; für sie zählt allein die Fußzeilen-Untergrenze, und die hält über
- * **alle** 60 Zettel mit mindestens 4,00 px Luft. 4 px ist damit die richtige
- * Größenordnung, nicht nur eine Vermutung.
+ * 4,00…4,86 px — diese 4 px plus der `Math.ceil`-Rest.
+ *
+ * Die übrigen 45 weichen in ZWEI Richtungen ab, nicht nur in einer: die einen
+ * sind durch den 45-%-Deckel oder den Streifenfüller **absichtlich** schmaler
+ * als einzeilig, die anderen umgekehrt BREITER als der Deckel, weil ihr
+ * `minimum` ihn sticht — `defaultNoteWidth` kann nur anheben, nie unter
+ * `natural` drücken. Wie viele auf jede Gruppe entfallen, ist nicht gezählt.
+ *
+ * Dieses `minimum` ist auch nicht mehr allein fußzeilengetrieben: seit
+ * `cornerExtra` in der oberen Fassung mitzählt (Ticket 12, siehe `relayout`),
+ * bindet bei 27 von 60 Zetteln `titleMinimum + cornerExtra`. Bei dreien wirkt
+ * es bis in die gesetzte Breite durch — „QC-LANGTITEL: Fenster im
+ * Wohnzimmer…" steht auf 163 statt 161 px, und 163 = ⌈99,5 + 41 + 18⌉ + 4 ist
+ * eine reine Titelrechnung, in der die Fußzeile gar nicht vorkommt.
+ *
+ * Die Fußzeilen-Untergrenze selbst hält über **alle** 60 Zettel mit mindestens
+ * 4,00 px Luft. 4 px ist damit die richtige Größenordnung, nicht nur eine
+ * Vermutung.
+ *
+ * 15 und 45 sind keine Konstanten: sie gelten für `wall.clientWidth = 370`,
+ * wo der 45-%-Deckel bei 161 px liegt. Bei anderer Wandbreite fällt die
+ * Aufteilung anders aus.
  *
  * Die 3,5 px im Absatz davor sind **nicht dieselbe Größe**: sie stammen von
  * vor `chromeWidth` und messen den Platz, den der Titel tatsächlich hatte, in
@@ -372,10 +389,14 @@ const relayout = (animate: boolean, anchorId?: string) => {
     // --- Punktwert oben rechts? (Karten-Redesign, Ticket 00a, Handoff
     // Punkt 6) ----------------------------------------------------------
     //
-    // Nur wenn die Fußzeile sonst breiter als der Titel wäre — sonst bliebe
-    // oben ungenutzter Platz, während die Fußzeile den Zettel aufbläht.
-    // Titel UND Fußzeile stehen dafür auf `max-content` (Regeln dazu in
-    // `WallNote.vue`, `.zettel--measuring .title`/`.foot`).
+    // Der Sticker wandert nach oben, wenn der Zettel DADURCH schmaler wird.
+    // Nicht schon dann, wenn die Fußzeile breiter als der Titel ist: oben
+    // kostet er `cornerExtra` (er verengt den Titelkasten, siehe dort), unten
+    // kostet er `pointsWidth` plus `gap`. Verglichen werden deshalb die beiden
+    // Breiten, die der Zettel wirklich BEKÄME — und zwar die geplanten, nicht
+    // die gewünschten (siehe `defaultNoteWidth` unten). Titel UND Fußzeile
+    // stehen für die Messung auf `max-content` (Regeln dazu in `WallNote.vue`,
+    // `.zettel--measuring .title`/`.foot`).
     //
     // **`zettel--meta-top` gehört AUSSCHLIESSLICH Vue** (Prop `metaTop`,
     // siehe `metaTopIds` oben und `WallNote.vue`). Weder `add`/`toggle` NOCH
@@ -405,7 +426,26 @@ const relayout = (animate: boolean, anchorId?: string) => {
     const visiblePointsEl = wasMetaTop
       ? el.querySelector<HTMLElement>('.corner .points')
       : el.querySelector<HTMLElement>('.foot > .points')
+
+    // Der Sticker klebt SCHIEF (`.points { transform: rotate(-6deg) }`, der
+    // Stern `-10deg`). `getBoundingClientRect()` liefert das Rechteck NACH der
+    // Transformation, also den gedrehten Umriss — für das Layout zählt aber
+    // die ungedrehte Breite: eine Drehung verschiebt nichts im Fluss. QC
+    // gemessen: 37,37 statt 34,00 px, beim Stern 45,29 statt 39,09 px. Die
+    // Differenz ginge in `cornerExtra` UND in `footWidthFull` ein und machte
+    // jeden Zettel mit Sticker oben rund 3 px zu breit.
+    //
+    // Die Neigung wird für den Moment der Messung per Inline-Style
+    // abgeschaltet und danach zurückgenommen (`''`, denn im Ruhezustand steht
+    // dort nichts) — dasselbe Muster wie bei `.title` und `min-content` unten.
+    // `offsetWidth` wäre der falsche Ausweg: es rundet auf ganze Zahlen ab,
+    // wogegen der Kommentar am Kopf dieses Messblocks steht. Und
+    // `zettel--measuring` hilft hier nicht: dessen `transform: none` gilt für
+    // den ZETTEL, nicht für den Sticker.
+    if (visiblePointsEl) visiblePointsEl.style.transform = 'none'
     const pointsWidth = visiblePointsEl?.getBoundingClientRect().width ?? 0
+    if (visiblePointsEl) visiblePointsEl.style.transform = ''
+
     // Ob die Fußzeile außer dem Punktwert noch etwas trägt (Unteraufgaben-
     // Zeichen, Stempel) — entscheidet, ob beim Herausrechnen des Punktwerts
     // ein Flex-`gap` mitzählt: ein `gap` entsteht nur ZWISCHEN Geschwistern,
@@ -417,34 +457,160 @@ const relayout = (animate: boolean, anchorId?: string) => {
       ? footWidthCurrent
       : Math.max(0, footWidthCurrent - pointsWidth - footGap)
 
-    const metaTop = footWidthFull > titleWidth + 1
-    if (metaTop) nextMetaTopIds.add(task.task_id)
-
-    // **Zweiter, unabhängiger Punkt (ebenfalls QC-Befund):** `natural`/
-    // `minimum` müssen die Fußzeilenbreite verwenden, die zu der GERADE
-    // GETROFFENEN Entscheidung `metaTop` gehört — NICHT die von `wasMetaTop`.
-    // Ändert sich die Entscheidung in diesem Lauf, rendert der Zettel gleich
-    // mit der jeweils ANDEREN Fußzeile, und die Breitenplanung muss dafür
-    // Platz einräumen, nicht für die, die gerade verschwindet.
-    const correctedFootWidth = metaTop ? footWidthWithoutPoints : footWidthFull
-
-    // `natural`: der Titel einzeilig (`zettel--single-line`, noch aktiv),
-    // mindestens so breit wie die Fußzeile es verlangt, plus die Chrome von
-    // `.zettel` selbst (siehe `chromeWidth` oben) — ohne sie fehlt der
-    // gesetzten Border-Box-Breite genau der Rand, den Rahmen und Innenabstand
-    // brauchen.
-    const natural = Math.ceil(Math.max(titleWidth, correctedFootWidth) + chromeWidth) + MEASURE_SAFETY
-
-    // `minimum`: dieselbe Fußzeilen-Untergrenze, aber der Titel darf jetzt an
-    // Wortgrenzen umbrechen — gemessen wird `.title` SELBST auf `min-content`
-    // gestellt (nicht mehr der ganze Zettel, dessen Breite von der jetzt
-    // Vue-exklusiven `zettel--meta-top`-Klasse mitbestimmt würde). Auch hier
-    // zählt `chromeWidth` dazu — dieselbe Begründung wie bei `natural`.
+    // Die Breite, unter der ein Wort abgeschnitten würde — `.title` SELBST auf
+    // `min-content` gestellt (nicht der ganze Zettel, dessen Breite von der
+    // jetzt Vue-exklusiven `zettel--meta-top`-Klasse mitbestimmt würde).
+    // Steht HIER und nicht mehr hinter der Entscheidung, weil die Entscheidung
+    // sie inzwischen braucht: `defaultNoteWidth` klemmt nach unten gegen
+    // `minimum`, und `minimum` hängt an dieser Messung.
     el.classList.remove('zettel--single-line')
     if (titleEl) titleEl.style.width = 'min-content'
     const titleMinimum = titleEl?.getBoundingClientRect().width ?? titleWidth
     if (titleEl) titleEl.style.width = ''
-    const minimum = Math.ceil(Math.max(titleMinimum, correctedFootWidth) + chromeWidth) + MEASURE_SAFETY
+
+    // Was der Sticker OBEN kostet.
+    //
+    // Der Anlass (Ticket 12): ohne diesen Zuschlag setzten **21 von 60**
+    // Zetteln ihren Titel mehrzeilig, obwohl sie ihre volle natürliche Breite
+    // hatten — die Messung beschrieb einen Titel, den es so nie gab. Mit ihm
+    // sind es 0 von 60. An dieser Spanne merkt der Nächste, ob die Korrektur
+    // noch trägt.
+    //
+    // `.corner` ist in `WallNote.vue` ein `float: right` in `.head`
+    // (`display: flow-root`) — der Titel steht aber NICHT „um ihn herum": weil
+    // `.title` mit `overflow: hidden` einen eigenen Block-Formatierungskontext
+    // öffnet, darf sein Kasten den Float-Margin-Kasten nicht überlappen. Der
+    // Titel wird deshalb über seine GANZE Höhe schmaler, nicht nur in der
+    // ersten Zeile — der Text steht in einer verengten Spalte neben dem
+    // Sticker, jede Zeile gleich kurz. QC-Beleg: `head.clientWidth −
+    // title.clientWidth` ist bei jedem `metaTop`-Zettel die Breite dieser Ecke
+    // und bei allen anderen 0 — gemessen 41 bei 36 Zetteln und 46 bei zweien.
+    //
+    // Die Ecke ist also NICHT über alle Zettel gleich breit: die beiden
+    // Ausreißer sind die Fünf-Punkte-Sterne, die `.points--s5` auf 39,1 statt
+    // 34 px verbreitert. Wer hier mit einer festen 41 rechnet, rechnet für
+    // jeden Stern falsch.
+    //
+    // Die beiden Zahlen sind ganzzahlig, weil `clientWidth` es ist — der
+    // Zähler zeigt den gerundeten Wert, nicht den gerechneten. `cornerExtra`
+    // selbst ergibt 41,000 bzw. 46,094 px; die fehlenden 0,094 px des Sterns
+    // sind keine Abweichung, sondern die Auflösung des Messwerkzeugs.
+    //
+    // Verengt wird um die Sticker-Breite plus dessen waagerechte Ränder
+    // (`.corner { margin: -1px 0 2px 7px }`: links 7 px, rechts 0).
+    //
+    // Gemessen, nicht verdrahtet — dieselbe Begründung wie bei `chromeWidth`:
+    // eine Konstante `41` liefe bei der nächsten Änderung an Sticker-Größe
+    // oder Rand still auseinander, und sie stimmte ohnehin nur für vier der
+    // fünf Sticker-Formen (der Stern ist breiter, `.points--s5`).
+    //
+    // `getComputedStyle` für die Ränder und NICHT `getBoundingClientRect`:
+    // ohne `zettel--meta-top` ist `.corner` `display: none` und liefert ein
+    // Rechteck der Breite 0. Ein Rand in px ist dagegen ohne Layout auflösbar
+    // und kommt auch bei `display: none` richtig heraus. Kurz einschalten
+    // wäre keine Alternative — die Klasse gehört ausschließlich Vue (siehe
+    // oben).
+    const cornerEl = el.querySelector<HTMLElement>('.corner')
+    const cornerStyle = cornerEl ? getComputedStyle(cornerEl) : null
+    const cornerMargins = cornerStyle
+      ? parseFloat(cornerStyle.marginLeft) + parseFloat(cornerStyle.marginRight)
+      : NaN
+    // Zwei Ausfälle, beide nur erreichbar, wenn `WallNote` sein Markup
+    // ändert — der Vollständigkeit halber, nicht weil sie vorkommen:
+    // - Ohne `.corner` im DOM (oder mit Rändern, die nicht als Zahl
+    //   herauskommen) ist `cornerExtra` 0. Der Sticker oben kostet dann
+    //   rechnerisch nichts, und es entscheidet wieder allein die Fußzeile —
+    //   also die zu großzügige Rechnung von VOR diesem Ticket, kein sicherer
+    //   Wert.
+    // - Findet sich kein sichtbarer Sticker, ist `pointsWidth` 0 und
+    //   `cornerExtra` gleich dem Rand allein (7 px). Der Zettel wird oben
+    //   dann nie schmaler als unten, `metaTop` ist immer `false` — der
+    //   Punktwert bliebe dauerhaft in der Fußzeile.
+    const cornerExtra = Number.isFinite(cornerMargins) ? pointsWidth + cornerMargins : 0
+
+    // Die beiden Fassungen des Zettels, zwischen denen die Entscheidung wählt.
+    // Jede rechnet mit IHRER Fußzeile — die eine ohne Punktwert (der steht
+    // dann oben), die andere mit. Dass `natural`/`minimum` zur GERADE
+    // getroffenen Entscheidung passen und nicht zur vorigen (`wasMetaTop`),
+    // ist damit strukturell erledigt: unten wird eine der beiden Fassungen
+    // GANZ übernommen, es gibt keine dritte Rechnung mehr, die auseinander
+    // laufen könnte.
+    //
+    // Beide Fassungen enthalten:
+    // - `natural`: der Titel einzeilig, mindestens so breit wie die Fußzeile
+    //   es verlangt;
+    // - `minimum`: derselbe Boden, aber der Titel darf an Wortgrenzen
+    //   umbrechen;
+    // - `chromeWidth`: Rahmen und Innenabstand von `.zettel` selbst (siehe
+    //   oben) — ohne sie fehlt der gesetzten Border-Box-Breite genau der Rand,
+    //   den Rahmen und Innenabstand brauchen;
+    // - `MEASURE_SAFETY`: die Rundungsmarge, Begründung dort.
+    //
+    // `cornerExtra` zählt in der oberen Fassung zu BEIDEN Titelmaßen. Auch zu
+    // `minimum`: der Titelkasten ist über seine ganze Höhe um `cornerExtra`
+    // verengt (siehe oben), das längste Wort muss also in die VERENGTE Spalte
+    // passen — sonst schneidet `text-overflow: ellipsis` es still ab, obwohl
+    // `minimum` genau für dieses Wort berechnet war. QC-Negativkontrolle mit
+    // ersetztem Titeltext: ohne diesen Zuschlag werden 14, 23 und 35 px
+    // abgeschnitten, mit ihm 0.
+    //
+    // **Gratis ist die Zusage nicht**, auch wenn sie meist folgenlos bleibt:
+    // der Zuschlag hebt `minimum` der oberen Fassung bei 27 von 60 Zetteln um
+    // 3…47 px, ändert dadurch bei 9 die geplante Breite, und 3 davon stehen am
+    // Ende wirklich mit Sticker oben und sind breiter als ohne ihn (161 → 163,
+    // 161 → 179, 220 → 223 px, live gemessen). Die ENTSCHEIDUNG `metaTop`
+    // kippt dabei bei keinem einzigen Zettel. Wer sich später fragt, warum
+    // drei Zettel breiter sind als ihr Titel verlangt: das ist der Preis
+    // dafür, dass kein Wort still abgeschnitten wird.
+    const shapeWithMetaTop: WallNoteShape = {
+      id: task.task_id,
+      natural:
+        Math.ceil(Math.max(titleWidth + cornerExtra, footWidthWithoutPoints) + chromeWidth) +
+        MEASURE_SAFETY,
+      minimum:
+        Math.ceil(Math.max(titleMinimum + cornerExtra, footWidthWithoutPoints) + chromeWidth) +
+        MEASURE_SAFETY
+    }
+    const shapeWithMetaFoot: WallNoteShape = {
+      id: task.task_id,
+      natural: Math.ceil(Math.max(titleWidth, footWidthFull) + chromeWidth) + MEASURE_SAFETY,
+      minimum: Math.ceil(Math.max(titleMinimum, footWidthFull) + chromeWidth) + MEASURE_SAFETY
+    }
+
+    // Entschieden wird gegen die Breite, die TATSÄCHLICH herauskommt — nicht
+    // gegen die gewünschte. Der Unterschied ist der 45-%-Deckel: übersteigen
+    // beide Fassungen ihn, sind sie in Wahrheit gleich breit, und dann ist der
+    // Sticker oben die schlechtere Wahl, weil er dem Titel bei identischer
+    // Zettelbreite `cornerExtra` je Zeile wegnimmt, ohne dass der Zettel dafür
+    // schmaler würde. Ein QC hat genau das gemessen: mit der gewünschten
+    // Breite als Maßstab wurden 13 Zettel um 13…20 px breiter, ohne eine Zeile
+    // zu gewinnen — die Wand wuchs dadurch um 13,4 % in der Höhe, obwohl die
+    // Zettel zusammen 5 % niedriger waren.
+    //
+    // Das ist ein Beleg, keine Zusage: die Regel minimiert die Breite des
+    // EINZELNEN Zettels und schaut nie auf die Wandhöhe — auch nicht auf die
+    // Höhe des Zettels selbst. Ein schmaler Zettel ist ein hoher Zettel: acht
+    // Zettel sind seit dieser Runde sechs- oder siebenzeilig (vorher einer).
+    // Vom Nutzer gesehen und so entschieden — die Wand ist unterm Strich
+    // kürzer (3548,12 gegen 3596,72 gemessen). Wer hier später Höhe
+    // optimieren will, baut eine andere Regel, nicht diese um.
+    //
+    // Benutzt wird die ECHTE Regel aus `wallLayout.ts` statt einer Kopie des
+    // Deckels an dieser Stelle. Eine zweite Fassung derselben Entscheidung ist
+    // genau die Fehlerklasse, um die es hier geht.
+    //
+    // Bei Gleichstand bleibt der Sticker UNTEN: `<`, nicht `<=`. Beide Werte
+    // sind ganze Pixel, der Umzug muss also mindestens 1 px echt einsparen.
+    // Dass die Fußzeile dabei nie abgeschnitten wird, garantiert `minimum` —
+    // `defaultNoteWidth` klemmt nach unten nie darunter.
+    const widthWithMetaTop = defaultNoteWidth(shapeWithMetaTop, usableWidth)
+    const widthWithMetaFoot = defaultNoteWidth(shapeWithMetaFoot, usableWidth)
+
+    const metaTop = widthWithMetaTop < widthWithMetaFoot
+    if (metaTop) nextMetaTopIds.add(task.task_id)
+
+    // Eine der beiden Fassungen wird GANZ übernommen — kein Nachrechnen.
+    const shape = metaTop ? shapeWithMetaTop : shapeWithMetaFoot
 
     el.classList.remove('zettel--measuring')
     el.style.maxWidth = ''
@@ -452,7 +618,7 @@ const relayout = (animate: boolean, anchorId?: string) => {
 
     const lineHeight = titleEl ? parseFloat(getComputedStyle(titleEl).lineHeight) : NaN
 
-    shapes.push({ id: task.task_id, natural, minimum })
+    shapes.push(shape)
     elements.set(task.task_id, el)
     // Ohne brauchbare Zeilenhöhe gibt es keine Zeilenobergrenze — dann bleibt
     // es bei der natürlichen Breite (siehe Schritt 3).

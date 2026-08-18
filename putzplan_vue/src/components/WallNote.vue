@@ -682,9 +682,25 @@ const handlePostponeConfirm = async (targetDate: string) => {
          sichtbar ist immer nur eine der beiden Stellen, gesteuert über
          `zettel--meta-top` (Prop `metaTop`, siehe Skript und `WallView`). -->
     <div class="head">
-      <!-- Schwimmt nach rechts, der Titel fließt darum herum: ein kurzer
-           Titel steht daneben, ein langer läuft darunter weiter — beides ohne
-           eigene Messung. Nur sichtbar mit `zettel--meta-top`. -->
+      <!-- Schwimmt nach rechts — der Titel fließt aber NICHT darum herum:
+           `.title` öffnet mit `overflow: hidden` einen eigenen Block-
+           Formatierungskontext, und ein solcher Kasten darf den Float-Kasten
+           nicht überlappen. Der Titel steht deshalb über seine GANZE Höhe in
+           einer um die Ecke verengten Spalte; auch die zweite und dritte
+           Zeile bleiben kurz, keine läuft unter der Ecke weiter. QC-Beleg:
+           `head.clientWidth − title.clientWidth` ist ohne `zettel--meta-top`
+           0 und mit ihr genau die Breite dieser Ecke — gemessen 41 px bei 36
+           Zetteln und 46 px bei zwei Zetteln mit Fünf-Punkte-Stern, den
+           `.points--s5` breiter macht. Die Ecken sind also NICHT alle gleich
+           breit.
+
+           Das ist eine echte Kopplung, kein Nebeneffekt: wer das
+           `overflow: hidden` an `.title` wegräumt, nimmt nicht nur die
+           Ellipse-Klemme mit (Begründung dort), sondern verändert auch die
+           Form dieses Kopfes — und die Breitenmessung in `WallView`
+           (`cornerExtra`) rechnet dann für ein Layout, das es nicht mehr gibt.
+
+           Nur sichtbar mit `zettel--meta-top`. -->
       <div class="corner">
         <span class="points" :class="`points--s${Math.min(5, Math.max(0, effectivePoints))}`">
           {{ effectivePoints }}
@@ -1008,8 +1024,9 @@ const handlePostponeConfirm = async (targetDate: string) => {
 /* --- Kopf: Titel plus die Ecke oben rechts (Ticket 00a) -------------------- */
 
 /* Der Zettel selbst ist ein Flex-Container; ein `float` wäre darin
-   wirkungslos. Der Kopf ist deshalb ein eigener Block — nur dort fließt der
-   Titel um die Ecke herum.
+   wirkungslos. Der Kopf ist deshalb ein eigener Block — nur dort wirkt der
+   Float der Ecke überhaupt. UMFLOSSEN wird sie dabei nicht: der Titel steht
+   in einer verengten Spalte daneben (Begründung am `.corner` im Template).
 
    `flow-root`, nicht `block`: die Ecke (34 px hoch) kann höher sein als eine
    einzeilige Titelzeile (~18 px) — bei einem kurzen Titel wie „Müll" mit
