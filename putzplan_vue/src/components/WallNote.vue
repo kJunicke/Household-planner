@@ -795,7 +795,11 @@ const handlePostponeConfirm = async (targetDate: string) => {
   /* Rechts bleibt Platz für den Bearbeiten-Knopf, der als einziges Element
      noch absolut sitzt. Unten reserviert nichts mehr Platz — die Fußzeile
      steht im Fluss. */
-  padding: var(--proto-pad, 6px 36px 5px 8px);
+  /* PROTOTYP: rechts oben ist nichts mehr reserviert — der Titel bekommt die
+     ganze obere Kante. Unten liegt die Griffzeile (Stift + Eselsohr); wie viel
+     Platz sie braucht, haengt davon ab, ob die Fusszeile sich die Zeile teilt. */
+  padding: 6px 8px 5px 8px;
+  padding-bottom: var(--proto-bottom, 5px);
   min-height: 44px;
   text-align: left;
   will-change: transform;
@@ -813,7 +817,7 @@ const handlePostponeConfirm = async (targetDate: string) => {
 
 .title {
   margin: 0;
-  font-size: var(--proto-title, 13px);
+  font-size: calc(13px * var(--proto-scale, 1));
   font-weight: 800;
   line-height: 1.15;
   letter-spacing: -0.15px;
@@ -845,7 +849,10 @@ const handlePostponeConfirm = async (targetDate: string) => {
   align-items: baseline;
   gap: 6px;
   margin-top: 2px;
-  font-size: var(--proto-foot, 10px);
+  /* PROTOTYP: rechts stehen Stift und Eselsohr. Teilt sich die Fusszeile die
+     Zeile mit ihnen, muss sie deren Breite freihalten. */
+  padding-right: var(--proto-foot-reserve, 0px);
+  font-size: calc(10px * var(--proto-scale, 1));
   font-weight: 800;
   line-height: 1.1;
   letter-spacing: 0.3px;
@@ -922,7 +929,7 @@ const handlePostponeConfirm = async (targetDate: string) => {
   border: 1.5px solid var(--pw-line);
   border-radius: 2px;
   box-shadow: 2px 2px 0 rgba(36, 31, 26, 0.42);
-  font-size: var(--proto-sub, 12px);
+  font-size: calc(12px * var(--proto-scale, 1));
   font-weight: 700;
   line-height: 1.15;
 }
@@ -935,7 +942,7 @@ const handlePostponeConfirm = async (targetDate: string) => {
 .subs--c3 .mini {
   flex-basis: calc(33.333% - 4.667px);
   padding: 6px 42px 6px 10px;
-  font-size: var(--proto-sub-c3, 11.5px);
+  font-size: calc(11.5px * var(--proto-scale, 1));
 }
 
 .subs--c3 {
@@ -951,7 +958,7 @@ const handlePostponeConfirm = async (targetDate: string) => {
 }
 
 .mini-points {
-  font-size: var(--proto-sub-foot, 9.5px);
+  font-size: calc(9.5px * var(--proto-scale, 1));
   font-weight: 800;
   letter-spacing: 0.3px;
   color: var(--pw-ink-soft);
@@ -1134,19 +1141,27 @@ const handlePostponeConfirm = async (targetDate: string) => {
    gemessen liegt der sichtbare Knick zu 97,7 % im Eselsohr, ein Griff dorthin
    öffnet also auch kein Modal mitten in der Geste. */
 .edit {
+  /* PROTOTYP: unten rechts, unmittelbar LINKS neben dem Eselsohr (44 px).
+     Die untere rechte Ecke ist ohnehin die Griff-Ecke des Zettels — dort
+     sucht der Daumen, und oben wird eine ganze Titelzeile frei.
+
+     Der Glyph fuellt seine Flaeche jetzt aus (`place-items: center`) statt in
+     ihrer Ecke zu sitzen: gezielt wird auf das Sichtbare, nicht auf die
+     unsichtbare Flaeche darum herum. */
   position: absolute;
-  top: 0;
-  right: 0;
-  width: 40px;
-  height: 40px;
-  padding: 1px 0 0 4px;
+  top: auto;
+  bottom: 0;
+  right: 44px;
+  width: var(--proto-edit-hit, 48px);
+  height: var(--proto-edit-hit, 48px);
+  padding: 0;
   border: 0;
   background: none;
   color: var(--pw-ink-soft);
-  font-size: 12px;
+  font-size: calc(var(--proto-edit-hit, 48px) * 0.42);
   line-height: 1;
   display: grid;
-  place-items: start start;
+  place-items: center center;
   cursor: pointer;
 }
 
@@ -1363,7 +1378,7 @@ const handlePostponeConfirm = async (targetDate: string) => {
 }
 
 .zettel--daily .title {
-  font-size: var(--proto-title-daily, 12.5px);
+  font-size: calc(12.5px * var(--proto-scale, 1));
 }
 
 .tape {
@@ -1394,7 +1409,7 @@ const handlePostponeConfirm = async (targetDate: string) => {
 }
 
 .zettel--project .title {
-  font-size: var(--proto-title-project, 15px);
+  font-size: calc(15px * var(--proto-scale, 1));
 }
 
 .clip {

@@ -2,38 +2,53 @@
 /**
  * PROTOTYP — WEGWERFCODE. Nicht Teil der App, nicht warten, nicht kopieren.
  *
- * Frage: Wie fühlt sich der Richtungskranz an, wenn er kein enger Chip-Kranz um
- * die Karte mehr ist, sondern ein ätherisches Vollbild-Overlay mit Kreisbögen an
- * den vier Bildschirmrändern?
+ * Entschieden ist die **Mechanik**: Vollbild-Overlay, Nebel am Rand der
+ * gewählten Richtung, kurzer Pfeil an der Karte. Offen ist die **Handschrift** —
+ * generisch-ätherisch oder etwas, das nach dieser App aussieht.
  *
- * Aufruf:  /proto-kranz?v=bogen | kranz | nebel | strahl
- * Die Leiste unten schaltet Variante, Ziehschwelle und Rand-Streuung um.
+ * Aufruf:  /proto-kranz?v=aether | tafel | skizze | kork
  */
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 
 type Dir = 'up' | 'down' | 'left' | 'right'
+type Style = 'aether' | 'tafel' | 'skizze' | 'kork'
 
 const route = useRoute()
 const router = useRouter()
 
-const VARIANTS = [
-  { key: 'bogen', label: 'Bögen am Rand' },
-  { key: 'kranz', label: 'Kreis, am Rand platt' },
-  { key: 'nebel', label: 'Randnebel' },
-  { key: 'strahl', label: 'Bögen + Strahl' }
-] as const
+const VARIANTS: Array<{ key: Style; label: string }> = [
+  { key: 'aether', label: 'Ätherisch' },
+  { key: 'tafel', label: 'Kreidetafel' },
+  { key: 'skizze', label: 'Tuschskizze' },
+  { key: 'kork', label: 'Pinnwand' }
+]
 
-const variant = computed(() => {
-  const v = String(route.query.v ?? 'bogen')
-  return VARIANTS.some(x => x.key === v) ? v : 'bogen'
+const variant = computed<Style>(() => {
+  const v = String(route.query.v ?? 'aether') as Style
+  return VARIANTS.some(x => x.key === v) ? v : 'aether'
 })
-const setVariant = (v: string) => router.replace({ query: { ...route.query, v } })
+const setVariant = (v: Style) => router.replace({ query: { ...route.query, v } })
+
+/** Was jede Handschrift anders macht. Alles andere ist identisch. */
+const SKIN: Record<Style, {
+  veil: string      // Schleier über der App
+  fog: string       // Farbe des Randnebels
+  ink: string       // Pfeil und Schrift
+  glow: boolean     // Weichzeichner an?
+}> = {
+  aether: { veil: 'rgba(18,24,38,0.38)', fog: '#cfe4ff', ink: '#ffffff', glow: true },
+  tafel:  { veil: 'rgba(26,46,38,0.82)', fog: '#eaf6ec', ink: '#f4fbf5', glow: true },
+  skizze: { veil: 'rgba(253,241,201,0.80)', fog: '#241f1a', ink: '#241f1a', glow: false },
+  kork:   { veil: 'rgba(36,31,26,0.55)', fog: '#e9d48a', ink: '#241f1a', glow: false }
+}
+const skin = computed(() => SKIN[variant.value])
+const filt = computed(() => (skin.value.glow ? 'url(#glow)' : undefined))
 
 // --- Stellschrauben ---------------------------------------------------------
-const commit = ref(48)      // Ziehstrecke bis eine Richtung anliegt
-const scatter = ref(true)   // Randabstand der Karten links/rechts streuen
-const onlyDown = ref(false) // Projekte-Fall: nur die Grundrichtung
+const commit = ref(48)
+const scatter = ref(true)
+const onlyDown = ref(false)
 
 const LABELS: Record<Dir, string> = {
   down: 'erledigen',
@@ -41,6 +56,19 @@ const LABELS: Record<Dir, string> = {
   left: 'zuweisen',
   right: 'Aufwand anpassen'
 }
+
+/**
+ * Zweizeilig statt einzeilig: „Aufwand anpassen" passt am rechten Rand nicht
+ * in eine Zeile, ohne aus dem Fenster zu laufen. Umbrechen loest das, ohne
+ * dass der Text gedreht oder gekuerzt werden muss.
+ */
+const LINES: Record<Dir, string[]> = {
+  down: ['erledigen'],
+  up: ['verschieben'],
+  left: ['zuweisen'],
+  right: ['Aufwand', 'anpassen']
+}
+const LINE_H = 17
 const dirs = computed<Dir[]>(() => (onlyDown.value ? ['down'] : ['down', 'up', 'left', 'right']))
 
 // --- Fake-Zettel ------------------------------------------------------------
@@ -64,7 +92,6 @@ const edgeOf = (n: { jitter: number }) =>
 const open = ref(false)
 const dir = ref<Dir | null>(null)
 const anchor = ref<{ x: number; y: number } | null>(null)
-const tip = ref<{ x: number; y: number } | null>(null)
 const toast = ref('')
 
 let timer: number | null = null
@@ -78,7 +105,7 @@ const reset = () => {
   if (timer !== null) { clearTimeout(timer); timer = null }
   if (open.value && el?.hasPointerCapture?.(pid)) el.releasePointerCapture(pid)
   active = false; el = null; pid = -1
-  open.value = false; dir.value = null; anchor.value = null; tip.value = null
+  open.value = false; dir.value = null; anchor.value = null
 }
 
 const onDown = (e: PointerEvent) => {
@@ -92,7 +119,6 @@ const onDown = (e: PointerEvent) => {
     if (!active) return
     const r = el!.getBoundingClientRect()
     anchor.value = { x: r.left + r.width / 2, y: r.top + r.height / 2 }
-    tip.value = { x: sx, y: sy }
     open.value = true
     try { el?.setPointerCapture?.(pid) } catch { /* egal */ }
   }, 420)
@@ -115,7 +141,6 @@ const onMove = (e: PointerEvent) => {
     if (Math.abs(dx) > 10 || Math.abs(dy) > 10) reset()
     return
   }
-  tip.value = { x: e.clientX, y: e.clientY }
   dir.value = pick(dx, dy)
   e.preventDefault()
 }
@@ -134,7 +159,7 @@ const onTouchMove = (e: TouchEvent) => {
   if (open.value && e.cancelable) e.preventDefault()
 }
 
-// --- Geometrie des Overlays -------------------------------------------------
+// --- Geometrie --------------------------------------------------------------
 const vw = ref(0)
 const vh = ref(0)
 const sync = () => {
@@ -144,29 +169,51 @@ const sync = () => {
 onMounted(() => { sync(); window.addEventListener('resize', sync) })
 onUnmounted(() => { window.removeEventListener('resize', sync); reset() })
 
-const PAD = 26     // Abstand des Bogenendes zur Ecke
-const BULGE = 74   // wie weit der Bogen in den Bildschirm hineinwölbt
+const waagerecht = (d: Dir) => d === 'left' || d === 'right'
 
-/**
- * Ein Bogen je Richtung, als quadratische Kurve entlang der jeweiligen Kante.
- * Variante `kranz` zieht den Scheitel zur Karte hin — solange Platz ist; sonst
- * drückt ihn der Rand platt. Genau der Effekt, um den es geht.
- */
-const arc = (d: Dir) => {
+/** Mitte des Randbereichs je Richtung — dort sitzt Nebel und Beschriftung. */
+const edgePoint = (d: Dir) => {
   const w = vw.value, h = vh.value
-  const a = anchor.value
-  const R = 150
-  let bulge = BULGE
-  if (variant.value === 'kranz' && a) {
-    const room =
-      d === 'down' ? h - a.y : d === 'up' ? a.y : d === 'left' ? a.x : w - a.x
-    bulge = Math.max(28, Math.min(BULGE, room - (R - BULGE) < 0 ? BULGE : room - R + BULGE))
+  const IN = 56
+  if (d === 'down') return { x: w / 2, y: h - IN - 24 }
+  if (d === 'up') return { x: w / 2, y: IN }
+  if (d === 'left') return { x: IN, y: h / 2 }
+  return { x: w - IN, y: h / 2 }
+}
+
+/** Die Randbahn als Rechteck — für die stilisierten Fassungen (kork). */
+const band = (d: Dir) => {
+  const w = vw.value, h = vh.value
+  const T = 46
+  if (d === 'down') return { x: 0, y: h - T - 46, w, h: T }
+  if (d === 'up') return { x: 0, y: 0, w, h: T }
+  if (d === 'left') return { x: 0, y: 0, w: T, h }
+  return { x: w - T, y: 0, w: T, h }
+}
+
+const ARROW_GAP = 30
+const ARROW_LEN = 64
+const ARROW_HEAD = 15
+
+const arrow = (a: { x: number; y: number }, d: Dir) => {
+  const ux = d === 'left' ? -1 : d === 'right' ? 1 : 0
+  const uy = d === 'up' ? -1 : d === 'down' ? 1 : 0
+  const x1 = a.x + ux * ARROW_GAP
+  const y1 = a.y + uy * ARROW_GAP
+  const x2 = a.x + ux * (ARROW_GAP + ARROW_LEN)
+  const y2 = a.y + uy * (ARROW_GAP + ARROW_LEN)
+  const px = -uy, py = ux
+  const bx = x2 - ux * ARROW_HEAD, by = y2 - uy * ARROW_HEAD
+  const wingA = { x: bx + px * ARROW_HEAD * 0.7, y: by + py * ARROW_HEAD * 0.7 }
+  const wingB = { x: bx - px * ARROW_HEAD * 0.7, y: by - py * ARROW_HEAD * 0.7 }
+  return {
+    line: `M ${x1} ${y1} L ${x2} ${y2}`,
+    // leicht verzogene Zweitlinie — nur die Skizze nutzt sie
+    line2: `M ${x1 + px * 1.5} ${y1 + py * 1.5} L ${x2 - px * 2} ${y2 - py * 2}`,
+    head: `M ${x2} ${y2} L ${wingA.x} ${wingA.y} L ${wingB.x} ${wingB.y} Z`,
+    // offene Spitze, wie mit zwei Strichen gezeichnet
+    headOpen: `M ${wingA.x} ${wingA.y} L ${x2} ${y2} L ${wingB.x} ${wingB.y}`
   }
-  const inset = 34
-  if (d === 'down') return { path: `M ${PAD} ${h - inset - 26} Q ${w / 2} ${h - inset - 26 - bulge} ${w - PAD} ${h - inset - 26}`, mid: { x: w / 2, y: h - inset - 26 - bulge * 0.5 } }
-  if (d === 'up') return { path: `M ${PAD} ${inset} Q ${w / 2} ${inset + bulge} ${w - PAD} ${inset}`, mid: { x: w / 2, y: inset + bulge * 0.5 } }
-  if (d === 'left') return { path: `M ${inset} ${PAD} Q ${inset + bulge} ${h / 2} ${inset} ${h - PAD}`, mid: { x: inset + bulge * 0.5, y: h / 2 } }
-  return { path: `M ${w - inset} ${PAD} Q ${w - inset - bulge} ${h / 2} ${w - inset} ${h - PAD}`, mid: { x: w - inset - bulge * 0.5, y: h / 2 } }
 }
 </script>
 
@@ -194,62 +241,99 @@ const arc = (d: Dir) => {
       </div>
     </div>
 
-    <!-- Das Overlay: absolut über allem, unabhängig von der View -->
     <Teleport to="body">
-      <svg v-if="open" class="ov" :viewBox="`0 0 ${vw} ${vh}`" preserveAspectRatio="none">
+      <svg v-if="open" class="ov" :class="`ov--${variant}`" :viewBox="`0 0 ${vw} ${vh}`">
         <defs>
           <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
             <feGaussianBlur stdDeviation="6" result="b" />
             <feMerge><feMergeNode in="b" /><feMergeNode in="SourceGraphic" /></feMerge>
           </filter>
+          <!-- Kreidestaub: grob gekörnter Schein -->
+          <filter id="chalk" x="-50%" y="-50%" width="200%" height="200%">
+            <feTurbulence baseFrequency="0.9" numOctaves="3" result="n" />
+            <feDisplacementMap in="SourceGraphic" in2="n" scale="3" />
+            <feGaussianBlur stdDeviation="0.4" />
+          </filter>
           <radialGradient id="fog">
-            <stop offset="0%" stop-color="#cfe4ff" stop-opacity="0.55" />
-            <stop offset="100%" stop-color="#cfe4ff" stop-opacity="0" />
+            <stop offset="0%" :stop-color="skin.fog" stop-opacity="0.6" />
+            <stop offset="100%" :stop-color="skin.fog" stop-opacity="0" />
           </radialGradient>
+          <!-- Schraffur statt Nebel, für die Tuschfassung -->
+          <pattern id="hatch" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(35)">
+            <line x1="0" y1="0" x2="0" y2="7" stroke="#241f1a" stroke-width="1.4" />
+          </pattern>
         </defs>
 
-        <!-- Schleier: ohne ihn hat das aetherische Leuchten keinen Grund -->
-        <rect x="0" y="0" :width="vw" :height="vh" fill="rgba(18,24,38,0.38)" />
+        <rect x="0" y="0" :width="vw" :height="vh" :fill="skin.veil" />
 
         <template v-for="d in dirs" :key="d">
-          <!-- Randnebel-Variante: weicher Schein statt Linie -->
+          <!-- Randbereich: je Handschrift anders gemalt -->
+          <rect
+            v-if="variant === 'kork'"
+            :x="band(d).x" :y="band(d).y" :width="band(d).w" :height="band(d).h"
+            :fill="skin.fog"
+            :opacity="dir === d ? 1 : 0.25"
+            :stroke="dir === d ? '#241f1a' : 'none'"
+            stroke-width="2"
+          />
+          <rect
+            v-else-if="variant === 'skizze'"
+            :x="band(d).x" :y="band(d).y" :width="band(d).w" :height="band(d).h"
+            fill="url(#hatch)"
+            :opacity="dir === d ? 0.55 : 0.14"
+          />
           <ellipse
-            v-if="variant === 'nebel'"
-            :cx="arc(d).mid.x" :cy="arc(d).mid.y"
-            :rx="d === 'left' || d === 'right' ? 90 : vw * 0.6"
-            :ry="d === 'left' || d === 'right' ? vh * 0.6 : 90"
-            fill="url(#fog)"
-            :opacity="dir === d ? 1 : 0.35"
-          />
-          <path
             v-else
-            :id="`arc-${d}`"
-            :d="arc(d).path"
-            fill="none"
-            :stroke="dir === d ? '#ffffff' : '#cfe4ff'"
-            :stroke-width="dir === d ? 3 : 1.5"
-            :opacity="dir === d ? 1 : 0.4"
-            stroke-linecap="round"
-            filter="url(#glow)"
+            :cx="edgePoint(d).x" :cy="edgePoint(d).y"
+            :rx="waagerecht(d) ? 96 : vw * 0.62"
+            :ry="waagerecht(d) ? vh * 0.62 : 96"
+            fill="url(#fog)"
+            :opacity="dir === d ? 1 : 0.3"
+            :filter="variant === 'tafel' ? 'url(#chalk)' : undefined"
           />
-          <path :id="`p-${d}`" :d="arc(d).path" fill="none" stroke="none" />
+
           <text
             class="lab"
             :class="{ on: dir === d }"
-            :x="arc(d).mid.x" :y="arc(d).mid.y"
+            :fill="skin.ink"
+            :x="edgePoint(d).x"
+            :y="edgePoint(d).y - ((LINES[d].length - 1) * LINE_H) / 2"
             text-anchor="middle"
             dominant-baseline="middle"
-          >{{ LABELS[d] }}</text>
+          ><tspan
+              v-for="(line, i) in LINES[d]"
+              :key="line"
+              :x="edgePoint(d).x"
+              :dy="i === 0 ? 0 : LINE_H"
+            >{{ line }}</tspan></text>
         </template>
 
-        <!-- Strahl von der Karte zur anliegenden Richtung -->
-        <line
-          v-if="variant === 'strahl' && anchor && dir"
-          :x1="anchor.x" :y1="anchor.y"
-          :x2="arc(dir).mid.x" :y2="arc(dir).mid.y"
-          stroke="#ffffff" stroke-width="2" opacity="0.8" filter="url(#glow)"
-        />
-        <circle v-if="anchor" :cx="anchor.x" :cy="anchor.y" r="5" fill="#ffffff" opacity="0.9" />
+        <!-- Der kurze Pfeil an der Karte -->
+        <template v-if="anchor && dir">
+          <template v-if="variant === 'skizze'">
+            <path :d="arrow(anchor, dir).line" :stroke="skin.ink" stroke-width="2.4"
+                  stroke-linecap="round" fill="none" />
+            <path :d="arrow(anchor, dir).line2" :stroke="skin.ink" stroke-width="1.2"
+                  stroke-linecap="round" fill="none" opacity="0.6" />
+            <path :d="arrow(anchor, dir).headOpen" :stroke="skin.ink" stroke-width="2.4"
+                  stroke-linecap="round" stroke-linejoin="round" fill="none" />
+          </template>
+          <!-- Kreidepfeil: kraeftiger Schaft plus Spitze, koernig gefiltert -->
+          <template v-else-if="variant === 'tafel'">
+            <g filter="url(#chalk)" opacity="0.92">
+              <path :d="arrow(anchor, dir).line" :stroke="skin.ink" stroke-width="6"
+                    stroke-linecap="round" fill="none" />
+              <path :d="arrow(anchor, dir).head" :fill="skin.ink" />
+            </g>
+          </template>
+          <template v-else>
+            <path :d="arrow(anchor, dir).line" :stroke="skin.ink" stroke-width="3"
+                  stroke-linecap="round" fill="none" :filter="filt" />
+            <path :d="arrow(anchor, dir).head" :fill="skin.ink" :filter="filt" />
+          </template>
+        </template>
+
+        <circle v-if="anchor" :cx="anchor.x" :cy="anchor.y" r="4" :fill="skin.ink" opacity="0.85" />
       </svg>
 
       <div v-if="toast" class="toast">{{ toast }}</div>
@@ -285,11 +369,31 @@ const arc = (d: Dir) => {
 
 <style>
 .ov { position: fixed; inset: 0; z-index: 2000; pointer-events: none; }
-.ov .lab {
-  fill: #eaf3ff; font-size: 13px; font-weight: 700; opacity: 0.55;
-  letter-spacing: 0.5px; paint-order: stroke; stroke: rgba(20,26,40,.6); stroke-width: 3px;
+.ov .lab { font-size: 14px; font-weight: 700; opacity: 0.6; letter-spacing: 0.5px; }
+.ov .lab.on { opacity: 1; font-size: 16px; }
+
+/* Ätherisch: Schrift schwebt, dunkel umrandet damit sie auf hellem Nebel hält */
+.ov--aether .lab { paint-order: stroke; stroke: rgba(20,26,40,.55); stroke-width: 3px; }
+
+/* Kreidetafel: die KREIDE steckt im Pfeil, nicht in der Schrift —
+   handschriftliche Beschriftung war schlicht schlecht zu lesen. */
+.ov--tafel .lab {
+  font-weight: 800;
+  letter-spacing: 0.2px;
+  paint-order: stroke;
+  stroke: rgba(14,28,22,.85);
+  stroke-width: 3.5px;
 }
-.ov .lab.on { fill: #fff; opacity: 1; font-size: 15px; }
+
+/* Tuschskizze: Tinte auf Papier, alles handschriftlich */
+.ov--skizze .lab {
+  font-family: 'Comic Sans MS', 'Segoe Print', cursive;
+  font-weight: 700;
+}
+
+/* Pinnwand: dieselbe Typo wie die Zettel, harte Kante statt Schein */
+.ov--kork .lab { font-weight: 800; letter-spacing: -0.2px; }
+
 .toast {
   position: fixed; left: 50%; top: 12%; transform: translateX(-50%);
   background: #241f1a; color: #fff; padding: 8px 14px; border-radius: 4px;
