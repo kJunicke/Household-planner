@@ -38,8 +38,11 @@ export interface ProtoConfig {
   indent: number
   /** Wie die Dringlichkeit gezeigt wird. */
   due: 'aus' | 'zwecke' | 'stempel' | 'beides'
-  /** Punktwert und Rückstand nach oben rechts statt in die Fußzeile. */
-  metaTop: boolean
+  /**
+   * Wo Punktwert und Rückstand stehen. `auto` heißt: oben rechts nur dann,
+   * wenn die Fußzeile sonst breiter als der Titel wäre.
+   */
+  metaTop: 'auto' | 'oben' | 'unten'
 }
 
 /** Der Ist-Zustand — nur noch als Vergleichspunkt. */
@@ -50,7 +53,7 @@ export const IST: ProtoConfig = {
   sticker: 34,
   indent: 0,
   due: 'aus',
-  metaTop: false
+  metaTop: 'unten'
 }
 
 /** Der besprochene Entwurf. */
@@ -60,8 +63,8 @@ export const ENTWURF: ProtoConfig = {
   hit: 44,
   sticker: 34,
   indent: 26,
-  due: 'beides',
-  metaTop: true
+  due: 'zwecke',
+  metaTop: 'auto'
 }
 
 export const config = reactive<ProtoConfig>({ ...ENTWURF })
@@ -77,7 +80,7 @@ function readUrl(): void {
     const [key, value] = part.split(':') as [keyof ProtoConfig, string]
     if (!KEYS.includes(key) || value === undefined) continue
     if (key === 'due') config.due = value as ProtoConfig['due']
-    else if (key === 'metaTop') config.metaTop = value === 'true'
+    else if (key === 'metaTop') config.metaTop = value as ProtoConfig['metaTop']
     else (config[key] as number) = Number(value)
   }
 }

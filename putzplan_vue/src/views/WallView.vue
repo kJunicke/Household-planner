@@ -132,6 +132,13 @@ const wallHeight = ref(0)
 const expandedIds = ref(new Set<string>())
 
 /**
+ * PROTOTYP: Zettel, deren Punktwert oben rechts steht. Die Entscheidung faellt
+ * waehrend der Messung (nur dort sind Titel- und Fusszeilenbreite bekannt) und
+ * wird hier festgehalten, damit Vue sie beim naechsten Render nicht wegpatcht.
+ */
+const metaTopIds = ref(new Set<string>())
+
+/**
  * Der Zettel, der gerade **unter einer Geste des Fingers steht** — und deshalb
  * von der Animation ausgenommen ist.
  *
@@ -240,6 +247,7 @@ const relayout = (animate: boolean, anchorId?: string) => {
   // der Titel keine Umbruchstelle — genau die Zettel bleiben vom zweiten Lauf
   // ausgenommen.
   const shapes: WallNoteShape[] = []
+  const nextMetaTop = new Set<string>()
   const elements = new Map<string, HTMLElement>()
   const lineHeights = new Map<string, number>()
 
@@ -269,6 +277,28 @@ const relayout = (animate: boolean, anchorId?: string) => {
     el.classList.add('zettel--measuring', 'zettel--single-line')
     el.style.maxWidth = 'none'
     el.style.width = 'max-content'
+
+    // PROTOTYP: Wandern Punktwert und Rueckstand nach oben rechts?
+    //
+    // Nur wenn die Fusszeile sonst BREITER als der Titel waere — dann bliebe
+    // oben rechts Platz ungenutzt, waehrend die Fusszeile den ganzen Zettel
+    // aufblaeht. Ist der Titel ohnehin laenger, bleibt alles unten: dort steht
+    // es zusammen, und oben entsteht kein Loch.
+    //
+    // Gemessen wird mit `zettel--measuring`, das Titel und Fusszeile auf
+    // `max-content` stellt — sonst waeren beide so breit wie der Zettel und
+    // damit ununterscheidbar.
+    const measureWidth = (selector: string) =>
+      el.querySelector<HTMLElement>(selector)?.getBoundingClientRect().width ?? 0
+    el.classList.remove('zettel--meta-top')
+    const metaTop = protoConfig.metaTop === 'oben'
+      ? true
+      : protoConfig.metaTop === 'unten'
+        ? false
+        : measureWidth('.foot') > measureWidth('.title') + 1
+    el.classList.toggle('zettel--meta-top', metaTop)
+    if (metaTop) nextMetaTop.add(task.task_id)
+
     const natural = Math.ceil(el.getBoundingClientRect().width) + MEASURE_SAFETY
 
     el.classList.remove('zettel--single-line')
@@ -287,6 +317,8 @@ const relayout = (animate: boolean, anchorId?: string) => {
     // es bei der natürlichen Breite (siehe Schritt 3).
     lineHeights.set(task.task_id, Number.isFinite(lineHeight) && lineHeight > 0 ? lineHeight : 0)
   }
+
+  metaTopIds.value = nextMetaTop
 
   // Schritt 2 — Breiten planen (zweiter Packlauf, siehe `planNoteWidths`).
   const planned = planNoteWidths(shapes, usableWidth)
@@ -665,6 +697,7 @@ const handleCreateQuickTask = async (data: {
         :ref="instance => setNoteEl(task.task_id, instance)"
         :task="task"
         :expanded="expandedIds.has(task.task_id)"
+        :meta-top="metaTopIds.has(task.task_id)"
         @toggle="toggleNote"
         @gesture-start="gestureNoteId = $event"
         @gesture-end="gestureNoteId = gestureNoteId === $event ? null : gestureNoteId"

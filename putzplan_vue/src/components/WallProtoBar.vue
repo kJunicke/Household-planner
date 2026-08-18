@@ -100,10 +100,21 @@ const SLIDERS = [
         </div>
       </div>
 
-      <label class="proto-check">
-        <input v-model="config.metaTop" type="checkbox" />
-        <span>Punkte und Rückstand oben rechts statt in der Fußzeile</span>
-      </label>
+      <div class="proto-row proto-row--pos">
+        <span class="proto-name">Punkte</span>
+        <div class="proto-presets">
+          <button
+            v-for="mode in (['auto', 'oben', 'unten'] as const)"
+            :key="mode"
+            class="proto-chip"
+            :class="{ 'proto-chip--on': config.metaTop === mode }"
+            :title="mode === 'auto' ? 'oben rechts nur, wenn die Fußzeile breiter als der Titel wäre' : ''"
+            @click="config.metaTop = mode"
+          >
+            {{ mode }}
+          </button>
+        </div>
+      </div>
 
     </div>
   </div>

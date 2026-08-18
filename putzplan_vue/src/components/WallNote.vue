@@ -55,7 +55,16 @@ import TaskAssignmentModal from './TaskAssignmentModal.vue'
 import SubtaskManagementModal from './SubtaskManagementModal.vue'
 import TaskPostponeModal from './TaskPostponeModal.vue'
 
-const props = defineProps<{ task: Task; expanded?: boolean }>()
+const props = defineProps<{
+  task: Task
+  expanded?: boolean
+  /**
+   * PROTOTYP: Punktwert und Rueckstand stehen oben rechts statt in der
+   * Fusszeile. Die Wand entscheidet das, nicht der Zettel — nur sie misst, ob
+   * die Fusszeile breiter als der Titel waere.
+   */
+  metaTop?: boolean
+}>()
 /**
  * `gesture-start` / `gesture-end`: solange der Finger auf diesem Zettel eine
  * Geste ausführt — Ziehen am Eselsohr (Ticket 09) **oder** langes Drücken mit
@@ -486,7 +495,6 @@ const schedule = computed(() => scheduleOf(props.task))
  * Bewusst dreistufig und nicht feiner: die Zwecke ist 14 px gross, mehr
  * Abstufungen kann sie nicht tragen.
  */
-const protoMetaTop = computed(() => proto.metaTop)
 const protoStamp = computed(() => proto.due === 'stempel' || proto.due === 'beides')
 
 const urgency = computed((): 'hot' | 'today' | null => {
@@ -622,6 +630,7 @@ const handlePostponeConfirm = async (targetDate: string) => {
       `zettel--${kind}`,
       {
         'zettel--tappable': hasSubtasks,
+        'zettel--meta-top': props.metaTop,
         'zettel--tearing': isNoteTearing,
         'zettel--tear-ready': isTearReady,
         'zettel--pressed': pressOpen
@@ -663,7 +672,7 @@ const handlePostponeConfirm = async (targetDate: string) => {
          Knoepfe (Stapel, Stift, Eselsohr) bleiben unten, weil man sie dort mit
          dem Daumen erreicht. Der Titel fliesst um die Ecke herum. -->
     <div class="head">
-      <div v-if="protoMetaTop" class="corner">
+      <div class="corner">
         <span class="points" :class="`points--s${Math.min(5, Math.max(0, effectivePoints))}`">
           {{ effectivePoints }}
         </span>
@@ -683,11 +692,7 @@ const handlePostponeConfirm = async (targetDate: string) => {
       <!-- PROTOTYP: der Punktwert ist ein aufgeklebter Sticker, keine Zeile
            Text mehr. Die FORM traegt den Wert (Kreis 1 … Stern 5), die Zahl
            bestaetigt ihn nur — auf einen Blick erkennbar, ohne zu lesen. -->
-      <span
-        v-if="!protoMetaTop"
-        class="points"
-        :class="`points--s${Math.min(5, Math.max(0, effectivePoints))}`"
-      >
+      <span class="points" :class="`points--s${Math.min(5, Math.max(0, effectivePoints))}`">
         {{ effectivePoints }}
       </span>
       <!-- PROTOTYP: Unteraufgaben haben jetzt IMMER ein eigenes Zeichen — ein
@@ -711,7 +716,7 @@ const handlePostponeConfirm = async (targetDate: string) => {
           {{ tracksProgress ? `${doneSubtasks}/${subtasks.length}` : subtasks.length }}
         </span>
       </button>
-      <span v-if="metaLabel && !protoMetaTop" class="meta">{{ metaLabel }}</span>
+      <span v-if="metaLabel" class="meta">{{ metaLabel }}</span>
     </div>
 
     <!-- Unteraufgaben als angeheftete Zettelchen. Erst im aufgeklappten
@@ -951,17 +956,39 @@ const handlePostponeConfirm = async (targetDate: string) => {
 
 /* Der Zettel selbst ist ein Flex-Container; ein `float` waere darin
    wirkungslos. Der Kopf ist deshalb ein eigener BLOCK — nur dort fliesst der
-   Titel um die Ecke herum. */
+   Titel um die Ecke herum. Er ist ausserdem der Bezugsrahmen des Stempels:
+   der bleibt damit ueber dem Titel und kann die Knoepfe der Fusszeile nicht
+   erreichen. */
 .head {
   display: block;
+  position: relative;
+}
+
+/* Punktwert und Rueckstand stehen in BEIDEN Orten im DOM; sichtbar ist immer
+   nur einer. Die Voreinstellung ist unten — oben rechts wandern sie erst,
+   wenn die Wand gemessen hat, dass die Fusszeile breiter als der Titel waere
+   (→ `WallView`, `zettel--meta-top`). Ein `v-if` waere hier falsch: die
+   Entscheidung faellt WAEHREND der Messung, nicht im Render. */
+.corner {
+  display: none;
+}
+
+.zettel--meta-top .corner {
+  display: flex;
+}
+
+.zettel--meta-top .foot > .points,
+.zettel--meta-top .foot > .meta {
+  display: none;
 }
 
 /* Die Ecke schwimmt (`float`), damit der Titel um sie herumfliesst statt neben
    ihr in eine schmale Spalte gezwungen zu werden. Ein kurzer Titel steht neben
    ihr, ein langer laeuft unter ihr weiter — beides ohne Messung. */
 .corner {
+  /* Sichtbar nur mit `zettel--meta-top` — die Regel oben schaltet sie ein.
+     Hier steht deshalb bewusst KEIN `display`. */
   float: right;
-  display: flex;
   align-items: center;
   gap: 5px;
   margin: -1px 0 2px 7px;
@@ -980,13 +1007,14 @@ const handlePostponeConfirm = async (targetDate: string) => {
    Zieh-Geste. */
 .due-stamp {
   position: absolute;
-  top: 38%;
-  left: 8%;
+  top: 50%;
+  left: 4px;
   z-index: 2;
+  max-width: 62%;
   padding: 1px 5px;
   border: 2px solid currentColor;
   border-radius: 3px;
-  transform: rotate(-9deg);
+  transform: translateY(-50%) rotate(-9deg);
   opacity: 0.55;
   font-size: calc(9px * var(--proto-scale, 1));
   font-weight: 900;
@@ -1351,6 +1379,16 @@ const handlePostponeConfirm = async (targetDate: string) => {
    Inline-Style am Element hängt. */
 .zettel--measuring {
   transform: none !important;
+}
+
+/* PROTOTYP: waehrend der Messung nehmen Titel und Fusszeile ihre EIGENE
+   natuerliche Breite an. Ohne das sind beide so breit wie der Zettel, und die
+   Wand koennte nicht entscheiden, welcher von beiden ihn breit macht.
+   Die gemessene Zettelbreite aendert das nicht: sie ist ohnehin das Maximum
+   der beiden. */
+.zettel--measuring .title,
+.zettel--measuring .foot {
+  width: max-content;
 }
 
 /* Die einzige sichtbare Aktion. Oben rechts, weil unten rechts das Eselsohr
