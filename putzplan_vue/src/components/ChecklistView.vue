@@ -19,6 +19,7 @@ import ChecklistItemRow from '@/components/ChecklistItemRow.vue'
 import CategoryRail from '@/components/CategoryRail.vue'
 import CategorySearchModal, { type CategoryCandidate } from '@/components/CategorySearchModal.vue'
 import CategoryEditModal from '@/components/CategoryEditModal.vue'
+import LongSheet from '@/components/LongSheet.vue'
 
 export interface ChecklistLabels {
   /** Title of the "new list" modal, e.g. 'Neue Packliste'. */
@@ -72,6 +73,18 @@ const qtyFieldOpen = ref<Set<string>>(new Set())
 const forcedAddOpen = ref<Set<string>>(new Set())
 const sectionOverride = ref<Map<string, boolean>>(new Map())
 
+// --- Gedämpfte (leere) Kategorien — Ticket 05 --------------------------------
+// Abgeleiteter Zustand, nichts Gespeichertes: eine Kategorie ohne Einträge
+// (`group.total === 0`) ist gedämpft, bis sie in dieser Sitzung angetippt
+// wurde. `undampedCategories` hält NUR den Tipp fest — ob eine Kategorie noch
+// leer ist, wird live geprüft, sonst würde eine später wieder geleerte
+// Kategorie fälschlich normal groß hängen bleiben (siehe Watcher unten).
+const undampedCategories = ref<Set<string>>(new Set())
+const isCategoryEmpty = (group: CategoryGroup): boolean => group.total === 0
+const isCategoryDamped = (group: CategoryGroup): boolean =>
+  isCategoryEmpty(group) && !undampedCategories.value.has(group.key)
+const touchCategory = (key: string) => { undampedCategories.value.add(key) }
+
 // Focus the number field the moment it appears.
 const vFocus = { mounted: (el: HTMLElement) => el.focus() }
 
@@ -90,6 +103,7 @@ watch(
     forcedAddOpen.value = new Set()
     sectionOverride.value = new Map()
     doneOpen.value = new Set()
+    undampedCategories.value = new Set()
     clearAllGrace()
     notesDraft.value = store.currentList?.notes ?? ''
     notesOpen.value = false
@@ -109,6 +123,18 @@ const categoryLabels = computed(() =>
   store.itemsByCategory.filter(g => !g.isUncategorized).map(g => g.label)
 )
 
+// Sobald eine Kategorie wieder Einträge trägt, verfällt ihr Tipp-Vermerk. Bleibt
+// er stehen, würde eine später erneut geleerte Kategorie fälschlich normal groß
+// bleiben — der Tipp darf nicht ewig nachwirken.
+watch(
+  () => store.itemsByCategory,
+  (groups) => {
+    for (const group of groups) {
+      if (!isCategoryEmpty(group)) undampedCategories.value.delete(group.key)
+    }
+  }
+)
+
 // --- Section open/collapse --------------------------------------------------
 const isSectionOpen = (group: CategoryGroup): boolean => {
   const override = sectionOverride.value.get(group.key)
@@ -117,6 +143,22 @@ const isSectionOpen = (group: CategoryGroup): boolean => {
 
 const toggleSection = (group: CategoryGroup) => {
   sectionOverride.value.set(group.key, !isSectionOpen(group))
+}
+
+// Ein Tipp auf eine GEDÄMPFTE Kategorie heißt „hier will ich etwas hineinlegen":
+// entdämpfen, Abschnitt offen, Eingabezeile offen — über dieselben Session-Refs,
+// die `toggleSection`/`isAddOpen` ohnehin schon lesen (`sectionOverride`,
+// `forcedAddOpen`), nicht über eine neue Regel. Eine normale (gefüllte oder
+// bereits entdämpfte) Kategorie klappt weiterhin ganz gewöhnlich über
+// `toggleSection` auf und zu — dort ändert sich nichts.
+const onCatHeaderClick = (group: CategoryGroup) => {
+  if (isCategoryDamped(group)) {
+    touchCategory(group.key)
+    sectionOverride.value.set(group.key, true)
+    forcedAddOpen.value.add(group.key)
+    return
+  }
+  toggleSection(group)
 }
 
 // --- Contextual add line ----------------------------------------------------
@@ -365,44 +407,42 @@ onUnmounted(() => {
 <template>
   <div class="page-container">
     <div class="container-fluid">
-      <!-- Listen Chip-Leiste -->
-      <div class="list-chip-bar mb-3">
-        <div class="list-chip-container">
-          <button
-            v-for="list in store.lists"
-            :key="list.list_id"
-            :class="['list-chip', store.currentListId === list.list_id && 'active']"
-            @click="store.currentListId = list.list_id"
-          >
-            <span>{{ list.name }}</span>
-            <button
-              class="chip-edit-btn"
-              @click.stop="openEditModal(list)"
-              :title="`'${list.name}' bearbeiten`"
-            >
-              <i class="bi bi-pencil"></i>
-            </button>
-          </button>
-          <button
-            class="list-chip add-chip"
-            @click="openCreateList"
-            :title="labels.createListChipTitle"
-          >
-            <i class="bi bi-plus-lg"></i>
-          </button>
-        </div>
-      </div>
+      <!-- Der lange Zettel (Ticket 07/pinnwand-ausbau): dieselbe Papierhuelle
+           wie im Einkauf, geteilt ueber `LongSheet`. Die Chip-Leiste rendert
+           unconditional (wie vorher), das Blatt selbst nur, wenn es eine
+           aktuelle Liste gibt. -->
+      <LongSheet :has-content="!!store.currentListId">
+        <template #tabs>
+          <!-- Listen Chip-Leiste -->
+          <div class="list-chip-bar">
+            <div class="list-chip-container">
+              <button
+                v-for="list in store.lists"
+                :key="list.list_id"
+                :class="['list-chip', store.currentListId === list.list_id && 'active']"
+                @click="store.currentListId = list.list_id"
+              >
+                <span>{{ list.name }}</span>
+                <button
+                  class="chip-edit-btn"
+                  @click.stop="openEditModal(list)"
+                  :title="`'${list.name}' bearbeiten`"
+                >
+                  <i class="bi bi-pencil"></i>
+                </button>
+              </button>
+              <button
+                class="list-chip add-chip"
+                @click="openCreateList"
+                :title="labels.createListChipTitle"
+              >
+                <i class="bi bi-plus-lg"></i>
+              </button>
+            </div>
+          </div>
+        </template>
 
-      <!-- Keine Listen vorhanden -->
-      <div v-if="store.lists.length === 0 && !store.isLoading" class="empty-state">
-        <i class="bi" :class="labels.emptyIcon"></i>
-        <p>{{ labels.emptyText }}</p>
-        <button class="btn btn-primary" @click="openCreateList">
-          <i class="bi bi-plus-lg me-1"></i> Liste erstellen
-        </button>
-      </div>
-
-      <template v-else-if="store.currentListId">
+        <template v-if="store.currentListId">
         <!-- Gesamt-Fortschritt -->
         <div v-if="store.currentListItems.length > 0" class="progress-header">
           <div class="progress-label">
@@ -463,15 +503,19 @@ onUnmounted(() => {
             :ref="(el) => setSectionEl(group.key, el)"
             :data-cat-key="group.key"
             class="cat-section"
-            :class="{ 'cat-uncategorized': group.isUncategorized, 'cat-complete': group.isComplete }"
+            :class="{
+              'cat-uncategorized': group.isUncategorized,
+              'cat-complete': group.isComplete,
+              'cat-damped': isCategoryDamped(group),
+            }"
           >
             <div
               class="cat-header"
               role="button"
               tabindex="0"
-              @click="toggleSection(group)"
-              @keydown.enter.prevent="toggleSection(group)"
-              @keydown.space.prevent="toggleSection(group)"
+              @click="onCatHeaderClick(group)"
+              @keydown.enter.prevent="onCatHeaderClick(group)"
+              @keydown.space.prevent="onCatHeaderClick(group)"
             >
               <span class="cat-dot" :style="{ background: categoryColor(group.category) }"></span>
               <span class="cat-name">{{ group.label }}</span>
@@ -532,6 +576,10 @@ onUnmounted(() => {
 
               <!-- Kontextuelle Add-Zeile -->
               <div v-if="isAddOpen(group)" class="add-line">
+                <!-- Leeres Kaestchen: haelt die Schreibzeile im Pinnwand-Aussehen
+                     in derselben Spur wie die Eintragsnamen darueber (wie im
+                     Einkauf). Im klassischen Aussehen `display: none`. -->
+                <span class="add-ghost-box" aria-hidden="true"></span>
                 <div class="add-input-wrap">
                   <input
                     v-model="addDraft[group.key]"
@@ -609,7 +657,17 @@ onUnmounted(() => {
           />
         </div>
         </template>
-      </template>
+        </template>
+      </LongSheet>
+
+      <!-- Keine Listen vorhanden -->
+      <div v-if="store.lists.length === 0 && !store.isLoading" class="empty-state">
+        <i class="bi" :class="labels.emptyIcon"></i>
+        <p>{{ labels.emptyText }}</p>
+        <button class="btn btn-primary" @click="openCreateList">
+          <i class="bi bi-plus-lg me-1"></i> Liste erstellen
+        </button>
+      </div>
     </div>
   </div>
 
@@ -719,11 +777,17 @@ onUnmounted(() => {
 </template>
 
 <style scoped>
-/* ---- List Chip Bar (unchanged pattern) ---- */
+/* ---- List Chip Bar ---- */
+/* `margin-bottom` steht hier statt als Bootstraps `.mb-3` im Template (das
+   Template trug es bisher direkt): `.mb-3` ist bei Bootstrap `!important` und
+   liesse sich vom Pinnwand-Aussehen (LongSheet, Ticket 07) nicht mehr auf
+   -6px ziehen. Wert identisch mit dem bisherigen `.mb-3` (1rem). Genau das
+   Problem, das ShoppingView fuer sich selbst schon so geloest hatte. */
 .list-chip-bar {
   background: var(--color-background-elevated);
   border-radius: var(--radius-lg);
   padding: var(--spacing-sm);
+  margin-bottom: 1rem;
 }
 
 .list-chip-container {
@@ -945,6 +1009,16 @@ onUnmounted(() => {
 .cat-complete-icon { color: var(--color-success); }
 .cat-chevron { color: var(--color-text-muted); }
 
+/* ---- Gedämpfte (leere) Kategorien — Ticket 05 -----------------------------
+   Verhalten (leer ⇒ gedämpft, Antippen hebt es für die Sitzung auf) sitzt in
+   <script setup> und gilt in beiden Aussehen. Hier nur die Optik; die
+   Kopfzeile behält ihre Mindesthöhe/Trefferfläche unverändert (Touch-Target),
+   nur Schriftgröße und Deckkraft gehen zurück. */
+.cat-section.cat-damped { margin-bottom: 4px; }
+.cat-section.cat-damped .cat-header { opacity: 0.5; }
+.cat-section.cat-damped .cat-name { font-size: var(--font-sm); font-weight: 500; }
+.cat-section.cat-damped .cat-dot { width: 6px; height: 6px; }
+
 .cat-body {
   padding: 0;
   display: flex;
@@ -978,6 +1052,7 @@ onUnmounted(() => {
   gap: 4px;
   padding: 0;
 }
+.add-ghost-box { display: none; }
 .add-input-wrap {
   position: relative;
   flex: 1;
@@ -1100,4 +1175,286 @@ onUnmounted(() => {
   min-height: var(--touch-target-dense);
 }
 .add-category-btn:hover { border-color: var(--color-primary); color: var(--color-primary); }
+
+/* ==========================================================================
+   PINNWAND-AUSSEHEN — „Der lange Zettel" auf Packliste und To-do
+   --------------------------------------------------------------------------
+   Alles ab hier haengt an `:root[data-design='pinnwand']`. Ohne das Attribut
+   greift keine einzige Regel — das klassische Aussehen oben bleibt Wort fuer
+   Wort der Normalfall.
+
+   Die Papierhuelle selbst (Kante, Kopfzeile) kommt aus `LongSheet.vue`
+   (Ticket 07) und wird dort einmal gepflegt. Was hier steht, ist der Rest
+   des Blatts — Kategorie-Ueberschriften, Zeilen, Eingabezeilen — in eigenem
+   Besitz dieser View, nach demselben Muster wie `ShoppingView.vue`, aber nur
+   fuer das, was es hier wirklich gibt: kein `.qty-badge`, kein `.star-btn`,
+   keine `.row-priority` — Packliste/To-do kennen weder Prioritaet noch den
+   Einkaufs-Mengen-Chip. Umgekehrt hat die Checkliste Elemente, die der
+   Einkauf nicht hat (`.pack-stepper`, `.done-toggle`, `.add-reopen`,
+   `.add-category-btn`) — die bekommen hier ihre eigene Behandlung in
+   derselben Bildsprache (dieselben `--pw-*`-Tokens), keine Kopie.
+
+   `ListItemRow`/`ChecklistItemRow` werden ueber `:deep()` unterhalb von
+   `.cat-column` angefasst — aus demselben Grund wie in ShoppingView: die
+   Zeile gehoert einer Kind-Komponente, nicht dieser View. Alles andere hier
+   ist natives Markup dieser View und braucht kein `:deep()`.
+   ========================================================================== */
+
+/* ---- Fortschrittsbalken & Notiz-Vorschau: die zwei Fremdkoerper auf dem
+   Papier, gefunden im QC-Review. Notizblock und Beschriftungszeile brauchen
+   keine eigene Regel: die alten Tokens sind unter Pinnwand bereits auf
+   `--pw-*` umgelegt, `.notes-block` liest also von selbst in Blattfarbe. Der
+   Balken tut das nicht — er ist rund, randlos, schattenlos und animiert,
+   das einzige Element mit dieser Form auf dem ganzen Blatt. */
+:root[data-design='pinnwand'] .progress-track {
+  background: transparent;
+  border: 2px solid var(--pw-line);
+  border-radius: 0;
+}
+:root[data-design='pinnwand'] .progress-fill { border-radius: 0; }
+/* `--color-text-muted` ist unter Pinnwand auf `--pw-free` umgelegt — auf
+   Papier nur ~3,3:1 (siehe `pinnwand.css`, Platzhalter-Regel). Derselbe
+   Tausch wie dort: `--pw-ink-soft` erreicht ~8,9:1. */
+:root[data-design='pinnwand'] .notes-preview { color: var(--pw-ink-soft); }
+
+/* ---- Kategorie = Ueberschrift mit doppelter Tintenlinie, keine Box -------- */
+:root[data-design='pinnwand'] .cat-section { margin-bottom: 18px; }
+/* Das klassische `opacity: 0.92` verduennt jeden Kontrast in der Sektion. */
+:root[data-design='pinnwand'] .cat-uncategorized { opacity: 1; }
+:root[data-design='pinnwand'] .cat-header {
+  min-height: 40px;
+  margin-bottom: 4px;
+  padding: 0 2px 3px;
+  border-bottom: 3px double var(--pw-line);
+  color: var(--pw-ink);
+}
+:root[data-design='pinnwand'] .cat-name {
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--pw-ink);
+}
+:root[data-design='pinnwand'] .cat-uncategorized .cat-name {
+  color: var(--pw-ink-soft);
+  font-weight: 700;
+}
+/* Die Kategoriefarbe bleibt als kleine gestempelte Marke erhalten, wie im
+   Einkauf — sie traegt keinen Text und ist damit nicht kontrastpflichtig. */
+:root[data-design='pinnwand'] .cat-dot {
+  width: 11px;
+  height: 11px;
+  border-radius: 0;
+  border: 1.5px solid var(--pw-line);
+}
+:root[data-design='pinnwand'] .cat-count {
+  color: var(--pw-ink);
+  font-size: var(--font-sm);
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+:root[data-design='pinnwand'] .cat-chevron { color: var(--pw-ink); }
+/* Ein gefuelltes gruenes Rund neben einem ungefuellten Tinten-Kaestchen
+   waeren zwei Sprachen fuer "erledigt". Dieselbe Tinte wie das Haekchen
+   in `.list-check.on`. */
+:root[data-design='pinnwand'] .cat-complete-icon { color: var(--pw-ink); }
+/* 18px Abstand + erweiterte Trefferflaeche = 48×48px, die sich beruehren
+   statt zu ueberlappen — dieselbe Rechnung wie im Einkauf. */
+:root[data-design='pinnwand'] .cat-header-right { gap: 18px; }
+:root[data-design='pinnwand'] .cat-edit-btn {
+  color: var(--pw-ink);
+  opacity: 1;
+}
+:root[data-design='pinnwand'] .cat-edit-btn::after { inset: -10px -9px; }
+
+/* ---- Gedämpfte (leere) Kategorien — eigene Optik fürs Pinnwand-Papier -----
+   Höhere Spezifität als die Basisregeln oben (`:root[data-design] .cat-name`
+   & Co.), damit die Dämpfung trotz gleicher Selektorlänge gewinnt statt von
+   der spaeter im Stylesheet stehenden Papier-Regel überschrieben zu werden.
+   Die Trefferfläche der Kopfzeile bleibt unangetastet. */
+:root[data-design='pinnwand'] .cat-section.cat-damped .cat-header {
+  opacity: 0.55;
+  border-bottom-style: solid;
+  border-bottom-width: 1px;
+}
+:root[data-design='pinnwand'] .cat-section.cat-damped .cat-name {
+  font-size: var(--font-sm);
+  letter-spacing: normal;
+}
+:root[data-design='pinnwand'] .cat-section.cat-damped .cat-dot {
+  width: 7px;
+  height: 7px;
+}
+
+/* ---- Zeile: kein Rahmen, kein Hintergrund — Schrift auf Papier -----------
+   `ListItemRow` ist dieselbe Komponente wie im Einkauf (ueber
+   `ChecklistItemRow`), deshalb identische Optik. */
+:root[data-design='pinnwand'] .cat-body { gap: 0; }
+:root[data-design='pinnwand'] .cat-column :deep(.list-row) {
+  min-height: var(--touch-target-min);
+  padding: 0 2px;
+  background: none;
+  border: none;
+  border-bottom: 1px solid rgba(36, 31, 26, 0.16);
+  border-radius: 0;
+  color: var(--pw-ink);
+}
+:root[data-design='pinnwand'] .cat-column :deep(.list-row:hover) {
+  background: rgba(36, 31, 26, 0.04);
+}
+/* Ein abgehakter Eintrag bleibt lesbar: durchgestrichen und eine Spur
+   leiser, aber nicht auf 55 % heruntergeblendet. */
+:root[data-design='pinnwand'] .cat-column :deep(.list-row.checked) { opacity: 1; }
+:root[data-design='pinnwand'] .cat-column :deep(.list-row.checked .list-name) {
+  color: var(--pw-ink-soft);
+  text-decoration: line-through 2px var(--pw-line);
+}
+:root[data-design='pinnwand'] .cat-column :deep(.list-check) {
+  width: 22px;
+  height: 22px;
+  border: 2px solid var(--pw-line);
+  border-radius: 0;
+  color: var(--pw-ink);
+}
+:root[data-design='pinnwand'] .cat-column :deep(.list-check.on) {
+  background: none;
+  border-color: var(--pw-line);
+  color: var(--pw-ink);
+}
+:root[data-design='pinnwand'] .cat-column :deep(.row-trailing) { gap: 18px; }
+:root[data-design='pinnwand'] .cat-column :deep(.row-edit-btn) {
+  width: 30px;
+  height: 30px;
+  color: var(--pw-ink);
+}
+:root[data-design='pinnwand'] .cat-column :deep(.row-edit-btn)::after { inset: -9px; }
+
+/* ---- Mengen-Stepper: die einzige Zeilen-Ergaenzung, die der Einkauf nicht
+   hat (Packliste zaehlt gepackt/gesamt statt nur an-/abzuhaken). Dieselbe
+   Zurueckhaltung wie beim Einkaufs-`.star-btn`: Rahmen statt Flaeche, Tinte
+   statt Farbe — kein Bootstrap-Blau, das auf Papier fremd wirkt. */
+:root[data-design='pinnwand'] .cat-column :deep(.step-btn) {
+  border: 2px solid var(--pw-line);
+  border-radius: 2px;
+  background: none;
+  color: var(--pw-ink);
+}
+:root[data-design='pinnwand'] .cat-column :deep(.step-btn:hover:not(:disabled)) {
+  border-color: var(--pw-line);
+  background: var(--pw-tape);
+  color: var(--pw-ink);
+}
+:root[data-design='pinnwand'] .cat-column :deep(.step-btn:disabled) {
+  opacity: 0.35;
+  border-color: rgba(36, 31, 26, 0.35);
+  color: var(--pw-ink-soft);
+}
+:root[data-design='pinnwand'] .cat-column :deep(.step-count) { color: var(--pw-ink); }
+
+/* ---- „N erledigt" (einklappbar) — kennt nur die Checkliste, keine
+   Entsprechung im Einkauf (dort gibt es den globalen Gekauft-Block). */
+:root[data-design='pinnwand'] .done-toggle { color: var(--pw-ink-soft); }
+:root[data-design='pinnwand'] .done-toggle:hover { color: var(--pw-ink); }
+:root[data-design='pinnwand'] .done-check { color: var(--pw-ink); }
+
+/* ---- Naechste freie Zeile statt Formularfeld ------------------------------
+   Das leere Kaestchen (`.add-ghost-box`) fehlte hier zunaechst — ohne Papier
+   fiel die 32px-Verschiebung gegenueber den Eintragsnamen nicht auf, mit
+   Papier schon (QC-Befund). Dieselbe Regel wie im Einkauf. */
+:root[data-design='pinnwand'] .add-line {
+  gap: 8px;
+  min-height: var(--touch-target-min);
+}
+:root[data-design='pinnwand'] .add-ghost-box {
+  display: block;
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  border: 2px dashed var(--pw-line);
+  opacity: 0.45;
+}
+:root[data-design='pinnwand'] .add-input {
+  height: 40px;
+  padding: 0 2px;
+  border: none;
+  border-bottom: 1px dashed rgba(36, 31, 26, 0.5);
+  border-radius: 0;
+  background: none;
+  color: var(--pw-ink);
+}
+:root[data-design='pinnwand'] .add-input:focus {
+  border-color: transparent;
+  border-bottom: 2px solid var(--pw-line);
+}
+:root[data-design='pinnwand'] .suggestions-dropdown {
+  border: 2px solid var(--pw-line);
+  border-radius: 2px;
+  background: var(--pw-paper);
+  box-shadow: var(--pw-shadow);
+}
+:root[data-design='pinnwand'] .suggestion-item {
+  color: var(--pw-ink);
+  border-bottom-color: rgba(36, 31, 26, 0.2);
+  min-height: var(--touch-target-min);
+}
+:root[data-design='pinnwand'] .add-qty-toggle,
+:root[data-design='pinnwand'] .add-qty-input {
+  position: relative;
+  height: 40px;
+  min-width: 40px;
+  border: 1.5px solid var(--pw-line);
+  border-radius: 2px;
+  background: var(--pw-tape);
+  color: var(--pw-ink);
+  font-weight: 800;
+}
+:root[data-design='pinnwand'] .add-qty-toggle::after {
+  content: '';
+  position: absolute;
+  inset: -4px;
+}
+:root[data-design='pinnwand'] .add-qty-toggle:hover,
+:root[data-design='pinnwand'] .add-qty-toggle.active {
+  border-color: var(--pw-line);
+  color: var(--pw-ink);
+}
+:root[data-design='pinnwand'] .add-confirm {
+  position: relative;
+  width: 44px;
+  height: 44px;
+  border: 2px solid var(--pw-line);
+  border-radius: 2px;
+  background: var(--pw-accent);
+  color: var(--pw-paper);
+  box-shadow: 2px 2px 0 var(--pw-line);
+}
+:root[data-design='pinnwand'] .add-confirm::after {
+  content: '';
+  position: absolute;
+  inset: -2px;
+}
+/* Deaktiviert heisst nicht unsichtbar — dieselbe Begruendung wie im Einkauf:
+   volle Deckkraft, umgefaerbt statt ausgeblendet. */
+:root[data-design='pinnwand'] .add-confirm:disabled {
+  opacity: 1;
+  background: var(--pw-cork-deep);
+  color: var(--pw-ink-soft);
+}
+/* Checklisten-eigen (kein Einkaufs-Gegenstueck): der Link, der eine wieder
+   eingeklappte Eingabezeile zurueckholt. */
+:root[data-design='pinnwand'] .add-reopen { color: var(--pw-ink-soft); }
+:root[data-design='pinnwand'] .add-reopen:hover { color: var(--pw-ink); }
+
+/* ---- + Kategorie -----------------------------------------------------------
+   Ebenfalls checklisten-eigen: der Einkauf legt Kategorien ueber einen Knopf
+   in der oberen Leiste an (`.top-new-cat`, gibt es hier nicht). Bekommt
+   dieselbe gestrichelte Papier-Optik wie die Eingabezeile darueber. */
+:root[data-design='pinnwand'] .add-category-btn {
+  border: 2px dashed var(--pw-line);
+  color: var(--pw-ink-soft);
+}
+:root[data-design='pinnwand'] .add-category-btn:hover {
+  border-color: var(--pw-line);
+  color: var(--pw-ink);
+}
 </style>
