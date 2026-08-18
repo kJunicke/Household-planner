@@ -1206,7 +1206,13 @@ onUnmounted(() => {
    `--pw-*` umgelegt, `.notes-block` liest also von selbst in Blattfarbe. Der
    Balken tut das nicht — er ist rund, randlos, schattenlos und animiert,
    das einzige Element mit dieser Form auf dem ganzen Blatt. */
+/* QC-Befund: Rahmen oben+unten frisst von den klassischen 6px zwei weg,
+   die Fuellung blieb bei 2px zwischen zwei 2px-Linien optisch begraben statt
+   sichtbar. Spurhoehe unter Pinnwand auf 10px angehoben, nur hier (nicht in
+   der Basisregel oben, die bleibt bei 6px): 10px − 2px oben − 2px unten =
+   6px Fuellung, wieder so kraeftig wie im klassischen Aussehen. */
 :root[data-design='pinnwand'] .progress-track {
+  height: 10px;
   background: transparent;
   border: 2px solid var(--pw-line);
   border-radius: 0;
@@ -1216,6 +1222,9 @@ onUnmounted(() => {
    Papier nur ~3,3:1 (siehe `pinnwand.css`, Platzhalter-Regel). Derselbe
    Tausch wie dort: `--pw-ink-soft` erreicht ~8,9:1. */
 :root[data-design='pinnwand'] .notes-preview { color: var(--pw-ink-soft); }
+/* Derselbe Tausch, derselbe Befund: `.reset-inline-btn` erbt sonst ebenfalls
+   `--color-text-muted` (= `--pw-free`), auf Papier nur ~3,6:1. */
+:root[data-design='pinnwand'] .reset-inline-btn { color: var(--pw-ink-soft); }
 
 /* ---- Kategorie = Ueberschrift mit doppelter Tintenlinie, keine Box -------- */
 :root[data-design='pinnwand'] .cat-section { margin-bottom: 18px; }
