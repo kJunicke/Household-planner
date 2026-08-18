@@ -47,9 +47,35 @@ für sie nicht.
 
 ### Dringlichkeit
 
-Der Vergleichswert, nach dem offene Aufgaben sortiert werden: je größer, desto dringender.
-Er wird zentral aus Kadenz und letzter Erledigung berechnet, damit Reihenfolge und
-Farbgebung in allen Ansichten übereinstimmen.
+Der **berechnete** Vergleichswert aus Kadenz und letzter Erledigung: je größer, desto
+dringender. Er wird zentral gebildet, damit alle Ansichten dieselbe Aussage treffen.
+
+Wie er sichtbar wird, hängt an der Ansicht. In Listen ordnet er die Aufgaben. **Auf der
+Pinnwand ordnet er nicht**: dort gelten alle fälligen Aufgaben als gleich dringend, und
+innerhalb einer Gruppe entscheidet der Platz, nicht die Dringlichkeit — eine Wand ist keine
+Liste. Ablesbar bleibt sie dort allein am **Stempel** (NIE / FÄLLIG / HEUTE), nicht an der
+Position und nicht an einer Farbe.
+
+Nicht zu verwechseln mit **Nachdruck**, der von Hand gesetzt wird.
+
+### Nachdruck
+
+Die Aussage, die ein Haushaltsmitglied einer fälligen Aufgabe **von Hand** mitgibt: „diesmal
+ist es wichtig". Damit handelt der Haushalt untereinander aus, was zuerst zählt — im
+Unterschied zur **Dringlichkeit**, die niemand setzt, sondern die sich aus dem Zeitplan
+ergibt.
+
+Nachdruck wird gestempelt: FÄLLIG → WICHTIG → DRINGEND, jeder Stempel legt einen weiteren
+Abdruck auf den Zettel, der oberste gilt. Nach dem dritten ist der Zettel wieder sauber und
+zeigt nur noch FÄLLIG. Die Höhe des Stapels ist selbst eine Aussage — an einer Aufgabe mit
+drei Abdrücken hat sichtbar jemand nachgelegt.
+
+Nachdruck ist **rein optisch**: er ändert weder die Reihenfolge noch die Gruppe. Eine als
+DRINGEND gestempelte Aufgabe kann auf der Wand unterhalb einer ungestempelten stehen.
+
+Er gilt für **einen Durchlauf**, nicht für die Aufgabe: mit dem Erledigen fällt er weg, bei
+täglichen Aufgaben mit dem nächtlichen Zurücksetzen. Bliebe er stehen, wäre nach ein paar
+Wochen alles dringend.
 
 ### wieder dreckig
 
@@ -92,6 +118,22 @@ Rangliste**: die Farbanteile beantworten „wer hat was gemacht", nie „wer lie
 Es gibt keine Historie: sichtbar ist immer nur die laufende Woche. Eine geänderte Zielzahl
 gilt deshalb sofort, ein geänderter Wochenstart dagegen erst ab der nächsten Woche — sonst
 verschwänden bereits gesammelte Punkte scheinbar.
+
+### Zettel
+
+Eine einzelne Aufgabe im Pinnwand-Aussehen: ein Stück Papier an der Wand. Das Papier trägt
+den Typ der Aufgabe — wiederkehrend, täglich, einmalig und Projekt sehen unterschiedlich
+aus. Ein Zettel ist immer **genau eine** Aufgabe; er hat ein **Eselsohr** und lässt sich
+**abreißen**.
+
+### langer Zettel
+
+Das Papier, auf dem eine **Liste** steht — Einkauf, Packliste oder To-do. Nicht die Liste
+selbst, sondern ihre Hülle: Kante, Linien, Kopfzeile. Ein langer Zettel trägt **viele**
+Einträge, hat kein Eselsohr und wird nicht abgerissen.
+
+Das ist der Gegenbegriff zum **Zettel**: eine Aufgabe an der Wand gegenüber einer Liste auf
+einem Screen. Die beiden teilen die Papier-Optik, aber weder Inhalt noch Gesten.
 
 ### Abreißen
 
