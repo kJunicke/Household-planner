@@ -96,6 +96,24 @@ Aufbau: **Aktiv** (als Nächstes) · **Backlog** (irgendwann) · **Bekannte Rand
   Nachdruck-Randfälle weiter unten in dieser Datei klären: sie betreffen genau die
   Unteraufgaben, die 09b stempeln würde.
 
+**Richtungsentscheidungen ohne Ticket** — aus der Grilling-Session, bewusst als
+„Out of Scope" in der Spec gelandet und deshalb nie ein Ticket geworden. Sie standen
+damit nur in `.scratch/pinnwand-ausbau/spec.md`, also gitignored:
+
+- **Das klassische Aussehen soll auf Dauer verschwinden.** Wörtlich vom Nutzer:
+  „wir wollen das aussehen ja generell in die gesamte App nach und nach übertragen."
+  Der Aussehen-Schalter bleibt vorerst, aber die Richtung ist gesetzt. Wer eine
+  Papier-Regel hinter `data-design` gatet, tut das für eine Übergangszeit, nicht für
+  immer. Der Abschnitt „Erst wenn der alte `CleaningView` wegfällt" weiter unten
+  hängt an dieser Entscheidung.
+- **Die Einkaufsansicht wird vollständig auf die geteilten Bausteine umgebaut.**
+  Beim langen Zettel (07) wurde bewusst nur die Papierhülle herausgezogen, der Rest
+  ausdrücklich vertagt. Überschneidet sich mit „alle drei Listentypen auf geteilte
+  Bausteine" weiter unten, ist aber die weitergehende Entscheidung.
+- **Die Rangliste im Haushalts-Store.** Ticket 08 entfernt die Rangliste aus dem
+  Header; der berechnete Wert wird dadurch unbenutzt und darf bleiben oder
+  entfallen. Bewusst offen gelassen, nicht vergessen.
+
 **Prototypen-Zweige** (Wegwerfcode, aber mit abgenommenen Entscheidungen darin):
 `proto/kartengroesse` (9 Commits, Kartengröße + Kranz-Prototyp) und
 `prototype/einkauf-pinnwand`. Ihre Ergebnisse stehen in
