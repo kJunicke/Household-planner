@@ -66,7 +66,14 @@ export function kindOfTaskType(taskType: string): WallNoteKind {
  * Untergrenze, damit ein Zettel mit sehr kurzem Titel („Müll") nicht zum
  * Schnipsel wird und der Bearbeiten-Knopf seinen Platz behält.
  */
-export const MIN_NOTE_WIDTH = 96
+// PROTOTYP: `let` statt `const`, damit `wallProto.ts` die Untergrenze je
+// Variante umstellen kann. Beim Zurückbauen wieder `const 96`.
+export let MIN_NOTE_WIDTH = 96
+
+/** PROTOTYP — Untergrenze zur Laufzeit setzen. */
+export function setMinNoteWidth(width: number): void {
+  MIN_NOTE_WIDTH = width
+}
 
 /**
  * Obergrenze für Zettel mit **mehrwortigen** Titeln, als Anteil der Wandbreite.

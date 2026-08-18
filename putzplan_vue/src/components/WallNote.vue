@@ -795,7 +795,7 @@ const handlePostponeConfirm = async (targetDate: string) => {
   /* Rechts bleibt Platz für den Bearbeiten-Knopf, der als einziges Element
      noch absolut sitzt. Unten reserviert nichts mehr Platz — die Fußzeile
      steht im Fluss. */
-  padding: 6px 36px 5px 8px;
+  padding: var(--proto-pad, 6px 36px 5px 8px);
   min-height: 44px;
   text-align: left;
   will-change: transform;
@@ -813,7 +813,7 @@ const handlePostponeConfirm = async (targetDate: string) => {
 
 .title {
   margin: 0;
-  font-size: 13px;
+  font-size: var(--proto-title, 13px);
   font-weight: 800;
   line-height: 1.15;
   letter-spacing: -0.15px;
@@ -845,7 +845,7 @@ const handlePostponeConfirm = async (targetDate: string) => {
   align-items: baseline;
   gap: 6px;
   margin-top: 2px;
-  font-size: 10px;
+  font-size: var(--proto-foot, 10px);
   font-weight: 800;
   line-height: 1.1;
   letter-spacing: 0.3px;
@@ -922,7 +922,7 @@ const handlePostponeConfirm = async (targetDate: string) => {
   border: 1.5px solid var(--pw-line);
   border-radius: 2px;
   box-shadow: 2px 2px 0 rgba(36, 31, 26, 0.42);
-  font-size: 12px;
+  font-size: var(--proto-sub, 12px);
   font-weight: 700;
   line-height: 1.15;
 }
@@ -935,7 +935,7 @@ const handlePostponeConfirm = async (targetDate: string) => {
 .subs--c3 .mini {
   flex-basis: calc(33.333% - 4.667px);
   padding: 6px 42px 6px 10px;
-  font-size: 11.5px;
+  font-size: var(--proto-sub-c3, 11.5px);
 }
 
 .subs--c3 {
@@ -951,7 +951,7 @@ const handlePostponeConfirm = async (targetDate: string) => {
 }
 
 .mini-points {
-  font-size: 9.5px;
+  font-size: var(--proto-sub-foot, 9.5px);
   font-weight: 800;
   letter-spacing: 0.3px;
   color: var(--pw-ink-soft);
@@ -1363,7 +1363,7 @@ const handlePostponeConfirm = async (targetDate: string) => {
 }
 
 .zettel--daily .title {
-  font-size: 12.5px;
+  font-size: var(--proto-title-daily, 12.5px);
 }
 
 .tape {
@@ -1394,7 +1394,7 @@ const handlePostponeConfirm = async (targetDate: string) => {
 }
 
 .zettel--project .title {
-  font-size: 15px;
+  font-size: var(--proto-title-project, 15px);
 }
 
 .clip {
