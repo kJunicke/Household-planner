@@ -119,7 +119,10 @@ Aufbau: **Aktiv** (als Nächstes) · **Backlog** (irgendwann) · **Bekannte Rand
   aufs blanke Wurzelelement, die Papier-*Regeln* bleiben gegated. Die Leiste muss
   ihre Höhe weiter als CSS-Variable melden — die Wand reserviert danach ihr unteres
   Polster. Unabhängig von allem anderen, kann sofort starten.
-- **Projekte auf der Pinnwand (03).** Projekte bekommen **gar keinen**
+- **Projekte auf der Pinnwand (03).** Das Abzeichen am Projektzettel zeigt die **Summe der
+  bisher verschlungenen Punkte** als Zahl — immer sichtbar, ab 0. Die Summe steht in
+  `task_completions`; die Wand lädt heute nur die laufende Woche, das braucht eine eigene
+  Abfrage (bewusst keine zweite Spalte auf `tasks`). Projekte bekommen **gar keinen**
   Richtungskranz. Die Geste bleibt: nach unten ziehen öffnet den
   `ProjectWorkModal` — dasselbe Fenster wie „Am Projekt arbeiten" im klassischen
   Aussehen, mit Eintrag was gemacht wurde und wie viel Aufwand. Kein einfaches
