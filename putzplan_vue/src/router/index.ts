@@ -41,6 +41,12 @@ const router = createRouter({
       component: () => import('../views/NotesView.vue')
     },
     {
+      // PROTOTYP (Wegwerf, Ticket Ziehgeste) — vor dem Merge wieder raus.
+      path: '/proto-kranz',
+      name: 'proto-kranz',
+      component: () => import('../views/PrototypeKranzView.vue')
+    },
+    {
       path: '/login',
       name: 'login',
       component: () => import('../views/LoginView.vue')

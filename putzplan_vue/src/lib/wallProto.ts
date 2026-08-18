@@ -1,127 +1,179 @@
 /**
  * PROTOTYP — WEGWERFCODE. Nicht nach `main` mergen.
  *
- * Frage: „Wie werden die Zettel der Pinnwand lesbar, ohne die Paar-Packung
- * aufzugeben?" (→ `HANDOFF-kartengroesse.md`)
+ * Frage: „Wie werden die Zettel der Pinnwand auf dem Handy lesbar und
+ * bedienbar?" (→ `HANDOFF-kartengroesse.md`)
  *
- * Vier Varianten auf der bestehenden Route `/`, umschaltbar über `?variant=`
- * und die schwebende Leiste unten (`WallProtoBar.vue`).
+ * Kein fester Variantensatz mehr, sondern **Regler**: Schriftgrößen,
+ * Innenabstand, Mindestbreite und der Bearbeiten-Stift (Größe und Position)
+ * lassen sich live drehen. Presets sind nur Sprungmarken in denselben Raum.
  *
- * Jede Variante zieht an einer ANDEREN Stellschraube:
- *   A — der Ist-Zustand, als Vergleichspunkt.
- *   B — Untergrenze hoch + Schrift größer (der Kandidat aus dem Handoff).
- *   C — festes Zwei-Spalten-Raster: jeder Zettel ist halb oder ganz breit.
- *   D — Schrift groß, Fläche umverteilt: schmalerer Rand, leisere Fußzeile.
+ * Der ganze Zustand steckt in der URL (`?proto=`), damit eine Einstellung
+ * teilbar und nach dem Neuladen noch da ist.
+ *
+ * **Referenzwerte** (dafür sind die Regler-Enden gewählt):
+ * - Trefferfläche: iOS HIG 44×44 pt, Material Design 48×48 dp Minimum.
+ * - Fließtext: iOS Body 17 pt, Material Body-Large 16 sp; unter 11–12 px gilt
+ *   Text auf dem Telefon als grenzwertig.
+ * - Der Zettel-Titel ist kein Fließtext, sondern fett und kurz — 15–17 px ist
+ *   dort das Gegenstück zu 16 sp Fließtext.
  */
-import { ref } from 'vue'
+import { reactive, watch } from 'vue'
 import { setMinNoteWidth } from './wallLayout'
 
-export interface ProtoVariant {
-  key: string
-  name: string
-  /** Untergrenze der Zettelbreite; bekommt die nutzbare Wandbreite. */
-  minWidth: (wallWidth: number) => number
-  /** Alle Zettel auf halbe/ganze Wandbreite rasten. */
-  snapColumns?: boolean
-  /** CSS-Variablen, die `WallNote.vue` für Schrift und Innenabstand liest. */
-  css: Record<string, string>
+/** Wo der Bearbeiten-Stift sitzt. */
+export type EditPos = 'tr' | 'tl' | 'bl' | 'flow'
+
+export const EDIT_POS_LABELS: Record<EditPos, string> = {
+  tr: 'oben rechts (Ist)',
+  tl: 'oben links',
+  bl: 'unten links',
+  flow: 'in der Fußzeile'
 }
 
-const PAIR_GAP = 12
+export interface ProtoConfig {
+  /** Titelgröße in px. */
+  title: number
+  /** Fußzeile (Punkte, Rückstand) in px. */
+  foot: number
+  /** Schrift der Unteraufgaben-Zettelchen in px. */
+  sub: number
+  /** Innenabstand des Zettels in px (oben/unten bzw. links). */
+  pad: number
+  /** `MIN_NOTE_WIDTH` — Untergrenze der Zettelbreite. */
+  minWidth: number
+  /** Sichtbare Größe des Stift-Glyphs in px. */
+  editGlyph: number
+  /** Kantenlänge der Trefferfläche des Stifts in px. */
+  editHit: number
+  /** Position des Stifts. */
+  editPos: EditPos
+}
 
-export const PROTO_VARIANTS: ProtoVariant[] = [
+/** Der Ist-Zustand — Startpunkt und Vergleichspunkt. */
+export const IST: ProtoConfig = {
+  title: 13,
+  foot: 10,
+  sub: 12,
+  pad: 6,
+  minWidth: 96,
+  editGlyph: 12,
+  editHit: 40,
+  editPos: 'tr'
+}
+
+export interface ProtoPreset {
+  key: string
+  name: string
+  hint: string
+  config: ProtoConfig
+}
+
+export const PRESETS: ProtoPreset[] = [
   {
     key: 'A',
     name: 'Ist-Zustand',
-    minWidth: () => 96,
-    css: {}
+    hint: 'Vergleichspunkt',
+    config: { ...IST }
   },
   {
     key: 'B',
-    name: 'Untergrenze 150 + Schrift +2',
-    minWidth: () => 150,
-    css: {
-      '--proto-title': '15px',
-      '--proto-title-daily': '14.5px',
-      '--proto-title-project': '17px',
-      '--proto-foot': '12px',
-      '--proto-sub': '14px',
-      '--proto-sub-c3': '13.5px',
-      '--proto-sub-foot': '11.5px'
-    }
+    name: 'Nur Schrift größer',
+    hint: 'Schrift +2, sonst nichts — zeigt, wo es allein daran hakt',
+    config: { ...IST, title: 15, foot: 12, sub: 14 }
   },
   {
     key: 'C',
-    name: 'Festes Zwei-Spalten-Raster',
-    minWidth: (wall) => Math.floor((wall - PAIR_GAP) / 2),
-    snapColumns: true,
-    css: {
-      '--proto-title': '16px',
-      '--proto-title-daily': '15.5px',
-      '--proto-title-project': '18px',
-      '--proto-foot': '12px',
-      '--proto-sub': '14px',
-      '--proto-sub-c3': '13.5px',
-      '--proto-sub-foot': '11.5px'
-    }
+    name: 'Schrift + Untergrenze',
+    hint: 'Kandidat aus dem Handoff: 150 px Untergrenze',
+    config: { ...IST, title: 15, foot: 12, sub: 14, minWidth: 150 }
   },
   {
     key: 'D',
-    name: 'Schrift groß, Fläche umverteilt',
-    minWidth: () => 120,
-    css: {
-      '--proto-title': '16px',
-      '--proto-title-daily': '15.5px',
-      '--proto-title-project': '18px',
-      /* Fußzeile bleibt klein und tritt zurück — der Titel bekommt den Platz. */
-      '--proto-foot': '9.5px',
-      '--proto-pad': '5px 30px 4px 6px',
-      '--proto-sub': '14px',
-      '--proto-sub-c3': '13.5px',
-      '--proto-sub-foot': '10px'
+    name: 'Fläche umverteilt',
+    hint: 'Titel groß, Fußzeile leise, Rand schmal',
+    config: { ...IST, title: 16, foot: 9.5, sub: 14, pad: 5, minWidth: 120 }
+  },
+  {
+    key: 'E',
+    name: 'Daumen-tauglich',
+    hint: '16 px Titel, Stift 20 px auf 48 px Fläche in der Fußzeile',
+    config: {
+      title: 16,
+      foot: 12,
+      sub: 14,
+      pad: 8,
+      minWidth: 150,
+      editGlyph: 20,
+      editHit: 48,
+      editPos: 'flow'
     }
   }
 ]
 
-const initialKey = (): string => {
-  const fromUrl = new URLSearchParams(window.location.search).get('variant')
-  return PROTO_VARIANTS.some((v) => v.key === fromUrl) ? (fromUrl as string) : 'A'
+export const config = reactive<ProtoConfig>({ ...IST })
+
+// --- URL: Einstellung teilbar und neuladefest ---------------------------------
+
+const KEYS = Object.keys(IST) as Array<keyof ProtoConfig>
+
+function readUrl(): void {
+  const raw = new URLSearchParams(window.location.search).get('proto')
+  if (!raw) return
+  for (const part of raw.split(',')) {
+    const [key, value] = part.split(':') as [keyof ProtoConfig, string]
+    if (!KEYS.includes(key) || value === undefined) continue
+    if (key === 'editPos') config.editPos = value as EditPos
+    else (config[key] as number) = Number(value)
+  }
 }
 
-export const protoKey = ref(initialKey())
-
-export const protoVariant = (): ProtoVariant =>
-  PROTO_VARIANTS.find((v) => v.key === protoKey.value) ?? PROTO_VARIANTS[0]
-
-export function setProtoKey(key: string): void {
-  protoKey.value = key
+function writeUrl(): void {
+  const raw = KEYS.map((key) => `${key}:${config[key]}`).join(',')
   const url = new URL(window.location.href)
-  url.searchParams.set('variant', key)
+  url.searchParams.set('proto', raw)
   window.history.replaceState({}, '', url)
 }
 
-/** Vor jedem Layout-Lauf: Untergrenze und CSS-Variablen der Variante setzen. */
-export function applyProtoVariant(wallWidth: number): ProtoVariant {
-  const variant = protoVariant()
-  setMinNoteWidth(variant.minWidth(wallWidth))
-  const root = document.documentElement
-  for (const v of PROTO_VARIANTS) {
-    for (const name of Object.keys(v.css)) root.style.removeProperty(name)
-  }
-  for (const [name, value] of Object.entries(variant.css)) {
-    root.style.setProperty(name, value)
-  }
-  return variant
+readUrl()
+watch(config, writeUrl, { deep: true })
+
+export function applyPreset(preset: ProtoPreset): void {
+  Object.assign(config, preset.config)
+}
+
+/** Stimmt die aktuelle Einstellung exakt mit einem Preset überein? */
+export function matchingPreset(): ProtoPreset | null {
+  return (
+    PRESETS.find((p) => KEYS.every((key) => p.config[key] === config[key])) ?? null
+  )
 }
 
 /**
- * Variante C: alles auf halbe oder ganze Wandbreite rasten. Bewusst NACH dem
- * regulären Planen — der Prototyp fragt, wie ein Raster aussieht, nicht wie man
- * es sauber einbaut.
+ * Vor jedem Layout-Lauf: Untergrenze und CSS-Variablen setzen.
+ *
+ * Die Schriftgrößen der Unteraufgaben leiten sich von `sub` ab, statt eigene
+ * Regler zu bekommen — drei Regler für dieselbe Frage machen den Prototypen
+ * unbedienbar.
  */
-export function snapToColumns(widths: Map<string, number>, wallWidth: number): void {
-  const half = Math.floor((wallWidth - PAIR_GAP) / 2)
-  for (const [id, width] of widths) {
-    widths.set(id, width <= half ? half : wallWidth)
-  }
+export function applyProtoConfig(): void {
+  setMinNoteWidth(config.minWidth)
+  const s = document.documentElement.style
+  s.setProperty('--proto-title', `${config.title}px`)
+  s.setProperty('--proto-title-daily', `${config.title - 0.5}px`)
+  s.setProperty('--proto-title-project', `${config.title + 2}px`)
+  s.setProperty('--proto-foot', `${config.foot}px`)
+  s.setProperty('--proto-sub', `${config.sub}px`)
+  s.setProperty('--proto-sub-c3', `${config.sub - 0.5}px`)
+  s.setProperty('--proto-sub-foot', `${config.sub - 2.5}px`)
+  s.setProperty('--proto-edit-glyph', `${config.editGlyph}px`)
+  s.setProperty('--proto-edit-hit', `${config.editHit}px`)
+
+  // Der Innenabstand hängt an der Stift-Position: nur ein Stift OBEN RECHTS
+  // braucht rechts einen Streifen frei.
+  const side = config.pad + 2
+  const reserve = config.editPos === 'tr' ? Math.max(28, config.editHit - 8) : side
+  s.setProperty('--proto-pad', `${config.pad}px ${reserve}px ${config.pad - 1}px ${side}px`)
+
+  document.documentElement.dataset.protoEdit = config.editPos
 }

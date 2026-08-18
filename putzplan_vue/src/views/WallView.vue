@@ -47,7 +47,7 @@ import { useTaskBoard } from '@/composables/useTaskBoard'
 import { searchTasks } from '@/lib/taskSearch'
 // PROTOTYP (Kartengroesse) — Wegwerfcode, nicht nach main mergen.
 import WallProtoBar from '../components/WallProtoBar.vue'
-import { applyProtoVariant, protoKey, snapToColumns } from '@/lib/wallProto'
+import { applyProtoConfig, config as protoConfig } from '@/lib/wallProto'
 import {
   defaultNoteWidth,
   packWall,
@@ -202,8 +202,8 @@ const relayout = (animate: boolean, anchorId?: string) => {
   const usableWidth = wall.clientWidth - 2 * EDGE
   if (usableWidth <= 0) return
 
-  // PROTOTYP: Untergrenze und Schriftgroessen der aktiven Variante setzen.
-  const protoVariant = applyProtoVariant(usableWidth)
+  // PROTOTYP: Untergrenze, Schriftgroessen und Stift der Einstellung setzen.
+  applyProtoConfig()
 
   // Scroll-Anker, Teil 1: die Bildschirmposition des angetippten Zettels
   // merken, BEVOR irgendetwas am DOM verändert wird.
@@ -357,15 +357,6 @@ const relayout = (animate: boolean, anchorId?: string) => {
     if (!el || fallback === undefined) continue
     widths.set(id, fallback)
     el.style.width = `${fallback}px`
-  }
-
-  // PROTOTYP (Variante C): auf halbe/ganze Wandbreite rasten.
-  if (protoVariant.snapColumns) {
-    snapToColumns(widths, usableWidth)
-    for (const shape of shapes) {
-      const el = elements.get(shape.id)
-      if (el) el.style.width = `${widths.get(shape.id)}px`
-    }
   }
 
   // Schritt 4 — Höhen messen. Erst hier, wenn keine Breite sich mehr ändert:
@@ -535,8 +526,8 @@ const layoutSignature = computed(() =>
   wallTasks.value.map(task => `${task.task_id}:${task.task_type}:${task.title}`).join('|')
 )
 
-// PROTOTYP: Variantenwechsel loest ein neues Layout aus.
-watch(protoKey, () => nextTick(() => relayout(false)))
+// PROTOTYP: jede Reglerbewegung loest ein neues Layout aus.
+watch(protoConfig, () => nextTick(() => relayout(false)), { deep: true })
 
 watch(layoutSignature, () => {
   // Ein Zettel, der von der Wand verschwindet (erledigt, gelöscht), nimmt
