@@ -100,16 +100,15 @@ Aufbau: **Aktiv** (als Nächstes) · **Backlog** (irgendwann) · **Bekannte Rand
   trifft also immer dieselben Zettel — daher „fast immer".
   Der Reststreifen rechts ist dagegen Arithmetik: bei 45 % Deckel bleiben auf
   374 px rund 26 px liegen.
-- **Punkte-Sticker erst ab vier Fußzeilen-Elementen (15).** Wandert der Punktwert
-  bei einer dreiteiligen Fußzeile (Punkte, Stift, Eselsohr) nach oben rechts,
-  bleibt unten ein großes Loch — die beiden Griffe stehen rechtsbündig, links ist
-  nichts. Die Entscheidung ist heute rein über die Breite gefällt und kennt die
-  Elementzahl nicht. Das Merkmal existiert im Code bereits als
-  `hasOtherFootContent`. **Zu dieser Bedingung gibt es keine
-  Nutzerentscheidung** — sie stammt aus der Prototyp-Sitzung, ihre Begründung
-  (die Paar-Packung retten) ist mit Ticket 02 entfallen. Sie darf ohne
-  Rückfrage geändert werden. Zu prüfen ist nur, dass weiterhin zwei Zettel auf
-  ~374 px nebeneinander passen — das verlangt 02.
+- **Der Stempel wird zusammengelegt (09b).** Ein Stempel je Zettel statt zweier: der
+  Grundabdruck ist berechnet (NEU / FÄLLIG / ROUTINE / Projektspruch), darüber stempelt man
+  von Hand WICHTIG und DRINGEND. NIE und HEUTE entfallen. Der Stempel **ordnet nichts um**
+  → [ADR-0002](docs/adr/0002-stempel-ordnet-nicht.md). **Ändert bereits deployten Code:**
+  `complete-task` muss tägliche Aufgaben ins Zurücksetzen aufnehmen, und der nächtliche
+  Reset in `reset_recurring_tasks()` entfällt — neue Migration nötig, Migrations sind
+  append-only, und der Function-Deploy ist ein eigener Schritt.
+  ~~Punkte-Sticker erst ab vier Fußzeilen-Elementen (15)~~ ist dadurch **erledigt**: jeder
+  Zettel trägt jetzt einen Stempel, die dreiteilige Fußzeile gibt es nicht mehr.
 - **Wochenziel-Leiste in jede Ansicht (08).** Heute liegt sie in
   `WallStatusBar.vue` und ist damit **nur auf der Pinnwand** sichtbar; in Einkauf,
   Notizen und Historie fehlt sie. Der Header soll überall gleich aussehen: Papier,

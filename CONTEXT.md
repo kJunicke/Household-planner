@@ -41,41 +41,68 @@ stark überfällig gelten.
 ### noch nie gemacht
 
 Eine wiederkehrende Aufgabe ohne jede Erledigung (`last_completed_at` ist leer). Sie gilt
-als **maximal dringend** und steht in jeder Dringlichkeits-Sortierung ganz oben. Sie ist
-kein Sonderfall der Überfälligkeit, sondern ein eigener Zustand — eine Tageszahl gibt es
-für sie nicht.
+als **maximal dringend** und steht in jeder geordneten Liste ganz oben. Sie ist kein
+Sonderfall der Überfälligkeit, sondern ein eigener Zustand — eine Tageszahl gibt es für sie
+nicht. Auf der Pinnwand trägt sie den Grundabdruck **NEU** → **Stempel**.
 
-### Dringlichkeit
+### Stempel
 
-Der **berechnete** Vergleichswert aus Kadenz und letzter Erledigung: je größer, desto
-dringender. Er wird zentral gebildet, damit alle Ansichten dieselbe Aussage treffen.
+Der Gummistempel in der Fußzeile eines **Zettels** — die einzige Stelle, an der auf der
+Pinnwand steht, wie es um eine Aufgabe bestellt ist. **Jeder Zettel trägt einen.**
 
-Wie er sichtbar wird, hängt an der Ansicht. In Listen ordnet er die Aufgaben. **Auf der
-Pinnwand ordnet er nicht**: dort gelten alle fälligen Aufgaben als gleich dringend, und
-innerhalb einer Gruppe entscheidet der Platz, nicht die Dringlichkeit — eine Wand ist keine
-Liste. Ablesbar bleibt sie dort allein am **Stempel** (NIE / FÄLLIG / HEUTE), nicht an der
-Position und nicht an einer Farbe.
+Der unterste Abdruck ist **berechnet** und ergibt sich aus Kadenz und letzter Erledigung:
+**NEU**, solange eine Aufgabe noch nie erledigt wurde, sonst **FÄLLIG**. Tägliche Aufgaben
+tragen **ROUTINE**, Projekte einen eigenen Spruch — bei beiden sagt der Grundabdruck nichts
+über Dringlichkeit aus, weil beide nie in Verzug geraten können. Darüber legt der Haushalt
+von Hand nach → **Überstempeln**.
 
-Nicht zu verwechseln mit **Nachdruck**, der von Hand gesetzt wird.
+**Der Stempel ordnet nicht.** Auf der Wand gelten alle fälligen Aufgaben als gleich
+dringend; innerhalb einer Gruppe entscheidet der Platz, nicht der Stempel — eine Wand ist
+keine Liste. Eine mit DRINGEND gestempelte Aufgabe darf unter einer ungestempelten hängen,
+und das ist kein Fehler → [ADR-0002](docs/adr/0002-stempel-ordnet-nicht.md).
 
-### Nachdruck
+In **Listen** ordnet derselbe berechnete Vergleichswert die Aufgaben sehr wohl. Dort gibt es
+keine Stempel: die Reihenfolge ist die Aussage.
 
-Die Aussage, die ein Haushaltsmitglied einer fälligen Aufgabe **von Hand** mitgibt: „diesmal
-ist es wichtig". Damit handelt der Haushalt untereinander aus, was zuerst zählt — im
-Unterschied zur **Dringlichkeit**, die niemand setzt, sondern die sich aus dem Zeitplan
+### Überstempeln
+
+Die Aussage, die ein Haushaltsmitglied einem **Zettel** von Hand mitgibt: „diesmal ist es
+wichtig". Damit handelt der Haushalt untereinander aus, was zuerst zählt — im Unterschied
+zum Grundabdruck des **Stempels**, den niemand setzt, sondern der sich aus dem Zeitplan
 ergibt.
 
-Nachdruck wird gestempelt: FÄLLIG → WICHTIG → DRINGEND, jeder Stempel legt einen weiteren
-Abdruck auf den Zettel, der oberste gilt. Nach dem dritten ist der Zettel wieder sauber und
-zeigt nur noch FÄLLIG. Die Höhe des Stapels ist selbst eine Aussage — an einer Aufgabe mit
-drei Abdrücken hat sichtbar jemand nachgelegt.
+Ein Tipp auf den Stempel legt den nächsten Abdruck obenauf: **WICHTIG**, dann **DRINGEND**.
+Der nächste Tipp macht den Zettel wieder sauber — er zeigt danach nur noch seinen
+Grundabdruck, als hätte ihn nie jemand angefasst. Die vorherigen Abdrücke bleiben sichtbar
+liegen, der oberste gilt; die Höhe des Stapels ist selbst eine Aussage.
 
-Nachdruck ist **rein optisch**: er ändert weder die Reihenfolge noch die Gruppe. Eine als
-DRINGEND gestempelte Aufgabe kann auf der Wand unterhalb einer ungestempelten stehen.
+Überstempeln gilt für **einen Durchlauf**, nicht für die Aufgabe: mit dem Erledigen fällt es
+weg. Bliebe es stehen, wäre nach ein paar Wochen alles dringend. Der **Grundabdruck**
+verfällt nicht — der wird berechnet und kommt von selbst wieder.
 
-Er gilt für **einen Durchlauf**, nicht für die Aufgabe: mit dem Erledigen fällt er weg, bei
-täglichen Aufgaben mit dem nächtlichen Zurücksetzen. Bliebe er stehen, wäre nach ein paar
-Wochen alles dringend.
+### Kranz
+
+Die vier beschrifteten Richtungen, die erscheinen, wenn man einen **Zettel** gedrückt hält:
+die Erklärung dessen, was beim Ziehen in die jeweilige Richtung geschieht. Sie stehen an den
+**Bildschirmrändern**, nicht um den Zettel herum — sonst verdeckt der Daumen die Hälfte
+davon.
+
+Der Kranz erklärt die Geste, er ersetzt sie nicht: gezogen wird weiter mit demselben Finger,
+und wer loslässt, ohne eine Richtung erreicht zu haben, hat nichts getan. **Projekte haben
+keinen Kranz** — bei ihnen führt nur die eine Richtung überhaupt zu etwas.
+
+### Aufklappen
+
+Der Tipp auf einen Zettel mit Unteraufgaben: er zeigt seine Zettelchen und nimmt dafür die
+volle Wandbreite ein. Ein aufgeklappter Zettel **bleibt liegen, wo er hängt**; die Zettel,
+die ihm im Weg sind, rutschen unter ihn. Zuklappen stellt den vorigen Zustand wieder her.
+
+### Reißzwecke
+
+Die Nadel, mit der ein Zettel an der Wand steckt — und der einzige Träger der **Zuweisung**:
+ist jemand zuständig, hat sie dessen Farbe, sonst bleibt sie neutral. Kein Rahmen, keine
+zweite Farbstelle am Zettel. Projekte hängen stattdessen an einer doppelten Büroklammer, die
+dieselbe Aussage trägt.
 
 ### wieder dreckig
 
