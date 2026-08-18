@@ -302,6 +302,31 @@ export function planNoteWidths(
   return plan
 }
 
+/**
+ * PROTOTYP: Wie weit ein Zettel an der LINKEN Wandkante zusaetzlich eingerueckt
+ * werden darf, in Pixeln.
+ *
+ * Die Skyline setzt jeden Zettel, der links Platz findet, exakt auf x = 0 —
+ * dadurch stehen die meisten Zettel auf einer perfekten Linie untereinander.
+ * So pinnt kein Mensch. Der Versatz aus `jitterOf` (±5 px) faellt dagegen nicht
+ * ins Gewicht.
+ *
+ * Eingerueckt wird nur an der linken Kante und nur nach rechts: ein Zettel darf
+ * nicht ueber den Rand hinausragen, und mitten in der Reihe wuerde die
+ * Einrueckung ein Loch reissen.
+ */
+let LEFT_INDENT_MAX = 0
+
+export function setLeftIndent(max: number): void {
+  LEFT_INDENT_MAX = max
+}
+
+/** Einrueckung dieses Zettels: 0 … max, deterministisch aus der `task_id`. */
+export function indentOf(taskId: string, max: number): number {
+  if (max <= 0) return 0
+  return fnv1a(`${taskId}#indent`) % (max + 1)
+}
+
 export interface PackedNote {
   id: string
   x: number
@@ -352,7 +377,8 @@ export function packWall(notes: readonly WallNoteMetrics[], wallWidth: number): 
     }
     if (bestTop === Infinity) bestTop = 0
 
-    const dx = note.expanded ? 0 : jitterOf(note.id, 'x', 5)
+    const indent = note.expanded || bestColumn !== 0 ? 0 : indentOf(note.id, LEFT_INDENT_MAX)
+    const dx = (note.expanded ? 0 : jitterOf(note.id, 'x', 5)) + indent
     const dy = note.expanded ? 0 : jitterOf(note.id, 'y', 4) - 2.5
     const x = Math.max(0, Math.min(wallWidth - width, bestColumn * SKYLINE_RESOLUTION + dx))
     const y = Math.max(0, bestTop + dy)

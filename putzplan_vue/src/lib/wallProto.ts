@@ -23,7 +23,7 @@
  *   davon; ×1.3 bringt ihn auf 16,9 px / 13 px — also genau auf Body-Niveau.
  */
 import { reactive, watch } from 'vue'
-import { setMinNoteWidth } from './wallLayout'
+import { setLeftIndent, setMinNoteWidth } from './wallLayout'
 
 export interface ProtoConfig {
   /** Faktor auf alle Schriftgrößen des Zettels. 1 = Ist-Zustand. */
@@ -34,6 +34,12 @@ export interface ProtoConfig {
   hit: number
   /** Kantenlänge des Punkte-Stickers. */
   sticker: number
+  /** Wie weit ein Zettel an der linken Kante eingerückt werden darf (px). */
+  indent: number
+  /** Wie die Dringlichkeit gezeigt wird. */
+  due: 'aus' | 'zwecke' | 'stempel' | 'beides'
+  /** Punktwert und Rückstand nach oben rechts statt in die Fußzeile. */
+  metaTop: boolean
 }
 
 /** Der Ist-Zustand — nur noch als Vergleichspunkt. */
@@ -41,7 +47,10 @@ export const IST: ProtoConfig = {
   scale: 1,
   minWidth: 96,
   hit: 44,
-  sticker: 34
+  sticker: 34,
+  indent: 0,
+  due: 'aus',
+  metaTop: false
 }
 
 /** Der besprochene Entwurf. */
@@ -49,7 +58,10 @@ export const ENTWURF: ProtoConfig = {
   scale: 1.2,
   minWidth: 96,
   hit: 44,
-  sticker: 34
+  sticker: 34,
+  indent: 26,
+  due: 'beides',
+  metaTop: true
 }
 
 export const config = reactive<ProtoConfig>({ ...ENTWURF })
@@ -64,7 +76,9 @@ function readUrl(): void {
   for (const part of raw.split(',')) {
     const [key, value] = part.split(':') as [keyof ProtoConfig, string]
     if (!KEYS.includes(key) || value === undefined) continue
-    (config[key] as number) = Number(value)
+    if (key === 'due') config.due = value as ProtoConfig['due']
+    else if (key === 'metaTop') config.metaTop = value === 'true'
+    else (config[key] as number) = Number(value)
   }
 }
 
@@ -83,6 +97,8 @@ export function applyProtoConfig(): void {
   s.setProperty('--proto-scale', String(config.scale))
   s.setProperty('--proto-hit', `${config.hit}px`)
   s.setProperty('--proto-sticker', `${config.sticker}px`)
+  setLeftIndent(config.indent)
+  document.documentElement.dataset.protoDue = config.due
   // Der Knick des Eselsohrs waechst mit seiner Flaeche, damit er neben dem
   // Stift-Patch nicht verloren wirkt.
   s.setProperty('--proto-knick', `${Math.round(config.hit * 0.62)}px`)

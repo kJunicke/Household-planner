@@ -47,6 +47,14 @@ const SLIDERS = [
     max: 52,
     step: 2,
     note: 'Form trägt den Wert: Kreis 1 · Quadrat 2 · Sechseck 3 · Wappen 4 · Stern 5'
+  },
+  {
+    key: 'indent',
+    label: 'Einrückung',
+    min: 0,
+    max: 60,
+    step: 2,
+    note: 'zufällig, aber fest je Zettel — nur an der linken Kante'
   }
 ] as const
 </script>
@@ -75,6 +83,26 @@ const SLIDERS = [
         />
         <span class="proto-value">{{ config[slider.key] }}</span>
         <span class="proto-note">{{ slider.note }}</span>
+      </label>
+
+      <div class="proto-row proto-row--pos">
+        <span class="proto-name">Dringlichkeit</span>
+        <div class="proto-presets">
+          <button
+            v-for="mode in (['aus', 'zwecke', 'stempel', 'beides'] as const)"
+            :key="mode"
+            class="proto-chip"
+            :class="{ 'proto-chip--on': config.due === mode }"
+            @click="config.due = mode"
+          >
+            {{ mode }}
+          </button>
+        </div>
+      </div>
+
+      <label class="proto-check">
+        <input v-model="config.metaTop" type="checkbox" />
+        <span>Punkte und Rückstand oben rechts statt in der Fußzeile</span>
       </label>
 
     </div>
@@ -119,6 +147,7 @@ const SLIDERS = [
 
 .proto-presets {
   display: flex;
+  flex-wrap: wrap;
   gap: 4px;
   margin-bottom: 8px;
 }
@@ -131,6 +160,25 @@ const SLIDERS = [
   color: #ddd;
   font: inherit;
   cursor: pointer;
+}
+
+.proto-row--pos {
+  grid-template-columns: 78px 1fr;
+  align-items: start;
+}
+
+.proto-chip--on {
+  border-color: #ffd479;
+  background: #4a3a12;
+  color: #ffd479;
+}
+
+.proto-check {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+  color: #ddd;
 }
 
 .proto-row {

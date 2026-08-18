@@ -45,6 +45,8 @@ import { kindOfTaskType, rotationOf, subtaskColumns } from '@/lib/wallLayout'
 import { useTearGesture } from '@/composables/useTearGesture'
 import { useDirectionPress, type PressDirection } from '@/composables/useDirectionPress'
 import { flyPoints } from '@/lib/pointsFlight'
+// PROTOTYP (Kartengroesse) — Wegwerfcode, nicht nach main mergen.
+import { config as proto } from '@/lib/wallProto'
 import { offerScrap } from '@/composables/useTornScrap'
 import WallDirectionMenu from './WallDirectionMenu.vue'
 import TaskCompletionModal from './TaskCompletionModal.vue'
@@ -474,6 +476,34 @@ const schedule = computed(() => scheduleOf(props.task))
  * Tägliche Aufgaben tragen hier nichts: dass sie täglich sind, steht am
  * gelben Papier und am Klebestreifen. Ein Wort daneben wäre Doppelung.
  */
+/**
+ * PROTOTYP: Dringlichkeitsstufe fuer Zwecke und Stempel.
+ *
+ *   'hot'   ueberfaellig oder nie gemacht  → rot
+ *   'today' heute faellig geworden          → gelb
+ *   null    hat Zeit                        → kein Signal
+ *
+ * Bewusst dreistufig und nicht feiner: die Zwecke ist 14 px gross, mehr
+ * Abstufungen kann sie nicht tragen.
+ */
+const protoMetaTop = computed(() => proto.metaTop)
+const protoStamp = computed(() => proto.due === 'stempel' || proto.due === 'beides')
+
+const urgency = computed((): 'hot' | 'today' | null => {
+  if (props.task.task_type === 'daily') return null
+  const { status, daysOverdue } = schedule.value
+  if (status === 'never-done') return 'hot'
+  if (status === 'overdue') return (daysOverdue ?? 0) > 0 ? 'hot' : 'today'
+  return null
+})
+
+/** PROTOTYP: was der Stempel sagt. */
+const stampLabel = computed((): string | null => {
+  if (urgency.value === 'hot') return schedule.value.status === 'never-done' ? 'NIE' : 'FÄLLIG'
+  if (urgency.value === 'today') return 'HEUTE'
+  return null
+})
+
 const metaLabel = computed((): string | null => {
   if (props.task.task_type === 'daily') return null
   if (schedule.value.status === 'never-done') return 'nie'
@@ -607,14 +637,42 @@ const handlePostponeConfirm = async (targetDate: string) => {
   >
     <!-- Befestigung: Reißzwecke / Klebeband / Büroklammern.
          Sie ist das Typ-Signal, deshalb kein Text daneben. -->
-    <span v-if="kind === 'open'" class="pin" aria-hidden="true"></span>
+    <span
+      v-if="kind === 'open'"
+      class="pin"
+      :class="urgency ? `pin--${urgency}` : null"
+      aria-hidden="true"
+    ></span>
     <span v-else-if="kind === 'daily'" class="tape" aria-hidden="true"></span>
     <template v-else>
-      <span class="clip clip--l" aria-hidden="true"></span>
-      <span class="clip clip--r" aria-hidden="true"></span>
+      <span class="clip clip--l" :class="urgency ? `clip--${urgency}` : null" aria-hidden="true"></span>
+      <span class="clip clip--r" :class="urgency ? `clip--${urgency}` : null" aria-hidden="true"></span>
     </template>
 
-    <p class="title">{{ props.task.title }}</p>
+    <!-- PROTOTYP: Der Gummistempel. Er erscheint NUR, wenn es brennt — das ist
+         sein ganzer Wert: ein Zettel, der Zeit hat, zeigt nichts, und deshalb
+         sieht man den einen, der schreit. Halbtransparent und schraeg ueber
+         die obere Kante, wie ein Abdruck im Posteingang. -->
+    <span v-if="protoStamp && stampLabel" class="due-stamp" :class="`due-stamp--${urgency}`">
+      {{ stampLabel }}
+    </span>
+
+    <!-- PROTOTYP: die Ecke oben rechts. Hier steht, was NICHTS tut — Punktwert
+         und Rueckstand. Auf einem schmalen Zettel wurde die Fusszeile sonst
+         breiter als der Titel und hat den ganzen Zettel aufgeblasen; die drei
+         Knoepfe (Stapel, Stift, Eselsohr) bleiben unten, weil man sie dort mit
+         dem Daumen erreicht. Der Titel fliesst um die Ecke herum. -->
+    <div class="head">
+      <div v-if="protoMetaTop" class="corner">
+        <span class="points" :class="`points--s${Math.min(5, Math.max(0, effectivePoints))}`">
+          {{ effectivePoints }}
+        </span>
+        <!-- Der Stempel sagt dasselbe lauter — dann schweigt der Text. -->
+        <span v-if="metaLabel && !(protoStamp && stampLabel)" class="meta">{{ metaLabel }}</span>
+      </div>
+
+      <p class="title">{{ props.task.title }}</p>
+    </div>
 
     <!-- Fußzeile im normalen Fluss: Punktwert und Rückstand können dem Titel
          damit strukturell nicht mehr ins Gehege kommen, egal wie lang er ist. -->
@@ -625,7 +683,11 @@ const handlePostponeConfirm = async (targetDate: string) => {
       <!-- PROTOTYP: der Punktwert ist ein aufgeklebter Sticker, keine Zeile
            Text mehr. Die FORM traegt den Wert (Kreis 1 … Stern 5), die Zahl
            bestaetigt ihn nur — auf einen Blick erkennbar, ohne zu lesen. -->
-      <span class="points" :class="`points--s${Math.min(5, Math.max(0, effectivePoints))}`">
+      <span
+        v-if="!protoMetaTop"
+        class="points"
+        :class="`points--s${Math.min(5, Math.max(0, effectivePoints))}`"
+      >
         {{ effectivePoints }}
       </span>
       <!-- PROTOTYP: Unteraufgaben haben jetzt IMMER ein eigenes Zeichen — ein
@@ -649,7 +711,7 @@ const handlePostponeConfirm = async (targetDate: string) => {
           {{ tracksProgress ? `${doneSubtasks}/${subtasks.length}` : subtasks.length }}
         </span>
       </button>
-      <span v-if="metaLabel" class="meta">{{ metaLabel }}</span>
+      <span v-if="metaLabel && !protoMetaTop" class="meta">{{ metaLabel }}</span>
     </div>
 
     <!-- Unteraufgaben als angeheftete Zettelchen. Erst im aufgeklappten
@@ -883,6 +945,88 @@ const handlePostponeConfirm = async (targetDate: string) => {
    Dauer, nicht das Wort. */
 .meta {
   color: var(--color-danger);
+}
+
+/* --- PROTOTYP: Ecke oben rechts, Stempel, Dringlichkeit ------------------- */
+
+/* Der Zettel selbst ist ein Flex-Container; ein `float` waere darin
+   wirkungslos. Der Kopf ist deshalb ein eigener BLOCK — nur dort fliesst der
+   Titel um die Ecke herum. */
+.head {
+  display: block;
+}
+
+/* Die Ecke schwimmt (`float`), damit der Titel um sie herumfliesst statt neben
+   ihr in eine schmale Spalte gezwungen zu werden. Ein kurzer Titel steht neben
+   ihr, ein langer laeuft unter ihr weiter — beides ohne Messung. */
+.corner {
+  float: right;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin: -1px 0 2px 7px;
+}
+
+.corner .meta {
+  font-size: calc(10px * var(--proto-scale, 1));
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+/* Der Gummistempel: schraeg, halbtransparent, mit Kastenrand wie ein echter
+   Abdruck. Er liegt UEBER dem Zettel und nimmt keinen Platz weg — der Preis
+   ist, dass er ein Stueck Titel ueberdeckt, deshalb sitzt er am oberen Rand
+   und bleibt durchscheinend. `pointer-events: none`, sonst schluckt er die
+   Zieh-Geste. */
+.due-stamp {
+  position: absolute;
+  top: 38%;
+  left: 8%;
+  z-index: 2;
+  padding: 1px 5px;
+  border: 2px solid currentColor;
+  border-radius: 3px;
+  transform: rotate(-9deg);
+  opacity: 0.55;
+  font-size: calc(9px * var(--proto-scale, 1));
+  font-weight: 900;
+  letter-spacing: 0.8px;
+  pointer-events: none;
+}
+
+.due-stamp--hot {
+  color: #b32d21;
+}
+
+.due-stamp--today {
+  color: #1f6ba8;
+}
+
+/* Die Befestigung faerbt sich: ein RING um die Zwecke, nicht ihre Fuellung.
+   Die Fuellung gehoert der Person (`--owner`) und darf nicht ueberschrieben
+   werden — sonst sagt der Zettel nicht mehr, wer zustaendig ist. */
+[data-proto-due='zwecke'] .pin--hot,
+[data-proto-due='beides'] .pin--hot {
+  box-shadow:
+    0 0 0 3px #d33c2c,
+    1px 2px 0 rgba(0, 0, 0, 0.28);
+}
+
+[data-proto-due='zwecke'] .pin--today,
+[data-proto-due='beides'] .pin--today {
+  box-shadow:
+    0 0 0 3px #e8b53a,
+    1px 2px 0 rgba(0, 0, 0, 0.28);
+}
+
+[data-proto-due='zwecke'] .clip--hot,
+[data-proto-due='beides'] .clip--hot {
+  background: #d33c2c;
+}
+
+[data-proto-due='zwecke'] .clip--today,
+[data-proto-due='beides'] .clip--today {
+  background: #e8b53a;
 }
 
 /* --- PROTOTYP: Punkte als aufgeklebter Sticker ---------------------------- */
