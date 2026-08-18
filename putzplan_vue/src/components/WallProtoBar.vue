@@ -39,6 +39,14 @@ const SLIDERS = [
     max: 64,
     step: 2,
     note: 'Stift und Eselsohr, gleich groß — Apple HIG 44 · Material Design 48'
+  },
+  {
+    key: 'sticker',
+    label: 'Punkte-Sticker',
+    min: 24,
+    max: 52,
+    step: 2,
+    note: 'Form trägt den Wert: Kreis 1 · Quadrat 2 · Sechseck 3 · Wappen 4 · Stern 5'
   }
 ] as const
 </script>

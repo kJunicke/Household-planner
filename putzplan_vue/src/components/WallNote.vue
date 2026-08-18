@@ -622,7 +622,12 @@ const handlePostponeConfirm = async (targetDate: string) => {
       <!-- NICHT `task.effort`: hier steht, was das Abreißen wirklich noch
            einbringt (→ `effectivePoints`). Die Zahl ist das Versprechen, das
            der Punkteflug gleich einlöst — beide kommen aus derselben Quelle. -->
-      <span class="points">{{ effectivePoints }} P</span>
+      <!-- PROTOTYP: der Punktwert ist ein aufgeklebter Sticker, keine Zeile
+           Text mehr. Die FORM traegt den Wert (Kreis 1 … Stern 5), die Zahl
+           bestaetigt ihn nur — auf einen Blick erkennbar, ohne zu lesen. -->
+      <span class="points" :class="`points--s${Math.min(5, Math.max(0, effectivePoints))}`">
+        {{ effectivePoints }}
+      </span>
       <!-- Fortschritt am EINGEKLAPPTEN Zettel: „3 / 7" ohne Aufklappen. Er
            bleibt auch aufgeklappt stehen — die Zahl ist die Zusammenfassung
            der Zettelchen, nicht ihr Ersatz.
@@ -798,7 +803,7 @@ const handlePostponeConfirm = async (targetDate: string) => {
   /* PROTOTYP: rechts oben ist nichts mehr reserviert — der Titel bekommt die
      ganze obere Kante. Unten liegt die Griffzeile (Stift + Eselsohr); wie viel
      Platz sie braucht, haengt davon ab, ob die Fusszeile sich die Zeile teilt. */
-  padding: 6px 8px 0 8px;
+  padding: 5px 7px 0 7px;
   min-height: 44px;
   text-align: left;
   will-change: transform;
@@ -851,7 +856,7 @@ const handlePostponeConfirm = async (targetDate: string) => {
   display: flex;
   align-items: center;
   gap: 6px;
-  margin-top: 2px;
+  margin-top: 0;
   min-height: var(--proto-hit, 48px);
   padding-right: calc(2 * var(--proto-hit, 48px));
   font-size: calc(10px * var(--proto-scale, 1));
@@ -861,15 +866,87 @@ const handlePostponeConfirm = async (targetDate: string) => {
   white-space: nowrap;
 }
 
-.points {
-  color: var(--pw-ink-soft);
-  opacity: 0.85;
-}
-
 /* Rot trägt die Bedeutung „überfällig" — deshalb steht daneben nur noch die
    Dauer, nicht das Wort. */
 .meta {
   color: var(--color-danger);
+}
+
+/* --- PROTOTYP: Punkte als aufgeklebter Sticker ---------------------------- */
+
+/* Die Form ist die Botschaft: ein Kreis ist eine Kleinigkeit, ein Stern ist
+   die dickste Aufgabe auf der Wand. Wer die Wand ueberfliegt, sucht die
+   Sterne — und muss dafuer keine Zahl lesen.
+
+     0–1 P  Kreis          ruhig, blass
+       2 P  abgerundetes Quadrat
+       3 P  Sechseck
+       4 P  Wappen
+       5 P  Stern          Gold, der Blickfang
+
+   Alle Formen haben dieselbe Kantenlaenge; nur die Silhouette und die Farbe
+   unterscheiden sie. Der Schatten kommt von `drop-shadow` und nicht von
+   `box-shadow`: ein `box-shadow` legt sich um das RECHTECK und wuerde am
+   Stern als Kasten sichtbar. */
+.points {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: var(--proto-sticker, 34px);
+  height: var(--proto-sticker, 34px);
+  /* Leicht schief aufgeklebt — wie alles auf dieser Wand. */
+  transform: rotate(-6deg);
+  color: #2b241c;
+  font-size: calc(var(--proto-sticker, 34px) * 0.42);
+  font-weight: 900;
+  line-height: 1;
+  opacity: 1;
+  filter: drop-shadow(1.5px 2px 0 rgba(36, 31, 26, 0.35));
+}
+
+.points--s0,
+.points--s1 {
+  border-radius: 50%;
+  background: #e8e0cd;
+  box-shadow: inset 0 0 0 1.5px rgba(36, 31, 26, 0.35);
+}
+
+.points--s2 {
+  border-radius: 7px;
+  background: #bcd3e8;
+  box-shadow: inset 0 0 0 1.5px rgba(36, 31, 26, 0.35);
+}
+
+.points--s3 {
+  background: #bfdcc0;
+  clip-path: polygon(25% 4%, 75% 4%, 100% 50%, 75% 96%, 25% 96%, 0 50%);
+}
+
+.points--s4 {
+  background: #f0c78a;
+  clip-path: polygon(50% 0, 100% 18%, 100% 62%, 50% 100%, 0 62%, 0 18%);
+}
+
+/* Der Stern ist absichtlich der einzige, der aus der Reihe faellt: groesser,
+   golden, staerker geneigt. Fuenf Punkte sind der Ausreisser. */
+.points--s5 {
+  width: calc(var(--proto-sticker, 34px) * 1.15);
+  height: calc(var(--proto-sticker, 34px) * 1.15);
+  transform: rotate(-10deg);
+  background: #f4cf4a;
+  font-size: calc(var(--proto-sticker, 34px) * 0.4);
+  clip-path: polygon(
+    50% 0%,
+    61% 35%,
+    98% 35%,
+    68% 57%,
+    79% 91%,
+    50% 70%,
+    21% 91%,
+    32% 57%,
+    2% 35%,
+    39% 35%
+  );
 }
 
 /* Fortschritt der Unteraufgaben. Ruhig wie der Punktwert: er sagt, wie viel
@@ -1159,12 +1236,27 @@ const handlePostponeConfirm = async (targetDate: string) => {
   padding: 0;
   border: 0;
   background: none;
-  color: var(--pw-ink-soft);
+  color: #2b241c;
   font-size: calc(var(--proto-hit, 48px) * 0.42);
   line-height: 1;
   display: grid;
-  place-items: center center;
+  place-items: stretch;
+  padding: 7px;
   cursor: pointer;
+}
+
+/* PROTOTYP: der Stift sitzt auf einem eigenen aufgeklebten Patch — dieselbe
+   Sprache wie der Punkte-Sticker daneben. Vorher war er eine graue Glyphe im
+   Nichts: man sah nicht, dass da ein Knopf ist. */
+.edit > i {
+  display: grid;
+  place-items: center;
+  border-radius: 5px;
+  background: #d9c9ec;
+  box-shadow:
+    inset 0 0 0 1.5px rgba(36, 31, 26, 0.35),
+    1.5px 2px 0 rgba(36, 31, 26, 0.3);
+  transform: rotate(3deg);
 }
 
 .edit:active {
@@ -1257,8 +1349,8 @@ const handlePostponeConfirm = async (targetDate: string) => {
   position: absolute;
   right: 2px;
   bottom: 2px;
-  width: 22px;
-  height: 22px;
+  width: var(--proto-knick, 30px);
+  height: var(--proto-knick, 30px);
   background: linear-gradient(
     225deg,
     var(--pw-cork) 0 50%,
@@ -1286,8 +1378,8 @@ const handlePostponeConfirm = async (targetDate: string) => {
   content: '';
   position: absolute;
   right: 2px;
-  bottom: 22px;
-  width: 24px;
+  bottom: var(--proto-knick, 30px);
+  width: calc(var(--proto-knick, 30px) + 2px);
   height: 0;
   border-top: 1.5px dashed rgba(36, 31, 26, 0.45);
 }

@@ -32,20 +32,24 @@ export interface ProtoConfig {
   minWidth: number
   /** Kantenlänge BEIDER Griffe — Stift und Eselsohr sind gleich groß. */
   hit: number
+  /** Kantenlänge des Punkte-Stickers. */
+  sticker: number
 }
 
 /** Der Ist-Zustand — nur noch als Vergleichspunkt. */
 export const IST: ProtoConfig = {
   scale: 1,
   minWidth: 96,
-  hit: 44
+  hit: 44,
+  sticker: 34
 }
 
 /** Der besprochene Entwurf. */
 export const ENTWURF: ProtoConfig = {
   scale: 1.3,
   minWidth: 150,
-  hit: 48
+  hit: 48,
+  sticker: 34
 }
 
 export const config = reactive<ProtoConfig>({ ...ENTWURF })
@@ -78,6 +82,10 @@ export function applyProtoConfig(): void {
   const s = document.documentElement.style
   s.setProperty('--proto-scale', String(config.scale))
   s.setProperty('--proto-hit', `${config.hit}px`)
+  s.setProperty('--proto-sticker', `${config.sticker}px`)
+  // Der Knick des Eselsohrs waechst mit seiner Flaeche, damit er neben dem
+  // Stift-Patch nicht verloren wirkt.
+  s.setProperty('--proto-knick', `${Math.round(config.hit * 0.62)}px`)
 }
 
 // Einmal beim Laden: sonst misst der erste Layout-Lauf noch die alten
