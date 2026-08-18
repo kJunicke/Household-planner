@@ -69,8 +69,21 @@ Leiste unten: Variante, Ziehschwelle 0–90 px, Rand-Streuung, „nur unten".
    kein Verschieben; zuweisen läuft über den Edit-Stift am Zettel.
 
 6. **Randbeschwerde links** ist **nicht** über die Ziehschwelle gelöst, sondern
-   über das Layout: die Karten bekommen einen **zufälligen** Randabstand
-   links/rechts statt überall denselben (im Prototyp 8–34 px).
+   über das Layout: die Karten bekommen unterschiedliche Randabstände statt
+   überall denselben.
+
+   > **Korrektur 18.08.2026 — dieser Punkt ist erledigt, und die hier genannte
+   > Zahl war falsch.** Umgesetzt hat es **Ticket 02**: `indentOf(taskId)` mit
+   > `LEFT_INDENT_MAX = 12`, deterministisch aus `fnv1a`, nur in der linken
+   > Spalte (`wallLayout.ts:116–120`). Die ursprünglich hier genannten „8–34 px
+   > links/rechts" stammen aus dem Kranz-Prototypen und sind aus drei Gründen
+   > nicht übertragbar: sie werden dort als `marginLeft` **und** `marginRight`
+   > mit demselben Wert gesetzt (die Zettel werden dadurch nur schmaler, nicht
+   > versetzt), sie sind an Fake-Zetteln in einer Flex-Spalte statt am
+   > Skyline-Packing gemessen, und sie streuen aus dem **Listenindex** statt aus
+   > der `task_id` — beim Umsortieren würde der Abstand mitwandern. 02 hat den
+   > erprobten Wert zusätzlich von 26 auf 12 px gesenkt, weil bei 26 px zu große
+   > Überlappungen entstanden. **Nicht neu bauen.**
 
 ## Offen für den echten Umbau
 

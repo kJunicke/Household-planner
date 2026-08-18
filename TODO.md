@@ -77,6 +77,14 @@ Aufbau: **Aktiv** (als Nächstes) · **Backlog** (irgendwann) · **Bekannte Rand
   eine dritte, nie ins Layout übernommene Größe — das Anliegen ist mit Ticket 02
   bereits gelöst (`indentOf`, 12 px, deterministisch aus der `task_id`).
   Blockiert Projekte (03).
+- **Aufklappen springt (13).** Ein aufgeklappter Zettel soll liegen bleiben und
+  die blockierenden Zettel unter sich schieben; heute springt er selbst durch die
+  Wand. Ursache im Code: er bekommt die volle Wandbreite und wird von `packWall`
+  komplett neu platziert — das ist heute **so gewollt** und wird über den
+  Scroll-Anker aufgefangen, statt verhindert. Dieses Ticket dreht die
+  Entscheidung um. Erster Schritt ist eine Messung, ob der Scroll-Anker
+  überhaupt noch greift; „mittlerweile kaputt" deutet auf eine Regression aus
+  02, 11 oder 12.
 - **Wochenziel-Leiste in jede Ansicht (08).** Heute liegt sie in
   `WallStatusBar.vue` und ist damit **nur auf der Pinnwand** sichtbar; in Einkauf,
   Notizen und Historie fehlt sie. Der Header soll überall gleich aussehen: Papier,
