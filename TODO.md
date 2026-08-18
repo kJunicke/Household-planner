@@ -85,6 +85,20 @@ Aufbau: **Aktiv** (als Nächstes) · **Backlog** (irgendwann) · **Bekannte Rand
   Entscheidung um. Erster Schritt ist eine Messung, ob der Scroll-Anker
   überhaupt noch greift; „mittlerweile kaputt" deutet auf eine Regression aus
   02, 11 oder 12.
+- **Zettel breiter streuen, Überlapp begrenzen (14).** Die Zettel überlappen
+  „fast immer", der Abstand nach rechts ist zu gering, und rechts bleibt oft
+  Platz übrig. Gewünscht: mehr Streuung in der Waagerechten **und** eine
+  Obergrenze für den Überlapp. Heutige Größen: `rowGapOf` 8…16 px Luft nach
+  rechts, `jitterOf` ±5 px Versatz, `indentOf` 0…12 px nur links. Vermutlich
+  entsteht der sichtbare Überlapp aus der **Neigung** — der Packer rechnet mit
+  achsenparallelen Rechtecken, die Zettel sind gedreht und ragen an den Ecken
+  darüber hinaus. Erst zählen, dann bauen.
+- **Punkte-Sticker erst ab vier Fußzeilen-Elementen (15).** Wandert der Punktwert
+  bei einer dreiteiligen Fußzeile (Punkte, Stift, Eselsohr) nach oben rechts,
+  bleibt unten ein großes Loch — die beiden Griffe stehen rechtsbündig, links ist
+  nichts. Die Entscheidung ist heute rein über die Breite gefällt und kennt die
+  Elementzahl nicht. Das Merkmal existiert im Code bereits als
+  `hasOtherFootContent`.
 - **Wochenziel-Leiste in jede Ansicht (08).** Heute liegt sie in
   `WallStatusBar.vue` und ist damit **nur auf der Pinnwand** sichtbar; in Einkauf,
   Notizen und Historie fehlt sie. Der Header soll überall gleich aussehen: Papier,
