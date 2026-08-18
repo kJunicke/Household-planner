@@ -34,8 +34,38 @@ npx supabase db pull
 npx supabase migration list --linked
 ```
 
+## Edge Functions deployen — eigener Schritt, eigener Haken
+
+`npx supabase db push` deployt **keine** Edge Functions. Wer `supabase/functions/`
+anfasst, muss zusätzlich:
+
+```bash
+npx supabase functions deploy complete-task
+
+# Welche Fassung laeuft gerade? Version und Datum gegen den letzten Commit halten:
+npx supabase functions list
+```
+
+**Das ist keine Formalie.** Am 18.08.2026 fand ein QC, dass `complete-task` seit dem
+22.12.2025 nicht deployt worden war: Repo-Code korrekt, Migration gepusht, Ticket
+committet — und der ausgelieferte Funktionsrumpf enthielt **null** Vorkommen des
+neuen Feldes. Mit deployt wurde dann auch ein acht Monate alter Commit vom
+02.01.2026, der nie live gegangen war. Es war also kein Ausrutscher, sondern ein
+fehlender Schritt in dieser Datei.
+
+Der Fehler ist **still**: die Function antwortet weiter mit `HTTP 200`, schreibt
+alles Alte korrekt und lässt nur das Neue weg. Im Zusammenspiel mit einer
+optimistischen Anzeige sieht es kurz sogar richtig aus, bis das Nachladen den
+alten Serverwert zurückholt.
+
+**Prüfen statt hoffen:** nach dem Deploy die Versionsnummer aus
+`npx supabase functions list` gegen das Commit-Datum halten. Ein Deploy, der
+durchlief, ist nicht dasselbe wie eine Function, die das Neue enthält.
+
 ## Regeln
 
 - **Append-only**: nie gepushte Migrations editieren
+- **Edge Functions gehören zum selben Ticket wie ihre Migration** — und werden
+  getrennt deployt (siehe oben)
 - **Security**: RLS für alle Tabellen, SECURITY DEFINER für Helper-Functions (`get_user_household_id()`)
 - `.env` nicht committen
