@@ -135,7 +135,15 @@ Aufbau: **Aktiv** (als Nächstes) · **Backlog** (irgendwann) · **Bekannte Rand
   Aussehen, mit Eintrag was gemacht wurde und wie viel Aufwand. Kein einfaches
   Erledigen, kein Verschieben; zuweisen läuft über den Stift am Zettel. Baut auf
   00b auf.
-- **FAB wechselt keine Ansicht (01).** Eigenständig, kleines Ticket.
+- **Rückgängig-Geste im Such-Overlay wechselt die Ansicht (01).** Eigenständig,
+  kleines Ticket. **Am 19.08. vom Nutzer neu beschrieben** — die alte Fassung
+  („der FAB wechselt beim Antippen die Ansicht") war falsch: „FAB wechselt nur die
+  ansicht wenn man mit der rückgängig geste den suchdialog wieder schließt."
+  Hypothese, nicht verifiziert: das geöffnete Overlay ist **kein eigener Eintrag
+  im Verlauf**, die Geste findet nichts zum Zurücknehmen und geht eine Route
+  zurück. Die Ghost-Click-Diagnose der Planungssitzung ist damit gegenstandslos.
+  Naheliegende Lösung: Overlay beim Öffnen als Verlaufseintrag führen und über
+  `popstate` schließen — Zurück-Taste und Wischgeste müssen sich gleich verhalten.
 - **Überstempeln am Zettel (09b).** Die Spalte `emphasis_level`, die Migration
   und die drei Reset-Fälle stehen (09a, `ccc1dd4`, Edge Function als v22 deployt) —
   die **Bedienung fehlt**. Vorbedingung 00a ist inzwischen erfüllt. Vorher die drei
