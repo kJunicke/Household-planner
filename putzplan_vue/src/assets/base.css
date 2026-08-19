@@ -78,20 +78,23 @@
 }
 
 /* ============================================================================
-   Pinnwand-Farbwelt — zweiter Token-Satz (Pinnwand-Redesign, Etappe 1)
+   Pinnwand-Rohpalette — auf dem BLANKEN Wurzelelement, ungegated
    ----------------------------------------------------------------------------
-   Liegt NEBEN dem Bestand, überschreibt `:root` nicht. Aktiv nur, wenn
-   `data-design="pinnwand"` am <html> steht (→ src/lib/design.ts). Ohne das
-   Attribut gilt der obige Satz unverändert — das alte Aussehen bleibt exakt
-   wie bisher.
+   Bis Ticket 08 hing diese Palette unter `:root[data-design='pinnwand']`. Sie
+   ist jetzt immer aktiv, unabhängig vom Aussehen-Schalter: der App-Header
+   (`Header.vue`, der die Wochenziel-Leiste `WallStatusBar.vue` einbettet) ist
+   die bewusste EINZIGE Ausnahme vom `data-design`-Umschalter — Papier-Optik in
+   beiden Aussehen und auf jeder Route, siehe Kommentar in `Header.vue`. Damit
+   das funktioniert, müssen die `--pw-*`-Rohtoken selbst außerhalb des Gates
+   liegen. Alle anderen Pinnwand-Komponenten (`WallView`, `WallNote`, …)
+   benutzen dieselben Token weiterhin nur innerhalb `[data-design='pinnwand']`
+   gerenderter Bäume — das Verschieben der Token ändert an deren Sichtbarkeit
+   nichts, es macht sie nur zusätzlich für den Header erreichbar.
 
-   Die bestehenden Token-NAMEN bleiben; nur ihre Werte hängen am aktiven Satz.
-   Die `--pw-*`-Rohtöne sind die Palette aus dem Prototypen (r5-freiewand.html)
-   und stehen den Pinnwand-Komponenten späterer Etappen zur Verfügung.
-   Kein Dark Mode — Kork ist eine helle Formsprache.
+   Die Palette stammt aus dem Prototypen (r5-freiewand.html). Kein Dark Mode —
+   Kork ist eine helle Formsprache.
    ========================================================================== */
-:root[data-design='pinnwand'] {
-  /* Rohpalette */
+:root {
   --pw-cork: #e7dcc8;
   --pw-cork-deep: #d8c9ad;
   --pw-paper: #fffdf6;
@@ -105,7 +108,21 @@
   --pw-line: #241f1a;
   --pw-shadow: 3px 3px 0 var(--pw-line);
   --pw-shadow-lift: 7px 10px 0 rgba(36, 31, 26, 0.35);
+}
 
+/* ============================================================================
+   Pinnwand-Farbwelt — zweiter Token-Satz (Pinnwand-Redesign, Etappe 1)
+   ----------------------------------------------------------------------------
+   Liegt NEBEN dem Bestand, überschreibt `:root` nicht. Aktiv nur, wenn
+   `data-design="pinnwand"` am <html> steht (→ src/lib/design.ts). Ohne das
+   Attribut gilt der obige Satz unverändert — das alte Aussehen bleibt exakt
+   wie bisher.
+
+   Die bestehenden Token-NAMEN bleiben; nur ihre Werte hängen am aktiven Satz.
+   Das sind die Papier-**Regeln** (welche Farbe `--color-background` etc.
+   bekommt) — die bleiben bewusst gegated, im Unterschied zur Rohpalette oben.
+   ========================================================================== */
+:root[data-design='pinnwand'] {
   /* --- Bestehende Token-Namen, neu belegt --- */
 
   /* Primary — Tinte-Blau statt Indigo */

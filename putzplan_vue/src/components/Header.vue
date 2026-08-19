@@ -1,46 +1,62 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
-import { useRoute } from 'vue-router'
-import { useAuthStore } from '../stores/authStore'
+import { ref, onMounted } from 'vue'
 import { useHouseholdStore } from '../stores/householdStore'
-import { useDesignStore } from '../stores/designStore'
 import SettingsSidebar from './SettingsSidebar.vue'
-import BrandLogo from './BrandLogo.vue'
 import SyncIndicator from './SyncIndicator.vue'
+import WallStatusBar from './WallStatusBar.vue'
+import BrandLogo from './BrandLogo.vue'
 import { useElementHeightVar } from '../composables/useElementHeightVar'
 
-const authStore = useAuthStore()
+/**
+ * BEWUSSTE AUSNAHME VOM AUSSEHEN-SCHALTER (Ticket 08 „Header überall gleich").
+ *
+ * Jede andere Ansicht/Komponente richtet ihr Aussehen nach dem
+ * `data-design`-Attribut am Wurzelelement (→ designStore, src/lib/design.ts):
+ * klassisch oder Pinnwand. DIESER Header nicht. Er zeigt in beiden Aussehen
+ * und auf jeder Route dieselbe Papier-Optik — deshalb greift sein `<style>`
+ * unten direkt auf die ungegateten `--pw-*`-Rohtoken aus `base.css` zu statt
+ * auf die (gegateten) `--color-*`-Token, die je nach Aussehen umspringen.
+ * Das gilt auch für VORDERGRUNDFARBEN, nicht nur für Fläche/Rahmen: `color`
+ * wird unten explizit auf `--pw-ink` gesetzt, weil sonst die geerbte
+ * `--color-text-primary` vom `<body>` durchschlägt (die IST gegated) — genau
+ * dieselbe Falle steckte in `SyncIndicator` (`--color-primary`/
+ * `--color-warning-dark`) und ist dort direkt behoben (`SyncIndicator.vue`
+ * benutzt jetzt selbst ungegatete Farben), weil die Komponente ausschließlich
+ * hier im Header eingesetzt wird — dieselbe Ausnahme gilt also für sie mit.
+ *
+ * Das ist kein Bug und keine vergessene `[data-design]`-Klammer — wer das
+ * hier "repariert", hebt eine Absicht auf, die der Nutzer in der
+ * Grilling-Session vom 18.08.2026 zweimal ausdrücklich bestätigt hat:
+ * „In beiden Aussehen und in allen Views sieht der Header gleich aus."
+ * Siehe .scratch/pinnwand-ausbau/issues/08-header-ueberall-gleich.md.
+ *
+ * Die Wochenziel-Leiste (`WallStatusBar`) gehört zu dieser Ausnahme: sie war
+ * bis Ticket 08 ein Pinnwand-Exklusiv unterhalb des Headers und ausschließlich
+ * auf der Wand sichtbar. Jetzt ist sie hier eingebettet und läuft dadurch auf
+ * jeder Route mit — inklusive ihrer Papier-Optik im klassischen Aussehen, das
+ * ist gewollt (siehe Kommentar in `WallStatusBar.vue`).
+ *
+ * Die Rangliste ist ersatzlos entfernt (siehe Ticket 08).
+ * `householdStore.weeklyRanking` wird dadurch nirgends mehr gelesen; ob der
+ * Store-Wert bleibt oder entfällt, ist laut Ticket bewusst offen (TODO.md).
+ *
+ * Das „Putzplan"-Logo stand ursprünglich links neben der Rangliste und sollte
+ * laut Ticket 08 ganz entfallen — der Nutzer hat das nach dem ersten Umbau
+ * präzisiert: das Logo bleibt, wandert aber an die alte Avatar-Stelle rechts
+ * und ist jetzt selbst der Menü-Knopf (ersetzt den rein dekorativen farbigen
+ * Kreis). Die Spec-Zeile „kein Logo" meinte nur den alten Platz links neben
+ * der Rangliste.
+ */
 const householdStore = useHouseholdStore()
-
-const designStore = useDesignStore()
-const route = useRoute()
 
 const sidebarOpen = ref(false)
 
-/**
- * Auf dem Putzen-Screen der Pinnwand gibt es **keine Rangliste** mehr — dort
- * beantwortet die Statusleiste an der Wand die Frage nach dem Wochenstand, und
- * zwar gemeinsam statt als Platzierung.
- *
- * Der Header ist global, deshalb hängt die Entscheidung an Route und Aussehen
- * statt an der View: auf allen anderen Routen und im alten Aussehen bleibt die
- * Rangliste unverändert stehen (`CleaningView` wird ausdrücklich nicht
- * umgerüstet).
- */
-const showRanking = computed(
-  () => !(route.name === 'home' && designStore.design === 'pinnwand')
-)
-
-// Der Header meldet seine eigene Höhe global; Toasts und Sync-Indikator hängen
-// sich daran, ein fester Pixelwert wäre auf Desktop und bei umbrechender
-// Rangliste falsch.
+// Der Header meldet seine eigene Höhe (inkl. der jetzt eingebetteten
+// Wochenziel-Leiste) global; Toasts, Sync-Indikator und die Verlauf-Kopfzeile
+// hängen sich daran, ein fester Pixelwert wäre auf Desktop und im
+// Kompaktzustand falsch.
 const headerEl = ref<HTMLElement | null>(null)
 useElementHeightVar(headerEl, '--app-header-height')
-
-const currentMemberColor = computed(() => {
-  const member = householdStore.householdMembers.find(m => m.user_id === authStore.user?.id)
-  return member?.user_color || '#4A90E2'
-})
 
 onMounted(async () => {
   await householdStore.loadWeeklyCompletions()
@@ -49,43 +65,24 @@ onMounted(async () => {
 
 <template>
   <header ref="headerEl" class="app-header">
-    <!-- Compact Header Bar -->
+    <!-- Eine Zeile: links die Wochenziel-Leiste über die freie Breite, rechts
+         Sync-Status und der Menü-Knopf (Logo). Kein Logo/keine Rangliste mehr
+         an ihrem alten Platz links — siehe Kommentar oben im Script. -->
     <div class="header-bar">
-      <BrandLogo size="sm" />
-
-      <!-- Wochen-Rangliste: alle Haushaltsmitglieder, eigener Eintrag hervorgehoben -->
-      <div
-        v-if="showRanking && householdStore.weeklyRanking.length > 0"
-        class="points-display"
-      >
-        <div
-          v-for="entry in householdStore.weeklyRanking"
-          :key="entry.userId"
-          class="rank-item"
-          :class="{ 'current-user': entry.isCurrentUser }"
-        >
-          <span class="rank-position">{{ entry.rank }}.</span>
-          <span class="rank-color-dot" :style="{ backgroundColor: entry.color }"></span>
-          <span class="rank-name">{{ entry.name }}</span>
-          <span class="rank-points">{{ entry.points }}</span>
-        </div>
-      </div>
-
-      <!-- Empty state: Mitglieder noch nicht geladen -->
-      <div v-else-if="showRanking" class="points-display points-empty">
-        <i class="bi bi-trophy"></i>
-        <span class="empty-hint">Diese Woche: {{ householdStore.currentUserWeeklyPoints }} Pkt</span>
-      </div>
+      <WallStatusBar class="header-goal" />
 
       <div class="header-actions">
         <SyncIndicator />
         <button
-          class="user-avatar"
-          :style="{ backgroundColor: currentMemberColor }"
-          :title="'Einstellungen · Deine Farbe: ' + currentMemberColor"
+          type="button"
+          class="header-logo-btn"
+          :aria-expanded="sidebarOpen"
           aria-label="Einstellungen öffnen"
+          title="Einstellungen öffnen"
           @click="sidebarOpen = true"
-        />
+        >
+          <BrandLogo size="sm" :wordmark="false" />
+        </button>
       </div>
     </div>
 
@@ -95,103 +92,44 @@ onMounted(async () => {
 </template>
 
 <style scoped>
+/* Direkt die `--pw-*`-Rohtoken statt `--color-*` — siehe Kommentar oben im
+   Script: das ist die bewusste Papier-Ausnahme vom Aussehen-Schalter. `color`
+   ist Absicht, nicht Zierde: ohne ihn erbt jedes Kind (u. a. `WallStatusBar`s
+   Zahlen, falls sie mal keinen eigenen `color` setzen) die gegatete
+   `--color-text-primary` vom Body. */
 .app-header {
-  background: var(--color-background-elevated);
-  border-bottom: 1px solid var(--color-border);
-  box-shadow: var(--shadow-sm);
+  background: var(--pw-paper);
+  border-bottom: 2px solid var(--pw-line);
+  box-shadow: var(--pw-shadow);
+  color: var(--pw-ink);
   position: sticky;
   top: 0;
-  z-index: 100;
+  /* QC-Runde 2: 100 war zu niedrig in die andere Richtung. `CategoryNav.vue`
+     bekam ein `top: var(--app-header-height)` (rastet jetzt UNTER dem Header
+     ein, siehe Kommentar dort) — dadurch überlappen sich beide im Ruhezustand
+     nicht mehr, aber ein z-index braucht es trotzdem als zweite Sicherung
+     (z. B. für den kurzen Moment, bevor `useElementHeightVar` die Variable
+     zum ersten Mal schreibt, oder bei einer Größenänderung der Leiste). 950
+     liegt bewusst zwischen `CategoryNav`s 850 (der Header soll im Zweifel
+     GEWINNEN, nicht verdeckt werden) und den Sidebar-/Modal-Ebenen ab 1040
+     (`SettingsSidebar.vue`) — der Header darf nicht über Modals/Overlays
+     liegen. Nicht wieder auf 900 ziehen: das war der Wert, der in Runde 1
+     `CategoryNav` verdeckt hat (siehe Git-Historie dieses Kommentars). */
+  z-index: 950;
 }
 
-/* Compact Header Bar */
 .header-bar {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding: 0.75rem 1rem;
   gap: 0.75rem;
+  padding: 0.375rem 1rem;
 }
 
-/* Weekly Points Display */
-/* Auf zwei Mitglieder optimiert. Mehr Mitglieder sollen lediglich nicht
-   zerbrechen: die Einträge umbrechen dann in eine zweite Zeile. */
-.points-display {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 0.25rem 0.5rem;
-  flex-shrink: 1;
+/* Die Wochenziel-Leiste nimmt die freie Breite, die früher Logo + Rangliste
+   belegt haben; die Icons rechts bleiben in ihrer natürlichen Breite. */
+.header-goal {
+  flex: 1 1 auto;
   min-width: 0;
-}
-
-/* Empty state when there are no completions this week */
-.points-empty {
-  gap: 0.375rem;
-  color: var(--color-text-secondary);
-  font-size: 0.75rem;
-  font-weight: 600;
-}
-
-.points-empty i {
-  color: var(--color-warning);
-  font-size: 0.9rem;
-}
-
-.points-empty .empty-hint {
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.rank-item {
-  display: flex;
-  align-items: center;
-  gap: 0.25rem;
-  font-size: 0.75rem;
-  padding: 0.125rem 0.375rem;
-  border-radius: var(--radius-sm);
-  min-width: 0;
-}
-
-/* Eigener Eintrag bleibt hervorgehoben */
-.rank-item.current-user {
-  background: rgba(79, 70, 229, 0.1);
-  outline: 1px solid rgba(79, 70, 229, 0.25);
-}
-
-.rank-position {
-  font-weight: 700;
-  color: var(--color-text-secondary);
-  font-size: 0.7rem;
-}
-
-.rank-color-dot {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  border: 1px solid rgba(0, 0, 0, 0.1);
-  flex-shrink: 0;
-}
-
-.rank-name {
-  font-weight: 600;
-  color: var(--color-text-secondary);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 4rem;
-}
-
-.rank-item.current-user .rank-name {
-  color: var(--color-primary);
-  font-weight: 700;
-}
-
-.rank-points {
-  font-weight: 700;
-  color: var(--color-text-primary);
-  white-space: nowrap;
 }
 
 .header-actions {
@@ -201,26 +139,63 @@ onMounted(async () => {
   flex-shrink: 0;
 }
 
-.user-avatar {
-  width: 36px;
-  height: 36px;
-  border-radius: 50%;
-  border: 2px solid var(--color-border);
-  cursor: pointer;
-  transition: all 0.2s ease;
+/* Menü-Knopf: ersetzt den vormals rein dekorativen farbigen Kreis. Das Logo
+   selbst ist 32px hoch (`BrandLogo` Größe „sm"), damit die Zeile nicht höher
+   wird als vorher — ein Hochskalieren auf Avatar-Größe (36px) hätte die
+   ohnehin knappe Ziel-Headerhöhe (61px INKLUSIVE der 2px `border-bottom` von
+   `.app-header` — die fehlte in einer früheren Rechnung hier, siehe QC-Runde
+   2) unnötig strapaziert. Die Trefferfläche wird trotzdem auf 48px gebracht,
+   per `::after` — dasselbe Muster wie in `SyncIndicator.vue`. */
+.header-logo-btn {
+  position: relative;
+  border: none;
+  background: transparent;
   padding: 0;
-  background: var(--color-primary);
+  cursor: pointer;
+  border-radius: var(--radius-md);
+  line-height: 0;
 }
 
-.user-avatar:hover {
-  transform: scale(1.05);
-  border-color: var(--color-text-primary);
+.header-logo-btn::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: var(--touch-target-min);
+  height: var(--touch-target-min);
+  transform: translate(-50%, -50%);
 }
 
-/* Desktop: slightly larger */
+.header-logo-btn:focus-visible {
+  outline: 2px solid var(--pw-accent);
+  outline-offset: 2px;
+  border-radius: var(--radius-md);
+}
+
+/* `BrandLogo` selbst setzt Fläche/Schatten über die gegateten `--color-primary`
+   / `--shadow-sm` — im klassischen Aussehen wäre das Indigo statt Tinte-Blau.
+   Dieselbe Ausnahme wie überall im Header: fest auf die `--pw-*`-Rohtoken.
+   KEIN `!important` nötig: `:deep()` haengt hier an `.header-logo-btn`, einer
+   ZUSÄTZLICHEN Klasse gegenüber `BrandLogo.vue`s eigener Regel — der
+   emittierte Selektor ist (0,3,0) gegen deren (0,2,0), gewinnt also rein über
+   Spezifität, unabhängig von der Bundle-Reihenfolge der beiden `<style>`-
+   Blöcke. (Korrigiert nach QC-Runde 2: eine frühere Fassung dieses Kommentars
+   behauptete gleiche Spezifität und begründete damit ein `!important`, das
+   real gar nicht nötig war.) */
+.header-logo-btn :deep(.brand-mark) {
+  background: var(--pw-accent);
+  box-shadow: var(--pw-shadow);
+}
+
+/* Desktop: mehr horizontale Luft, aber DASSELBE vertikale Polster wie mobil
+   (0.375rem) — QC-Runde 2 hat 65/61px auf Desktop gemessen (gegen 61/57px
+   mobil), weil hier vorher 0.5rem statt 0.375rem stand: 2px oben + 2px unten
+   zu viel. Zwei verschiedene Headerhöhen je Breite sind nicht vorgesehen,
+   deshalb bleibt das vertikale Polster über beide Breakpoints gleich — nur
+   das horizontale wächst. */
 @media (min-width: 768px) {
   .header-bar {
-    padding: 1rem 1.5rem;
+    padding: 0.375rem 1.5rem;
   }
 }
 </style>

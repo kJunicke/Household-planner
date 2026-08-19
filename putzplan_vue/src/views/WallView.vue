@@ -41,7 +41,6 @@ import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import WallNote from '../components/WallNote.vue'
 import WallDoneList from '../components/WallDoneList.vue'
 import WallScrap from '../components/WallScrap.vue'
-import WallStatusBar from '../components/WallStatusBar.vue'
 import TaskCard from '../components/TaskCard.vue'
 import TaskCreateModal from '../components/TaskCreateModal.vue'
 import QuickTaskModal from '../components/QuickTaskModal.vue'
@@ -1003,8 +1002,9 @@ const handleCreateQuickTask = async (data: {
 
 <template>
   <main class="wall-page">
-    <!-- Statusleiste: klebt oben, bleibt beim Scrollen sichtbar. -->
-    <WallStatusBar />
+    <!-- Die Statusleiste (`WallStatusBar`) steckt seit Ticket 08 im globalen
+         App-Header (`Header.vue`) und läuft auf jeder Route mit — sie wird
+         hier bewusst NICHT mehr eingebunden, sonst rendert sie doppelt. -->
 
     <!-- Die Wand: Kork, absolut positionierte Zettel, keine Überschriften. -->
     <div ref="wallEl" class="pw-wall wall" :style="{ height: `${wallHeight}px` }">
@@ -1134,18 +1134,24 @@ const handleCreateQuickTask = async (data: {
 .wall-page {
   min-height: 100vh;
   background: var(--pw-cork-deep);
-  /* Unten kommt zum FAB-Polster die Höhe der oben klebenden Statusleiste dazu.
-     `WallStatusBar` misst sie und schreibt sie als `--wall-status-height` an
-     <html> — eine feste Pixelzahl wäre falsch, weil die Leiste kompakt/nicht
-     kompakt und je nach Leck unterschiedlich hoch ist. Ohne dieses Polster
-     bleiben am Seitenende Zettel dauerhaft unter der Leiste und ihr Eselsohr
-     (Etappe 4) wäre unerreichbar. */
+  /* Unten kommt zum FAB-Polster die Höhe des oben klebenden App-Headers dazu
+     (Header-Zeile + eingebettete Wochenziel-Leiste zusammen). Seit Ticket 08
+     ist `WallStatusBar` kein eigenständiges sticky-Element mehr, sondern Teil
+     von `Header.vue` — `--wall-status-height` ist deshalb ENTFALLEN (bewusst,
+     siehe Kommentar in `WallStatusBar.vue`) und durch `--app-header-height`
+     ersetzt, das der Header ohnehin schon meldet (`useElementHeightVar`). Eine
+     feste Pixelzahl wäre falsch, weil der Header kompakt/nicht kompakt und je
+     nach Mitgliederzahl unterschiedlich hoch ist. Ohne dieses Polster bleiben
+     am Seitenende Zettel dauerhaft unter dem Header verdeckt und ihr Eselsohr
+     (Etappe 4) wäre unerreichbar — derselbe Effekt, den vor Ticket 08
+     `--wall-status-height` allein für die (damals separate) Statusleiste
+     abgedeckt hat. */
   /* Der untere Wert ist gerechnet, nicht gemessen: der FAB sitzt 64 + 18 px
      über der Unterkante, ist 52 px hoch und trägt Rahmen samt Schlagschatten —
      zusammen rund 138 px. Mit 148 px bleibt am Seitenende Luft unter ihm, statt
      dass er die letzte Zeile bzw. das Eselsohr des untersten Zettels verdeckt.
      Nachmessen, wenn sich `.fab-card` ändert. */
-  padding: 10px 8px calc(148px + env(safe-area-inset-bottom) + var(--wall-status-height, 0px));
+  padding: 10px 8px calc(148px + env(safe-area-inset-bottom) + var(--app-header-height, 0px));
 }
 
 /* Der Bezugsrahmen der absolut positionierten Zettel. Die Höhe kommt aus dem

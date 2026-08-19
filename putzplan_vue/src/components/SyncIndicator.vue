@@ -67,12 +67,27 @@ const showExplanation = () => {
   transform: translate(-50%, -50%);
 }
 
+/* `--color-warning-dark` / `--color-primary` sind gegated (`data-design`) und
+   sähen im klassischen Aussehen anders aus als im Pinnwand-Aussehen. Diese
+   Komponente wird ausschließlich im App-Header eingesetzt (`Header.vue`) —
+   der ist die bewusste Ausnahme vom Aussehen-Schalter (siehe Kommentar dort)
+   und braucht deshalb ungegatete Farben direkt, sonst sieht der Sync-Status
+   in beiden Aussehen unterschiedlich aus. `--pw-accent` trägt „syncing" wie
+   überall im Header (`--pw-accent` ist die ungegatete Rohtoken-Fassung von
+   `--color-primary`, siehe `base.css`).
+
+   Für „offline" gibt es in der Rohpalette kein Warnton-Äquivalent — dafür der
+   Literalwert `#8f6214`. Das ist BEWUSST kein neuer `--pw-*`-Token für einen
+   einzigen Anwendungsfall, sondern derselbe Farbwert, den `base.css` schon
+   für `--color-warning-dark` unter `[data-design='pinnwand']` einträgt: dort
+   extra auf Lesbarkeit auf Papier abgestimmt — und der Header-Hintergrund ist
+   jetzt IMMER Papier (`--pw-paper`), auch klassisch. */
 .sync-offline {
-  color: var(--color-warning-dark);
+  color: #8f6214;
 }
 
 .sync-syncing {
-  color: var(--color-primary);
+  color: var(--pw-accent);
 }
 
 .spin {

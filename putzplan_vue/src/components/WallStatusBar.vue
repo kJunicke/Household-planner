@@ -1,20 +1,39 @@
 <script setup lang="ts">
 /**
- * Statusleiste der Pinnwand (Pinnwand-Redesign, Etappe 3).
+ * Wochenziel-Leiste (Pinnwand-Redesign, Etappe 3 — seit Ticket 08 globale
+ * Header-Komponente).
  *
  * Zeigt, wie weit der Haushalt diese Woche **gemeinsam** gekommen ist: **ein
  * einziger** Balken über die volle Papierbreite, ein Farbsegment je Mitglied in
- * dessen `user_color`, darunter eine Legende mit Name und Punktzahl.
+ * dessen `user_color`. Die Legende (Farbe + Name + Punkte je Mitglied) steht
+ * links in der Kopfzeile, die Gesamtpunktzahl rechts — dieselbe Zeile, kein
+ * zusätzlicher Platzbedarf.
  *
- * Ausdrücklich **keine Rangliste**: weder Reihenfolge noch Legende richten sich
- * nach der Punktzahl, es gibt keine Platzierung. Die Reihenfolge ist die der
- * Mitgliederliste und bleibt deshalb über die Woche stabil.
+ * **Kurzes Kapitel Beschriftung-IM-Balken, wieder verworfen:** ein
+ * Zwischenstand hat die Legende versuchsweise in die Balkensegmente selbst
+ * verlegt (samt Canvas-Textmessung und Kontrast-Halo), um im Header noch
+ * kompakter zu sein. Der Nutzer hat das gesehen und ausdrücklich abgelehnt
+ * („das sieht seltsam aus") — die Legende gehört zurück in die Kopfzeile, wo
+ * ohnehin noch Platz neben der Punktzahl ist. Diese Fassung ist der Rückbau
+ * dazu; die gesamte Fit-/Kontrast-Logik aus diesem Zwischenstand ist entfernt,
+ * nicht nur ausgeblendet.
  *
- * Die Leiste klebt oben unter dem App-Header, damit die fliegenden Punkte aus
- * Ticket 09 später immer ein Ziel haben. Bearbeitet wird das Ziel hier nicht —
- * das gehört in die Settings-Sidebar (Ticket 08).
+ * Ausdrücklich **keine Rangliste**: weder Reihenfolge noch Legende richten
+ * sich nach der Punktzahl, es gibt keine Platzierung. Die Reihenfolge ist die
+ * der Mitgliederliste und bleibt deshalb über die Woche stabil.
+ *
+ * **Seit Ticket 08 eingebettet in `Header.vue`**, nicht mehr eigenständig in
+ * `WallView`. Sie klebt deshalb NICHT mehr selbst (siehe `.wall-status` unten)
+ * — das übernimmt der App-Header als Ganzes, in dessen sticky-Box diese
+ * Komponente jetzt steckt. Damit läuft sie auf jeder Route mit, nicht nur auf
+ * der Wand, und der Kompaktzustand beim Scrollen (`isScrolled` unten) gilt
+ * dadurch automatisch überall — derselbe `window`-Scroll-Listener läuft jetzt
+ * einfach auf jeder Seite, weil dieselbe Komponenten-Instanz im globalen
+ * Header sitzt statt nur in `WallView`.
+ *
+ * Bearbeitet wird das Ziel hier nicht — das gehört in die Settings-Sidebar.
  */
-import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useHouseholdStore } from '../stores/householdStore'
 
 const householdStore = useHouseholdStore()
@@ -248,71 +267,42 @@ const onScroll = () => {
 }
 
 /**
- * Wie viel Platz die Leiste der Wand wegnimmt — gemessen, nicht geraten.
+ * `--wall-status-height` ist mit Ticket 08 ENTFALLEN — bewusste Entscheidung,
+ * nicht vergessen.
  *
- * Die Leiste klebt oben. Alles, was am Ende der Seite unter ihr liegt, lässt
- * sich nicht mehr darunter hervorscrollen: bei maximalem Scroll blieben zuletzt
- * Zettel dauerhaft verdeckt. In Etappe 4 wäre das ein unerreichbares Eselsohr.
+ * Vor Ticket 08 hing diese Komponente eigenständig unter dem App-Header und
+ * musste ihre eigene Höhe separat melden, damit `WallView` unten genug
+ * Polster reserviert (siehe Git-Historie dieser Datei für die alte Fassung).
+ * Seit sie IM Header steckt, ist sie kein zweites klebendes Element mehr,
+ * dessen Höhe man getrennt kennen müsste — sie ist Teil derselben sticky-Box
+ * wie der Rest des Headers. Die Höhe, die am oberen Bildschirmrand verdeckt,
+ * ist jetzt schlicht die Headerhöhe, und die trägt bereits `--app-header-height`
+ * (`useElementHeightVar` in `Header.vue`, per `ResizeObserver`). Eine zweite,
+ * fast identische Variable hier wäre keine neue Bedeutung, sondern eine
+ * Dopplung, die auseinanderlaufen kann.
  *
- * Die Wand braucht deshalb unten genau so viel zusätzlichen Platz, wie die
- * Leiste hoch ist. Eine feste Pixelzahl wäre falsch: die Höhe hängt am
- * Kompaktzustand (der Überlauf ändert sie nicht — er liegt absolut in der Spur,
- * und die Kopfzeile hat eine feste Höhe).
- * Also misst ein `ResizeObserver` das Papier und schreibt den Wert als
- * `--wall-status-height` an `<html>`; `WallView` addiert ihn auf sein unteres
- * Polster.
- *
- * Gespeichert wird das **Maximum** der beobachteten Höhen, solange gescrollt
- * ist. Sonst schrumpfte das Polster in dem Moment, in dem die Leiste kompakt
- * wird — die Seite würde unter dem Finger kürzer. Am Seitenanfang (nicht
- * gescrollt) wird der Wert wieder auf die tatsächliche Höhe zurückgesetzt.
+ * `WallView.vue` reserviert sein unteres Polster deshalb jetzt direkt gegen
+ * `--app-header-height` statt gegen `--wall-status-height` — siehe Kommentar
+ * dort an `.wall-page`.
  */
-const paperEl = ref<HTMLElement | null>(null)
-let heightObserver: ResizeObserver | null = null
-let reservedHeight = 0
-
-const setReserved = (value: number) => {
-    if (Math.abs(value - reservedHeight) < 0.5) return
-    reservedHeight = value
-    document.documentElement.style.setProperty('--wall-status-height', `${Math.ceil(value)}px`)
-}
-
-const measure = () => {
-    const el = paperEl.value
-    if (!el) return
-    // Der Außenabstand der Leiste zur Wand gehört zum verdeckten Band dazu.
-    const height = el.getBoundingClientRect().height + 10
-    if (isScrolled.value) setReserved(Math.max(reservedHeight, height))
-    else setReserved(height)
-}
-
 onMounted(() => {
     onScroll()
     window.addEventListener('scroll', onScroll, { passive: true })
-
-    measure()
-    if (paperEl.value && typeof ResizeObserver !== 'undefined') {
-        heightObserver = new ResizeObserver(() => measure())
-        heightObserver.observe(paperEl.value)
-    }
 })
-
-watch(isScrolled, () => nextTick(measure))
 
 onUnmounted(() => {
     window.removeEventListener('scroll', onScroll)
-    heightObserver?.disconnect()
-    document.documentElement.style.removeProperty('--wall-status-height')
 })
 </script>
 
 <template>
   <div class="wall-status" :class="{ 'wall-status--compact': isScrolled }">
-    <div ref="paperEl" class="status-paper">
-      <!-- Kopfzeile: Legende mittig, Punktzahl rechts. Die Legende hat keine
-           eigene Zeile mehr (Wunsch: kompakter). Reihenfolge ist die der
-           Mitgliederliste — keine Sortierung, keine Platzierung; ein Mitglied
-           ohne Punkte steht mit 0 da. -->
+    <div class="status-paper">
+      <!-- Kopfzeile: Legende links, Punktzahl rechts — dieselbe Zeile, kein
+           zusätzlicher Platzbedarf (die Legende stand kurzzeitig IM Balken,
+           siehe Script-Kommentar oben; der Nutzer wollte sie zurück hier).
+           Reihenfolge ist die der Mitgliederliste — keine Sortierung, keine
+           Platzierung; ein Mitglied ohne Punkte steht mit 0 da. -->
       <div class="status-head">
         <ul class="status-legend">
           <li v-for="entry in contributions" :key="entry.userId" class="legend-item">
@@ -389,25 +379,36 @@ onUnmounted(() => {
 </template>
 
 <style scoped>
+/* KEIN eigenes `position: sticky` mehr (Ticket 08). Vor Ticket 08 hing diese
+   Komponente als eigenständiges Element unterhalb des App-Headers und musste
+   sich selbst an dessen gemeldeter Höhe (`--app-header-height`) einklinken.
+   Seit sie IN `Header.vue` eingebettet ist, wäre genau das zirkulär: sie misst
+   sich dann an der Höhe des Elements, dessen Teil sie selbst ist — der Header
+   trägt die Sticky-Position jetzt für beide gemeinsam (`.app-header` in
+   `Header.vue`, dort auch der Stapelkontext/z-index). Diese Regel war die
+   heikelste Einzelstelle beim Umbau: sie musste WEG, nicht bloß mitkopiert
+   werden. */
+/* `flex: 1 1 auto` — diese Komponente sitzt seit dem Header-Umbau NEBEN den
+   Icons in `Header.vue`s Zeile (`.header-bar`, flex row) und nimmt dort die
+   freie Breite ein, die früher Logo + Rangliste belegt haben. Sie wird
+   ausschließlich dort eingesetzt (kein zweiter Verwendungsort), deshalb ist
+   das hier fest verdrahtet statt über eine Wrapper-Klasse von außen. */
 .wall-status {
-  position: sticky;
-  /* Unter dem App-Header, der selbst sticky auf 0 klebt. */
-  top: var(--app-header-height, 0px);
-  /* Über den Zetteln (max. 600er-Bereich beim Fliegen), unter dem FAB (1000). */
-  z-index: 900;
-  margin: 0 0 10px;
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
 }
 
+/* KEIN eigenes Papier-Kärtchen mehr (Rahmen/Schatten/Innenabstand). Vor dem
+   Header-Umbau brauchte diese Komponente ihre eigene Papier-Optik, weil sie
+   frei über dem Kork der Wand schwebte (Kontrast nötig). Jetzt steckt sie IM
+   Header, der selbst schon durchgehend Papier ist (`--pw-paper`,
+   `Header.vue`) — ein zweites, identisch gefärbtes Kärtchen darin wäre
+   doppeltes Chrome ohne Wirkung, kostet aber Höhe, die laut Vorgabe
+   `Header ≤ ~61px` fehlt. `overflow: hidden` bleibt: das Spritzen (siehe
+   `.status-bars`) geht über die Balkenkante hinaus und muss weiterhin am
+   Komponentenrand enden, nicht in den Header-Icons daneben. */
 .status-paper {
-  background: var(--pw-paper);
-  border: 2px solid var(--pw-line);
-  border-radius: 3px;
-  box-shadow: var(--pw-shadow);
-  padding: 5px 10px 4px;
-  /* Das Spritzen geht über die Balkenkante hinaus. Was trotzdem einmal zu weit
-     ginge, wird hier sauber abgeschnitten — die Leiste scrollt nie waagerecht
-     und nichts verlässt den Viewport. Der Schlagschatten liegt außerhalb der
-     Border-Box und bleibt davon unberührt. */
   overflow: hidden;
 }
 
@@ -420,19 +421,24 @@ onUnmounted(() => {
    1,16px. Kollisionsfrei, aber ohne Puffer: wer an Schriftgröße, Zeilenhöhe
    oder Drehung von `.status-over` dreht, muss diese Höhe mit anheben.
 
-   Papierhöhe, selbst nachgerechnet (Border-Box, alle Werte aus dieser Datei):
+   Höhe DIESER Komponente, selbst nachgerechnet (alle Werte aus dieser Datei;
+   ohne eigenes Papier-Kärtchen entfallen Rahmen und Innenabstand komplett,
+   siehe `.status-paper` oben):
 
-     offen:   Rahmen 2+2=4 · Polster 5+4=9 · Kopf 22 + Abstand 5 = 27 · Spur 20
-              → 60px
-     kompakt: Rahmen 4 · Polster 3+3=6 · Kopf 22 + Abstand 1 = 23 · Spur 20
-              → 53px
+     offen:   Kopf 22 + Abstand 5 = 27 · Spur 20 → 47px
+     kompakt: Kopf 22 + Abstand 1 = 23 · Spur 20 → 43px
 
-   Das ist **gerechnet, nicht gemessen** — und es ist eine Korrektur: eine
-   frühere Rechnung an dieser Stelle kam auf dieselben 60/53, während real
-   64/57 gemessen wurden (Polster 7+6 bzw. 4+4, Abstand 3). Die fehlenden 4px
-   sind jetzt in beiden Zuständen aus den Polstern und dem Kopfabstand geholt;
-   Kopf (22px) und Spur (20px) bleiben unangetastet, weil sie die
-   Höhenkonstanz bzw. die Streifenbreite tragen.
+   Das ist **gerechnet, nicht gemessen** — die Gesamt-Headerhöhe (diese
+   Komponente + `Header.vue`s Zeilenpolster + Icons + dessen `border-bottom`)
+   steht dort kommentiert; der QC misst nach. QC-Runde 2 hat dabei eine echte
+   Lücke in einer früheren Fassung dieser Rechnung gefunden: sie hatte
+   `Header.vue`s 2px `border-bottom` schlicht vergessen und lag deshalb überall
+   2px zu niedrig (Ist: 61/57px mobil, nicht 59/55px). Header.vue rechnet seit
+   der Korrektur mit Grenzfall EINSCHLIESSLICH Rahmen. Kopf (22px) und Spur
+   (20px) bleiben unangetastet, weil sie die Höhenkonstanz bzw. die
+   Streifenbreite tragen — siehe die frühere Fassung dieses Kommentars in der
+   Git-Historie für die (inzwischen durch das entfallene Papier-Kärtchen
+   gegenstandslose) Herleitung der 5px/1px Kopfabstände.
 
    Die Höhenkonstanz über alle Punktstände (0px Abweichung über sieben
    Zustände) ist gemessen und strukturell unverändert: feste Kopfhöhe, feste
@@ -544,7 +550,10 @@ onUnmounted(() => {
 }
 
 /* Absolut positioniert — siehe Kommentar an `segments`: so kann Flexbox die
-   Breiten nicht stauchen, weder heute noch nach einem späteren Umbau. */
+   Breiten nicht stauchen, weder heute noch nach einem späteren Umbau. Trägt
+   keine Beschriftung mehr (die stand kurzzeitig hier drin, siehe
+   Script-Kommentar oben zum Rückbau) — reiner Farbblock, kein Flex-Kontext
+   mehr nötig. */
 .status-seg {
   position: absolute;
   top: 0;
@@ -705,21 +714,33 @@ onUnmounted(() => {
   }
 }
 
-/* Die Legende sitzt mittig in der Kopfzeile, nicht mehr in einer eigenen Zeile.
-   `flex: 1 1 auto` + `min-width: 0` heißt: sie nimmt den Platz zwischen den
-   Rändern und gibt ihn zuerst wieder her, wenn es eng wird — die Punktzahl
-   rechts wird nie gestaucht. `overflow: hidden` ist das Netz gegen die zweimal
-   aufgetretene Klage „läuft aus dem Papier": mehr als der Zwischenraum kann die
-   Legende nicht belegen.
+/* Die Legende sitzt links in der Kopfzeile, neben der Punktzahl rechts —
+   dieselbe Zeile, kein zusätzlicher Platzbedarf (Rückbau des kurzzeitigen
+   Zwischenstands „Beschriftung im Segment", siehe Script-Kommentar oben).
 
-   Gemessene Grenze: bei **drei** Mitgliedern auf **375px** ellipsieren die Namen
-   ab **5 Zeichen**. (Eine frühere Schätzung von ≈6,8 Zeichen war rund 30 % zu
-   optimistisch — nicht als Beleg zitieren.) */
+   **Fit-Regel, absichtlich rein in CSS, keine gemessene/geschätzte Breite in
+   JavaScript:** `flex: 1 1 auto` + `min-width: 0` auf `.status-legend` heißt,
+   sie nimmt den Platz zwischen dem linken Rand und `.status-score` und gibt
+   ihn zuerst wieder her, wenn es eng wird — die Punktzahl ist `flex: 0 0 auto`
+   und wird NIE gestaucht (das ist die wichtigere Angabe, siehe
+   `.legend-points` unten für dieselbe Regel auf Mitgliedsebene). Innerhalb
+   der Legende schrumpft jedes `.legend-item` (`min-width: 0`, Flex-Shrink
+   standardmäßig an) gemeinsam; einzelne, ungewöhnlich lange Namen ellipsieren
+   für sich (`.legend-name`, `text-overflow: ellipsis`). Reicht der Platz
+   selbst dafür nicht mehr (sehr viele Mitglieder), schneidet
+   `overflow: hidden` auf `.status-legend` die überzähligen Einträge am
+   rechten Rand der Legende sauber ab, statt sie umzubrechen oder die Zeile
+   wachsen zu lassen — genau das verlangt die Höhenvorgabe des Headers
+   (61/57px, siehe `Header.vue`). `flex-wrap: nowrap` verhindert den Umbruch
+   strukturell, nicht nur der Optik nach.
+
+   Gemessene Grenze (vor dem kurzen Zwischenstand ermittelt, Layout-Mechanik
+   unverändert): bei **drei** Mitgliedern auf **375px** ellipsieren die Namen
+   ab **5 Zeichen**. */
 .status-legend {
   flex: 1 1 auto;
   min-width: 0;
   display: flex;
-  justify-content: center;
   align-items: center;
   flex-wrap: nowrap;
   gap: 0 7px;
@@ -752,21 +773,18 @@ onUnmounted(() => {
   text-overflow: ellipsis;
 }
 
-/* Die Punktzahl je Mitglied ist ein Akzeptanzkriterium und wird deshalb nie
-   gestaucht — enger wird zuerst der Name. */
+/* Die Punktzahl je Mitglied ist Teil der Kernaussage der Legende und wird
+   deshalb nie gestaucht — enger wird zuerst der Name. */
 .legend-points {
   flex: 0 0 auto;
   font-weight: 800;
   color: var(--pw-ink);
 }
 
-/* Gescrollt: die Leiste wird flacher. Die Legende steht jetzt im Kopf und
-   bleibt deshalb stehen — auszublenden gibt es nichts mehr, gespart wird über
-   die Polster. */
-.wall-status--compact .status-paper {
-  padding: 3px 10px;
-}
-
+/* Gescrollt: die Leiste wird flacher. Da `.status-paper` seit dem Header-
+   Umbau kein eigenes Innenpolster mehr hat (siehe Kommentar dort), bleibt hier
+   nur noch der Kopfabstand zum Sparen — der Rest der Ersparnis kommt aus
+   `Header.vue`s eigenem, knapperem Zeilenpolster. */
 .wall-status--compact .status-head {
   margin-bottom: 1px;
 }
