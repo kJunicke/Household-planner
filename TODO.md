@@ -49,12 +49,13 @@ Aufbau: **Aktiv** (als Nächstes) · **Backlog** (irgendwann) · **Bekannte Rand
 - **`docs/data-model.md` kennt `emphasis_level` nicht.** Beschrieben ist die Spalte nur im
   Glossar (`CONTEXT.md`) und in den Migrationskommentaren.
 
-### Pinnwand-Ausbau — die fünf offenen Tickets
+### Pinnwand-Ausbau — die offenen Tickets (08 erledigt, sechs offen)
 
 > Der Ausbau ist am 18.08.2026 nach `main` gemergt (`d8f0aa7`). Abgenommen sind
 > Karten-Redesign, Wand-Anordnung, Erledigt-Streifen, gedämpfte Kategorien, langer
-> Zettel, Nachdruck-Datenmodell, Zuweisungsfarbe, Stapelreihenfolge und Titelbreite.
-> **Diese fünf hier sind nicht gebaut.** Die ausführlichen Tickets liegen unter
+> Zettel, Nachdruck-Datenmodell, Zuweisungsfarbe, Stapelreihenfolge, Titelbreite
+> und seit dem 19.08. der gemeinsame Header (08).
+> **Die übrigen hier sind nicht gebaut.** Die ausführlichen Tickets liegen unter
 > `.scratch/pinnwand-ausbau/issues/` — und das ist **gitignored**, hängt also an
 > dieser Platte. Was hier steht, ist die haltbare Fassung.
 
@@ -109,16 +110,22 @@ Aufbau: **Aktiv** (als Nächstes) · **Backlog** (irgendwann) · **Bekannte Rand
   append-only, und der Function-Deploy ist ein eigener Schritt.
   ~~Punkte-Sticker erst ab vier Fußzeilen-Elementen (15)~~ ist dadurch **erledigt**: jeder
   Zettel trägt jetzt einen Stempel, die dreiteilige Fußzeile gibt es nicht mehr.
-- **Wochenziel-Leiste in jede Ansicht (08).** Heute liegt sie in
-  `WallStatusBar.vue` und ist damit **nur auf der Pinnwand** sichtbar; in Einkauf,
-  Notizen und Historie fehlt sie. Der Header soll überall gleich aussehen: Papier,
-  Wochenziel-Leiste, keine Rangliste, kein Logo — in allen Ansichten und in
-  **beiden** Aussehen. Der Header ist damit die **bewusste Ausnahme** vom
-  Aussehen-Schalter, der einzige Teil der Papier-Optik ohne `data-design`-Gate;
-  das gehört im Code als Absicht kommentiert. Dafür wandern die `--pw-*`-Tokens
-  aufs blanke Wurzelelement, die Papier-*Regeln* bleiben gegated. Die Leiste muss
-  ihre Höhe weiter als CSS-Variable melden — die Wand reserviert danach ihr unteres
-  Polster. Unabhängig von allem anderen, kann sofort starten.
+- ~~**Wochenziel-Leiste in jede Ansicht (08).**~~ **erledigt** — `149d8c0`, Zweig
+  `ticket-08-header-ueberall-gleich`. Drei QC-Runden in der laufenden App.
+  Abweichungen von der Spec, alle vom Nutzer im Lauf entschieden:
+  - **Der Header wurde einzeilig**, nicht zweizeilig. Vorgabe: er darf vertikal
+    nicht wachsen. Gemessen 61 px offen / 57 kompakt, in beiden Breiten und
+    beiden Aussehen. Die Wand beginnt jetzt bei 71 statt 141 px.
+  - **Das Logo kommt zurück, aber rechts als Menü-Knopf.** Die Spec-Zeile „kein
+    Logo" meinte den alten Platz links neben der Rangliste; der farbige
+    Avatar-Kreis ist dafür ersatzlos entfallen.
+  - **`--wall-status-height` entfällt ersatzlos** — die verdeckende Höhe ist jetzt
+    die Headerhöhe, die `--app-header-height` bereits meldet.
+  - **Die Legende blieb über dem Balken**, in der Kopfzeile neben der Punktzahl.
+    Eine Fassung mit Beschriftung *in* den Segmenten wurde gebaut und vom Nutzer
+    verworfen („sieht seltsam aus"); mit ihr fielen Text-Halo, Canvas-Messung und
+    die Kontrastwahl je Segment wieder weg.
+
 - **Projekte auf der Pinnwand (03).** Das Abzeichen am Projektzettel zeigt die **Summe der
   bisher verschlungenen Punkte** als Zahl — immer sichtbar, ab 0. Die Summe steht in
   `task_completions`; die Wand lädt heute nur die laufende Woche, das braucht eine eigene
@@ -128,7 +135,15 @@ Aufbau: **Aktiv** (als Nächstes) · **Backlog** (irgendwann) · **Bekannte Rand
   Aussehen, mit Eintrag was gemacht wurde und wie viel Aufwand. Kein einfaches
   Erledigen, kein Verschieben; zuweisen läuft über den Stift am Zettel. Baut auf
   00b auf.
-- **FAB wechselt keine Ansicht (01).** Eigenständig, kleines Ticket.
+- **Rückgängig-Geste im Such-Overlay wechselt die Ansicht (01).** Eigenständig,
+  kleines Ticket. **Am 19.08. vom Nutzer neu beschrieben** — die alte Fassung
+  („der FAB wechselt beim Antippen die Ansicht") war falsch: „FAB wechselt nur die
+  ansicht wenn man mit der rückgängig geste den suchdialog wieder schließt."
+  Hypothese, nicht verifiziert: das geöffnete Overlay ist **kein eigener Eintrag
+  im Verlauf**, die Geste findet nichts zum Zurücknehmen und geht eine Route
+  zurück. Die Ghost-Click-Diagnose der Planungssitzung ist damit gegenstandslos.
+  Naheliegende Lösung: Overlay beim Öffnen als Verlaufseintrag führen und über
+  `popstate` schließen — Zurück-Taste und Wischgeste müssen sich gleich verhalten.
 - **Überstempeln am Zettel (09b).** Die Spalte `emphasis_level`, die Migration
   und die drei Reset-Fälle stehen (09a, `ccc1dd4`, Edge Function als v22 deployt) —
   die **Bedienung fehlt**. Vorbedingung 00a ist inzwischen erfüllt. Vorher die drei
@@ -149,9 +164,10 @@ damit nur in `.scratch/pinnwand-ausbau/spec.md`, also gitignored:
   Beim langen Zettel (07) wurde bewusst nur die Papierhülle herausgezogen, der Rest
   ausdrücklich vertagt. Überschneidet sich mit „alle drei Listentypen auf geteilte
   Bausteine" weiter unten, ist aber die weitergehende Entscheidung.
-- **Die Rangliste im Haushalts-Store.** Ticket 08 entfernt die Rangliste aus dem
-  Header; der berechnete Wert wird dadurch unbenutzt und darf bleiben oder
-  entfallen. Bewusst offen gelassen, nicht vergessen.
+- **Die Rangliste im Haushalts-Store.** Ticket 08 hat die Rangliste aus dem Header
+  entfernt; `weeklyRanking` ist seitdem **tatsächlich unbenutzt** und darf bleiben
+  oder entfallen. Bewusst nicht im 08er-Commit aufgeräumt, damit das Ticket nicht
+  nebenbei fremden Code anfasst.
 
 **Prototypen-Zweige** (Wegwerfcode, aber mit abgenommenen Entscheidungen darin):
 `proto/kartengroesse` (9 Commits, Kartengröße + Kranz-Prototyp) und
@@ -161,6 +177,20 @@ damit nur in `.scratch/pinnwand-ausbau/spec.md`, also gitignored:
 nach `main`.
 
 ### Pinnwand — offene Arbeit
+- **Die Legende im Header schmilzt ab vier Mitgliedern auf Farbpunkt plus Zahl.**
+  Gemessen in der 08er-Abnahme, schmalster Viewport: bei fünf Mitgliedern haben
+  die *kürzesten* Namen `clientWidth: 0` — nicht einmal ein Auslassungszeichen —,
+  während die langen „Ä…", „W…" behalten. Grund: Flex schrumpft proportional zur
+  Basisbreite, der Nutzer verliert also zuerst die Namen, die noch gepasst
+  hätten. Ab acht Mitgliedern läuft die Legende sauber über (keine halben
+  Farbpunkte, keine angeschnittenen Zahlen — der letzte Eintrag bleibt als Punkt
+  ohne Zahl stehen). **Kein Regress von 08**: dieselbe Legende stand vorher in
+  derselben Kopfzeile. Bei zwei bis drei Mitgliedern — dem realistischen Fall —
+  ist alles einwandfrei. Ob das reicht, ist eine Nutzerentscheidung.
+- **`.user-avatar` ist mit 08 verschwunden**, damit auch der einzige Ort, an dem
+  die eigene Personenfarbe im Header stand. Die Zuweisungsfarbe trägt weiter die
+  Reißzwecke am Zettel (Ticket 10). Falls die Farbe im Header vermisst wird,
+  wäre die Legende der Platz dafür.
 - **Kuratierte Personenfarben-Palette + Migration bestehender `user_color`-Werte.**
   Die Umrandung ist die einzige Person-Info am Zettel, `#4A90E2` misst nur 3,23 gegen Papier
   / 2,43 gegen Kork. Kein Laufzeit-Snapping — die gewählte Farbe bleibt die angezeigte.

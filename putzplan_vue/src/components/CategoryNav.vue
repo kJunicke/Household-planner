@@ -75,14 +75,28 @@ onMounted(() => {
 </template>
 
 <style scoped>
+/* `top` folgt seit Ticket 08 der Headerhöhe statt 0: der globale App-Header
+   (`Header.vue`) ist jetzt in jeder Ansicht sichtbar (inkl. der eingebetteten
+   Wochenziel-Leiste) und klebt SELBST oben. Bei `top: 0` würde dieser Filter
+   beim Scrollen exakt in denselben Bildschirmbereich wie der Header einrasten
+   und je nach Stapelreihenfolge eines von beidem verdecken (belegter Regress
+   aus dem QC: Chips hinter dem Header UND, umgekehrt, der Menü-Knopf hinter
+   einem Chip). Mit `top: var(--app-header-height)` rastet der Filter direkt
+   UNTER dem Header ein — beide überlappen sich dann gar nicht mehr, das macht
+   die z-index-Reihenfolge unten nur noch zur zweiten Sicherung (z. B. für den
+   kurzen Moment, bevor der ResizeObserver im Header die Variable das erste
+   Mal schreibt). Fallback `56px` wie an den übrigen `--app-header-height`-
+   Stellen im Code (`ToastContainer.vue`, `HistoryView.vue`). */
 .category-nav-container {
   position: sticky;
-  top: 0;
+  top: var(--app-header-height, 56px);
   left: 0;
   right: 0;
   background: var(--color-background-elevated);
   border-bottom: 1px solid var(--color-border);
   padding: 8px 0;
+  /* Unter dem Header (siehe Kommentar dort, z-index 950), aber weiterhin über
+     dem normalen Seiteninhalt. */
   z-index: 850;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
 }
