@@ -209,17 +209,74 @@ const effectivePoints = computed(() => {
  * dauerhaft auf 0. Der klassische `TaskCard` lädt seine Erledigungen selbst und
  * bleibt deshalb unverändert an der alten Rechnung.
  *
- * Das Aussehen ist hier noch das heutige des Punkte-Stickers; die fünf Stufen,
- * `999+` und die Büroklammer-Farbe sind Ticket 03-3. Klassenname `.points` und
- * Platz im `.corner` bleiben, weil `WallView.relayout` genau danach misst.
+ * Klassenname `.points` und Platz im `.corner` bleiben, weil
+ * `WallView.relayout` genau danach misst.
  */
 const displayPoints = computed(() =>
   isProject.value ? taskStore.getProjectEffortTotal(props.task.task_id) : effectivePoints.value
 )
 
-/** Stufenklasse des Stickers — heutige Form, unverändert (03-3 baut die neue). */
-const pointsShapeClass = computed(
-  () => `points--s${Math.min(5, Math.max(0, displayPoints.value))}`
+/**
+ * Was im Sticker STEHT.
+ *
+ * Bei allen Zetteln außer Projekten unverändert die rohe Zahl. **Nur das
+ * Projekt-Abzeichen klemmt bei `999+`** (Ticket 03-3): vier Stellen sprengen
+ * die 34 px, und ein Projekt jenseits von 999 Punkten hat die Aussage ohnehin
+ * gemacht. Die Klemme gilt ausschließlich für die ANZEIGE — die Stufe rechnet
+ * weiter mit `displayPoints` (siehe `badgeStage`), sonst fiele ein Projekt mit
+ * 1500 Punkten auf die Stufe von 999.
+ */
+const pointsLabel = computed(() =>
+  isProject.value && displayPoints.value > 999 ? '999+' : String(displayPoints.value)
+)
+
+/**
+ * Stufe des Projekt-Abzeichens: 1–5 über den Bändern 0–9, 10–24, 25–49,
+ * 50–99, ab 100. Die Bänder sind gesetzt, nicht gemessen (Ticket 03).
+ *
+ * **Bewusst eigene Klassen (`points--b1…b5`) statt `points--s0…s5`.** Die
+ * Sticker-Stufen sind die PUNKTZAHL einer Aufgabe (Kreis 1 … Stern 5); ein
+ * Projekt mit 21 verschlungenen Punkten bekäme über `Math.min(5, …)` den
+ * goldenen Fünf-Punkte-Stern und läse sich als „5 Punkte" statt „Stufe 5".
+ * Getrennte Klassen, getrenntes Bild: Sticker sind aufgeklebte Formen,
+ * Abzeichen ist eine Siegelmarke mit umlaufender Skala.
+ */
+const badgeStage = computed(() => {
+  const p = displayPoints.value
+  if (p >= 100) return 5
+  if (p >= 50) return 4
+  if (p >= 25) return 3
+  if (p >= 10) return 2
+  return 1
+})
+
+/**
+ * Klassen am Sticker. Projekte bekommen das Abzeichen (Grundform, Stufe,
+ * Passung), alle anderen den unveränderten Punkte-Sticker.
+ *
+ * `points--fitN` steuert nur die Schriftgröße nach der STELLENZAHL. Ohne sie
+ * läge dreistellig bei 14,3 px über der freien Innenfläche des Abzeichens; die
+ * Fläche selbst bleibt bei allen Stufen 34 × 34 px (der Sticker wächst bei
+ * `points--s5` auf 39,1 px — das Abzeichen tut das bewusst NICHT).
+ */
+const pointsShapeClass = computed(() => {
+  if (!isProject.value) return `points--s${Math.min(5, Math.max(0, displayPoints.value))}`
+  return [
+    'points--badge',
+    `points--b${badgeStage.value}`,
+    `points--fit${Math.min(4, pointsLabel.value.length)}`,
+  ]
+})
+
+/**
+ * Nur dort gesetzt, wo die Klemme etwas verschweigt. Bei einem Abzeichen, das
+ * `23` zeigt, wäre „Bisher verschlungene Punkte: 23" die sichtbare Zahl noch
+ * einmal — ein Titel, der nichts hinzufügt, ist einer zu viel.
+ */
+const pointsTitle = computed(() =>
+  isProject.value && displayPoints.value > 999
+    ? `Bisher verschlungene Punkte: ${displayPoints.value}`
+    : undefined
 )
 
 /**
@@ -839,8 +896,8 @@ const handlePostponeConfirm = async (targetDate: string) => {
 
            Nur sichtbar mit `zettel--meta-top`. -->
       <div class="corner">
-        <span class="points" :class="pointsShapeClass">
-          {{ displayPoints }}
+        <span class="points" :class="pointsShapeClass" :title="pointsTitle">
+          {{ pointsLabel }}
         </span>
       </div>
 
@@ -865,9 +922,11 @@ const handlePostponeConfirm = async (targetDate: string) => {
            Bei einem PROJEKT steht hier kein Versprechen, sondern die Bilanz:
            die bis jetzt verschlungenen Punkte (→ `displayPoints`). Ein Projekt
            wird nicht abgerissen, es fliegt beim Zug also auch nichts, was diese
-           Zahl einlösen müsste. -->
-      <span class="points" :class="pointsShapeClass">
-        {{ displayPoints }}
+           Zahl einlösen müsste. Das Abzeichen trägt deshalb ein eigenes Bild
+           (`points--badge`, siehe CSS) — die Sticker-Formen bedeuten eine
+           Punktzahl, das Abzeichen eine Stufe. -->
+      <span class="points" :class="pointsShapeClass" :title="pointsTitle">
+        {{ pointsLabel }}
       </span>
       <!-- Unteraufgaben haben jetzt IMMER ein eigenes Zeichen — ein
            angeklammerter Zettelstapel. Vorher verriet nur die Fortschrittszahl
@@ -1357,6 +1416,187 @@ const handlePostponeConfirm = async (targetDate: string) => {
     2% 35%,
     39% 35%
   );
+}
+
+/* --- Projekt-Abzeichen statt Punkte-Sticker (Ticket 03-3) ------------------
+   Ein Projekt hat keine feste Punktzahl mehr. An derselben Stelle steht, wie
+   viele Punkte es bis jetzt VERSCHLUNGEN hat — eine Bilanz, kein Versprechen.
+   Das Bild ist deshalb bewusst ein anderes: keine aufgeklebte Form, sondern
+   eine **Siegelmarke mit umlaufender Skala**.
+
+   Warum getrennt von `.points--s0…s5`: dort bedeutet die Form eine PUNKTZAHL
+   (Kreis 1 … Stern 5). Ein Projekt mit 21 Punkten hätte über `Math.min(5, …)`
+   den goldenen Fünf-Punkte-Stern getragen und sich als „5 Punkte" gelesen
+   statt als „Stufe 5". Die Sticker-Regeln bleiben unangetastet; hier steht
+   ein eigenes Bild daneben.
+
+   **Zwei Merkmale tragen die fünf Stufen**, ein drittes schmückt nur:
+
+     1. **Wie dunkel die Marke ist.** Die Scheibe läuft von fast weißem Papier
+        (Stufe 1) bis nahezu Tinte (Stufe 5); ab Stufe 4 kippt die Schrift auf
+        Papierfarbe. Der Sprung hell→dunkel ist auf Armlänge sichtbar. Die
+        Rampe ist streng monoton in der Luminanz (0,921 / 0,615 / 0,325 /
+        0,138 / 0,046), Nachbarabstände 1,46 / 1,77 / 2,00 / 1,96 — ab b2
+        aufwärts trägt sie deshalb bei jeder Farbfehlsichtigkeit unverändert.
+        Nur das schwächste Paar b1↔b2 (1,46) stützt sich zusätzlich auf den
+        Tonwechsel cremeweiß→blassblau; wer weder Ton noch diese 1,46 sieht,
+        unterscheidet die beiden untersten Stufen nicht. Der Umschlag der
+        Ziffer auf Papierfarbe ab b4 ist am Bild der schärfste Einzelhinweis,
+        deutlicher als der Helligkeitsschritt selbst.
+     2. **Der Umriss.** Stufe 5 ist die einzige mit Zackenkranz (ein gestanztes
+        Siegel statt einer glatten Scheibe) — die Silhouette allein sagt
+        „ab 100", ohne Farbe und ohne Zahl.
+
+   **Die Skala am Rand trägt NICHT** — sie sieht in der Abnahme aus wie eine
+   Kontur, nicht wie ein Füllstand. In 3,4 px Bandbreite bei 34 px Marke ist
+   der Unterschied zwischen 80 % und 100 % Füllung am Bild nicht auszumachen,
+   und auf b5 frisst der Zackenkranz das Band zusätzlich an; ablesbar wird sie
+   erst bei drei- bis vierfacher Vergrößerung. Sie bleibt als Schmuck, weil sie
+   der Marke ihre Siegelform gibt — wer sich auf sie als ordinalen Träger
+   verlässt, verlässt sich auf nichts. Ein früherer Kommentar hier behauptete
+   genau das; er war die Absicht, nicht der Befund.
+
+   Die Bänder (0–9, 10–24, 25–49, 50–99, ab 100) stehen im Skript
+   (`badgeStage`), nicht hier.
+
+     Fläche: 34 × 34 px wie der frühere Punkte-Sticker, auf ALLEN Stufen. Das
+     Abzeichen wächst bewusst nicht wie `.points--s5` (39,1 px) — die
+     Sticker-Ausnahme war genau der Grund, warum ein dreistelliger Wert bisher
+     39 statt 34 px maß. Die Zahl passt über `points--fitN` (unten), nicht über
+     eine größere Fläche. */
+.points--badge {
+  --badge-arc: 20%;
+  --badge-disc: color-mix(in srgb, var(--pw-accent) 4%, var(--pw-paper));
+  /* Die ungefüllte Skala: nur so kräftig, dass der Kreis als Kreis dasteht. */
+  --badge-track: color-mix(in srgb, var(--pw-ink) 18%, transparent);
+  position: relative;
+  border-radius: 50%;
+  /* Kein `background` hier: Ring und Scheibe malen die Pseudoelemente. Der
+     Hintergrund des Elements SELBST läge unter ihnen (Malreihenfolge:
+     Elementhintergrund, dann Nachfahren mit negativem z-index) und wäre nie
+     zu sehen. */
+  color: var(--badge-text, var(--pw-ink));
+}
+
+/* Ring und Scheibe liegen HINTER der Zahl, aber vor dem Elementhintergrund —
+   dafür `z-index: -1`. `.points` hat durch `transform`/`filter` einen eigenen
+   Stapelkontext, die beiden können also nicht hinter den Zettel rutschen.
+   Absolut positioniert heißt außerdem: sie sind keine Grid-Kinder und
+   verschieben die zentrierte Zahl nicht. */
+.points--badge::before,
+.points--badge::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: 50%;
+}
+
+/* Die Skala am Rand. `conic-gradient` füllt den Anteil, die Maske schneidet
+   daraus ein 3,4 px schmales Band am Rand — die freie Innenfläche bleibt
+   dadurch 0,78 × 34 ≈ 26,5 px breit, das Maß, an dem `points--fitN` hängt. */
+.points--badge::before {
+  background: conic-gradient(
+    var(--pw-ink) 0 var(--badge-arc),
+    var(--badge-track) var(--badge-arc) 100%
+  );
+  -webkit-mask: radial-gradient(closest-side, transparent 0 78%, #000 80%);
+  mask: radial-gradient(closest-side, transparent 0 78%, #000 80%);
+}
+
+/* Die Scheibe, knapp unter das Band geschoben. Ihre eigene Tintenkontur hält
+   sie auch auf den hellen Stufen gegen das Packpapier ab. */
+.points--badge::after {
+  inset: 3px;
+  background: var(--badge-disc);
+  box-shadow: inset 0 0 0 1.5px rgba(36, 31, 26, 0.55);
+}
+
+.points--b1 {
+  --badge-arc: 20%;
+  --badge-disc: color-mix(in srgb, var(--pw-accent) 4%, var(--pw-paper));
+}
+
+.points--b2 {
+  --badge-arc: 40%;
+  --badge-disc: color-mix(in srgb, var(--pw-accent) 26%, var(--pw-paper));
+}
+
+.points--b3 {
+  --badge-arc: 60%;
+  --badge-disc: color-mix(in srgb, var(--pw-accent) 55%, var(--pw-paper));
+}
+
+.points--b4 {
+  --badge-arc: 80%;
+  --badge-disc: color-mix(in srgb, var(--pw-accent) 84%, var(--pw-paper));
+  --badge-text: var(--pw-paper);
+}
+
+/* Ab 100 Punkten: volle Skala, fast schwarze Marke — und als einzige Stufe
+   ein gestanzter Zackenkranz. Der Ausschnitt trifft nur den Rand; die Zahl
+   sitzt in der Scheibe weit innerhalb und wird nicht angeschnitten. */
+.points--b5 {
+  --badge-arc: 100%;
+  --badge-disc: color-mix(in srgb, var(--pw-ink) 35%, var(--pw-accent));
+  --badge-text: var(--pw-paper);
+  clip-path: polygon(
+    50% 0%,
+    59.7% 7.6%,
+    71.7% 5%,
+    77.1% 16%,
+    89.1% 18.8%,
+    89.2% 31.1%,
+    98.7% 38.9%,
+    93.5% 50%,
+    98.7% 61.1%,
+    89.2% 68.9%,
+    89.1% 81.2%,
+    77.1% 84%,
+    71.7% 95%,
+    59.7% 92.4%,
+    50% 100%,
+    40.3% 92.4%,
+    28.3% 95%,
+    22.9% 84%,
+    10.9% 81.2%,
+    10.8% 68.9%,
+    1.3% 61.1%,
+    6.5% 50%,
+    1.3% 38.9%,
+    10.8% 31.1%,
+    10.9% 18.8%,
+    22.9% 16%,
+    28.3% 5%,
+    40.3% 7.6%
+  );
+}
+
+/* Passung: die Schriftgröße folgt der STELLENZAHL, die Fläche bleibt 34 px.
+   Gerechnet gegen die freie Innenfläche von ~26,5 px (Ring 3,4 px + Kontur):
+
+     1–2 Stellen  14,3 px  →  bis ~18,9 px breit  (unverändert wie am Sticker)
+     3 Stellen    11,6 px  →  ~20,7 px
+     `999+`        10 px    →  ~22,4 px
+
+   `999+` lag zuerst bei 9,6 px und damit unter `--font-xs`, dem kleinsten
+   Schriftmaß des Projekts. Gemessen waren es 21,5 px in 26,5 px Fläche — die
+   Luft reichte, also steht dort jetzt das Token statt einer eigenen Zahl.
+
+   Steht NACH den Stufenregeln, damit es sie in der Schriftgröße schlägt. */
+.points--fit1,
+.points--fit2 {
+  font-size: 14.3px;
+}
+
+.points--fit3 {
+  font-size: 11.6px;
+  letter-spacing: -0.2px;
+}
+
+.points--fit4 {
+  font-size: var(--font-xs);
+  letter-spacing: -0.3px;
 }
 
 /* --- Zeichen für Unteraufgaben (Ticket 00a) --------------------------------
@@ -1891,7 +2131,14 @@ const handlePostponeConfirm = async (targetDate: string) => {
   height: 20px;
   border: 2.5px solid var(--pw-line);
   border-radius: 3px;
-  background: #b9b3a6;
+  /* Trägt die Zuweisungsfarbe (Ticket 10, nachgezogen in 03-3) — dieselbe
+     Regel wie an der Reißzwecke: mit Zuständigkeit `--owner`, ohne die
+     gedämpfte `--owner-none` vom Zettel. An `.zettel--project` gibt es keine
+     Reißzwecke, die Regel dort griff bis jetzt ins Leere; das Papier war die
+     einzige Stelle, an der ein Projekt gar keine Zuständigkeit zeigte.
+     Vorher fest #b9b3a6 („Metall"). Die eigene Tintenkontur (`border` oben)
+     hält die Klammer auch in der neutralen Fassung sichtbar. */
+  background: var(--owner, var(--owner-none));
   box-shadow: 1px 2px 0 rgba(0, 0, 0, 0.25);
   /* Ornament, kein Bedienelement — Begründung bei `.pin`. `pointer-events`
      ist eine vererbte Eigenschaft, `.clip::after` bekommt sie also automatisch
