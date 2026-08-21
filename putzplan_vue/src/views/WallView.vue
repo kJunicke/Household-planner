@@ -47,6 +47,7 @@ import QuickTaskModal from '../components/QuickTaskModal.vue'
 import { useTaskStore } from '../stores/taskStore'
 import { useHouseholdStore } from '../stores/householdStore'
 import { useTaskBoard } from '@/composables/useTaskBoard'
+import { useOverlayHistoryEntry } from '@/composables/useOverlayHistoryEntry'
 import { searchTasks } from '@/lib/taskSearch'
 import {
   defaultNoteWidth,
@@ -944,31 +945,53 @@ onUnmounted(() => {
 
 const showCreateModal = ref(false)
 const showQuickModal = ref(false)
-const showSearchOverlay = ref(false)
 const searchQuery = ref('')
+
+// Das Such-Overlay ist ein eigener Verlaufseintrag, damit die Rückgängig-Geste
+// es schließt, statt die Ansicht zu wechseln. Reguläres Schließen verbraucht
+// den Eintrag wieder → `useOverlayHistoryEntry`.
+//
+// Der Grund des Schließens kommt als Argument zurück: beim Weitergehen ins
+// Modal bleibt die Eingabe als Titelvorschlag stehen, sonst wird sie geleert.
+// Er reist durch das Composable mit, weil das Schließen per Verlaufssprung
+// erst verzögert zurückmeldet.
+const {
+  isOpen: showSearchOverlay,
+  open: openSearchOverlay,
+  close: closeSearchOverlay,
+} = useOverlayHistoryEntry<'modal'>('suche', (reason) => {
+  if (reason === 'modal') return
+  searchQuery.value = ''
+})
 
 const searchResults = computed(() => searchTasks(taskStore.tasks, searchQuery.value))
 
-const openSearchOverlay = () => {
-  showSearchOverlay.value = true
-  setTimeout(() => {
-    const input = document.querySelector('.search-overlay-input') as HTMLInputElement | null
-    input?.focus()
-  }, 100)
-}
+// `immediate`, weil das Overlay beim Aufbau der View **schon offen sein kann**:
+// die Marke im Verlauf überlebt das Neuladen und die Rückkehr aus einer fremden
+// Seite. Ein Watcher nur auf den Übergang liesse den Fokus dort aus, und
+// dasselbe Overlay verhielte sich je nach Herkunft anders.
+watch(
+  showSearchOverlay,
+  (open) => {
+    if (!open) return
+    setTimeout(() => {
+      const input = document.querySelector('.search-overlay-input') as HTMLInputElement | null
+      input?.focus()
+    }, 100)
+  },
+  { immediate: true },
+)
 
-const closeSearchOverlay = () => {
-  showSearchOverlay.value = false
-  searchQuery.value = ''
-}
-
+// Aus der Suche heraus weiter: erst den eigenen Verlaufseintrag verbrauchen,
+// dann das Modal öffnen. `searchQuery` bleibt als Titelvorschlag stehen und
+// wird deshalb erst nach dem Schließen des Modals geleert.
 const openCreateFromSearch = () => {
-  showSearchOverlay.value = false
+  closeSearchOverlay('modal')
   showCreateModal.value = true
 }
 
 const openQuickFromSearch = () => {
-  showSearchOverlay.value = false
+  closeSearchOverlay('modal')
   showQuickModal.value = true
 }
 
@@ -1052,7 +1075,7 @@ const handleCreateQuickTask = async (data: {
     <!-- Such-Overlay: funktional unverändert, inklusive der bestehenden Karte
          als Ergebniszeile — sie bleibt in dieser Etappe der Weg zum Erledigen. -->
     <div v-if="showSearchOverlay" class="search-overlay">
-      <div class="search-overlay-backdrop" @click="closeSearchOverlay"></div>
+      <div class="search-overlay-backdrop" @click="closeSearchOverlay()"></div>
       <div class="search-overlay-content">
         <div class="search-overlay-header">
           <div class="search-overlay-input-wrapper">
@@ -1062,7 +1085,7 @@ const handleCreateQuickTask = async (data: {
               type="text"
               class="search-overlay-input"
               placeholder="Aufgabe suchen oder erstellen..."
-              @keyup.esc="closeSearchOverlay"
+              @keyup.esc="closeSearchOverlay()"
             />
             <button
               v-if="searchQuery"
@@ -1073,7 +1096,7 @@ const handleCreateQuickTask = async (data: {
               <i class="bi bi-x-lg"></i>
             </button>
           </div>
-          <button class="search-overlay-close" aria-label="Suche schließen" @click="closeSearchOverlay">
+          <button class="search-overlay-close" aria-label="Suche schließen" @click="closeSearchOverlay()">
             <i class="bi bi-x-lg"></i>
           </button>
         </div>
