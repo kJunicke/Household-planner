@@ -196,6 +196,33 @@ const effectivePoints = computed(() => {
 })
 
 /**
+ * Was am Sticker steht.
+ *
+ * Bei allen anderen Zetteln ist das die Zahl, die beim Abreißen gleich fliegt
+ * (→ `effectivePoints`). **Ein Projekt hat keine feste Punktzahl mehr** — sie
+ * wird bei jedem Arbeitseintrag neu gewählt. Dort steht stattdessen, wie viele
+ * Punkte das Projekt bis jetzt verschlungen hat: die Summe aller Erledigungen
+ * seiner Unteraufgaben, aus `taskStore.projectEffortTotals`.
+ *
+ * Bewusst NICHT `taskStore.getProjectEffort()`: das rechnet aus
+ * `taskStore.completions`, und die sind an der Wand leer — die Zahl stünde
+ * dauerhaft auf 0. Der klassische `TaskCard` lädt seine Erledigungen selbst und
+ * bleibt deshalb unverändert an der alten Rechnung.
+ *
+ * Das Aussehen ist hier noch das heutige des Punkte-Stickers; die fünf Stufen,
+ * `999+` und die Büroklammer-Farbe sind Ticket 03-3. Klassenname `.points` und
+ * Platz im `.corner` bleiben, weil `WallView.relayout` genau danach misst.
+ */
+const displayPoints = computed(() =>
+  isProject.value ? taskStore.getProjectEffortTotal(props.task.task_id) : effectivePoints.value
+)
+
+/** Stufenklasse des Stickers — heutige Form, unverändert (03-3 baut die neue). */
+const pointsShapeClass = computed(
+  () => `points--s${Math.min(5, Math.max(0, displayPoints.value))}`
+)
+
+/**
  * Startpunkt des Punkteflugs: die Mitte des Griffs in **Fensterkoordinaten**.
  *
  * Das Rechteck eines geneigten Zettels ist größer als der Zettel selbst — seine
@@ -812,8 +839,8 @@ const handlePostponeConfirm = async (targetDate: string) => {
 
            Nur sichtbar mit `zettel--meta-top`. -->
       <div class="corner">
-        <span class="points" :class="`points--s${Math.min(5, Math.max(0, effectivePoints))}`">
-          {{ effectivePoints }}
+        <span class="points" :class="pointsShapeClass">
+          {{ displayPoints }}
         </span>
       </div>
 
@@ -833,9 +860,14 @@ const handlePostponeConfirm = async (targetDate: string) => {
            nur — auf einen Blick erkennbar, ohne zu lesen. Funktioniert auch
            bei Farbenblindheit, weil die Silhouette trägt, nicht nur die
            Farbe. Werte über 5 (Bonus-Unteraufgaben) fallen alle auf den
-           Stern — bekannt offen, siehe `HANDOFF-kartengroesse.md`. -->
-      <span class="points" :class="`points--s${Math.min(5, Math.max(0, effectivePoints))}`">
-        {{ effectivePoints }}
+           Stern — bekannt offen, siehe `HANDOFF-kartengroesse.md`.
+
+           Bei einem PROJEKT steht hier kein Versprechen, sondern die Bilanz:
+           die bis jetzt verschlungenen Punkte (→ `displayPoints`). Ein Projekt
+           wird nicht abgerissen, es fliegt beim Zug also auch nichts, was diese
+           Zahl einlösen müsste. -->
+      <span class="points" :class="pointsShapeClass">
+        {{ displayPoints }}
       </span>
       <!-- Unteraufgaben haben jetzt IMMER ein eigenes Zeichen — ein
            angeklammerter Zettelstapel. Vorher verriet nur die Fortschrittszahl

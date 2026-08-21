@@ -327,6 +327,11 @@ export const useTaskStore = defineStore('tasks', () => {
                 // sie nur zu löschen — sonst verschwindet der Eintrag ersatzlos,
                 // wenn das Realtime-Echo ausbleibt.
                 await replaceOptimisticCompletion(clientMutationId, taskId, userId)
+                // Das Projekt-Abzeichen zieht hier NICHT nach — das tut die
+                // ERSTE Zeile des Realtime-INSERT-Zweiges, absichtlich vor allen
+                // frühen `return`. Genau dieser Aufruf hier stand einmal an
+                // dieser Stelle; er wanderte dorthin, weil er sonst am
+                // optimistischen Einsetzen direkt darüber hängt.
             },
 
             revert: async (snapshot, error) => {
@@ -690,6 +695,10 @@ export const useTaskStore = defineStore('tasks', () => {
         // worden sein und den alten Stand zurückbringen.
         await loadTasks(ticket.snapshot.map(s => s.task_id))
         await householdStore.loadWeeklyCompletions({ force: true })
+        // Kein Nachruf fürs Projekt-Abzeichen: hierher kommt nur der FETZEN
+        // (`useTornScrap`), und an einem Projekt entsteht laut 03-1 keiner.
+        // Zurückgenommen wird eine Projekt-Erledigung ausschließlich über
+        // `deleteCompletion()` in der Historie — dort steht die Absicherung.
 
         return !restoreError
     }
@@ -985,6 +994,32 @@ export const useTaskStore = defineStore('tasks', () => {
                     // INSERT - Neue Completion wurde erstellt
                     if (payload.eventType === 'INSERT') {
                         const newCompletion = payload.new as TaskCompletion
+
+                        // ZUERST, VOR jedem `return` weiter unten. Das Projekt-
+                        // Abzeichen an der Wand rechnet nicht aus `completions`,
+                        // sondern aus einer eigenen Abfrage — es braucht dieses
+                        // Ereignis also auch dann, wenn die Zeile hier gar nichts
+                        // mehr zu tun findet.
+                        //
+                        // Genau das ist bei der EIGENEN Buchung der Regelfall:
+                        // `completeTask().onSuccess` holt über
+                        // `replaceOptimisticCompletion()` die Serverzeile selbst
+                        // und setzt sie ein, lange bevor das Echo eintrifft. Der
+                        // Treffer auf `completion_id` unten greift dann, der
+                        // Handler steigt aus — und ein Nachruf am Ende des
+                        // Zweiges liefe nie. Gemessen: vier Buchungen über die
+                        // Wand-Geste, null Summen-Abfragen, Abzeichen unverändert
+                        // falsch, während eine FREMDE Erledigung im selben
+                        // Handler alles nachholte.
+                        //
+                        // Hier oben ist der Aufruf unabhängig davon, wie die
+                        // eigene Buchung ihre Zeile einsetzt: er hängt allein am
+                        // Eintreffen des Ereignisses. Wer das optimistische
+                        // Einsetzen umbaut, kann das Abzeichen nicht mehr
+                        // aushebeln. Doppelte Abfragen sind der Preis; eine
+                        // falsche Zahl wäre teurer.
+                        refreshProjectEffortTotals()
+
                         if (completions.value.find(c => c.completion_id === newCompletion.completion_id)) return
 
                         // Echo einer eigenen optimistischen Completion: die Prüfung
@@ -1008,6 +1043,10 @@ export const useTaskStore = defineStore('tasks', () => {
                     if (payload.eventType === 'DELETE') {
                         const deletedCompletion = payload.old as TaskCompletion
                         completions.value = completions.value.filter(c => c.completion_id !== deletedCompletion.completion_id)
+                        // Volle Neuabfrage: der Payload trägt hier NUR die
+                        // completion_id (kein `REPLICA IDENTITY FULL`), also ist
+                        // weder Projekt noch Punktwert bekannt.
+                        refreshProjectEffortTotals()
                     }
                 }
             )
@@ -1179,6 +1218,18 @@ export const useTaskStore = defineStore('tasks', () => {
 
         // Lokalen State aktualisieren
         completions.value = completions.value.filter(c => c.completion_id !== completionId)
+        // Hier verschwindet eine Projekt-Erledigung wirklich (der Fetzen greift
+        // bei Projekten nicht, → 03-1). Der Nachruf steht als Vorsorge, aber
+        // **er greift heute in keinem einzigen Fall**: `deleteCompletion` wird
+        // nur aus `HistoryView` gerufen, dort ist die Wand nicht gemountet,
+        // ihr `onUnmounted` hat `stopProjectEffortTotals()` gerufen — und
+        // `refreshProjectEffortTotals()` ist dann ein `return` in Zeile 1.
+        //
+        // Dass das Abzeichen nach einem Löschen in der Historie trotzdem stimmt,
+        // trägt allein `WallView.onMounted`: das Betreten der Wand holt die
+        // Summen neu. Die Zeile hier wird erst dann zur Absicherung, wenn
+        // Erledigungen auch bei geöffneter Wand gelöscht werden können.
+        refreshProjectEffortTotals()
         toastStore.showToast('Eintrag gelöscht', 'success', 3000)
         return true
     }
@@ -1233,6 +1284,13 @@ export const useTaskStore = defineStore('tasks', () => {
 
         // Lokalen State aktualisieren
         completions.value = []
+        // Mit der Historie fiele auch jedes Projekt-Abzeichen auf 0 — nach
+        // derselben Rechnung wie sonst, nicht durch Nullsetzen von Hand.
+        // Zweimal Vorsorge, zweimal ohne heutige Wirkung: `deleteAllCompletions`
+        // hat aktuell **gar keinen Aufrufer** (nur Definition und Export), und
+        // selbst mit einem träfe hier dieselbe Sperre wie bei
+        // `deleteCompletion` — es sei denn, der Aufrufer säße auf der Wand.
+        refreshProjectEffortTotals()
         toastStore.showToast('Historie gelöscht', 'success', 3000)
         return true
     }
@@ -1317,6 +1375,152 @@ export const useTaskStore = defineStore('tasks', () => {
             }, 0)
     }
 
+    /**
+     * Punktesummen der Projekte — **unabhängig von `completions`**.
+     *
+     * `getProjectEffort()` oben rechnet aus `completions.value`. Das trägt nur
+     * im klassischen Aussehen, das seine Erledigungen selbst lädt; die Pinnwand
+     * lädt gar keine (`WallView.onMounted`: `loadTasks` + `subscribeToTasks` +
+     * `loadWeeklyCompletions`), und die Wochenliste liegt ohnehin im
+     * `householdStore` und deckt nur die laufende Woche ab. Ein Projekt sammelt
+     * über Monate. Deshalb eine eigene, schmale Abfrage.
+     *
+     * **Keine zweite Wahrheit:** gezählt wird weiter aus `task_completions`
+     * (`effort_override`), es gibt keine Spalte auf `tasks` und keine Migration.
+     * Was die Historie nicht mehr enthält — Zurückkleben löscht die Zeile —,
+     * zählt hier automatisch nicht mehr mit.
+     */
+    const projectEffortTotals = ref<Record<string, number>>({})
+
+    // Erst wenn die Wand die Summen einmal geholt hat, hält `refreshProjectEffortTotals`
+    // sie nach. Ohne diese Sperre feuerte das klassische Aussehen bei jeder
+    // Erledigung zwei überflüssige Abfragen — es rechnet aus `completions`.
+    let projectEffortTotalsActive = false
+
+    const loadProjectEffortTotals = async (): Promise<void> => {
+        const householdStore = useHouseholdStore()
+        if (!householdStore.currentHousehold) return
+
+        projectEffortTotalsActive = true
+
+        // Schritt 1: alle Unteraufgaben des Haushalts mit ihrem Elternteil.
+        //
+        // **Bewusst OHNE `deleted_at`-Filter.** Eine gelöschte Unteraufgabe hat
+        // trotzdem Punkte verschlungen; ihre Erledigungen zählen weiter, sonst
+        // schrumpfte das Abzeichen beim Aufräumen der Unteraufgaben.
+        const { data: subtaskRows, error: subtaskError } = await supabase
+            .from('tasks')
+            .select('task_id, parent_task_id')
+            .eq('household_id', householdStore.currentHousehold.household_id)
+            .not('parent_task_id', 'is', null)
+
+        if (subtaskError) {
+            // Stehenlassen statt auf 0 setzen: eine falsche 0 sieht aus wie ein
+            // Projekt ohne Arbeit und niemand liest sie als Fehler.
+            console.error('Error loading subtasks for project effort totals:', subtaskError)
+            return
+        }
+
+        const parentOf = new Map<string, string>()
+        for (const row of (subtaskRows ?? []) as Pick<Task, 'task_id' | 'parent_task_id'>[]) {
+            if (row.parent_task_id) parentOf.set(row.task_id, row.parent_task_id)
+        }
+
+        const subtaskIds = [...parentOf.keys()]
+        const totals: Record<string, number> = {}
+
+        // Schritt 2: die Erledigungen dieser Unteraufgaben. Summiert wird im
+        // Client — PostgREST kann ohne DB-Objekt kein `GROUP BY`. Gezählt werden
+        // ALLE Unteraufgaben-Erledigungen, nicht nur die von „Am Projekt
+        // arbeiten": auch eine abgehakte Checklisten-Zeile hat Punkte gekostet,
+        // wenn sie welche gebracht hat.
+        //
+        // Zwei voneinander unabhängige Grenzen, beide müssen gezogen werden:
+        //
+        // - `CHUNK` teilt die `in`-Liste, damit die URL nicht zu lang wird.
+        //   Das begrenzt die Zahl der ABGEFRAGTEN IDs, nicht die der Zeilen.
+        // - `PAGE` blättert die Antwort. PostgREST deckelt jede Antwort bei
+        //   `max_rows` (`supabase/config.toml`: 1000). Eine Scheibe mit 150
+        //   Unteraufgaben kann in einem gewachsenen Haushalt weit mehr als 1000
+        //   Erledigungen tragen — ohne Blättern fiele der Rest weg, die Summe
+        //   wäre zu NIEDRIG und niemand sähe einen Fehler.
+        const CHUNK = 150
+        const PAGE = 1000
+        for (let i = 0; i < subtaskIds.length; i += CHUNK) {
+            const chunk = subtaskIds.slice(i, i + CHUNK)
+
+            let offset = 0
+            for (;;) {
+                const { data: completionRows, error: completionError } = await supabase
+                    .from('task_completions')
+                    .select('task_id, effort_override')
+                    .in('task_id', chunk)
+                    // Ohne feste Ordnung ist Blättern sinnlos: PostgREST gibt
+                    // die Zeilen sonst in beliebiger Reihenfolge zurück, und
+                    // zwischen zwei Seiten darf sie sich ändern. Dieselbe Zeile
+                    // käme dann doppelt oder gar nicht — die Summe wäre still
+                    // falsch, genau der Fehler, gegen den das Blättern hier
+                    // überhaupt gebaut ist. `completion_id` ist der PK, also
+                    // eindeutig und damit eine vollständige Ordnung.
+                    .order('completion_id')
+                    .range(offset, offset + PAGE - 1)
+
+                if (completionError) {
+                    console.error('Error loading completions for project effort totals:', completionError)
+                    return
+                }
+
+                const rows = (completionRows ?? []) as Pick<TaskCompletion, 'task_id' | 'effort_override'>[]
+                for (const row of rows) {
+                    const parentId = parentOf.get(row.task_id)
+                    if (!parentId) continue
+                    totals[parentId] = (totals[parentId] ?? 0) + (row.effort_override ?? 0)
+                }
+
+                // Abbruch erst bei einer LEEREN Seite, und weitergezählt wird
+                // um das, was wirklich kam. `rows.length < PAGE` wäre falsch,
+                // sobald `max_rows` unter `PAGE` liegt: der Server kürzte dann
+                // jede Seite, die erste Runde sähe wie die letzte aus und der
+                // Rest fiele still weg.
+                if (rows.length === 0) break
+                offset += rows.length
+            }
+        }
+
+        projectEffortTotals.value = totals
+    }
+
+    /**
+     * Die Summe eines Projekts. 0 heißt „noch nichts gebucht" — ein Projekt ohne
+     * Arbeitseintrag trägt das Abzeichen trotzdem.
+     */
+    const getProjectEffortTotal = (projectId: string): number =>
+        projectEffortTotals.value[projectId] ?? 0
+
+    /**
+     * Nachziehen nach jeder Änderung an `task_completions`.
+     *
+     * **Immer voll neu abfragen, auch beim Löschen.** Ein Realtime-`DELETE`
+     * trägt ohne `REPLICA IDENTITY FULL` nur die `completion_id` im Payload —
+     * weder `task_id` noch Punktwert. Wer hier auf den Payload baut, kann nicht
+     * abziehen; das Abzeichen bliebe nach dem Zurückkleben zu hoch, und
+     * **niemand sähe einen Fehler**.
+     */
+    const refreshProjectEffortTotals = () => {
+        if (!projectEffortTotalsActive) return
+        void loadProjectEffortTotals()
+    }
+
+    /**
+     * Gegenstück zu `loadProjectEffortTotals()`: die Wand meldet sich beim
+     * Verlassen ab. Ohne das feuerte das klassische Aussehen, sobald es einmal
+     * die Wand gesehen hat, bei jeder Erledigung Abfragen für Summen, die
+     * niemand mehr liest — es rechnet aus `completions`.
+     */
+    const stopProjectEffortTotals = () => {
+        projectEffortTotalsActive = false
+    }
+
     // Return - was andere Komponenten verwenden können
     return {
         tasks,
@@ -1346,6 +1550,11 @@ export const useTaskStore = defineStore('tasks', () => {
         resetSubtasks,
         // Projects
         completeProject,
-        getProjectEffort
+        getProjectEffort,
+        projectEffortTotals,
+        loadProjectEffortTotals,
+        getProjectEffortTotal,
+        refreshProjectEffortTotals,
+        stopProjectEffortTotals
     }
 })
