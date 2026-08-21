@@ -73,6 +73,26 @@ const showPostpone = computed(
   () => canPostpone(props.task) && (!props.task.completed || props.task.postponed_until !== null)
 )
 
+// Der Typ „Projekt" steht in der Liste, ist aber KEIN Wechselziel — in keine
+// Richtung. Ohne die Option stünde das Feld bei einem Projekt auf einem Wert, den
+// es nicht gibt, und wäre leer (Ticket 03-4). Auswählbar darf sie trotzdem nicht
+// sein, weil ein Typwechsel Zustand hinterlässt, den dieses Modal nicht mitzieht:
+//
+// - Ein Projekt bekommt seine Unteraufgabe „Am Projekt arbeiten" NUR beim Anlegen
+//   (`taskStore.createTask`, Zweig `data.task_type === 'project'`). Eine nachträglich
+//   zum Projekt gemachte Aufgabe hätte sie nie.
+// - Die erlaubten Punktmodi hängen am Typ (`SubtaskManagementModal.availableModes`:
+//   Projekt nur `checklist`/`bonus`). Bestehende `deduct`-Unteraufgaben würden beim
+//   Wechsel zu „Projekt" nicht umgestellt, aber weiter abgezogen
+//   (`taskStore` Punktberechnung filtert `deduct` ohne Blick auf den Parent-Typ).
+// - Projekte sind an mehreren Stellen ausgenommen (Emphasis-Reset beim Erledigen,
+//   Gruppierung in `useTaskBoard`) — ein Wechsel verschiebt eine Aufgabe samt
+//   Erledigungen stillschweigend in ein anderes Regelwerk.
+//
+// Deshalb: bei einem Projekt sind die anderen Typen gesperrt, sonst ist „Projekt"
+// gesperrt. Anzeigen ja, wechseln nein.
+const isProject = computed(() => props.task.task_type === 'project')
+
 const editForm = ref({
   title: props.task.title,
   effort: props.task.effort,
@@ -131,9 +151,10 @@ const handleClose = () => {
                 v-model="editForm.task_type"
                 required
               >
-                <option value="recurring">Zeitbasiert</option>
-                <option value="daily">Täglich</option>
-                <option value="one-time">Einmalig</option>
+                <option value="recurring" :disabled="isProject">Zeitbasiert</option>
+                <option value="daily" :disabled="isProject">Täglich</option>
+                <option value="one-time" :disabled="isProject">Einmalig</option>
+                <option value="project" :disabled="!isProject">Projekt</option>
               </select>
             </div>
 

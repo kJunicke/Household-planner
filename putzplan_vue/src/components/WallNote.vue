@@ -19,13 +19,20 @@
  *
  * **Der Long-Press** auf der Zettelfläche (Ticket 10) blendet alle vier
  * Richtungen beschriftet ein: oben verschieben, unten erledigen, links
- * zuweisen, rechts erledigen mit angepasstem Aufwand — bei jedem Aufgabentyp
- * identisch. Die Geste steckt in `useDirectionPress`, die Beschriftung in
- * `WallDirectionMenu`.
+ * zuweisen, rechts erledigen mit angepasstem Aufwand. Die Geste steckt in
+ * `useDirectionPress`, die Beschriftung in `WallDirectionMenu`.
  *
  * **Das Eselsohr** unten rechts ist der Abreiß-Griff (Ticket 09): von dort aus
  * nach unten ziehen erledigt die Aufgabe, sofort und ohne vorheriges langes
  * Drücken. Die Geste selbst steckt in `useTearGesture`.
+ *
+ * **Projekte sind die Ausnahme von beidem** (Ticket 03). Sie werden nie fertig,
+ * sondern beackert: beide Gesten nach unten öffnen dort das
+ * `ProjectWorkModal`, der Zettel bleibt hängen, es entsteht kein Fetzen. Einen
+ * Richtungskranz bekommen sie gar nicht — beim Halten hebt sich nur der Zettel
+ * („ich höre zu"), ohne Beschriftung und ohne Schleier; die anderen drei
+ * Richtungen tun nichts. Alles Weitere (zuweisen, Aufwand,
+ * verschieben, löschen) läuft dort über den Bearbeiten-Stift.
  *
  * **Antippen der Fläche** klappt die Unteraufgaben auf — aber nur bei einem
  * Zettel, der welche hat. Ein Zettel ohne Unteraufgaben reagiert auf ein
@@ -47,6 +54,7 @@ import { useDirectionPress, type PressDirection } from '@/composables/useDirecti
 import { flyPoints } from '@/lib/pointsFlight'
 import { offerScrap } from '@/composables/useTornScrap'
 import WallDirectionMenu from './WallDirectionMenu.vue'
+import ProjectWorkModal from './ProjectWorkModal.vue'
 import TaskCompletionModal from './TaskCompletionModal.vue'
 import TaskEditModal from './TaskEditModal.vue'
 import TaskAssignmentModal from './TaskAssignmentModal.vue'
@@ -201,6 +209,79 @@ const centerOf = (el: HTMLElement) => {
   return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 }
 }
 
+// --- Projekte: arbeiten statt abreißen (Ticket 03) --------------------------
+
+/**
+ * Ein Projekt wird nie fertig, es wird beackert. **Beide** Gesten nach unten —
+ * der Zug am Eselsohr und der Long-Press-Zug — landen deshalb im selben
+ * `ProjectWorkModal` wie der Knopf „Am Projekt arbeiten" im klassischen
+ * Aussehen. Kein Erledigen, kein Fetzen, kein Verschwinden vom Board.
+ *
+ * Die beiden Wege können sich nicht gegenseitig auslösen und auch nicht zwei
+ * Einträge erzeugen: der Long-Press startet auf dem Eselsohr gar nicht erst
+ * (`isPressControl`), und selbst wenn beide dasselbe `showProjectWorkModal`
+ * setzten, ist es ein einzelner Zustand — gebucht wird ohnehin erst im Fenster,
+ * mit Pflichtauswahl und Pflichtnotiz.
+ */
+const showProjectWorkModal = ref(false)
+const isLoggingWork = ref(false)
+
+/**
+ * Die Unteraufgabe, an der die Buchung hängt. Sie ist bewusst NICHT in
+ * `subtasks` (dort herausgefiltert, „Buchhaltung, kein Zettel") — gesucht wird
+ * deshalb in der ungefilterten Liste des Stores.
+ */
+const projectWorkSubtaskId = computed(() => {
+  if (!isProject.value) return null
+  const work = taskStore
+    .getSubtasks(props.task.task_id)
+    .find(s => s.title === 'Am Projekt arbeiten')
+  return work?.task_id ?? null
+})
+
+/**
+ * Ein Altbestands-Projekt ohne diese Unteraufgabe (angelegt, bevor der Store
+ * sie automatisch mitanlegte) bekommt **kein** Fenster: es hätte nichts, worauf
+ * es buchen könnte, und ein Bestätigen liefe ins Leere. Stilles Nachlegen aus
+ * einer Geste heraus wäre eine Datenänderung, die niemand angefordert hat —
+ * dieselbe Entscheidung wie in `TaskCard` (dort `console.error`).
+ */
+const openProjectWork = () => {
+  if (!projectWorkSubtaskId.value) {
+    console.error('Project work subtask not found')
+    return
+  }
+  showProjectWorkModal.value = true
+}
+
+/**
+ * Buchen. Punkte und Notiz gehen an die Work-Unteraufgabe, genau wie am Knopf
+ * im klassischen Aussehen — die Punkte laufen damit ins Wochenziel wie bei
+ * jeder Erledigung.
+ *
+ * **Kein Konfetti**, obwohl `TaskCard` welches zündet: an der Wand ist die
+ * Rückmeldung der Punkteflug plus das Bestätigungsfenster, das ja schon
+ * dastand. **Kein Toast** aus demselben Grund. **Kein `markAsDirty`**: die
+ * Work-Unteraufgabe ist an der Wand ohnehin ausgeblendet, und ein
+ * Zurücksetzen von hier aus wäre eine zweite Wahrheit neben dem Store.
+ *
+ * Wie überall hier entscheidet der Rückgabewert über den Flug — ein
+ * abgewiesener Doppelgriff darf keine zweite Zahl fliegen lassen. Schlägt es
+ * fehl, bleibt das Fenster offen und der Eintrag erhalten.
+ */
+const handleProjectWork = async (effort: number, note: string) => {
+  const subtaskId = projectWorkSubtaskId.value
+  if (!subtaskId) return
+  const el = root.value
+  const origin = el ? centerOf(el) : null
+  isLoggingWork.value = true
+  const applied = await taskStore.completeTask(subtaskId, effort, note)
+  isLoggingWork.value = false
+  if (!applied) return
+  showProjectWorkModal.value = false
+  if (origin) flyPoints(`+${effort} P`, origin)
+}
+
 /**
  * Ein Zettelchen abreißen = die Unteraufgabe erledigen.
  *
@@ -275,8 +356,15 @@ const tearNote = async (handle: HTMLElement) => {
  */
 const tear = useTearGesture({
   onTear: (id, handle) => {
-    if (id === NOTE_HANDLE) void tearNote(handle)
-    else void tearSubtask(id, handle)
+    if (id === NOTE_HANDLE) {
+      // Am Projekt reißt nichts ab — der Griff ist dort der Griff zum Arbeiten
+      // (Ticket 03). Nicht über `tearNote()`: das erledigt die Aufgabe UND
+      // bietet unbedingt einen Fetzen an (`offerScrap`), und „Zurückkleben"
+      // löschte dort einen Arbeitseintrag, ohne dass es jemand als Löschen
+      // liest.
+      if (isProject.value) openProjectWork()
+      else void tearNote(handle)
+    } else void tearSubtask(id, handle)
   }
 })
 
@@ -297,8 +385,18 @@ const {
 /** Wird gerade am Eselsohr DIESES Zettels gezogen (nicht an einem Zettelchen)? */
 const isNoteTearing = computed(() => tearActiveId.value === NOTE_HANDLE)
 
-/** Weit genug für ein Abreißen — der Zettel sagt es, bevor losgelassen wird. */
-const isTearReady = computed(() => isNoteTearing.value && tearPull.value >= tearDistance)
+/**
+ * Weit genug für ein Abreißen — der Zettel sagt es, bevor losgelassen wird.
+ *
+ * **An einem Projekt nie.** Der gestrichelte Umriss (`.zettel--tear-ready`) und
+ * die Perforation am Eselsohr (`.ear--ready`) kündigen ein Abreißen an, das
+ * dort nicht stattfindet: der Zettel bleibt hängen. Das Ziehfeedback bleibt
+ * davon unberührt — der Zettel folgt weiter dem Finger (`.zettel--tearing`),
+ * nur die Ankündigung des Abrisses entfällt.
+ */
+const isTearReady = computed(
+  () => !isProject.value && isNoteTearing.value && tearPull.value >= tearDistance
+)
 
 watch(isNoteTearing, active => {
   if (active) emit('gesture-start', props.task.task_id)
@@ -387,15 +485,26 @@ const isPressControl = (target: EventTarget | null): boolean =>
  * Die Belegung ist in `WallDirectionMenu` beschriftet und hier ausgeführt —
  * beide Listen müssen dieselbe Aussage machen.
  *
- * **Kontextunabhängig, ausdrücklich ohne Fallunterscheidung nach Aufgabentyp**
- * (Spec): dieselbe Bewegung tut auf jedem Zettel dasselbe. Deshalb steht hier
- * kein `if (task_type === …)` und darf auch keins dazukommen.
+ * Für alles außer Projekten gilt weiter: dieselbe Bewegung tut auf jedem
+ * Zettel dasselbe. Drei der vier Richtungen öffnen genau die Dialoge, die schon
+ * am Bearbeiten-Knopf hängen; nur „unten" handelt sofort, weil es der
+ * Schnellweg ist, den die Beschriftung lehren soll.
  *
- * Drei der vier Richtungen öffnen genau die Dialoge, die schon am
- * Bearbeiten-Knopf hängen; nur „unten" handelt sofort, weil es der Schnellweg
- * ist, den die Beschriftung lehren soll.
+ * **Projekte sind die eine Ausnahme** (Ticket 03, `HANDOFF-ziehgeste.md`
+ * Punkt 5). Sie bekommen gar keinen Kranz, also auch keine Beschriftung, die
+ * hier eingelöst werden müsste: „unten" öffnet das Arbeitsfenster, die anderen
+ * drei tun **nichts**. Verschieben ergibt an einem Projekt keinen Sinn,
+ * Erledigen gibt es dort nicht, und Zuweisen und Aufwand laufen laut
+ * Nutzerentscheidung über den Bearbeiten-Stift. Eine Aktion ohne Beschriftung
+ * wäre außerdem eine unsichtbare — der frühere Kommentar hier („kein
+ * `if (task_type === …)`") stammt aus der Fassung, in der jeder Zettel einen
+ * Kranz bekam.
  */
 const onPressDirection = (direction: PressDirection) => {
+  if (isProject.value) {
+    if (direction === 'down') openProjectWork()
+    return
+  }
   if (direction === 'down') {
     const el = root.value
     if (el) void tearNote(el)
@@ -849,9 +958,33 @@ const handlePostponeConfirm = async (targetDate: string) => {
     <!-- Die vier beschrifteten Richtungen: Vollbild-Overlay, teleportiert nach
          `body` und in Fensterkoordinaten gelegt — die Begründung steht in der
          Komponente. Es hängt an der Geste, nicht am Zettel: Ursprung ist der
-         Aufsetzpunkt, nicht die Zettelmitte. -->
+         Aufsetzpunkt, nicht die Zettelmitte.
+
+         **An einem Projekt gar nicht** (Ticket 03): kein Kranz, kein Schleier.
+         Die Geste läuft trotzdem weiter — nur „unten" führt dort zu etwas, und
+         eine Beschriftung, die drei tote Richtungen anböte, wäre eine falsche
+         Aussage.
+
+         **`zettel--pressed` bleibt trotzdem an** — auch am Projekt. Erste
+         Fassung hatte es mit unterdrückt („sichtbar passiert nichts"); der QC
+         hat gemessen, was das kostet: ab exakt 420 ms sperrt
+         `useDirectionPress` den Bildlauf (`onTouchMove` → `preventDefault`)
+         und schluckt den Loslass-Klick (`armClickGuard` feuert bei `fired`,
+         auch ohne anliegende Richtung) — halten und loslassen ließ den Zettel
+         messbar unverändert, der Tipp verpuffte. Das passiert bei JEDEM
+         Zettel; der Unterschied ist nur, dass man dort den Kranz sieht und
+         deshalb versteht, warum die Wand gerade nicht reagiert. Der Defekt
+         war also die fehlende Rückmeldung, nicht der Wächter.
+
+         Das Ticket verbietet den **Kranz**, nicht das Anheben: ein Zettel, der
+         sich hebt, sagt „ich höre zu", ohne eine Richtung zu versprechen.
+         `.zettel--pressed` hebt nur Schatten und Papierhelligkeit an, weder
+         Größe noch Lage noch Neigung (Begründung samt Messwerten an der Regel
+         im CSS-Block). Damit passt auch das `gesture-start`/`gesture-end`
+         an `pressOpen` zum sichtbaren Zustand, statt ein unsichtbarer
+         Nebeneffekt zu sein — deshalb ist dort ebenfalls nichts unterdrückt. -->
     <WallDirectionMenu
-      v-if="pressOpen"
+      v-if="pressOpen && !isProject"
       :origin="pressOrigin"
       :tip="pressTip"
       :active="pressDirection"
@@ -866,6 +999,18 @@ const handlePostponeConfirm = async (targetDate: string) => {
       :isLoading="taskStore.isLoading"
       @close="showCompletionModal = false"
       @confirm="handleCustomCompletion"
+    />
+
+    <!-- Beide Gesten nach unten an einem Projekt: dasselbe Fenster wie der
+         Knopf „Am Projekt arbeiten" im klassischen Aussehen. Auswahl UND Notiz
+         sind dort Pflicht, nichts ist vorausgewählt — Schließen ohne Eintrag
+         bucht nichts. -->
+    <ProjectWorkModal
+      v-if="showProjectWorkModal"
+      :projectTitle="props.task.title"
+      :isLoading="isLoggingWork"
+      @close="showProjectWorkModal = false"
+      @confirm="handleProjectWork"
     />
 
     <TaskEditModal
@@ -1552,10 +1697,40 @@ const handlePostponeConfirm = async (targetDate: string) => {
    **Ohne jede Änderung an Größe, Lage oder Neigung.** Das Overlay liegt in
    Fensterkoordinaten und hängt am Aufsetzpunkt des Fingers, nicht am Zettel —
    ein Zettel, der beim Auslösen wächst oder springt, rutschte also unter der
-   stehenden Geste weg. Der Zustand ist deshalb rein farblich. */
-.zettel--pressed {
+   stehenden Geste weg. Der Zustand ist deshalb rein farblich.
+
+   **Zwei Klassen am selben Element (0,2,0), nicht eine (0,1,0) — und das ist
+   kein Stilmittel, sondern eine Reparatur.** `.zettel--project` steht weiter
+   unten und setzt einen eigenen `box-shadow` (`4px 4px 0`). Bei gleicher
+   Spezifität gewinnt die spätere Regel: der Hebe-Schatten erreichte den
+   Projekt-Zettel **nie**. Gemessen (QC): Projekt ruhend gegen gehalten
+   0 geänderte Pixel, beide PNGs bitgleich — die Klasse stand am Element, die
+   Wirkung kam nicht an. Genau das trifft am Projekt am härtesten, weil dort
+   seit Ticket 03 gar kein Richtungskranz mehr erscheint und dieser Zustand
+   die EINZIGE Rückmeldung auf das Halten ist. `!important` wäre hier falsch
+   (es überschriebe auch spätere absichtliche Ausnahmen), Umsortieren ebenso
+   (es risse die anderen Typregeln mit).
+
+   **Warum zusätzlich `filter`.** Der Hebe-Schatten allein ist am Projekt fast
+   stumm: dessen Ruheschatten ist mit `4px 4px 0` opak ohnehin der kräftigste
+   der drei Zetteltypen, `7px 10px 0` bei 35 % Deckkraft ist breiter, aber
+   blasser — überschlägig gleich viel Tinte. Das Papier hebt sich deshalb
+   zusätzlich ins Licht: dieselbe Aussage wie der Schatten (der Zettel liegt
+   nicht mehr auf, er wird gehalten), nur trägt sie hier die ganze Fläche
+   statt eines Randstreifens.
+
+   Bewusst KEIN `transform`: die Zettel tragen ihre Neigung als Inline-Style
+   (siehe `noteStyle`), und `.zettel--tearing` schiebt sie dem Finger nach —
+   ein `transform` hier überschriebe beides, statt sich zu addieren, und der
+   Zettel spränge beim Anfassen gerade.
+
+   `filter` öffnet einen Stapelkontext und wäre ein Bezugsrahmen für
+   `position: fixed` **innerhalb** des Zettels. Es gibt dort keins: Kranz und
+   Dialoge sind allesamt nach `body` teleportiert, liegen also außerhalb. */
+.zettel.zettel--pressed {
   z-index: 810 !important;
   box-shadow: var(--pw-shadow-lift);
+  filter: brightness(1.09);
 }
 
 /* Weit genug gezogen: Loslassen erledigt. Die Perforation reißt sichtbar auf.
