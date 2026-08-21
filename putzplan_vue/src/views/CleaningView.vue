@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted, ref, computed } from "vue";
+import { onMounted, onUnmounted, ref, computed, watch } from "vue";
 import TaskCard from '../components/TaskCard.vue';
 import CategoryNav, { type TaskCategory } from '../components/CategoryNav.vue';
 import TaskCreateModal from '../components/TaskCreateModal.vue';
@@ -8,6 +8,7 @@ import { useTaskStore } from "../stores/taskStore";
 import { useHouseholdStore } from "../stores/householdStore";
 import type { Task } from '@/types/Task';
 import { useTaskBoard, countOverdue } from '@/composables/useTaskBoard';
+import { useOverlayHistoryEntry } from '@/composables/useOverlayHistoryEntry';
 
 const taskStore = useTaskStore()
 
@@ -20,7 +21,17 @@ const showQuickModal = ref(false)
 
 // Search state
 const searchQuery = ref('')
-const showSearchOverlay = ref(false)
+
+// Dasselbe Such-Overlay wie auf der Pinnwand — und derselbe Verlaufseintrag,
+// damit die Rückgängig-Geste hier nicht die Ansicht wechselt.
+const {
+  isOpen: showSearchOverlay,
+  open: openSearchOverlay,
+  close: closeSearchOverlay,
+} = useOverlayHistoryEntry<'modal'>('suche', (reason) => {
+  if (reason === 'modal') return
+  searchQuery.value = ''
+})
 
 // Cross-tab search results (only when search is active)
 const crossTabSearchResults = computed(() => {
@@ -167,12 +178,12 @@ const closeCreateModal = () => {
 // Aus dem Such-Overlay heraus: zuerst Suche schließen, dann jeweiliges Modal
 // öffnen. searchQuery bleibt erhalten und wird als initialTitle übernommen.
 const openCreateFromSearch = () => {
-  showSearchOverlay.value = false
+  closeSearchOverlay('modal')
   showCreateModal.value = true
 }
 
 const openQuickFromSearch = () => {
-  showSearchOverlay.value = false
+  closeSearchOverlay('modal')
   showQuickModal.value = true
 }
 
@@ -192,19 +203,21 @@ const handleCreateQuickTask = async (data: {
   }
 }
 
-const openSearchOverlay = () => {
-  showSearchOverlay.value = true
-  // Focus input nach Vue render cycle
-  setTimeout(() => {
-    const input = document.querySelector('.search-overlay-input') as HTMLInputElement
-    input?.focus()
-  }, 100)
-}
-
-const closeSearchOverlay = () => {
-  showSearchOverlay.value = false
-  searchQuery.value = ''
-}
+// Fokus erst, wenn das Overlay wirklich offen ist — es hängt jetzt am
+// Verlaufseintrag und geht deshalb nicht mehr synchron mit dem Tippen auf.
+// `immediate`, weil das Overlay beim Aufbau der View schon offen sein kann
+// (Neuladen, Rückkehr aus einer fremden Seite).
+watch(
+  showSearchOverlay,
+  (open) => {
+    if (!open) return
+    setTimeout(() => {
+      const input = document.querySelector('.search-overlay-input') as HTMLInputElement
+      input?.focus()
+    }, 100)
+  },
+  { immediate: true },
+)
 
 const handleCreateTask = async (taskData: {
   title: string
@@ -339,7 +352,7 @@ onUnmounted(() => {
 
     <!-- Search Overlay -->
     <div v-if="showSearchOverlay" class="search-overlay">
-      <div class="search-overlay-backdrop" @click="closeSearchOverlay"></div>
+      <div class="search-overlay-backdrop" @click="closeSearchOverlay()"></div>
       <div class="search-overlay-content">
         <!-- Search Header -->
         <div class="search-overlay-header">
@@ -350,7 +363,7 @@ onUnmounted(() => {
               v-model="searchQuery"
               class="search-overlay-input"
               placeholder="Aufgabe suchen oder erstellen..."
-              @keyup.esc="closeSearchOverlay"
+              @keyup.esc="closeSearchOverlay()"
             />
             <button
               v-if="searchQuery"
@@ -362,7 +375,7 @@ onUnmounted(() => {
             </button>
           </div>
           <button
-            @click="closeSearchOverlay"
+            @click="closeSearchOverlay()"
             class="search-overlay-close"
             aria-label="Suche schließen"
           >
