@@ -1,6 +1,13 @@
 <script setup lang="ts">
 /**
- * Die vier beschrifteten Richtungen beim Long-Press (Ticket 10).
+ * Die vier beschrifteten Richtungen beim Long-Press — als Vollbild-Overlay
+ * (Ticket 10, grundüberholt in Ticket 00b).
+ *
+ * **Warum an den Bildschirmrändern und nicht um den Zettel herum:** ein Kranz
+ * um den Zettel liegt genau dort, wo der Daumen liegt. „Im Moment blockiert man
+ * auch die Hälfte der Sachen mit seinem Daumen" — das war der Auftrag. Wer den
+ * Kranz später „aus Ergonomiegründen" wieder an den Zettel heranholt, macht
+ * genau diese Korrektur rückgängig.
  *
  * **Warum das Ding nach `body` teleportiert und `fixed` liegt**, statt im Zettel
  * zu stecken:
@@ -13,191 +20,329 @@
  * - Zettel liegen dicht; der Zettel selbst hat einen niedrigen z-index aus dem
  *   Packen. Die Beschriftungen müssen über **allem** liegen.
  *
- * Der Anker sind **Fensterkoordinaten** der Zettelmitte (`fixed` rechnet im
- * selben Bezugssystem) — geliefert von `useDirectionPress`.
- *
  * `pointer-events: none` auf allem: die Geste läuft über den eingefangenen
  * Zeiger am Zettel weiter. Ein Element unter dem Finger, das Ereignisse
  * annehmen könnte, wäre nur eine Gelegenheit, sie zu verlieren. Die
  * Beschriftungen sind auch nicht anklickbar gemeint — sie erklären die Geste,
  * sie ersetzen sie nicht.
+ *
+ * **Zwei getrennte Aussagen, absichtlich:** der **Pfeil** zeigt, wohin der
+ * Daumen zieht (frei drehend, jeder Winkel), das **Aufleuchten am Rand** zeigt,
+ * was beim Loslassen passiert. In der Diagonale steht der Pfeil schräg und
+ * **nichts** leuchtet. Das ist gewollt und kein Fehler.
+ *
+ * Beide Angaben haben denselben Ursprung: den **Aufsetzpunkt** (`origin`), nicht
+ * die Zettelmitte. Der Pfeil sagt, wie weit gezogen wurde — und ab derselben
+ * Strecke, ab der eine Richtung anliegt (`COMMIT_DISTANCE`), ist er da. Zwei
+ * Ursprünge wären der Fehler, den Ticket 00b abstellt: eine anliegende Richtung
+ * ohne sichtbaren Pfeil.
  */
-import { computed, nextTick, onMounted, ref } from 'vue'
-import type { PressDirection } from '@/composables/useDirectionPress'
+import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue'
+import { COMMIT_DISTANCE, type PressDirection } from '@/composables/useDirectionPress'
 
 const props = defineProps<{
-  anchor: { x: number; y: number } | null
+  /** Der Aufsetzpunkt der Geste, in **Fensterkoordinaten**. */
+  origin: { x: number; y: number } | null
+  /** Wo der Finger gerade liegt — der Pfeil zeigt DORTHIN, nicht auf die Option. */
+  tip: { x: number; y: number } | null
   active: PressDirection | null
 }>()
 
-/**
- * Wie weit die Mitte vom Fensterrand wegbleiben muss, damit **alle vier**
- * Beschriftungen vollständig sichtbar sind — nach jeder Seite getrennt, weil
- * der Kranz nicht symmetrisch ist („Aufwand anpassen" rechts ist deutlich
- * breiter als „zuweisen" links).
- *
- * **Gemessen, nicht gerechnet, und das ist der Punkt dieser Fassung.** Vorher
- * standen hier zwei geschätzte Zahlen (Radius + 84 bzw. + 26). Der QC hat
- * nachgemessen:
- *
- *   verschieben        angenommen 84 px   gemessen 104,0
- *   erledigen                             gemessen  89,8
- *   zuweisen                              gemessen  87,7
- *   Aufwand anpassen                      gemessen 141,8   (+69 %)
- *
- * Folge: 11 von 19 Zetteln zeigten eine angeschnittene Beschriftung, im
- * schlimmsten Fall 57,8 px außerhalb des Fensters. Eine Beschriftung, die
- * „Aufwand anpass…" heißt, lehrt die Geste nur halb — und genau das Lehren ist
- * der Zweck dieses Tickets.
- *
- * Es steht deshalb **keine neue Zahl** an dieser Stelle: das Kärtchen liegt zur
- * Klemmzeit bereits im DOM, seine Ausdehnung ist ablesbar. Eine geschätzte Zahl
- * hier hätte den Fehler nur an die nächste Textänderung weitergereicht — ein
- * längeres Wort, eine Übersetzung, eine andere Schriftgröße.
- *
- * `null`, bis gemessen wurde; bis dahin bleibt der Kranz unsichtbar (siehe
- * `measured`).
- */
-const extent = ref<{ left: number; right: number; top: number; bottom: number } | null>(null)
-
-/**
- * Was `getBoundingClientRect()` **nicht** mitliefert: Schlagschatten und
- * `outline` liegen außerhalb der Layoutbox.
- *
- * Der Wert ist aus den Deklarationen weiter unten **abgelesen**, nicht
- * geschätzt: der größte Schatten ist der des anliegenden Zustands
- * (`5px 6px`), das `outline` ist 3 px breit bei 1 px Versatz (= 4 px nach
- * jeder Seite). 8 px deckt beides nach jeder Seite ab.
- *
- * Wer an Schatten oder `outline` dreht, zieht diese Zahl mit. Sie hängt an
- * CSS-Werten in derselben Datei, nicht am Text — deshalb darf sie hier stehen.
- */
-const DECORATION = 8
-
-/** Luft zum Fensterrand, damit nichts bündig an der Kante klebt. */
-const EDGE = 4
-
-const layerEl = ref<HTMLElement | null>(null)
-const anchorEl = ref<HTMLElement | null>(null)
-
-/**
- * Die Ausdehnung des Kranzes um seine Mitte, in Pixeln je Seite.
- *
- * Sie hängt **nicht** davon ab, wo der Kranz gerade steht: die Beschriftungen
- * sitzen mit festen Versätzen um den nulldimensionalen Anker. Einmal messen je
- * Einblendung genügt deshalb — und die Komponente wird bei jedem Long-Press
- * frisch eingehängt, misst also nach Schriftwechsel, Zoom und Drehung von
- * selbst neu.
- */
-const measure = () => {
-  const anchor = anchorEl.value
-  const layer = layerEl.value
-  if (!anchor || !layer) return
-  const origin = anchor.getBoundingClientRect()
-  let left = 0
-  let right = 0
-  let top = 0
-  let bottom = 0
-  for (const chip of layer.querySelectorAll<HTMLElement>('.dir-chip')) {
-    const rect = chip.getBoundingClientRect()
-    left = Math.max(left, origin.left - rect.left)
-    right = Math.max(right, rect.right - origin.right)
-    top = Math.max(top, origin.top - rect.top)
-    bottom = Math.max(bottom, rect.bottom - origin.bottom)
-  }
-  extent.value = {
-    left: left + DECORATION + EDGE,
-    right: right + DECORATION + EDGE,
-    top: top + DECORATION + EDGE,
-    bottom: bottom + DECORATION + EDGE
-  }
-}
-
-onMounted(() => {
-  // Erst nach dem Rendern der Kärtchen — vorher gibt es nichts zu messen.
-  void nextTick(measure)
-})
-
-/**
- * Geklemmt wird die **Anzeige**, nicht die Geste: welche Richtung gewählt ist,
- * hängt allein an der Fingerbewegung. Der Kranz darf also verrutschen, ohne
- * dass etwas Falsches ausgelöst wird — und er muss es, denn ein Zettel kann am
- * Bildschirmrand oder unter der klebenden Statusleiste liegen.
- *
- * Passt der Kranz nicht mehr zwischen beide Ränder (sehr schmales Fenster),
- * gewinnt die linke bzw. obere Grenze. Dann ist rechts etwas abgeschnitten —
- * aber die Alternative wäre, dass beide Seiten abschneiden.
- */
-const position = computed(() => {
-  if (!props.anchor) return null
-  const ext = extent.value
-  // **Nicht `window.innerWidth`.** Das ist das Fenster *einschließlich* der
-  // Bildlaufleiste; die Kranz-Ebene (`position: fixed; inset: 0`) ist dagegen
-  // so breit wie `documentElement.clientWidth`, also ohne sie. Zwei
-  // Bezugssysteme, die meistens gleich sind — und genau deshalb gefährlich.
-  //
-  // Gemessen hat der QC 500 gegen 485: das rechte Kärtchen reichte bis 488 und
-  // verlor 3,0 px an das `clip` der Ebene. Sichtbar tat das nichts, weil der
-  // Streifen in der Rinne der Bildlaufleiste liegt, und auf dem Zielgerät —
-  // Telefon mit überlagernder Leiste — sind beide Werte ohnehin identisch. Der
-  // Fehler tritt also ausschließlich am Entwicklungsrechner auf, was ihn nicht
-  // harmlos macht, sondern nur schwer auffindbar: dieselbe Falle wie bei der
-  // geschätzten Klemmbreite, nur kleiner.
-  //
-  // `documentElement` steht immer zur Verfügung, sobald diese Komponente
-  // gerendert wird — sie hängt bereits im Dokument.
-  const root = typeof document !== 'undefined' ? document.documentElement : null
-  const w = root?.clientWidth ?? 0
-  const h = root?.clientHeight ?? 0
-  // Vor der Messung: ungeklemmt setzen und unsichtbar lassen. Ohne Position
-  // hätten die Kärtchen keine Lage, die sich messen ließe.
-  if (!ext) return { left: `${props.anchor.x}px`, top: `${props.anchor.y}px` }
-  return {
-    left: `${Math.min(Math.max(props.anchor.x, ext.left), Math.max(ext.left, w - ext.right))}px`,
-    top: `${Math.min(Math.max(props.anchor.y, ext.top), Math.max(ext.top, h - ext.bottom))}px`
-  }
-})
-
-/**
- * Sichtbar erst nach der Messung — ein einziger Frame.
- *
- * `visibility: hidden` und nicht `v-if`: ein ausgeblendetes Element wird
- * weiterhin gelayoutet und ist damit messbar, ein nicht vorhandenes nicht.
- * Ohne diesen Frame blitzte der Kranz kurz ungeklemmt auf — also genau in der
- * Lage, gegen die diese Fassung antritt.
- */
-const measured = computed(() => extent.value !== null)
+/** Schleier über der App. Vom Nutzer abgenommen; nicht heller drehen. */
+const VEIL = 'rgba(26, 46, 38, 0.82)'
+/** Farbe des Randnebels und der Schrift (Kreidetafel-Fassung). */
+const FOG = '#eaf6ec'
+const INK = '#f4fbf5'
 
 /**
  * Die Belegung. Sie steht bewusst als **feste Liste** hier und hängt an keiner
  * Eigenschaft der Aufgabe: dieselbe Bewegung muss bei jedem Aufgabentyp
  * dasselbe tun (Spec). Wer hier eine Bedingung einbaut, macht die Geste
  * unzuverlässig.
+ *
+ * Zweizeilig statt einzeilig: „Aufwand anpassen" passt am rechten Rand nicht in
+ * eine Zeile. Umbrechen löst das, ohne dass der Text gedreht oder gekürzt
+ * werden muss — und eine halbe Beschriftung („Aufwand anpass…") lehrt die Geste
+ * nur halb, was ihr ganzer Zweck ist.
  */
-const items: Array<{ dir: PressDirection; label: string }> = [
-  { dir: 'up', label: 'verschieben' },
-  { dir: 'down', label: 'erledigen' },
-  { dir: 'left', label: 'zuweisen' },
-  { dir: 'right', label: 'Aufwand anpassen' }
-]
+const LINES: Record<PressDirection, string[]> = {
+  down: ['erledigen'],
+  up: ['verschieben'],
+  left: ['zuweisen'],
+  right: ['Aufwand', 'anpassen']
+}
+const DIRS: PressDirection[] = ['down', 'up', 'left', 'right']
+const LINE_H = 17
+
+/** Einrückung des Randpunkts vom jeweiligen Bildschirmrand. */
+const IN = 56
+
+/**
+ * Luft, die eine geklemmte Beschriftung zum Bildschirmrand behält.
+ *
+ * 4 px Abstand plus die halbe Kontur (3,5 px Strichbreite, also 1,75 px nach
+ * außen) — `getBBox()` liefert nur die Geometrie ohne Kontur.
+ */
+const EDGE_PAD = 6
+
+// --- Fenster und Tab-Navigation ---------------------------------------------
+//
+// `documentElement.clientWidth` und **nicht** `window.innerWidth`: das ist das
+// Fenster *einschließlich* der Bildlaufleiste, das Overlay (`fixed; inset: 0`)
+// ist dagegen so breit wie `clientWidth`. Zwei Bezugssysteme, die meistens
+// gleich sind — und genau deshalb gefährlich.
+const vw = ref(0)
+const vh = ref(0)
+/**
+ * Die **echte** Höhe der Tab-Navigation, gemessen statt geraten: sie trägt
+ * `padding-bottom: env(safe-area-inset-bottom)` und ist damit auf Geräten mit
+ * Gestenleiste höher als die 64 px ihrer Deklaration. Eine verdrahtete Zahl
+ * ließe die untere Beschriftung dort hinter der Leiste verschwinden.
+ *
+ * Ohne Leiste (Login, Onboarding) ist der Wert 0 und der Randpunkt sitzt
+ * schlicht `IN` über dem unteren Rand.
+ */
+const navH = ref(0)
+
+const sync = () => {
+  if (typeof document === 'undefined') return
+  const root = document.documentElement
+  vw.value = root.clientWidth
+  vh.value = root.clientHeight
+  navH.value = document.querySelector('.bottom-nav')?.getBoundingClientRect().height ?? 0
+}
+
+// **Sofort, nicht erst in `onMounted`.** Die Komponente wird mitten in der Geste
+// eingehängt; mit einer Viewbox aus Nullen im ersten Durchlauf stünde das
+// Overlay einen Bildaufbau lang zusammengefaltet da. `document` steht bereit,
+// sobald hier gerendert wird — die Wand hängt bereits im Dokument.
+sync()
+
+const waagerecht = (d: PressDirection) => d === 'left' || d === 'right'
+
+/** Mitte des Randbereichs je Richtung — dort sitzt Nebel und Beschriftung. */
+const edgePoint = (d: PressDirection) => {
+  const w = vw.value
+  const h = vh.value
+  if (d === 'down') return { x: w / 2, y: h - navH.value - IN }
+  if (d === 'up') return { x: w / 2, y: IN }
+  if (d === 'left') return { x: IN, y: h / 2 }
+  return { x: w - IN, y: h / 2 }
+}
+
+// --- Beschriftungen klemmen --------------------------------------------------
+//
+// Bei `text-anchor: middle` wächst eine Beschriftung um ihren Randpunkt nach
+// beiden Seiten. Rechts steht der Randpunkt bei `vw - IN`; ist die längste
+// Zeile breiter als 2 × IN, ragt sie aus dem Fenster. Geklemmt wird deshalb der
+// **Randpunkt** — ausdrücklich nicht über ein kleineres `IN`, einen Wechsel der
+// Ausrichtung, Kürzen oder Drehen (alles verworfen, siehe Ticket 00b).
+//
+// **Gemessen, nicht geschätzt**, aus demselben Grund wie beim alten Kranz: eine
+// geschätzte Breite hier reichte den Fehler an die nächste Textänderung weiter
+// — ein längeres Wort, eine Übersetzung, eine andere Schriftgröße.
+//
+// Gemessen wird an unsichtbaren Zwillingen in der **anliegenden** Größe (16 px,
+// der breitere der beiden Zustände). Damit ist die Klemmung unabhängig davon,
+// welche Richtung gerade leuchtet — sonst wanderte die Beschriftung während der
+// 120 ms des Schriftsprungs sichtbar hin und her.
+//
+// Gemessen wird **jede Zeile einzeln**, geklemmt nach der breitesten: welche
+// Zeile die breitere ist, entscheidet die Schrift, nicht die Zahl der
+// Buchstaben („Aufwand" gegen „anpassen").
+const measureEls = new Map<string, SVGTextElement>()
+const measureKey = (d: PressDirection, line: string) => `${d}::${line}`
+const setMeasureEl = (key: string, el: unknown) => {
+  if (el instanceof SVGTextElement) measureEls.set(key, el)
+  else measureEls.delete(key)
+}
+const halfWidth = ref<Record<PressDirection, number>>({ up: 0, down: 0, left: 0, right: 0 })
+
+const measureLabels = () => {
+  const next = { ...halfWidth.value }
+  for (const d of DIRS) {
+    let widest = 0
+    for (const line of LINES[d]) {
+      const el = measureEls.get(measureKey(d, line))
+      if (!el) continue
+      // `getBBox()` wirft in Umgebungen ohne Layout (jsdom, ausgeblendeter
+      // Baum). Dann bleibt die alte Zahl stehen und es wird nicht geklemmt —
+      // sichtbar falsch wäre erst ein Absturz.
+      try {
+        widest = Math.max(widest, el.getBBox().width)
+      } catch {
+        /* nicht messbar — ungeklemmt lassen */
+      }
+    }
+    if (widest > 0) next[d] = widest / 2
+  }
+  halfWidth.value = next
+}
+
+/** Randpunkt der Beschriftung: wie `edgePoint`, aber im Fenster gehalten. */
+const labelPoint = (d: PressDirection) => {
+  const p = edgePoint(d)
+  const half = halfWidth.value[d]
+  const min = half + EDGE_PAD
+  const max = vw.value - half - EDGE_PAD
+  // Passt die Beschriftung überhaupt nicht zwischen beide Ränder, ist die Mitte
+  // die am wenigsten falsche Lage — dann schneidet es beidseitig gleich viel ab.
+  const x = max < min ? vw.value / 2 : Math.min(Math.max(p.x, min), max)
+  return { x, y: p.y }
+}
+
+/** Erste Grundlinie: mehrzeilige Beschriftungen sitzen um den Randpunkt zentriert. */
+const firstLineY = (d: PressDirection) =>
+  labelPoint(d).y - ((LINES[d].length - 1) * LINE_H) / 2
+
+onMounted(() => {
+  // Noch einmal: zwischen Setup und Einhängen kann sich die Leiste geändert
+  // haben (Ansichtswechsel, eingeblendete Tastatur).
+  sync()
+  window.addEventListener('resize', sync)
+  // Erst nach dem Rendern der Beschriftungen — vorher gibt es nichts zu messen.
+  void nextTick(measureLabels)
+})
+onUnmounted(() => window.removeEventListener('resize', sync))
+
+// --- Der Pfeil ---------------------------------------------------------------
+
+/** Länge der Pfeilspitze. */
+const ARROW_HEAD = 15
+
+/**
+ * Kürzeste sichtbare Pfeillänge: die Spitze (15) plus ein Rest Schaft (3).
+ *
+ * Eine **Länge**, kein Abstand vom Ursprung — deshalb aus dem Prototypen
+ * unverändert übernommen.
+ */
+const ARROW_MIN = 18
+
+/**
+ * Abstand des Schaftanfangs zum Ursprung.
+ *
+ * **Umgerechnet, nicht übernommen.** Im Prototypen waren es 30 px, aber gemessen
+ * ab der *Zettelmitte*; hier ist der Ursprung der Aufsetzpunkt. Verbindlich ist
+ * stattdessen, dass Pfeil und Richtungswahl **dieselbe** Schwelle haben:
+ * sichtbar wird der Pfeil ab `ARROW_GAP + ARROW_MIN`, anliegen kann eine
+ * Richtung ab `COMMIT_DISTANCE` — also muss `ARROW_GAP = COMMIT_DISTANCE −
+ * ARROW_MIN` sein (32 − 18 = 14). Nicht ausrechnen, sondern rechnen lassen: wer
+ * an der Ziehschwelle dreht, soll den Pfeil nicht von Hand nachziehen müssen.
+ *
+ * 14 px genügen als Freiraum, weil um den Ursprung nur der Ankerpunkt-Kreis
+ * (r = 4) liegt und nicht ein ganzer Zettel.
+ */
+const ARROW_GAP = COMMIT_DISTANCE - ARROW_MIN
+
+/**
+ * Der Schaft endet am **Ansatz** der Spitze, nicht an ihrer Kerbe — sonst ragt
+ * er sichtbar durch das Dreieck hindurch.
+ */
+const arrow = computed(() => {
+  const a = props.origin
+  const t = props.tip
+  if (!a || !t) return null
+  const dx = t.x - a.x
+  const dy = t.y - a.y
+  const dist = Math.hypot(dx, dy)
+  if (dist < ARROW_GAP + ARROW_MIN) return null
+  const ux = dx / dist
+  const uy = dy / dist
+  const x1 = a.x + ux * ARROW_GAP
+  const y1 = a.y + uy * ARROW_GAP
+  // Spitze sitzt am Finger, Schaft hört davor auf.
+  const bx = t.x - ux * ARROW_HEAD
+  const by = t.y - uy * ARROW_HEAD
+  const px = -uy
+  const py = ux
+  const wingA = { x: bx + px * ARROW_HEAD * 0.62, y: by + py * ARROW_HEAD * 0.62 }
+  const wingB = { x: bx - px * ARROW_HEAD * 0.62, y: by - py * ARROW_HEAD * 0.62 }
+  return {
+    line: `M ${x1} ${y1} L ${bx} ${by}`,
+    head: `M ${t.x} ${t.y} L ${wingA.x} ${wingA.y} L ${wingB.x} ${wingB.y} Z`
+  }
+})
 </script>
 
 <template>
   <Teleport to="body">
-    <div v-if="position" ref="layerEl" class="dir-layer" :class="{ 'dir-layer--measured': measured }">
-      <div ref="anchorEl" class="dir-anchor" :style="position">
-        <span class="dir-dot" aria-hidden="true"></span>
-        <span
-          v-for="item in items"
-          :key="item.dir"
-          class="dir-chip"
-          :class="[`dir-chip--${item.dir}`, { 'dir-chip--active': props.active === item.dir }]"
-        >
-          <i class="bi" :class="`bi-arrow-${item.dir}`" aria-hidden="true"></i>
-          {{ item.label }}
-        </span>
-      </div>
-    </div>
+    <svg v-if="origin" class="dir-ov" :viewBox="`0 0 ${vw} ${vh}`">
+      <defs>
+        <!-- Kreidestaub: grob gekörnter Schein. Liegt **nur** auf dem Pfeil —
+             nicht auf der Schrift (war getestet, wegen Lesbarkeit verworfen)
+             und nicht auf dem Nebel. -->
+        <filter id="chalk" x="-50%" y="-50%" width="200%" height="200%">
+          <feTurbulence baseFrequency="0.9" numOctaves="3" result="n" />
+          <feDisplacementMap in="SourceGraphic" in2="n" scale="3" />
+          <feGaussianBlur stdDeviation="0.4" />
+        </filter>
+        <radialGradient id="fog">
+          <stop offset="0%" :stop-color="FOG" stop-opacity="0.6" />
+          <stop offset="100%" :stop-color="FOG" stop-opacity="0" />
+        </radialGradient>
+      </defs>
+
+      <rect x="0" y="0" :width="vw" :height="vh" :fill="VEIL" />
+
+      <template v-for="d in DIRS" :key="d">
+        <!-- Randnebel als Ellipse für **alle vier** Richtungen. Rechteck-Bahnen
+             über die volle Höhe wirkten wie Streifen und sind verworfen.
+
+             „Voll deckend" heißt 1 auf der Ellipse — der Radialverlauf hat in
+             der Mitte aber nur `stop-opacity .6`. Die effektive Deckkraft liegt
+             damit bei rund 0,6. Das ist der abgenommene Eindruck, nicht
+             nachbessern. -->
+        <ellipse
+          class="dir-fog"
+          :cx="edgePoint(d).x"
+          :cy="edgePoint(d).y"
+          :rx="waagerecht(d) ? 96 : vw * 0.62"
+          :ry="waagerecht(d) ? vh * 0.62 : 96"
+          fill="url(#fog)"
+          :style="{ opacity: active === d ? 1 : 0.3 }"
+        />
+
+        <text
+          class="dir-lab"
+          :class="{ 'dir-lab--on': active === d }"
+          :fill="INK"
+          :x="labelPoint(d).x"
+          :y="firstLineY(d)"
+          text-anchor="middle"
+          dominant-baseline="middle"
+        ><tspan
+          v-for="(line, i) in LINES[d]"
+          :key="line"
+          :x="labelPoint(d).x"
+          :dy="i === 0 ? 0 : LINE_H"
+        >{{ line }}</tspan></text>
+      </template>
+
+      <!-- Unsichtbare Zwillinge, nur zum Messen der Breite (→ `labelPoint`).
+           Immer in der anliegenden Größe, damit die Klemmung nicht mit dem
+           Schriftsprung wandert. -->
+      <g class="dir-measure" aria-hidden="true">
+        <template v-for="d in DIRS" :key="d">
+          <text
+            v-for="line in LINES[d]"
+            :key="line"
+            :ref="el => setMeasureEl(measureKey(d, line), el)"
+            class="dir-lab dir-lab--on"
+            x="0"
+            y="0"
+          >{{ line }}</text>
+        </template>
+      </g>
+
+      <!-- Der kurze Pfeil an der Geste: Kreidiger Schaft plus Spitze. -->
+      <g v-if="arrow" filter="url(#chalk)" opacity="0.92">
+        <path :d="arrow.line" :stroke="INK" stroke-width="6" stroke-linecap="round" fill="none" />
+        <path :d="arrow.head" :fill="INK" />
+      </g>
+
+      <!-- Der Punkt, von dem aus gezogen wird. -->
+      <circle v-if="origin" :cx="origin.x" :cy="origin.y" r="4" :fill="INK" opacity="0.85" />
+    </svg>
   </Teleport>
 </template>
 
@@ -206,119 +351,45 @@ const items: Array<{ dir: PressDirection; label: string }> = [
    unter der Modal-Ebene (1050, utilities.css) — die Modals, die diese Geste
    öffnet, müssen darüber liegen. Sie kann allerdings nicht gleichzeitig mit
    einem Modal sichtbar sein: das Loslassen schließt sie und öffnet erst dann. */
-.dir-layer {
+.dir-ov {
   position: fixed;
   inset: 0;
   z-index: 1040;
   /* Der Finger hängt am eingefangenen Zeiger des Zettels — hier darf nichts
      dazwischenkommen. */
   pointer-events: none;
-  /* Unsichtbar bis zur Messung der Kärtchen (→ `measured` im Skript). Ein
-     ausgeblendetes Element wird trotzdem gelayoutet und bleibt messbar. */
-  visibility: hidden;
-  /* In dem einen Frame vor der Messung steht der Kranz ungeklemmt und kann
-     rechts über das Fenster hinausragen. Ohne `clip` verlängerte das den
-     Scrollbereich des Dokuments, eine waagerechte Bildlaufleiste erschiene, die
-     Wandbreite änderte sich — und der `ResizeObserver` in `WallView` packte
-     mitten in der Geste neu. Nach der Messung liegt hier nichts mehr außerhalb;
-     `clip` ist die Absicherung des Zwischenzustands, nicht der Regelfall. */
-  overflow: clip;
 }
 
-.dir-layer--measured {
-  visibility: visible;
+/* Weich, aber kurz: an einer langsam gezogenen Geste wirkt eine harte
+   Umschaltung wie ein Ruckeln. */
+.dir-fog {
+  transition: opacity 120ms ease;
 }
 
-.dir-anchor {
-  position: absolute;
-  width: 0;
-  height: 0;
-}
-
-/* Die Mitte, von der aus gezogen wird. */
-.dir-dot {
-  position: absolute;
-  left: -5px;
-  top: -5px;
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  background: var(--pw-paper);
-  border: 2px solid var(--pw-line);
-}
-
-/* Papier wie alles auf dieser Wand — harte Kontur, harter Schatten. */
-.dir-chip {
-  position: absolute;
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 5px 8px;
-  background: var(--pw-paper);
-  color: var(--pw-ink);
-  border: 2px solid var(--pw-line);
-  border-radius: 3px;
-  box-shadow: var(--pw-shadow);
-  font-size: 12px;
+/* Normale, fette Schrift mit dunkler Kontur — **ausdrücklich keine
+   Kreide-/Handschrift**: die war gebaut, getestet und wegen Lesbarkeit
+   verworfen. Das Kreidige steckt im Pfeil. */
+.dir-lab {
+  font-size: 14px;
   font-weight: 800;
-  line-height: 1.1;
-  letter-spacing: -0.1px;
-  /* Eine Beschriftung darf nie umbrechen: „Aufwand anpassen" auf zwei Zeilen
-     verschiebt die Mitte des Kranzes und ließe ihn schief wirken. */
-  white-space: nowrap;
+  letter-spacing: 0.2px;
+  opacity: 0.6;
+  paint-order: stroke;
+  stroke: rgba(14, 28, 22, 0.85);
+  stroke-width: 3.5px;
+  transition:
+    opacity 120ms ease,
+    font-size 120ms ease;
 }
 
-/* Abstand zur Mitte: 56 px. Etwas mehr als die 48 px, ab denen die Richtung
-   gewählt ist (`COMMIT_DISTANCE` in `useDirectionPress`) — der Zug ist also
-   entschieden, bevor der Finger die Beschriftung erreicht und sie verdecken
-   könnte. Gesetzt, nicht gemessen; die Reihenfolge der beiden Zahlen ist das
-   Verbindliche, nicht ihr Abstand.
-
-   Die Beschriftungen wachsen IMMER von der Mitte weg (`translate` zieht sie um
-   ihre eigene Ausdehnung nach außen). Ein langer Text schiebt sich damit nach
-   außen statt über den Mittelpunkt — sonst läge „Aufwand anpassen" auf dem
-   Daumen. Genau deshalb darf die Klemmung des Kranzes nicht raten, wie breit
-   er ist: die Breite steckt im Text, nicht in dieser Datei (→ `extent`). */
-.dir-chip--up {
-  left: 0;
-  top: -56px;
-  transform: translate(-50%, -100%);
+.dir-lab--on {
+  opacity: 1;
+  font-size: 16px;
 }
 
-.dir-chip--down {
-  left: 0;
-  top: 56px;
-  transform: translate(-50%, 0);
-}
-
-.dir-chip--left {
-  left: -56px;
-  top: 0;
-  transform: translate(-100%, -50%);
-}
-
-.dir-chip--right {
-  left: 56px;
-  top: 0;
-  transform: translate(0, -50%);
-}
-
-/* Anliegende Richtung: das Loslassen würde JETZT genau das tun. Kräftiger
-   Grund statt nur Farbwechsel am Text — auf Kork mit vier Zetteln daneben ist
-   ein blasser Unterschied nicht zu sehen.
-
-   **Bewusst ohne jede Geometrieänderung.** Die Lage jeder Beschriftung steckt
-   in ihrem `transform`; ein zweites `transform` würde das erste ersetzen und
-   sie in die Mitte springen lassen, und ein `scale` daneben skalierte um den
-   Ursprung VOR dieser Verschiebung — die Beschriftung wanderte beim Anliegen
-   also messbar aus. Der Hervorhebung reichen Farbe, Schatten und ein
-   `outline`, das per Definition keinen Platz einnimmt. */
-.dir-chip--active {
-  background: var(--pw-accent);
-  border-color: var(--pw-accent);
-  color: var(--pw-paper);
-  outline: 3px solid var(--pw-tape);
-  outline-offset: 1px;
-  box-shadow: 5px 6px 0 rgba(36, 31, 26, 0.4);
+/* `visibility` und nicht `display: none`: ein ausgeblendetes Element wird
+   weiterhin gelayoutet und bleibt messbar, ein nicht gerendertes nicht. */
+.dir-measure {
+  visibility: hidden;
 }
 </style>

@@ -408,8 +408,7 @@ const onPressDirection = (direction: PressDirection) => {
 
 const press = useDirectionPress({
   onDirection: onPressDirection,
-  isControl: isPressControl,
-  anchorEl: () => root.value
+  isControl: isPressControl
 })
 
 // Einzeln herausgezogen — verschachtelte Refs werden im Template nicht
@@ -417,7 +416,8 @@ const press = useDirectionPress({
 const {
   open: pressOpen,
   direction: pressDirection,
-  anchor: pressAnchor,
+  origin: pressOrigin,
+  tip: pressTip,
   onPointerDown: onPressDown,
   onPointerMove: onPressMove,
   onPointerUp: onPressUp,
@@ -428,8 +428,9 @@ const {
 /**
  * Dieselbe Ausnahme wie beim Abreißen: solange die Richtungen offen sind, darf
  * ein Neupacken der Wand (ein anderes Mitglied ändert etwas) diesen Zettel nicht
- * durch die Gegend fliegen lassen. Der Kranz liegt in Fensterkoordinaten fest —
- * ein wegfliegender Zettel ließe Beschriftung und Bezugspunkt auseinanderlaufen.
+ * durch die Gegend fliegen lassen. Das Overlay liegt in Fensterkoordinaten fest
+ * — ein wegfliegender Zettel unter einer stehenden Geste ist keine Bewegung, die
+ * jemand erwartet.
  *
  * Beide Gesten teilen sich dafür `gestureNoteId` in `WallView`. Das geht, weil sie
  * sich gegenseitig ausschließen: der Long-Press startet nicht auf dem Eselsohr
@@ -845,9 +846,16 @@ const handlePostponeConfirm = async (targetDate: string) => {
       @click="swallowTearClick"
     ></button>
 
-    <!-- Die vier beschrifteten Richtungen. Teleportiert nach `body` und in
-         Fensterkoordinaten gelegt — die Begründung steht in der Komponente. -->
-    <WallDirectionMenu v-if="pressOpen" :anchor="pressAnchor" :active="pressDirection" />
+    <!-- Die vier beschrifteten Richtungen: Vollbild-Overlay, teleportiert nach
+         `body` und in Fensterkoordinaten gelegt — die Begründung steht in der
+         Komponente. Es hängt an der Geste, nicht am Zettel: Ursprung ist der
+         Aufsetzpunkt, nicht die Zettelmitte. -->
+    <WallDirectionMenu
+      v-if="pressOpen"
+      :origin="pressOrigin"
+      :tip="pressTip"
+      :active="pressDirection"
+    />
 
     <!-- Zug nach rechts: erledigen mit angepasstem Aufwand. Dasselbe Modal wie
          in der alten Karte, damit beide Ansichten denselben Ablauf haben. -->
@@ -1541,11 +1549,10 @@ const handlePostponeConfirm = async (targetDate: string) => {
 
 /* Er hebt sich ab wie beim Abreißen, und aus demselben Grund mit `!important`:
    den z-index schreibt `WallView` als Inline-Style.
-   **Ohne jede Änderung an Größe, Lage oder Neigung** — der Zettel ist der
-   Bezugspunkt des Richtungskranzes, der in Fensterkoordinaten daneben liegt.
-   Ein Zettel, der beim Auslösen wächst oder springt, verschöbe seine Mitte
-   gegen die bereits festgelegte Mitte des Kranzes. Der Zustand ist deshalb
-   rein farblich. */
+   **Ohne jede Änderung an Größe, Lage oder Neigung.** Das Overlay liegt in
+   Fensterkoordinaten und hängt am Aufsetzpunkt des Fingers, nicht am Zettel —
+   ein Zettel, der beim Auslösen wächst oder springt, rutschte also unter der
+   stehenden Geste weg. Der Zustand ist deshalb rein farblich. */
 .zettel--pressed {
   z-index: 810 !important;
   box-shadow: var(--pw-shadow-lift);
