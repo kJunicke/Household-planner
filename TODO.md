@@ -1,5 +1,7 @@
 # Putzplan TODOs
 
+Diese Datei ist der Backlog die aktiven todos sind tickets im Task tracker
+
 **Status:** 🎉 Live auf GitHub Pages
 
 Aufbau: **Aktiv** (als Nächstes) · **Backlog** (irgendwann) · **Bekannte Randfälle**
@@ -49,35 +51,44 @@ Aufbau: **Aktiv** (als Nächstes) · **Backlog** (irgendwann) · **Bekannte Rand
 - **`docs/data-model.md` kennt `emphasis_level` nicht.** Beschrieben ist die Spalte nur im
   Glossar (`CONTEXT.md`) und in den Migrationskommentaren.
 
-### Pinnwand-Ausbau — die offenen Tickets (08 erledigt, sechs offen)
+### Pinnwand-Ausbau — die offenen Tickets (08/00b/01 erledigt, 03 angefangen)
 
 > Der Ausbau ist am 18.08.2026 nach `main` gemergt (`d8f0aa7`). Abgenommen sind
 > Karten-Redesign, Wand-Anordnung, Erledigt-Streifen, gedämpfte Kategorien, langer
 > Zettel, Nachdruck-Datenmodell, Zuweisungsfarbe, Stapelreihenfolge, Titelbreite
-> und seit dem 19.08. der gemeinsame Header (08).
+> und seit dem 19.08. der gemeinsame Header (08). Am 21.08. dazu: der
+> Richtungskranz (00b, `f4cde5a`), die Rückgängig-Geste (01, `f5bbd3c`) und die
+> Projekt-Geste samt Bearbeiten-Fenster (03-1/03-4, `7bcf892`).
 > **Die übrigen hier sind nicht gebaut.** Die ausführlichen Tickets liegen unter
 > `.scratch/pinnwand-ausbau/issues/` — und das ist **gitignored**, hängt also an
 > dieser Platte. Was hier steht, ist die haltbare Fassung.
 
-- **Richtungskranz einbauen (00b).** Lang drücken zeigt heute noch den alten
-  Chip-Kranz um die Karte. Gebaut werden soll das Vollbild-Overlay mit
-  Beschriftungen an den vier **Bildschirmrändern**: Randnebel + Pfeil, dunkelgrüner
-  Schleier, blass (0,3) in Ruhe und voll deckend (1,0) bei anliegender Richtung,
-  Pfeil kurz an der Karte und frei zum Finger drehend, in der Diagonale leuchtet
-  **nichts**. Beschriftung fett mit dunkler Kontur, ausdrücklich **keine**
-  Kreideschrift (getestet, wegen Lesbarkeit verworfen).
-  **Der Entwurf ist vom Nutzer abgenommen** („Sieht super aus") und vollständig in
-  [HANDOFF-ziehgeste.md](HANDOFF-ziehgeste.md) beschrieben — offen ist nur der
-  Umbau von `WallDirectionMenu.vue`. Beim Einbau zu entscheiden: `COMMIT_DISTANCE`
-  (48 px, der ursprüngliche Grund ist mit den Randbeschriftungen entfallen) und die
-  Schleier-Deckkraft (0,82 schluckt die Zettel, ~0,6 wäre besser).
-  Der Prototyp liegt auf `proto/kartengroesse` als `PrototypeKranzView.vue` unter
-  `/proto-kranz` — **Wegwerfcode, kommt nicht mit**, und die Voreinstellung dort
-  ist `aether`, nicht die abgenommene Fassung `tafel` (`?v=tafel` anhängen).
-  **Nicht bauen:** der im Handoff genannte „zufällige Randabstand 8–34 px" ist
-  eine dritte, nie ins Layout übernommene Größe — das Anliegen ist mit Ticket 02
-  bereits gelöst (`indentOf`, 12 px, deterministisch aus der `task_id`).
-  Blockiert Projekte (03).
+- ~~**Richtungskranz einbauen (00b).**~~ **erledigt** — `f4cde5a`, Zweig
+  `ticket-00b-richtungskranz`. Vollbild-Overlay mit Randnebel-Ellipsen und
+  Beschriftung an den Bildschirmrändern; die Laufzeitvermessung des Zettels samt
+  Klemmlogik ist ersatzlos entfallen. Der Messursprung wanderte von der Zettelmitte
+  auf den **Aufsetzpunkt**, `COMMIT_DISTANCE` fiel 48 → **32** und wird exportiert,
+  `ARROW_GAP` hängt als `COMMIT_DISTANCE - ARROW_MIN` daran. Belegt: 441
+  Rasterpunkte, Richtung-ohne-Pfeil = 0, beide Spalten springen auf demselben Pixel
+  (d=31 nichts, d=32 Richtung **und** Pfeil mit 3,00 px Schaft); in der Diagonale
+  alle vier Nebel auf `opacity 0.3`. Unterer Randpunkt aus **gemessener**
+  Nav-Höhe statt verdrahteter Zahl.
+  - **Die geforderte Klemmung der rechten Beschriftung ist toter Code.** Der vom
+    Ticket unterstellte 9-px-Überstand existiert bei zweizeiliger Beschriftung
+    nicht (gemessen 20 px Luft bei 360/390/420 px). Die Klemme löst erst aus, wenn
+    die breiteste Zeile über **100 px** misst — unabhängig von `vw`; „anpassen"
+    misst 68,4 px. Formal umgesetzt, praktisch nie wirksam, **in der laufenden App
+    nicht verifizierbar**. Wer eine längere Beschriftung ergänzt, aktiviert sie —
+    dann greifen die beiden Schwächen darunter.
+  - **Die Messzwillinge messen die falsche Sache.** Sie messen ein nacktes
+    `<text>`, die echte Beschriftung ist `<text><tspan>` → **6,8 % Überschätzung**
+    (94,47 gegen 88,45). Dazu läuft `measureLabels()` einmalig ohne
+    `document.fonts.ready`; bei später eintreffender Schrift bliebe `halfWidth`
+    veraltet. Beides folgenlos, solange die Klemme nie greift.
+  - **`EDGE_PAD = 6` ist gesetzt, nicht gemessen** (4 px Luft + 1,75 px halbe
+    Kontur, weil `getBBox()` ohne Stroke rechnet). Dieselbe Klasse wie das
+    notierte `footGap = 6`.
+
 - **Aufklappen springt (13).** Ein aufgeklappter Zettel soll liegen bleiben und
   die blockierenden Zettel unter sich schieben; heute springt er selbst durch die
   Wand. Ursache im Code: er bekommt die volle Wandbreite und wird von `packWall`
@@ -101,7 +112,16 @@ Aufbau: **Aktiv** (als Nächstes) · **Backlog** (irgendwann) · **Bekannte Rand
   trifft also immer dieselben Zettel — daher „fast immer".
   Der Reststreifen rechts ist dagegen Arithmetik: bei 45 % Deckel bleiben auf
   374 px rund 26 px liegen.
-- **Der Stempel wird zusammengelegt (09b).** Ein Stempel je Zettel statt zweier: der
+- **Der Stempel wird zusammengelegt (09b).**
+  > ⚠️ **Die Prämisse dieses Tickets stimmt nicht.** Projekte tragen heute **gar
+  > keinen** Stempel — gemessen 38 von 78 Zetteln mit `.due-stamp`, davon **0
+  > Projekte**, weil `scheduleOf()` für Projekte `not-scheduled` liefert
+  > (`src/lib/taskSchedule.ts:20`) und `urgency`/`stampLabel` damit `null` werden.
+  > Das Ticket geht davon aus, ein Projektzettel zeige einen falschen Stempel, den
+  > der Projektspruch ersetzt. Tatsächlich wird der Spruch ein **neues** Element
+  > sein. Vor dem Bau neu fassen.
+
+  Ein Stempel je Zettel statt zweier: der
   Grundabdruck ist berechnet (NEU / FÄLLIG / ROUTINE / Projektspruch), darüber stempelt man
   von Hand WICHTIG und DRINGEND. NIE und HEUTE entfallen. Der Stempel **ordnet nichts um**
   → [ADR-0002](docs/adr/0002-stempel-ordnet-nicht.md). **Ändert bereits deployten Code:**
@@ -126,24 +146,41 @@ Aufbau: **Aktiv** (als Nächstes) · **Backlog** (irgendwann) · **Bekannte Rand
     verworfen („sieht seltsam aus"); mit ihr fielen Text-Halo, Canvas-Messung und
     die Kontrastwahl je Segment wieder weg.
 
-- **Projekte auf der Pinnwand (03).** Das Abzeichen am Projektzettel zeigt die **Summe der
-  bisher verschlungenen Punkte** als Zahl — immer sichtbar, ab 0. Die Summe steht in
-  `task_completions`; die Wand lädt heute nur die laufende Woche, das braucht eine eigene
-  Abfrage (bewusst keine zweite Spalte auf `tasks`). Projekte bekommen **gar keinen**
-  Richtungskranz. Die Geste bleibt: nach unten ziehen öffnet den
-  `ProjectWorkModal` — dasselbe Fenster wie „Am Projekt arbeiten" im klassischen
-  Aussehen, mit Eintrag was gemacht wurde und wie viel Aufwand. Kein einfaches
-  Erledigen, kein Verschieben; zuweisen läuft über den Stift am Zettel. Baut auf
-  00b auf.
-- **Rückgängig-Geste im Such-Overlay wechselt die Ansicht (01).** Eigenständig,
-  kleines Ticket. **Am 19.08. vom Nutzer neu beschrieben** — die alte Fassung
-  („der FAB wechselt beim Antippen die Ansicht") war falsch: „FAB wechselt nur die
-  ansicht wenn man mit der rückgängig geste den suchdialog wieder schließt."
-  Hypothese, nicht verifiziert: das geöffnete Overlay ist **kein eigener Eintrag
-  im Verlauf**, die Geste findet nichts zum Zurücknehmen und geht eine Route
-  zurück. Die Ghost-Click-Diagnose der Planungssitzung ist damit gegenstandslos.
-  Naheliegende Lösung: Overlay beim Öffnen als Verlaufseintrag führen und über
-  `popstate` schließen — Zurück-Taste und Wischgeste müssen sich gleich verhalten.
+- **Projekte auf der Pinnwand (03) — zur Hälfte gebaut.** In vier Schnitte
+  zerlegt; `7bcf892` enthält die ersten beiden:
+  - ~~**03-1 Geste und Unterdrückung**~~ **erledigt.** Abwärtszug öffnet den
+    `ProjectWorkModal`, Eselsohr-Zug ebenso; die drei anderen Richtungen tun
+    nichts, kein Kranz, kein Fetzen, kein Abreiß-Umriss. Belegt per SQL: genau
+    **eine** Zeile je Bedienung, und zwar an der **Unteraufgabe** (0 Zeilen auf
+    der Projekt-ID), Projektzeile bleibt `completed=false`.
+  - ~~**03-4 „Projekt" im Bearbeiten-Fenster**~~ **erledigt.** War vorbestehend
+    (das Typ-Feld stand bei Projekten leer), wurde aber verschärft, weil Zuweisen
+    und Aufwand bei Projekten jetzt **ausschließlich** über den Stift laufen.
+  - **03-2 Die Punkte-Summe — offen.** Das Abzeichen zeigt die Summe der
+    verschlungenen Punkte. **Die Wand lädt heute gar keine Completions** —
+    `WallView.onMounted` ruft nur `loadTasks` + `subscribeToTasks` +
+    `loadWeeklyCompletions()`, `taskStore.completions` ist dort leer, also liefert
+    `getProjectEffort()` an der Wand **0**. Die eigene Abfrage ist keine
+    Optimierung, sondern die Voraussetzung. Weg: zwei schmale Selects
+    (`tasks.task_id/parent_task_id`, dann `task_completions.task_id/effort_override`),
+    Summe im Client — PostgREST kann kein `GROUP BY` ohne DB-Objekt. **Kein**
+    `deleted_at`-Filter (gelöschte Unteraufgaben haben trotzdem Punkte
+    verschlungen). Bei Realtime-`DELETE` **volle Neuabfrage**, weil ohne
+    `REPLICA IDENTITY FULL` nur `completion_id` im Payload steht.
+  - **03-3 Abzeichen-Aussehen + Büroklammer-Farbe — offen.** Fünf Stufen,
+    `999+`-Klemme, Passung in 34 px; `.clip` bekommt `var(--owner, …)`.
+    Erbt **nicht** die Sternform der Fünf-Punkte-Stufe, sonst liest sich
+    „Stufe 5" wie „5 Punkte".
+  - **Der teuerste stille Bruch bei 03-2/03-3:** `relayout` misst `.points` und
+    `.corner`. Bekommt das Projekt-Abzeichen anderes Markup oder andere
+    Klassennamen, wird `pointsWidth = 0` → `metaTop` bei Projekten dauerhaft
+    `false`, Titelbreiten rechnen falsch, **und niemand sieht einen Fehler**
+    (Ticket 12 käme zurück). Klassenname und Platz müssen bleiben.
+  - Getroffene Entscheidungen: alle Unteraufgaben-Erledigungen zählen (nicht nur
+    „Am Projekt arbeiten"); der Zettel folgt beim Zug weiter dem Finger; ein
+    Alt-Projekt ohne Arbeits-Unteraufgabe öffnet **kein** Fenster (`console.error`,
+    kein stilles Nachlegen); kein Konfetti; kein optimistisches Hochzählen.
+
 - **Überstempeln am Zettel (09b).** Die Spalte `emphasis_level`, die Migration
   und die drei Reset-Fälle stehen (09a, `ccc1dd4`, Edge Function als v22 deployt) —
   die **Bedienung fehlt**. Vorbedingung 00a ist inzwischen erfüllt. Vorher die drei
@@ -232,6 +269,22 @@ nach `main`.
   beim Messen ist er eine Fehlerquelle.
 
 ### Korrektheit / Robustheit
+- **Kein DB-Cross-Check zwischen `task_type` und `subtask_points_mode`.**
+  `20251115132535_add_project_task_type.sql` prüft nur den Wertebereich von
+  `task_type`. Die Sperre gegen einen Typwechsel sitzt seit `7bcf892` **nur im
+  Modal** (`TaskEditModal`, `:disabled` an den Optionen). Wer den Typ per SQL oder
+  über einen anderen Weg umstellt, hinterlässt ein Projekt ohne die Unteraufgabe
+  „Am Projekt arbeiten" (die entsteht nur beim Anlegen, `taskStore.ts:765`) und
+  `deduct`-Unteraufgaben, die weiter abziehen (`taskStore.ts:397` filtert `deduct`
+  ohne Blick auf den Parent-Typ). Ein `CHECK` bzw. Trigger wäre der richtige Ort.
+- **Der gehaltene Zettel sperrt ab 420 ms den Bildlauf und schluckt den
+  Loslass-Tipp** — gemessen 400 ms → 105 px, 430 ms → 0 px; nach 600 ms Halten
+  klappt der Zettel beim Loslassen nicht auf. Gilt für **alle** Zettel, nicht nur
+  Projekte; bei normalen Aufgaben erklärt es der Kranz. Seit `7bcf892` haben auch
+  Projekte eine sichtbare Rückmeldung (Papier +21,8 % Luminanz gegen den Nachbarn,
+  Schatten 4 px hart → 7/10 px bei 35 %). Der Zettel sagt damit „ich höre zu",
+  aber **nicht** „der Bildlauf ist aus" — dafür bräuchte es eine Aussage über die
+  Wand, und die verbietet Ticket 03 am Projekt. Restunschärfe, bewusst akzeptiert.
 - **`runLoadTasks` ersetzt `tasks.value` komplett** — ein Realtime-Echo für eine *fremde*
   Zeile zwischen SELECT und Zuweisung wird überschrieben (Echo-Schutz greift nur für eigene
   IDs). Zweimal belegt, einmal 6 s falscher Zustand. Richtung: Zeilen einzeln mergen.
@@ -365,6 +418,14 @@ Kandidat 1 erledigt (Changelog). Reihenfolge = Empfehlung, Stärke in Klammern.
   rendert aber System-Schrift.
 
 **Ungeprüft, nicht widerlegt** (Prüfumgebung erreicht sie nicht):
+- **Die Wischgeste selbst ist nie gemessen worden** (00b, 01, 03). Belegt ist
+  durchgehend nur `history.back()`/`popstate` bzw. synthetische Zeigerereignisse —
+  der Mechanismus, den Randwisch und Zurück-Taste teilen. Für iOS Safari, wo der
+  Randwisch eine interaktive Transition ist, steht ein Gerätetest aus.
+- **Gesperrte `<option>`-Einträge auf mobilen Auswahlrädern.** `03-4` sperrt den
+  Typwechsel über `:disabled` an den Optionen, nicht am `<select>`. In Chrome sind
+  sie weder per Maus noch per Pfeiltaste erreichbar; manche Android-WebViews
+  stellen gesperrte Einträge nicht erkennbar grau.
 - Verschwinden des Fetzens bei fremder Löschung.
 - Unterer Klemmfall des Richtungskranzes (drei Seiten punktgenau gemessen).
 - Ein einmaliger Vorfall beim Fetzen (Punkte gebucht, Aufgabe nicht erledigt, Rückgängig
