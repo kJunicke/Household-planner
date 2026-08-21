@@ -66,6 +66,16 @@ per `transform: none` neutralisieren.
   Titel umbrechbar; eine Kadenz-Änderung nach dem Verschieben erzeugte 87 Tage, die mit
   der Ursache nichts zu tun hatten. Folgt eine Zahl nicht aus dem Code, ist die fehlende
   Bedienreihenfolge die erste Hypothese.
+- **Der laufende Dev-Server liefert manchmal veraltete Fassungen aus.** In der
+  03-2/03-3-Abnahme kamen `taskStore.ts` und `WallView.vue` aus einem stale
+  Transform-Cache in der Fassung *vor* dem Ticket — Symptome: alle Projektzettel
+  fehlten (Render-Absturz `getProjectEffortTotal is not a function`, danach
+  Kaskade `Cannot read properties of null (reading 'emitsOptions')`), bzw. alle
+  Abzeichen standen dauerhaft auf 0 und im Netzwerk-Log fehlte die Abfrage ganz.
+  Beides sah nach einem Befund aus und war keiner. Gegenprobe: die Symptome
+  ließen sich per `git checkout` der geänderten Datei reproduzieren. Behebung:
+  `touch` über `src/` und Hard-Reload — **nicht** den Server neu starten
+  (er läuft absichtlich durch).
 
 ## Context7 (MCP)
 

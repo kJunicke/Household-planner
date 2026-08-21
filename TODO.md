@@ -51,7 +51,7 @@ Aufbau: **Aktiv** (als Nächstes) · **Backlog** (irgendwann) · **Bekannte Rand
 - **`docs/data-model.md` kennt `emphasis_level` nicht.** Beschrieben ist die Spalte nur im
   Glossar (`CONTEXT.md`) und in den Migrationskommentaren.
 
-### Pinnwand-Ausbau — die offenen Tickets (08/00b/01 erledigt, 03 angefangen)
+### Pinnwand-Ausbau — die offenen Tickets (08/00b/01/03 erledigt)
 
 > Der Ausbau ist am 18.08.2026 nach `main` gemergt (`d8f0aa7`). Abgenommen sind
 > Karten-Redesign, Wand-Anordnung, Erledigt-Streifen, gedämpfte Kategorien, langer
@@ -156,26 +156,67 @@ Aufbau: **Aktiv** (als Nächstes) · **Backlog** (irgendwann) · **Bekannte Rand
   - ~~**03-4 „Projekt" im Bearbeiten-Fenster**~~ **erledigt.** War vorbestehend
     (das Typ-Feld stand bei Projekten leer), wurde aber verschärft, weil Zuweisen
     und Aufwand bei Projekten jetzt **ausschließlich** über den Stift laufen.
-  - **03-2 Die Punkte-Summe — offen.** Das Abzeichen zeigt die Summe der
-    verschlungenen Punkte. **Die Wand lädt heute gar keine Completions** —
-    `WallView.onMounted` ruft nur `loadTasks` + `subscribeToTasks` +
-    `loadWeeklyCompletions()`, `taskStore.completions` ist dort leer, also liefert
-    `getProjectEffort()` an der Wand **0**. Die eigene Abfrage ist keine
-    Optimierung, sondern die Voraussetzung. Weg: zwei schmale Selects
-    (`tasks.task_id/parent_task_id`, dann `task_completions.task_id/effort_override`),
-    Summe im Client — PostgREST kann kein `GROUP BY` ohne DB-Objekt. **Kein**
-    `deleted_at`-Filter (gelöschte Unteraufgaben haben trotzdem Punkte
-    verschlungen). Bei Realtime-`DELETE` **volle Neuabfrage**, weil ohne
-    `REPLICA IDENTITY FULL` nur `completion_id` im Payload steht.
-  - **03-3 Abzeichen-Aussehen + Büroklammer-Farbe — offen.** Fünf Stufen,
-    `999+`-Klemme, Passung in 34 px; `.clip` bekommt `var(--owner, …)`.
-    Erbt **nicht** die Sternform der Fünf-Punkte-Stufe, sonst liest sich
-    „Stufe 5" wie „5 Punkte".
-  - **Der teuerste stille Bruch bei 03-2/03-3:** `relayout` misst `.points` und
-    `.corner`. Bekommt das Projekt-Abzeichen anderes Markup oder andere
-    Klassennamen, wird `pointsWidth = 0` → `metaTop` bei Projekten dauerhaft
-    `false`, Titelbreiten rechnen falsch, **und niemand sieht einen Fehler**
-    (Ticket 12 käme zurück). Klassenname und Platz müssen bleiben.
+  - ~~**03-2 Die Punkte-Summe**~~ **erledigt** — `66bea83`, Zweig
+    `ticket-03-2-projekt-punktesumme`. Die Wand holt die Summe selbst: zwei
+    schmale Selects, Summe im Client, kein zweiter Zähler, keine Migration.
+    Gelöschte Unteraufgaben zählen mit (belegt an einer soft-gelöschten mit
+    5 Punkten). Alle Projektzettel gegen SQL identisch (1500 / 200 / 105 / 23 / 0).
+    Zwei Dinge, die in der Abnahme still falsch waren und jetzt stehen:
+    - **Der Realtime-INSERT-Handler steigt bei der eigenen Buchung früh aus**,
+      weil `replaceOptimisticCompletion()` die Serverzeile längst eingesetzt
+      hat, bevor das Echo eintrifft. Ein Nachruf am Ende des Zweigs war
+      unerreichbar — gemessen vier Buchungen ohne jede Änderung über 15 s, bei
+      **0** Summen-Abfragen. Der Nachruf steht jetzt **oberhalb** beider `return`.
+      Nach dem Fix: +N in 1,2–2,2 s, Doppeltipp erzeugt genau **eine** Zeile.
+    - **Die Abfrage blättert**, weil PostgREST bei `max_rows = 1000` deckelt;
+      die 150 IDs je Scheibe begrenzen die URL-Länge, nicht die Zeilenzahl.
+      Belegt an 1500 Erledigungen, die als 1500 ankommen statt als 1000.
+      Abbruch bei einer **leeren** Seite (nicht bei einer kurzen), damit die
+      Bedingung nicht daran hängt, dass `max_rows` zufällig gleich der
+      Seitengröße ist, und `.order('completion_id')` darüber.
+    Der Nachruf in `deleteCompletion`/`deleteAllCompletions` bleibt als Vorsorge
+    stehen, **greift aber heute nie** (`stopProjectEffortTotals()` legt beim
+    Verlassen der Wand den Riegel um, und beide werden nur aus `HistoryView`
+    gerufen). Dass die Zahl nach dem Zurückkleben trotzdem stimmt, trägt allein
+    `WallView.onMounted`. Steht so im Code kommentiert.
+  - ~~**03-3 Abzeichen-Aussehen + Büroklammer-Farbe**~~ **erledigt** — `c924678`,
+    Zweig `ticket-03-3-abzeichen-aussehen`. Eigene Klassen `points--b1…b5` statt
+    `points--s*`, Fläche auf **allen** Stufen 34×34 (der Sticker wächst bei `s5`
+    auf 39,1 px — das war die Ursache der 39 px bei dreistellig), Schriftgröße
+    folgt der Stellenzahl, `999+` ab vier Stellen bei ungeklemmter Stufenrechnung.
+    `.clip` trägt `var(--owner, var(--owner-none))`, gemessen identisch mit der
+    Reißzwecke derselben Person, beide Klammern.
+    - **Die umlaufende Skala trägt die Ordinalität nicht.** Sie war als
+      ordinaler Träger gebaut („zählbar wie ein Ladebalken, funktioniert auch
+      bei Farbenblindheit"); in 3,4 px Bandbreite bei 34 px Marke ist 80 % von
+      100 % am Bild nicht zu unterscheiden, auf Stufe 5 frisst der Zackenkranz
+      das Band zusätzlich an. Sie bleibt als **Schmuck**, der Kommentar sagt das
+      jetzt. Getragen wird die Ordnung von der Helligkeitsrampe (Luminanz 0,921
+      bis 0,046, Nachbarabstände 1,46–2,00) samt Ziffernumschlag ab Stufe 4 und
+      vom Zackenkranz auf Stufe 5.
+    - **Das schwächste Paar ist b1↔b2 mit 1,46.** Dort stützt sich der
+      Unterschied zusätzlich auf den Tonwechsel cremeweiß→blassblau — wer weder
+      Ton noch diese 1,46 sieht, unterscheidet die beiden untersten Stufen
+      nicht. Bewusst so belassen; die Bänder blieben unverschoben, weil die
+      Verteilung über 13 Projekte am Bild sinnvoll wirkte.
+    - **Stufe 2 liegt farblich beim Zwei-Punkte-Sticker** (Helligkeitsverhältnis
+      1,02, `rgb(200,207,219)` gegen `#bcd3e8`). Nebeneinander gestellt trennt
+      die Silhouette sie zuverlässig (Kreis mit Ringsegment gegen abgerundetes
+      Quadrat), dazu sitzt ein Abzeichen immer auf Packpapier. Kein Fehler —
+      gehört aber auf die Liste, wenn die Sticker-Palette einmal kuratiert wird.
+  - **Der teuerste stille Bruch bei 03-2/03-3 ist ausgeblieben:** `relayout` misst
+    `.points` und `.corner`; anderes Markup oder andere Klassennamen hätten
+    `pointsWidth = 0` und damit Ticket 12 zurückgeholt, ohne dass jemand einen
+    Fehler sieht. Klassenname und Platz sind unangetastet, nachgemessen 0 von 83
+    Zetteln mit Breite 0 und 0 Titelüberläufe.
+  - **Vorbestehend, in der 03-2-Abnahme belegt, nicht Teil des Tickets:** das
+    **klassische Aussehen zeigt bei allen Projekten `0 Pkt`**, auch bei einem mit
+    105. `taskStore.completions` wird von **keinem** Loader gefüllt (nur per
+    Realtime-`push`), also liefert `getProjectEffort()` dort immer 0. Selbst mit
+    geladenen Completions liefe es auseinander, weil `getSubtasks()` auf
+    `tasks.value` arbeitet und `loadTasks` `deleted_at IS NULL` filtert — die
+    Punkte gelöschter Unteraufgaben fehlten dort. An der Wand ist das gelöst,
+    im klassischen Aussehen nicht.
   - Getroffene Entscheidungen: alle Unteraufgaben-Erledigungen zählen (nicht nur
     „Am Projekt arbeiten"); der Zettel folgt beim Zug weiter dem Finger; ein
     Alt-Projekt ohne Arbeits-Unteraufgabe öffnet **kein** Fenster (`console.error`,
