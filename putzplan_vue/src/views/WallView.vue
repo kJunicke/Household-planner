@@ -894,11 +894,28 @@ watch(layoutSignature, () => {
   scheduleRelayout(true)
 })
 
+/**
+ * Wächst ein Projekt-Abzeichen von einer auf zwei oder drei Stellen, ändert sich
+ * die gemessene Breite seines Zettels. `layoutSignature` sieht das nicht — dort
+ * stehen nur Menge, Reihenfolge, Titel und Typ.
+ */
+watch(
+  () =>
+    wallTasks.value
+      .filter(task => task.task_type === 'project')
+      .map(task => `${task.task_id}:${taskStore.getProjectEffortTotal(task.task_id)}`)
+      .join('|'),
+  () => scheduleRelayout(true)
+)
+
 let resizeObserver: ResizeObserver | null = null
 let lastWidth = 0
 
 onMounted(async () => {
-  await taskStore.loadTasks()
+  // Parallel: die Projekt-Punktesummen kommen aus einer EIGENEN Abfrage (die
+  // Wand lädt keine Erledigungen), und sie müssen vor dem ersten `relayout`
+  // stehen — die Stellenzahl am Abzeichen geht in die gemessene Zettelbreite ein.
+  await Promise.all([taskStore.loadTasks(), taskStore.loadProjectEffortTotals()])
   taskStore.subscribeToTasks()
   householdStore.loadWeeklyCompletions()
 
@@ -938,6 +955,9 @@ onMounted(async () => {
 
 onUnmounted(() => {
   taskStore.unsubscribeFromTasks()
+  // Ohne die Abmeldung zöge der Store die Projekt-Summen auch im klassischen
+  // Aussehen weiter nach, wo sie niemand liest.
+  taskStore.stopProjectEffortTotals()
   resizeObserver?.disconnect()
 })
 
