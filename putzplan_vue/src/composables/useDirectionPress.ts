@@ -63,14 +63,20 @@ const PRESS_MS = 420
 const MOVE_TOLERANCE = 10
 
 /**
- * Ab dieser Strecke ist eine Richtung gewählt.
+ * Ab dieser Strecke — gemessen ab dem **Aufsetzpunkt** — ist eine Richtung
+ * gewählt.
  *
- * Etwas weniger als der Abstand der Beschriftungen zum Mittelpunkt (56 px),
- * damit die Richtung bereits feststeht, bevor der Finger auf ihrer Beschriftung
- * liegt — sonst verdeckte der eigene Daumen die Bestätigung. Gesetzt, nicht
- * gemessen.
+ * Früher 48 px, weil die Beschriftungen 56 px um die Zettelmitte lagen und die
+ * Richtung feststehen musste, bevor der Daumen auf ihnen lag. Dieser Grund ist
+ * mit den Beschriftungen an den **Bildschirm**rändern entfallen (Ticket 00b);
+ * ein Zettel am linken Wandrand brauchte sonst einen Zug bis fast an die Kante.
+ * Gesetzt, nicht gemessen.
+ *
+ * `WallDirectionMenu` hängt seine Pfeilgeometrie an genau diese Zahl: der Pfeil
+ * erscheint auf denselben Pixel, auf dem die erste Richtung anliegen kann.
+ * Deshalb ist sie exportiert und wird dort nicht noch einmal geschrieben.
  */
-const COMMIT_DISTANCE = 48
+export const COMMIT_DISTANCE = 32
 
 /**
  * Wie eindeutig die Richtung sein muss. `dy > dx` allein reicht nicht: bei 46°
@@ -96,8 +102,6 @@ export function useDirectionPress(options: {
   onDirection: (direction: PressDirection) => void
   /** Elemente, die diese Geste NICHT starten dürfen (Eselsohr, Knöpfe …). */
   isControl?: (target: EventTarget | null) => boolean
-  /** Das Element, um dessen Mitte die Beschriftungen liegen. */
-  anchorEl: () => HTMLElement | null
 }) {
   const scrolling = useScrollQuiet()
   const isControl = options.isControl ?? (() => false)
@@ -106,8 +110,17 @@ export function useDirectionPress(options: {
   const open = ref(false)
   /** Welche Richtung liegt gerade an — `null` heißt „noch keine". */
   const direction = ref<PressDirection | null>(null)
-  /** Mitte der Beschriftungen, in **Fensterkoordinaten**. */
-  const anchor = ref<{ x: number; y: number } | null>(null)
+  /**
+   * Wo der Finger aufgesetzt hat, in **Fensterkoordinaten**.
+   *
+   * **Nicht** die Zettelmitte: Richtungswahl und Pfeil müssen denselben
+   * Ursprung haben, sonst zeigt der Pfeil eine andere Strecke an als die, über
+   * die entschieden wird (→ `WallDirectionMenu`). Die Richtung wird ohnehin
+   * schon immer ab hier gemessen (`startX`/`startY`).
+   */
+  const origin = ref<{ x: number; y: number } | null>(null)
+  /** Wo der Finger gerade liegt — dorthin zeigt der Pfeil. */
+  const tip = ref<{ x: number; y: number } | null>(null)
 
   let pressTimer: number | null = null
   let el: HTMLElement | null = null
@@ -177,7 +190,8 @@ export function useDirectionPress(options: {
     pointerId = -1
     open.value = false
     direction.value = null
-    anchor.value = null
+    origin.value = null
+    tip.value = null
   }
 
   const onPointerDown = (event: PointerEvent) => {
@@ -208,13 +222,12 @@ export function useDirectionPress(options: {
         reset()
         return
       }
-      const rect = options.anchorEl()?.getBoundingClientRect() ?? null
-      // Die Mitte eines Rechtecks ist auch bei geneigtem Element die Mitte des
-      // Elements — die schiefen Ecken spielen hier keine Rolle. Ohne Element
-      // (theoretisch) fällt die Mitte auf den Finger zurück.
-      anchor.value = rect
-        ? { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 }
-        : { x: startX, y: startY }
+      // Der Finger hat sich seit dem Aufsetzen um höchstens `MOVE_TOLERANCE`
+      // bewegt (sonst hätte `onPointerMove` abgebrochen) — Ursprung und Spitze
+      // fallen im Moment des Auslösens also zusammen, und es ist kein Pfeil zu
+      // sehen. Genau richtig: gezogen wurde noch nicht.
+      origin.value = { x: startX, y: startY }
+      tip.value = { x: startX, y: startY }
       direction.value = null
       open.value = true
       // Ab hier gehören alle weiteren Ereignisse diesem Zettel, auch wenn der
@@ -258,6 +271,7 @@ export function useDirectionPress(options: {
       return
     }
 
+    tip.value = { x: event.clientX, y: event.clientY }
     direction.value = directionOf(dx, dy)
     event.preventDefault()
   }
@@ -301,7 +315,8 @@ export function useDirectionPress(options: {
   return {
     open: readonly(open),
     direction: readonly(direction),
-    anchor: readonly(anchor),
+    origin: readonly(origin),
+    tip: readonly(tip),
     onPointerDown,
     onPointerMove,
     onPointerUp,
