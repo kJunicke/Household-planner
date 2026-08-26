@@ -400,7 +400,13 @@ const SKYLINE_RESOLUTION = 4
 
 /**
  * Wie weit der y-Versatz einen Zettel höchstens nach UNTEN schiebt.
- * `jitterOf(id, 'y', 4) - 2.5` liegt in [−2,5; +1,5] — nach unten also 1,5 px.
+ * `jitterOf(id, 'y', 4) - 2.5` liegt in [−6,5; +1,5] — nach unten also 1,5 px.
+ *
+ * Die Untergrenze −6,5 ist NICHT −range/2: `jitterOf(id, key, 4)` liefert
+ * −4 … +4, davon 2,5 abgezogen ergibt −6,5 … +1,5 (im Bestand gemessen
+ * −6,41 … 1,49). Der Kommentar nannte hier bis zur QC von Ticket 13 fälschlich
+ * −2,5; `WallNoteMetrics.expanded` nennt −6,5 seit jeher korrekt. Die Konstante
+ * selbst stimmte — sie zählt nur die obere Grenze.
  *
  * Gebraucht wird die Zahl nur beim Packen oberhalb einer Vorgabe: dort wird
  * gegen die GEPLANTE Oberkante geprüft, gezeichnet wird aber die verschobene.
@@ -542,6 +548,14 @@ function resolvePins(
  *   ein Versatz wäre eine Bewegung, und genau die soll ausbleiben.
  * - Die **weiche Gruppengrenze gilt weiter**: die Vorgabe wird nach unten gegen
  *   `floor` geklemmt, sonst stünde ein Projekt über einer fälligen Aufgabe.
+ * - **Sie wird zusätzlich gegen die Unterkanten ihrer eigenen Spalten
+ *   geklemmt** (`contentLine`). `floor` ist das Maximum der OBERKANTEN der
+ *   Vorgruppe; ein hoher Zettel der Vorgruppe reicht weit darunter hinab und
+ *   wäre für die Vorgabe sonst unsichtbar. Lassen sich „bleibt liegen" und
+ *   „überlappt nicht" nicht zugleich einhalten, gewinnt „überlappt nicht" — die
+ *   Vorgabe rutscht nach unten. Wo nichts im Weg ist, bleibt sie auf den Pixel
+ *   liegen; geklemmt wird gegen echte Unterkanten, nicht gegen die Skyline mit
+ *   ihrem Zierabstand.
  * - Er wirkt als **Sperrlinie**: nach seiner Platzierung liegt die Skyline in
  *   seinen eigenen Spalten auf seiner Unterkante und in allen übrigen mindestens
  *   auf seiner Oberkante. Kein danach gesetzter Zettel kann ihn überholen.
@@ -562,6 +576,17 @@ export function packWall(
 ): PackedWall {
   const columns = Math.max(1, Math.ceil(wallWidth / SKYLINE_RESOLUTION))
   const skyline = new Array<number>(columns).fill(0)
+  /**
+   * Die UNTERKANTEN des bereits Gesetzten, je Spalte — ohne den Abstand, den
+   * `skyline` zusätzlich führt (`gapOf` bzw. `EXPANDED_GAP`).
+   *
+   * Gebraucht wird sie ausschließlich, um eine Vorgabe nach unten zu klemmen
+   * (Ticket 13, QC-Befund 1). Gegen `skyline` zu klemmen wäre falsch: deren
+   * Abstand ist Zierde, kein Inhalt, und die Vorgabe würde um bis zu 15 px
+   * wandern, obwohl gar nichts überlappt. „Bleibt liegen" gilt weiter, solange
+   * nichts im Weg ist — nachgegeben wird nur gegen echte Überdeckung.
+   */
+  const contentLine = new Array<number>(columns).fill(0)
   const placed: PackedNote[] = []
 
   // Gruppen in Eingabereihenfolge sammeln, dann nach Gruppennummer aufsteigend
@@ -614,16 +639,64 @@ export function packWall(
       const dy = note.expanded || pinned ? 0 : jitterOf(note.id, 'y', 4) - 2.5
 
       const x = Math.max(0, Math.min(wallWidth - width, column * SKYLINE_RESOLUTION + dx))
+
+      // Eine Vorgabe wird zusätzlich gegen die UNTERKANTEN ihrer eigenen
+      // Spalten geklemmt (Ticket 13, QC-Befund 1).
+      //
+      // `floor` allein trägt das nicht: die weiche Gruppengrenze ist das
+      // Maximum der OBERKANTEN der Vorgruppe (so gewollt, siehe
+      // Funktionskommentar). Ein hoher Zettel der Vorgruppe, der weit unter
+      // seine eigene Oberkante hinabreicht, ist für `floor` damit unsichtbar —
+      // eine Vorgabe auf dessen Höhe landete mitten in ihm. Belegt am
+      // Minimalfall: ein 400 px hoher Zettel in Gruppe 0, eine wandbreite
+      // Vorgabe mit `top = 0` in Gruppe 1 → 180 × 50 px Überlapp.
+      //
+      // Die Richtung ist vom Ticket entschieden: lassen sich „bleibt liegen"
+      // und „überlappt nicht" nicht gleichzeitig einhalten, gewinnt „überlappt
+      // nicht" — dieselbe Begründung, mit der schon `floor` die Vorgabe nach
+      // unten klemmt. Ein Zettel, der einen anderen verdeckt, ist schlimmer als
+      // einer, der ein Stück gewandert ist.
+      //
+      // Innerhalb der EIGENEN Gruppe ist die Klemmung wirkungslos: `packFree`
+      // hat vor der Vorgabe nur gesetzt, was GANZ über ihr passt
+      // (`noteTop + height + JITTER_DOWN_MAX <= limitTop`), also liegt
+      // `contentLine` dort ohnehin nicht tiefer. Sie greift genau dort, wo der
+      // Fehler saß: an der Gruppengrenze.
+      let clamped = top
+      if (pinned) {
+        for (let k = column; k < column + span; k++) {
+          if (contentLine[k] > clamped) clamped = contentLine[k]
+        }
+      }
+
       // Auf `floor` geklemmt: der y-Versatz darf einen Zettel etwas anheben,
       // aber niemals über die Untergrenze der Gruppe hinaus — sonst könnte der
       // Jitter allein die Gruppengrenze unterlaufen. Für einen vorgegebenen
       // Zettel ist das dieselbe Klemmung, nur ohne Versatz.
-      const y = Math.max(floor, top + dy)
+      const y = Math.max(floor, clamped + dy)
 
       const vGap = note.expanded ? EXPANDED_GAP : gapOf(note.id)
       const bottom = y + note.height + vGap
+      // **Nie senken.** Beim freien Packen ist die Zuweisung unschädlich, weil
+      // `top` dort aus genau diesen Spalten stammt und `bottom` deshalb nicht
+      // darunterfallen kann. Bei einer Vorgabe kommt `top` von außen: eine
+      // Zuweisung senkte die Skyline und löschte damit die Kollision, die die
+      // Sperrlinie unten gerade festhalten soll — sie steht in den eigenen
+      // Spalten auf `bottom` und fände den Wert bereits überschrieben vor
+      // (Ticket 13, QC-Befund 1; die zu klein gemeldete `height` kam daher).
+      //
+      // **Voraussetzung**, damit das freie Packen dabei bitidentisch bleibt:
+      // `note.height + vGap` muss größer sein als der maximale Aufwärtsschub des
+      // y-Versatzes (6,5 px). Sonst dürfte `bottom` unter die Skyline fallen, und
+      // was vorher gesenkt wurde, bliebe jetzt stehen. Der kleinste Zettel im
+      // Bestand misst 71 px, `height + vGap` also mindestens 73 — Faktor 11.
+      // Nachgemessen: mit erzwungenen Höhen von 1…5 px weichen 296 von 4000
+      // Wänden ab, mit echten Höhen 0 von 5000. Wer Zettel unter ~10 px zulässt
+      // (oder `display:none` misst), muss hier nachdenken.
+      const face = y + note.height
       for (let k = column; k < column + span; k++) {
-        skyline[k] = bottom
+        if (skyline[k] < bottom) skyline[k] = bottom
+        if (contentLine[k] < face) contentLine[k] = face
       }
 
       if (pinned) {
