@@ -89,14 +89,33 @@ Aufbau: **Aktiv** (als Nächstes) · **Backlog** (irgendwann) · **Bekannte Rand
     Kontur, weil `getBBox()` ohne Stroke rechnet). Dieselbe Klasse wie das
     notierte `footGap = 6`.
 
-- **Aufklappen springt (13).** Ein aufgeklappter Zettel soll liegen bleiben und
-  die blockierenden Zettel unter sich schieben; heute springt er selbst durch die
-  Wand. Ursache im Code: er bekommt die volle Wandbreite und wird von `packWall`
-  komplett neu platziert — das ist heute **so gewollt** und wird über den
-  Scroll-Anker aufgefangen, statt verhindert. Dieses Ticket dreht die
-  Entscheidung um. Erster Schritt ist eine Messung, ob der Scroll-Anker
-  überhaupt noch greift; „mittlerweile kaputt" deutet auf eine Regression aus
-  02, 11 oder 12.
+- **Aufklappen springt (13) — gebaut, NICHT abgenommen.** Zweig
+  `ticket-13-aufklappen-bleibt-liegen`, WIP-Commit, `type-check` grün. **Der QC steht
+  noch aus** — kein Prüfschritt ist in der laufenden App belegt. Übergabe mit
+  Schwerpunkten für den QC: `.scratch/pinnwand-ausbau/HANDOVER-13.md`, Messbelege in
+  `13-baseline-messung.md` (beides gitignored, hängt an dieser Platte). Haltbar hier:
+  - **Der Nutzerbefund ist mit Zahlen bestätigt.** Δ`style.top` beim Aufklappen bis
+    **+906 px**; der Scroll-Anker reichte das 1:1 an die Seite weiter (Δ`scrollY` 905),
+    der Zettel stand dabei im Fenster still. Es sprang also die **Wand unter ihm weg**.
+    Nach oben war der Anker bei `scrollY = 0` abgeschnitten: offen auf `sy = 100`
+    scrollen und zuklappen ließ den Zettel **675 px aus dem Bild** springen — das ist
+    das „springt wild umher" in Reinform. Die Herkunft **02** ist damit bestätigt,
+    11 und 12 sind unbeteiligt.
+  - Die Zuspitzung des Tickets „wandert ans untere Ende seiner Gruppe" gilt nur halb:
+    sie trifft die Platzierungs*reihenfolge*, nicht die Endposition. Ein Zettel wanderte
+    906 px und lag danach trotzdem nur auf Rang 27 von 53.
+  - **Vorbestehend gefunden und im Zuge des Tickets behoben: `packWall` war nicht
+    deterministisch.** Bei identischer Eingabe (83 Zettel, Breiten, Höhen, Reihenfolge,
+    `clientWidth` — alles nachweislich gleich) pendelte die Wand zwischen zwei
+    Packungen (Höhe 4623,95 / 4616,31, 21 Zettel um bis zu ±18 px), je nachdem welcher
+    Zettel zuletzt angetippt war. Ursache: der aufgeklappte Zettel verlor die Klasse
+    `zettel--meta-top`, die über `cornerExtra` (41…46 px) den Titelkasten verengt — beim
+    Zuklappen wurde sie zwar neu entschieden, erreichte das DOM aber erst im nächsten
+    Tick, sodass die Höhenmessung noch die alte Fassung traf. Der Prüfschritt „Zuklappen
+    stellt die Wandhöhe exakt wieder her" scheiterte damit schon **vor** dem Ticket.
+  - Neu im Code: `WallPin` + dritter Parameter `pins` an `packWall`, `resolvePins()`
+    (bei Konflikt gewinnt der zuletzt Angetippte), `WallNoteMetrics.previousTop`,
+    `pinnedTops` in `WallView`. **Die Scroll-Nachführung ist ersatzlos entfallen.**
 - **Zettel breiter streuen, Überlapp begrenzen (14).** Die Zettel überlappen
   „fast immer", der Abstand nach rechts ist zu gering, und rechts bleibt oft
   Platz übrig. Gewünscht: mehr Streuung in der Waagerechten **und** eine
