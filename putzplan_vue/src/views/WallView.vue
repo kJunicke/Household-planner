@@ -171,13 +171,35 @@ const wallHeight = ref(0)
 /**
  * Aufgeklappte Zettel. Mehrere dürfen gleichzeitig offen sein — ein Zettel, der
  * sich beim Antippen eines anderen still schließt, nimmt dem Aufklappen die
- * Verlässlichkeit, und der Scroll-Anker könnte nur noch einen von beiden halten.
+ * Verlässlichkeit.
  *
  * Geändert wird durch **Ersetzen** des Sets. Ein `ref` macht ein `Set` zwar
  * tief reaktiv, aber die Zuweisung ist der Weg, der auch dann noch stimmt, wenn
  * jemand hier später auf `shallowRef` umstellt.
  */
 const expandedIds = ref(new Set<string>())
+
+/**
+ * Die gemerkten Oberkanten der aufgeklappten Zettel (Ticket 13): der aufgeklappte
+ * Zettel bleibt liegen, wo er lag, und die anderen weichen ihm aus.
+ *
+ * `packWall` ist zustandslos und kennt kein „vorher"; das „vorher" steht hier.
+ * Eingetragen wird die y-Koordinate, die der Zettel **unmittelbar vor dem
+ * Antippen** hatte (`lastPositions`), verworfen wird beim Zuklappen — und beim
+ * Verschwinden von der Wand, zusammen mit `expandedIds`.
+ *
+ * **Die Reihenfolge ist Teil des Zustands.** Eine `Map` behält ihre
+ * Einfügereihenfolge; der letzte Eintrag ist der zuletzt angetippte Zettel, und
+ * genau der gewinnt, wenn sich zwei Vorgaben nicht gleichzeitig einhalten lassen
+ * (→ `resolvePins` in `wallLayout.ts`). Ein `Set`/`Map` wird beim erneuten
+ * Antippen deshalb erst gelöscht und dann neu gesetzt — sonst bliebe der Zettel
+ * auf seinem alten Platz in der Reihenfolge stehen.
+ *
+ * Bewusst **nicht** reaktiv: gelesen wird das ausschließlich in `relayout`, und
+ * jede Änderung daran zieht ohnehin selbst ein `relayout` nach sich. Ein `ref`
+ * würde hier nur eine Abhängigkeit vortäuschen, die es nicht gibt.
+ */
+const pinnedTops = new Map<string, number>()
 
 /**
  * Zettel, deren Punktwert oben rechts statt in der Fußzeile steht
@@ -269,28 +291,18 @@ const setNoteEl = (taskId: string, instance: unknown) => {
  * gemessen ist das nicht; erwartbar ist ein spürbarer, aber kein
  * größenordnungsmäßiger Aufschlag auf Schritt 1.
  *
- * **`anchorId`** ist der angetippte Zettel beim Auf- und Zuklappen. Er bleibt an
- * seiner Bildschirmposition stehen; alles andere rutscht um ihn herum. Wie das
- * geht, steht unten am Scroll-Anker.
+ * **`tappedId`** ist der angetippte Zettel beim Auf- und Zuklappen. Er steht
+ * still — beim Aufklappen, weil seine gemerkte Oberkante als Vorgabe in
+ * `packWall` geht (→ `pinnedTops`), beim Zuklappen, weil er ohne Vorgabe
+ * wieder dort landet, wo er als schmaler Zettel schon vorher lag. Gebraucht
+ * wird die Kennung hier nur noch, um ihn von der Flug-Animation auszunehmen.
  */
-const relayout = (animate: boolean, anchorId?: string) => {
+const relayout = (animate: boolean, tappedId?: string) => {
   const wall = wallEl.value
   if (!wall) return
 
   const usableWidth = wall.clientWidth - 2 * EDGE
   if (usableWidth <= 0) return
-
-  // Scroll-Anker, Teil 1: die Bildschirmposition des angetippten Zettels
-  // merken, BEVOR irgendetwas am DOM verändert wird.
-  //
-  // Gemessen wird das echte Rechteck und nicht — wie im Prototypen — die
-  // Differenz zweier gespeicherter `top`-Werte. Dort blieben rund 4 px Versatz
-  // stehen: die gespeicherte Zahl ist wandrelativ und weiß nichts davon, ob
-  // sich über der Wand noch etwas verschoben hat oder ob der Bildlauf sein
-  // Ziel überhaupt erreichen konnte. `getBoundingClientRect()` misst genau
-  // das, was der Anker eigentlich meint — den Abstand zur Fensteroberkante.
-  const anchorEl = anchorId ? (noteEls.get(anchorId) ?? null) : null
-  const anchorTopBefore = anchorEl ? anchorEl.getBoundingClientRect().top : 0
 
   const before = new Map(lastPositions)
 
@@ -349,6 +361,24 @@ const relayout = (animate: boolean, anchorId?: string) => {
       shapes.push({ id: task.task_id, natural: usableWidth, minimum: usableWidth })
       elements.set(task.task_id, el)
       lineHeights.set(task.task_id, 0)
+      // Die bisherige Entscheidung über den Punktwert oben rechts wird
+      // MITGENOMMEN, obwohl dieser Zettel nicht gemessen wird (Ticket 13).
+      //
+      // Ohne diese Zeile fiel er aus `nextMetaTopIds` heraus und verlor die
+      // Klasse `zettel--meta-top`, solange er offen war — der Sticker sprang
+      // sichtbar von der Ecke in die Fußzeile und beim Zuklappen zurück. Der
+      // Schaden war aber nicht nur kosmetisch: `zettel--meta-top` verengt den
+      // Titelkasten um die Ecke (`cornerExtra`, 41…46 px), der Titel braucht
+      // damit unter Umständen eine Zeile mehr. Beim Zuklappen wird die Klasse
+      // in DIESEM Lauf zwar neu entschieden, sie erreicht das DOM aber erst
+      // im nächsten Tick — Schritt 4 misst dann noch die Höhe der ALTEN
+      // Fassung und `packWall` packt die Wand auf eine Höhe, die es gleich
+      // nicht mehr gibt (gemessen: bis zu ±18 px, eine Titelzeile, bei 21 von
+      // 83 Zetteln). Die Wand pendelte dadurch je nach zuletzt aufgeklapptem
+      // Zettel zwischen zwei Packungen — dieselbe Eingabe, zwei Ergebnisse.
+      // Der Prüfschritt „Zuklappen stellt die Wandhöhe exakt wieder her"
+      // scheiterte schon daran.
+      if (metaTopIds.value.has(task.task_id)) nextMetaTopIds.add(task.task_id)
       continue
     }
 
@@ -707,11 +737,25 @@ const relayout = (animate: boolean, anchorId?: string) => {
       width: widths.get(shape.id) ?? 0,
       height: el.offsetHeight,
       expanded: expandedIds.value.has(shape.id),
-      group: taskGroups.get(shape.id) ?? 0
+      group: taskGroups.get(shape.id) ?? 0,
+      // Wo dieser Zettel im vorigen Lauf stand. `packWall` braucht das nur,
+      // solange eine Vorgabe im Spiel ist: wer vorher unter oder neben dem
+      // vorgegebenen Zettel lag, darf danach nicht darüber stehen. Beim ersten
+      // Lauf ist die Karte leer — dann gibt es auch keine Vorgabe.
+      previousTop: before.get(shape.id)?.y
     })
   }
 
-  const packed = packWall(metrics, usableWidth)
+  // Vorgaben für die aufgeklappten Zettel, in Antipp-Reihenfolge (Ticket 13).
+  // Gefiltert auf das, was gerade wirklich an der Wand hängt — eine Vorgabe für
+  // einen Zettel, den `packWall` gar nicht bekommt, wäre nur ein stiller
+  // Konfliktpartner für die übrigen.
+  const onWall = new Set(metrics.map(note => note.id))
+  const pins = [...pinnedTops]
+    .filter(([id]) => onWall.has(id))
+    .map(([id, top]) => ({ id, top }))
+
+  const packed = packWall(metrics, usableWidth, pins)
   wallHeight.value = packed.height
 
   lastPositions.clear()
@@ -727,7 +771,7 @@ const relayout = (animate: boolean, anchorId?: string) => {
     el.style.zIndex = String(note.z)
     lastPositions.set(note.id, { x, y })
 
-    // Der angetippte Zettel wird NICHT animiert, auch wenn er wandert.
+    // Der angetippte Zettel wird NICHT animiert.
     //
     // Aufklappen ist eine Aussage über genau diesen Zettel. Rutscht er dabei
     // selbst sichtbar weg, ist der Bezugspunkt der Handlung verloren: die
@@ -735,11 +779,12 @@ const relayout = (animate: boolean, anchorId?: string) => {
     // herum" — richtig —, die eigene Bewegung als „ich habe danebengetippt" —
     // falsch. Die Anheft-Bewegung der Spec gilt den ANDEREN Zetteln.
     //
-    // Zusammen mit dem Scroll-Anker weiter unten steht er damit wirklich still:
-    // der Anker hält seine Bildschirmposition, das Auslassen hier verhindert,
-    // dass er trotzdem eine Flugbahn zeigt.
+    // Seit Ticket 13 steht er ohnehin still (seine Oberkante ist Vorgabe, →
+    // `pinnedTops`); das Auslassen hier bleibt trotzdem: die eine Ausnahme, in
+    // der er doch wandert — zwei Vorgaben, die sich nicht vertragen —, ist
+    // gerade die, in der eine Flugbahn am meisten verwirrte.
     // Ebenso der Zettel, der gerade unter einer Geste steht (→ `gestureNoteId`).
-    if (note.id === anchorId || note.id === gestureNoteId.value) continue
+    if (note.id === tappedId || note.id === gestureNoteId.value) continue
 
     const previous = before.get(note.id)
     if (previous) {
@@ -751,30 +796,16 @@ const relayout = (animate: boolean, anchorId?: string) => {
     }
   }
 
-  // Scroll-Anker, Teil 2: den Bildlauf um genau den Betrag nachziehen, um den
-  // der angetippte Zettel gewandert ist.
-  //
-  // Die Wandhöhe wird dafür **hier** direkt ans Element geschrieben, obwohl
-  // `wallHeight` sie oben schon gesetzt hat: `wallHeight` ist reaktiv und
-  // erreicht das DOM erst im nächsten Tick. Bis dahin ist das Dokument noch so
-  // hoch wie vorher — ein Bildlauf nach unten würde am alten Seitenende
-  // abgeschnitten und der Anker bliebe daneben stehen. Die Höhenanimation ist
-  // für diesen Moment abgeschaltet, weil eine über 0,42 s wachsende Wand
-  // dasselbe Problem hätte, nur langsamer.
-  if (anchorEl) {
-    wall.style.transition = 'none'
-    wall.style.height = `${packed.height}px`
-    // Erzwingt die Anwendung, bevor gemessen wird.
-    void wall.offsetHeight
-    const delta = anchorEl.getBoundingClientRect().top - anchorTopBefore
-    if (Math.abs(delta) > 0.5) window.scrollBy(0, delta)
-    // Erst im nächsten Frame zurück auf die Regel aus dem Stylesheet — im
-    // selben Tick würde die eben gesetzte Höhe nachträglich animiert.
-    requestAnimationFrame(() => {
-      wall.style.transition = ''
-    })
-  }
-
+  // Hier stand bis Ticket 13 die **Scroll-Nachführung**: sie merkte sich die
+  // Bildschirmposition des angetippten Zettels, schrieb die neue Wandhöhe vorab
+  // ans Element (damit ein Bildlauf nach unten nicht am alten Seitenende
+  // abschnitt) und zog den Bildlauf um die Wanderstrecke des Zettels nach. Sie
+  // ist ersatzlos entfallen: sie existierte nur, um einen wandernden Zettel im
+  // Blick zu halten. Er wandert nicht mehr — und der Bildlauf einer Seite ist
+  // das, was der Nutzer eingestellt hat, nicht das, was die Wand für richtig
+  // hält. Gemessen wurde vor dem Umbau ein Nachzug von bis zu 906 px pro
+  // Aufklappen; nach oben war er bei `scrollY = 0` abgeschnitten, sodass der
+  // Zettel dann doch aus dem Bild sprang.
   if (!animate || prefersReducedMotion?.matches) return
   animateMoves(moved)
 }
@@ -792,13 +823,38 @@ const relayout = (animate: boolean, anchorId?: string) => {
  * behandelt das bereits: es animiert jeden Zettel, dessen Position sich
  * tatsächlich ändert, und lässt den Rest unangetastet.
  *
- * Der aufklappende Zettel selbst kann sehr wohl wandern: mit voller Wandbreite
- * braucht er eine Stelle, an der die Skyline über die ganze Breite frei ist.
- * Genau dagegen steht der Scroll-Anker.
+ * **Der angetippte Zettel selbst bleibt liegen** (Ticket 13). Beim Aufklappen
+ * wird seine aktuelle Oberkante gemerkt und geht `packWall` als Vorgabe mit; die
+ * anderen weichen ihm aus. Vorher wanderte er ans untere Ende seiner Gruppe —
+ * mit voller Wandbreite verliert er jeden Vergleich um die niedrigste Oberkante
+ * — und ein Scroll-Anker zog die Seite hinterher. Beides ist weg.
+ *
+ * Gemerkt wird die zuletzt GESETZTE Position (`lastPositions`), nicht eine frisch
+ * gemessene: sie ist die Zahl, die `packWall` ausgerechnet hat, und genau die
+ * soll er behalten. Eine Messung am DOM lieferte hier den Wert MITTEN in einer
+ * laufenden Fluganimation — der Zettel bliebe dann dort liegen, wo er zufällig
+ * gerade schwebte.
+ *
+ * Steht dort noch nichts (erster Lauf, Zettel gerade erst eingehängt), gibt es
+ * keine Vorgabe und der Zettel packt frei mit — sichtbar wie vor diesem Ticket,
+ * aber nicht falsch.
  */
 const toggleNote = (taskId: string) => {
   const next = new Set(expandedIds.value)
-  if (!next.delete(taskId)) next.add(taskId)
+  if (next.delete(taskId)) {
+    // Zuklappen: Vorgabe verwerfen. Der Zettel ist danach wieder schmal und
+    // packt normal mit — er landet dabei wieder dort, wo er vor dem Aufklappen
+    // lag, weil die Wand rechnerisch in denselben Zustand zurückfällt.
+    pinnedTops.delete(taskId)
+  } else {
+    next.add(taskId)
+    const top = lastPositions.get(taskId)?.y
+    // Erst löschen, dann setzen: die Einfügereihenfolge der `Map` IST die
+    // Antipp-Reihenfolge, und der zuletzt Angetippte muss hinten stehen — er
+    // gewinnt, wenn sich zwei Vorgaben nicht vertragen.
+    pinnedTops.delete(taskId)
+    if (top !== undefined) pinnedTops.set(taskId, top)
+  }
   expandedIds.value = next
   // Erst nach dem Rendern der Zettelchen packen — vorher ist die Höhe des
   // Zettels noch die alte.
@@ -885,6 +941,12 @@ watch(layoutSignature, () => {
   const onWall = new Set(wallTasks.value.map(task => task.task_id))
   if ([...expandedIds.value].some(id => !onWall.has(id))) {
     expandedIds.value = new Set([...expandedIds.value].filter(id => onWall.has(id)))
+  }
+  // Mit dem Aufklapp-Zustand geht auch die gemerkte Oberkante (Ticket 13).
+  // Bliebe sie hängen, käme der Zettel nach einem „wieder dreckig" mit einer
+  // Vorgabe aus einer Wand zurück, die es nicht mehr gibt.
+  for (const id of [...pinnedTops.keys()]) {
+    if (!onWall.has(id)) pinnedTops.delete(id)
   }
   // Dasselbe für den Zettel unter der Geste: verschwindet er von der Wand
   // (erledigt, gelöscht), kommt das `gesture-end` seiner Komponente nicht an — sie ist
