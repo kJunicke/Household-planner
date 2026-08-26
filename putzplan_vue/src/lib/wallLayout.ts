@@ -141,6 +141,33 @@ export interface WallNoteMetrics {
    * zwischen den Gruppen — siehe `packWall`.
    */
   group: number
+  /**
+   * Die Oberkante, an der dieser Zettel im **vorigen** Lauf tatsächlich stand,
+   * sofern bekannt (Ticket 13). Wird ausschließlich gebraucht, solange ein
+   * anderer Zettel eine Vorgabe hat (`WallPin`): wer vorher auf gleicher Höhe
+   * oder darunter lag, darf danach nicht darüber stehen. Ohne Vorgabe im Lauf
+   * bleibt der Wert unbenutzt — das freie Packen kennt keine Vergangenheit.
+   *
+   * Fehlt der Wert (neuer Zettel), gilt der Zettel als unbelastet und darf
+   * überall hin.
+   */
+  previousTop?: number
+}
+
+/**
+ * Vorgabe für genau einen Zettel: er steht bei `top` und nimmt am Wettbewerb um
+ * die niedrigste Oberkante nicht teil (Ticket 13 — „der aufgeklappte Zettel
+ * bleibt liegen").
+ *
+ * Die Reihenfolge des Feldes ist die **Antipp-Reihenfolge**: der letzte Eintrag
+ * ist der zuletzt angetippte Zettel. Lassen sich zwei Vorgaben arithmetisch
+ * nicht gleichzeitig einhalten, gewinnt der spätere Eintrag; der frühere rutscht
+ * unter ihn (siehe `resolvePins`).
+ */
+export interface WallPin {
+  id: string
+  /** Gewünschte Oberkante in Wandkoordinaten. */
+  top: number
 }
 
 /**
@@ -372,6 +399,68 @@ export interface PackedWall {
 const SKYLINE_RESOLUTION = 4
 
 /**
+ * Wie weit der y-Versatz einen Zettel höchstens nach UNTEN schiebt.
+ * `jitterOf(id, 'y', 4) - 2.5` liegt in [−2,5; +1,5] — nach unten also 1,5 px.
+ *
+ * Gebraucht wird die Zahl nur beim Packen oberhalb einer Vorgabe: dort wird
+ * gegen die GEPLANTE Oberkante geprüft, gezeichnet wird aber die verschobene.
+ * Ohne diesen Zuschlag dürfte ein Zettel bis auf 1,5 px in den vorgegebenen
+ * Zettel hineinragen. Wer `jitterOf`-Bereich oder Mitte ändert, muss diese Zahl
+ * mitziehen — sie ist eine Ableitung, keine Setzung.
+ */
+const JITTER_DOWN_MAX = 1.5
+
+/**
+ * Vorgaben in tatsächliche Oberkanten übersetzen (Ticket 13).
+ *
+ * Jede Vorgabe beansprucht ein Fenster [top, top + Höhe + `EXPANDED_GAP`].
+ * Überschneiden sich zwei Fenster, **gewinnt der zuletzt angetippte** — deshalb
+ * wird das Feld von hinten nach vorn abgearbeitet: wer zuerst drankommt, hat die
+ * höhere Priorität und behält seine Oberkante; wer später kommt und anstößt,
+ * rutscht unter das störende Fenster.
+ *
+ * Der typische Fall: erst wird ein unterer Zettel aufgeklappt (Vorgabe A), dann
+ * ein Zettel darüber (Vorgabe B). B wächst nach unten in A hinein. B ist der
+ * zuletzt angetippte, also bleibt B liegen und A rutscht auf B's Unterkante.
+ * Umgekehrt (erst oben, dann unten) entsteht gar kein Konflikt, weil die zweite
+ * Vorgabe erst NACH dem Aufklappen der ersten gemerkt wird.
+ *
+ * Die Schleife terminiert: jeder Ausweichschritt setzt `top` auf die Unterkante
+ * eines vergebenen Fensters, danach kann genau dieses Fenster nicht mehr stören
+ * — höchstens so viele Schritte wie vergebene Fenster.
+ *
+ * Zettel ohne bekannte Höhe (Vorgabe für einen Zettel, der gar nicht mehr an der
+ * Wand hängt) fallen heraus; der Aufrufer soll solche Vorgaben gar nicht erst
+ * schicken, aber diese Funktion baut darauf nicht.
+ */
+function resolvePins(
+  pins: readonly WallPin[],
+  heightOf: (id: string) => number | undefined
+): Map<string, number> {
+  const resolved = new Map<string, number>()
+  const claimed: Array<{ top: number; bottom: number }> = []
+
+  for (let i = pins.length - 1; i >= 0; i--) {
+    const pin = pins[i]
+    const height = heightOf(pin.id)
+    if (height === undefined) continue
+
+    let top = pin.top
+    for (;;) {
+      const clash = claimed.find(
+        window => top < window.bottom - 0.001 && top + height + EXPANDED_GAP > window.top + 0.001
+      )
+      if (!clash) break
+      top = clash.bottom
+    }
+    claimed.push({ top, bottom: top + height + EXPANDED_GAP })
+    resolved.set(pin.id, top)
+  }
+
+  return resolved
+}
+
+/**
  * Skyline-Packing: **frei innerhalb dreier Gruppen** (0 = fällig, 1 = täglich,
  * 2 = Projekt, aus `WallNoteMetrics.group`).
  *
@@ -441,8 +530,36 @@ const SKYLINE_RESOLUTION = 4
  * Zettel, der irgendwo MITTEN in einer Reihe steht, bekommt keine Einrückung
  * — dort würde sie ein Loch in die Reihe reißen, statt nur die Kante
  * aufzulockern.
+ *
+ * **Vorgaben (`pins`, Ticket 13).** Ein aufgeklappter Zettel soll liegen
+ * bleiben, wo er lag — die anderen weichen ihm aus, statt dass er sich einen
+ * neuen Platz sucht. Diese Funktion ist zustandslos und kennt kein „vorher",
+ * deshalb reicht die Wand die gemerkte Oberkante als Vorgabe herein. Für einen
+ * vorgegebenen Zettel gilt:
+ *
+ * - Seine Oberkante ist gesetzt (`max(floor, …)`), er nimmt am Wettbewerb um
+ *   die niedrigste Oberkante nicht teil und bekommt **keinen** y-Versatz —
+ *   ein Versatz wäre eine Bewegung, und genau die soll ausbleiben.
+ * - Die **weiche Gruppengrenze gilt weiter**: die Vorgabe wird nach unten gegen
+ *   `floor` geklemmt, sonst stünde ein Projekt über einer fälligen Aufgabe.
+ * - Er wirkt als **Sperrlinie**: nach seiner Platzierung liegt die Skyline in
+ *   seinen eigenen Spalten auf seiner Unterkante und in allen übrigen mindestens
+ *   auf seiner Oberkante. Kein danach gesetzter Zettel kann ihn überholen.
+ * - **Wer vorher unter (oder neben) ihm lag, bleibt unter ihm.** Oberhalb der
+ *   Vorgabe dürfen nur Zettel packen, deren `previousTop` echt kleiner ist als
+ *   die Vorgabe, und auch die nur, wenn sie GANZ darüber passen. Ohne diese
+ *   Bedingung würde der frei packende Rest in die Lücke rutschen, die der
+ *   vorgegebene Zettel als schmaler Zettel hinterlassen hat — ein Zettel von
+ *   unten stünde plötzlich oben.
+ * - Waagerecht landet er an der linken Wandkante (Spalte 0, keine Einrückung).
+ *   Für den einzigen Anwendungsfall — den aufgeklappten Zettel über die volle
+ *   Wandbreite — ist das die einzig mögliche Stelle.
  */
-export function packWall(notes: readonly WallNoteMetrics[], wallWidth: number): PackedWall {
+export function packWall(
+  notes: readonly WallNoteMetrics[],
+  wallWidth: number,
+  pins: readonly WallPin[] = []
+): PackedWall {
   const columns = Math.max(1, Math.ceil(wallWidth / SKYLINE_RESOLUTION))
   const skyline = new Array<number>(columns).fill(0)
   const placed: PackedNote[] = []
@@ -458,83 +575,72 @@ export function packWall(notes: readonly WallNoteMetrics[], wallWidth: number): 
   }
   const groupKeys = [...byGroup.keys()].sort((a, b) => a - b)
 
+  const heights = new Map<string, number>(notes.map(note => [note.id, note.height]))
+  /** Vorgegebene Oberkanten, Konflikte bereits aufgelöst (siehe `resolvePins`). */
+  const pinnedTops = resolvePins(pins, id => heights.get(id))
+
   /** Weiche Untergrenze für die aktuell gepackte Gruppe, siehe Funktionskommentar. */
   let floor = 0
 
+  const spanOf = (note: WallNoteMetrics) => {
+    const width = Math.min(note.width, wallWidth)
+    return Math.min(columns, Math.max(1, Math.ceil(width / SKYLINE_RESOLUTION)))
+  }
+
   for (const groupKey of groupKeys) {
-    const pool = [...byGroup.get(groupKey)!]
+    const members = byGroup.get(groupKey)!
+    const pool = members.filter(note => !pinnedTops.has(note.id))
+    // Vorgaben dieser Gruppe von oben nach unten abarbeiten. Bei exakt gleicher
+    // Oberkante entscheidet der Hash, nicht die Eingabereihenfolge — dieselbe
+    // Begründung wie beim Tiebreak des freien Packens.
+    const pinnedHere = members
+      .filter(note => pinnedTops.has(note.id))
+      .sort(
+        (a, b) => pinnedTops.get(a.id)! - pinnedTops.get(b.id)! || fnv1a(a.id) - fnv1a(b.id)
+      )
     let groupFloor = floor
 
-    while (pool.length > 0) {
-      // Freies Packen: für jeden verbliebenen Zettel dieser Gruppe zuerst die
-      // beste EIGENE Spalte suchen. Gewählt wird danach der Zettel mit der
-      // insgesamt niedrigsten Oberkante — bei exaktem Gleichstand entscheidet
-      // ein Hash der Aufgaben-Kennung, nicht die Position im Pool (siehe
-      // Funktionskommentar, „Der Tiebreak…").
-      let bestIndex = -1
-      let bestColumn = 0
-      let bestTop = Infinity
-      let bestHash = 0
-
-      for (let i = 0; i < pool.length; i++) {
-        const note = pool[i]
-        const width = Math.min(note.width, wallWidth)
-        const span = Math.min(columns, Math.max(1, Math.ceil(width / SKYLINE_RESOLUTION)))
-
-        let noteTop = Infinity
-        let noteColumn = 0
-        for (let start = 0; start + span <= columns; start++) {
-          let top = floor
-          for (let k = start; k < start + span; k++) {
-            if (skyline[k] > top) top = skyline[k]
-          }
-          if (top < noteTop - 0.001) {
-            noteTop = top
-            noteColumn = start
-          }
-        }
-        if (noteTop === Infinity) noteTop = floor
-
-        const hash = fnv1a(note.id)
-        const better =
-          bestIndex === -1 ||
-          noteTop < bestTop - 0.001 ||
-          (Math.abs(noteTop - bestTop) <= 0.001 && hash < bestHash)
-        if (better) {
-          bestTop = noteTop
-          bestColumn = noteColumn
-          bestIndex = i
-          bestHash = hash
-        }
-      }
-
-      const note = pool.splice(bestIndex, 1)[0]
+    /**
+     * Setzt einen Zettel, zieht die Skyline nach und merkt die Untergrenze.
+     * `pinned` schaltet den y-Versatz ab (der vorgegebene Zettel soll exakt
+     * liegen bleiben) und macht ihn zur Sperrlinie über die ganze Wandbreite.
+     */
+    const place = (note: WallNoteMetrics, column: number, top: number, pinned: boolean) => {
       const width = Math.min(note.width, wallWidth)
-      const span = Math.min(columns, Math.max(1, Math.ceil(width / SKYLINE_RESOLUTION)))
+      const span = spanOf(note)
 
-      const indent = note.expanded || bestColumn !== 0 ? 0 : indentOf(note.id)
+      const indent = note.expanded || pinned || column !== 0 ? 0 : indentOf(note.id)
       const dx = (note.expanded ? 0 : jitterOf(note.id, 'x', 5)) + indent
-      const dy = note.expanded ? 0 : jitterOf(note.id, 'y', 4) - 2.5
+      const dy = note.expanded || pinned ? 0 : jitterOf(note.id, 'y', 4) - 2.5
 
-      const x = Math.max(0, Math.min(wallWidth - width, bestColumn * SKYLINE_RESOLUTION + dx))
+      const x = Math.max(0, Math.min(wallWidth - width, column * SKYLINE_RESOLUTION + dx))
       // Auf `floor` geklemmt: der y-Versatz darf einen Zettel etwas anheben,
       // aber niemals über die Untergrenze der Gruppe hinaus — sonst könnte der
-      // Jitter allein die Gruppengrenze unterlaufen.
-      const y = Math.max(floor, bestTop + dy)
+      // Jitter allein die Gruppengrenze unterlaufen. Für einen vorgegebenen
+      // Zettel ist das dieselbe Klemmung, nur ohne Versatz.
+      const y = Math.max(floor, top + dy)
 
       const vGap = note.expanded ? EXPANDED_GAP : gapOf(note.id)
       const bottom = y + note.height + vGap
-      for (let k = bestColumn; k < bestColumn + span; k++) {
+      for (let k = column; k < column + span; k++) {
         skyline[k] = bottom
       }
 
-      // Waagerechte Luft zum rechten Nachbarn reservieren (siehe
-      // Funktionskommentar): die Spalten direkt rechts vom Zettel bleiben bis
-      // zu `rowGapOf(note.id)` px auf derselben Höhe blockiert.
-      if (!note.expanded) {
+      if (pinned) {
+        // Sperrlinie: in den eigenen Spalten steht die Skyline auf der
+        // Unterkante, in allen übrigen mindestens auf der Oberkante. Damit kann
+        // kein später gesetzter Zettel seitlich an ihm vorbei nach oben.
+        for (let k = 0; k < columns; k++) {
+          const barrier = k >= column && k < column + span ? bottom : y
+          if (skyline[k] < barrier) skyline[k] = barrier
+        }
+      } else if (!note.expanded) {
+        // Waagerechte Luft zum rechten Nachbarn reservieren (siehe
+        // Funktionskommentar): die Spalten direkt rechts vom Zettel bleiben bis
+        // zu `rowGapOf(note.id)` px auf derselben Höhe blockiert.
         const marginColumns = Math.ceil(rowGapOf(note.id) / SKYLINE_RESOLUTION)
-        const marginEnd = Math.min(columns, bestColumn + span + marginColumns)
-        for (let k = bestColumn + span; k < marginEnd; k++) {
+        const marginEnd = Math.min(columns, column + span + marginColumns)
+        for (let k = column + span; k < marginEnd; k++) {
           if (skyline[k] < bottom) skyline[k] = bottom
         }
       }
@@ -544,11 +650,88 @@ export function packWall(notes: readonly WallNoteMetrics[], wallWidth: number): 
       // fertigen Position vergeben (siehe „Stapelreihenfolge" nach der
       // Schleife und `PackedNote.z`).
       placed.push({ id: note.id, x, y, z: 0 })
-      // `y`, nicht `bestTop` — siehe Funktionskommentar, „Weiche
+      // `y`, nicht die geplante Oberkante — siehe Funktionskommentar, „Weiche
       // Gruppengrenze". Über die ganze Gruppe maximiert, nicht nur über den
       // zuletzt platzierten Zettel.
       groupFloor = Math.max(groupFloor, y)
     }
+
+    /**
+     * Freies Packen aus `pool`, bis nichts mehr passt.
+     *
+     * `limitTop` ist die Oberkante der nächsten Vorgabe: nur was GANZ darüber
+     * passt und vorher auch schon darüber lag, kommt hier zum Zug. Ohne Vorgabe
+     * steht dort `Infinity`, dann ist die Bedingung wirkungslos und es packt wie
+     * vor Ticket 13.
+     */
+    const packFree = (limitTop: number) => {
+      const limited = limitTop !== Infinity
+      for (;;) {
+        // Freies Packen: für jeden verbliebenen Zettel dieser Gruppe zuerst die
+        // beste EIGENE Spalte suchen. Gewählt wird danach der Zettel mit der
+        // insgesamt niedrigsten Oberkante — bei exaktem Gleichstand entscheidet
+        // ein Hash der Aufgaben-Kennung, nicht die Position im Pool (siehe
+        // Funktionskommentar, „Der Tiebreak…").
+        let bestIndex = -1
+        let bestColumn = 0
+        let bestTop = Infinity
+        let bestHash = 0
+
+        for (let i = 0; i < pool.length; i++) {
+          const note = pool[i]
+          // Wer vorher auf gleicher Höhe oder tiefer lag als die Vorgabe, darf
+          // nicht darüber. Ein Zettel ohne bekannte Vorgeschichte (neu an der
+          // Wand) darf.
+          if (limited && (note.previousTop ?? -Infinity) >= limitTop - 0.001) continue
+
+          const span = spanOf(note)
+
+          let noteTop = Infinity
+          let noteColumn = 0
+          for (let start = 0; start + span <= columns; start++) {
+            let top = floor
+            for (let k = start; k < start + span; k++) {
+              if (skyline[k] > top) top = skyline[k]
+            }
+            if (top < noteTop - 0.001) {
+              noteTop = top
+              noteColumn = start
+            }
+          }
+          if (noteTop === Infinity) noteTop = floor
+
+          // Ganz darüber passen heißt: samt der Strecke, die der y-Versatz ihn
+          // noch nach unten schieben kann. Geprüft wird die geplante Oberkante,
+          // gezeichnet die verschobene.
+          if (limited && noteTop + note.height + JITTER_DOWN_MAX > limitTop) continue
+
+          const hash = fnv1a(note.id)
+          const better =
+            bestIndex === -1 ||
+            noteTop < bestTop - 0.001 ||
+            (Math.abs(noteTop - bestTop) <= 0.001 && hash < bestHash)
+          if (better) {
+            bestTop = noteTop
+            bestColumn = noteColumn
+            bestIndex = i
+            bestHash = hash
+          }
+        }
+
+        if (bestIndex === -1) return
+        place(pool.splice(bestIndex, 1)[0], bestColumn, bestTop, false)
+      }
+    }
+
+    for (const note of pinnedHere) {
+      const top = Math.max(floor, pinnedTops.get(note.id)!)
+      // Erst alles, was noch echt über die Vorgabe passt …
+      packFree(top)
+      // … dann die Vorgabe selbst als Sperrlinie.
+      place(note, 0, top, true)
+    }
+
+    packFree(Infinity)
 
     floor = groupFloor
   }
