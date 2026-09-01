@@ -324,9 +324,10 @@ const pinnedTops = new Map<string, number>()
 /**
  * Zettel, deren Punktwert oben rechts statt in der Fußzeile steht
  * (Karten-Redesign, Ticket 00a, Handoff Punkt 6 — ursprünglich „Punktwert
- * UND Rückstand"; der Rückstandstext ist seither entfernt, siehe `urgency`
+ * UND Rückstand"; der Rückstandstext ist seither entfernt, siehe `stampLabel`
  * im Skript von `WallNote.vue`, die Fußzeile ist dadurch etwas schmaler
- * geworden). Die Entscheidung fällt während der Messung in `relayout` — nur
+ * geworden — inzwischen aber wieder breiter, weil jeder Zettel einen
+ * Grundabdruck trägt). Die Entscheidung fällt während der Messung in `relayout` — nur
  * dort sind Titel- und Fußzeilenbreite bekannt —, wird aber HIER als
  * Vue-Zustand festgehalten und über das `meta-top`-Prop an `WallNote`
  * gereicht.
@@ -433,6 +434,11 @@ const relayout = (animate: boolean, tappedId?: string): boolean => {
   if (usableWidth <= 0) return false
 
   const before = new Map(lastPositions)
+
+  // Merker für den Stempel-Wächter weiter unten: EIN Hinweis je Packlauf, nicht
+  // einer je Zettel. Ungebremst wären es hunderte identische Zeilen pro
+  // Layoutdurchgang — die Meldung ginge im Rauschen unter, statt aufzufallen.
+  let stampWarned = false
 
   // Gruppenzuordnung je Zettel (0 = fällig, 1 = täglich, 2 = Projekt) — steuert
   // die freie Packreihenfolge und die weiche Gruppengrenze in `packWall`. Die
@@ -627,12 +633,37 @@ const relayout = (animate: boolean, tappedId?: string): boolean => {
     const pointsWidth = visiblePointsEl?.getBoundingClientRect().width ?? 0
     if (visiblePointsEl) visiblePointsEl.style.transform = ''
 
-    // Ob die Fußzeile außer dem Punktwert noch etwas trägt (Unteraufgaben-
-    // Zeichen, Stempel) — entscheidet, ob beim Herausrechnen des Punktwerts
-    // ein Flex-`gap` mitzählt: ein `gap` entsteht nur ZWISCHEN Geschwistern,
-    // bei einem einzelnen Kind gibt es keinen.
-    const hasOtherFootContent = !!el.querySelector('.subs-badge, .due-stamp')
-    const footGap = hasOtherFootContent ? 6 : 0 // `.foot { gap: 6px }`
+    // Beim Herausrechnen des Punktwerts zählt ein Flex-`gap` mit — ein `gap`
+    // entsteht nur ZWISCHEN Geschwistern, bei einem einzelnen Kind gäbe es
+    // keinen.
+    //
+    // Der Punktwert ist in der Fußzeile **nie** das einzige Kind: seit dem
+    // Grundabdruck trägt JEDER Zettel einen Stempel (→ `WallNote.vue`,
+    // `stampLabel`). Die frühere Abfrage `hasOtherFootContent` (`.subs-badge,
+    // .due-stamp`) war damit immer wahr und ihr Null-Zweig toter Code; sie ist
+    // hier durch eine Prüfung der Voraussetzung ersetzt, auf der die Rechnung
+    // wirklich steht.
+    //
+    // Denn die Rechnung steht auf ZWEI Annahmen über `WallNote.vue`: der
+    // Stempel heißt `.due-stamp`, und er ist ein DIREKTES Flex-Kind von
+    // `.foot`. Fällt eine davon, ist `footGap` falsch, und die Zettel werden
+    // still falsch breit gepackt — kein Fehler, keine Warnung, nur ein Zettel,
+    // der nicht passt. Deshalb wird sie geprüft und laut gemeldet, statt
+    // stumm auf 0 zurückzufallen.
+    //
+    // Die 6 selbst bleibt verdrahtet (`.foot { gap: 6px }`) — dass sie nicht
+    // aus dem `getComputedStyle` der Fußzeile kommt, ist ein bekannter,
+    // eigener Befund (→ Ticket `42`) und hier bewusst nicht mitgeändert.
+    if (!stampWarned && !footEl?.querySelector(':scope > .due-stamp')) {
+      stampWarned = true
+      console.warn(
+        '[WallView] Kein `.due-stamp` als direktes Kind von `.foot` — die ' +
+          'Breitenmessung rechnet mit einem Flex-`gap`, den es dann nicht ' +
+          'gibt. Wurde der Stempel in `WallNote.vue` umbenannt oder verschoben? ' +
+          '(Dieser Hinweis erscheint einmal je Packlauf, nicht einmal je Zettel.)'
+      )
+    }
+    const footGap = 6
     const footWidthFull = wasMetaTop ? footWidthCurrent + pointsWidth + footGap : footWidthCurrent
     const footWidthWithoutPoints = wasMetaTop
       ? footWidthCurrent

@@ -1,0 +1,163 @@
+/**
+ * Der Projektspruch — der Grundabdruck eines Projekts (→ CONTEXT.md, „Projektspruch").
+ *
+ * Ein Projekt kann nicht in Verzug geraten, sein Stempel sagt deshalb nichts über
+ * Fälligkeit, sondern einen Spruch aus einer festen Sammlung von hundert. Die Liste ist
+ * vollständig aus `.scratch/archive/pinnwand-ausbau/issues/09-nachdruck.md`, Abschnitt
+ * „Die Spruchliste für Projekte", übernommen.
+ *
+ * **Höchstens zehn Zeichen je Spruch.** Der Stempel steht im Fluss der Fußzeile und geht
+ * damit in die Zettelbreite und über sie in die Wandhöhe ein. Wer die Liste ergänzt,
+ * prüft nur die Zeichenlänge — `PROJECT_PHRASE_MAX_LENGTH` und
+ * `findOverlongProjectPhrases()` unten sind dafür da.
+ *
+ * **Gelesen, nicht gezogen.** Der Spruch gehört dem Haushalt: er wird bei der Anlage
+ * eines Projekts gezogen und in einer Spalte auf `tasks` gespeichert, damit alle Geräte
+ * dasselbe Wort sehen und es ein Neuladen übersteht. Diese Datei löst den gespeicherten
+ * Listenplatz nur auf. Das Weiterdrehen beim Abräumen des Stapels ist ein eigener Schritt
+ * (→ Ticket `04`).
+ */
+
+/** Die harte Grenze: der Stempel geht in die Zettelbreite ein. */
+export const PROJECT_PHRASE_MAX_LENGTH = 10
+
+/**
+ * Die hundert Sprüche, in der Reihenfolge der Liste in `09-nachdruck.md`.
+ *
+ * `HEUTE NOCH` fehlt bewusst: `HEUTE` war bis zur Umstellung ein Stempelwort für die
+ * berechnete Fälligkeit und ist abgeschafft — als Projektspruch wiederverwendet würde es
+ * die eine Bedeutung mit der anderen verwechselbar machen. `SOFORT`, `GLEICH` und
+ * `AB HEUTE` bleiben dagegen drin: sie klingen nach Frist, meinen aber einen Vorsatz.
+ */
+export const PROJECT_PHRASES: readonly string[] = [
+  'BAUSTELLE', 'GESPERRT', 'IRGENDWANN', 'BALD MAL', 'JETZT ABER',
+  'IN ARBEIT', 'LÄUFT', 'LÄUFT NOCH', 'UNFERTIG', 'HALBFERTIG',
+  'VERTAGT', 'VERSCHOBEN', 'MORGEN', 'ÜBERMORGEN', 'EINES TAGS',
+  'NOCH NICHT', 'FAST SCHON', '90 PROZENT', '99 PROZENT', 'ANGEFANGEN',
+  'BEGONNEN', 'IM GANGE', 'AM WERKELN', 'WERKELT', 'RUHT',
+  'RUHT NOCH', 'SCHLUMMERT', 'PAUSIERT', 'AUF EIS', 'EISFACH',
+  'STOCKT', 'HAKT', 'HAKT NOCH', 'ZÄH', 'MÜHSAM',
+  'LANGWIERIG', 'EPOS', 'SAGA', 'ODYSSEE', 'MARATHON',
+  'DAUERLAUF', 'LEBENSWERK', 'HERKULES', 'SISYPHOS', 'UNENDLICH',
+  'EWIG', 'EWIGKEIT', 'NIE FERTIG', 'WIRD SCHON', 'KOMMT NOCH',
+  'GEDULD', 'ABWARTEN', 'MAL SEHEN', 'VIELLEICHT', 'THEORIE',
+  'IDEE', 'PLAN', 'PLAN B', 'ENTWURF', 'SKIZZE',
+  'VISION', 'TRAUM', 'WUNSCH', 'WOLLTE JA', 'HÄTTE',
+  'WILLE DA', 'MOTIVIERT', 'AUFRAFFEN', 'DRAN', 'BLEIB DRAN',
+  'WEITER SO', 'KOPF HOCH', 'SCHAFFST', 'DU PACKST', 'GLEICH',
+  'SOFORT', 'HALB DA', 'AB HEUTE', 'NEUSTART', 'ANLAUF 2',
+  'RUNDE 2', 'RUNDE 7', 'VERSUCH 3', 'WIEDER DA', 'ZURÜCK',
+  'AUFSCHUB', 'AUSSTEHEND', 'OFFEN', 'LOSE ENDEN', 'RESTPOSTEN',
+  'ÜBRIG', 'LIEGT NOCH', 'STAUBIG', 'VERGESSEN', 'VERDRÄNGT',
+  'IGNORIERT', 'VERTRÖSTET', 'AUSREDE 4', 'IN PLANUNG', 'DEMNÄCHST'
+]
+
+/**
+ * Prüft die GANZE Liste gegen die Zehn-Zeichen-Grenze und liefert die Verstöße.
+ *
+ * Bewusst eine Funktion und kein Kommentar „ist geprüft": ein Beispiel beweist nichts,
+ * und die Liste ist ausdrücklich zum Ergänzen gedacht. Aufrufbar aus der Konsole des
+ * ferngesteuerten Tabs, ohne Test-Framework.
+ */
+export function findOverlongProjectPhrases(): string[] {
+  return PROJECT_PHRASES.filter((phrase) => phrase.length > PROJECT_PHRASE_MAX_LENGTH)
+}
+
+/**
+ * Der Name der Spalte auf `tasks`, die den Listenplatz des Spruchs hält.
+ *
+ * Angelegt von Ticket `00`, in derselben Migration wie der Rückbau des Verfalls
+ * (`20260901160000_emphasis_no_nightly_reset_and_project_saying.sql`): `INTEGER NOT NULL`,
+ * `CHECK BETWEEN 0 AND 99`, Default gesetzt, bestehende Projekte beim Anlegen der Spalte
+ * zufällig befüllt. **Die Migration ist ausgeführt und in Produktion**; der Normalfall ist
+ * also, dass hier ein gültiger Wert ankommt — nachgewiesen für 13 von 13 Projekten im
+ * Bestand.
+ *
+ * Weicht der Name je ab, ist DIESE Zeile die einzige Stelle, die sich ändert — genau
+ * dafür ist der Zugriff hier gekapselt. `Task` in `src/types/Task.ts` kennt die Spalte
+ * (noch) nicht; deshalb wird sie hier über einen Cast gelesen statt über das Interface.
+ */
+const PHRASE_SLOT_COLUMN = 'project_saying_index'
+
+/**
+ * Alles, was diese Datei von einer Aufgabe braucht.
+ *
+ * Bewusst **keine** Index-Signatur (früher
+ * `{ task_id: string } & Partial<Record<string, unknown>>`): TypeScript weist einem Typ
+ * mit Index-Signatur kein Interface ohne eine solche zu, `projectPhraseOf(props.task)`
+ * war damit ein Typfehler — zur Laufzeit unsichtbar, im Build-Gate rot. Der Zugriff auf
+ * die undeklarierte Spalte passiert stattdessen an genau einer Stelle per Cast, siehe
+ * `storedPhraseSlot()`.
+ */
+type PhraseCarrier = { task_id: string }
+
+/**
+ * Liest den gespeicherten Listenplatz.
+ *
+ * Liefert `null`, wenn der Wert **fehlt oder unbrauchbar** ist; der Aufrufer meldet das
+ * laut. Ein Wert außerhalb 0–99 wird ausdrücklich **nicht** per Modulo umgeklappt: der
+ * `CHECK`-Constraint verbietet ihn ohnehin, und ein Umklappen ergäbe ein plausibel
+ * aussehendes falsches Wort. Lieber laut falsch als leise plausibel.
+ */
+function storedPhraseSlot(task: PhraseCarrier): number | null {
+  const raw = (task as unknown as Record<string, unknown>)[PHRASE_SLOT_COLUMN]
+  if (typeof raw !== 'number' || !Number.isInteger(raw)) return null
+  if (raw < 0 || raw >= PROJECT_PHRASES.length) return null
+  return raw
+}
+
+/**
+ * Ein Sonderfall wird **einmal je Projekt** gemeldet, nicht einmal je Neuzeichnen.
+ *
+ * `projectPhraseOf()` hängt an einem `computed` und läuft bei jedem Packlauf der Wand
+ * erneut — ungebremst wären das hunderte identische Zeilen je Layoutdurchgang, und die
+ * Meldung ginge im Rauschen unter, statt aufzufallen.
+ */
+const warnedTasks = new Set<string>()
+function warnOnce(taskId: string, message: string): void {
+  if (warnedTasks.has(taskId)) return
+  warnedTasks.add(taskId)
+  console.error(`[Projektspruch] ${message} (Aufgabe ${taskId})`)
+}
+
+/** FNV-1a, 32 Bit — dieselbe Streuung wie die Unordnung der Wand in `wallLayout.ts`. */
+function fnv1a(input: string): number {
+  let hash = 2166136261
+  for (let i = 0; i < input.length; i++) {
+    hash ^= input.charCodeAt(i)
+    hash = Math.imul(hash, 16777619) >>> 0
+  }
+  return hash >>> 0
+}
+
+/**
+ * Der Spruch eines Projekts.
+ *
+ * Der Regelweg ist der **gespeicherte** Listenplatz — der Spruch gehört dem Haushalt,
+ * nicht dem Gerät, und nur ein gespeicherter Wert lässt sich weiterdrehen (→ Ticket `04`).
+ *
+ * **Der Rückfall ist ein Notausgang, kein zweiter Regelweg.** Er greift nur, wenn die
+ * Spalte fehlt, `null` ist oder außerhalb 0–99 liegt — seit die Migration in Produktion
+ * ist, kommt das im Normalbetrieb nicht mehr vor. Er bleibt trotzdem stehen, weil ein
+ * Projekt ohne Grundabdruck keine Fläche zum Überstempeln hätte (→ Ticket `02`) und ein
+ * fehlender Stempel zudem die Breitenmessung in `WallView.vue` verfälschte, die ihn als
+ * gesetzt voraussetzt. Eine Lücke wäre also teurer als ein falsches Wort.
+ *
+ * **Er meldet sich aber.** Das ist der Punkt: der Rückfall ist selbst deterministisch,
+ * sähe im Fehlerfall völlig plausibel aus und zeigte allen Geräten dasselbe *falsche*
+ * Wort — ein stiller Notausgang, der nie auffällt. Deshalb `console.error` statt
+ * schweigen. Aus `Math.random()` kommt der Platz trotzdem nicht: ein Spruch, der sich
+ * beim Neuladen ändert, sähe nach einem zweiten, schlimmeren Fehler aus.
+ */
+export function projectPhraseOf(task: PhraseCarrier): string {
+  const stored = storedPhraseSlot(task)
+  if (stored !== null) return PROJECT_PHRASES[stored]
+
+  warnOnce(
+    task.task_id,
+    `Kein brauchbarer Listenplatz in \`tasks.${PHRASE_SLOT_COLUMN}\` — der Spruch wird ` +
+      'ersatzweise aus der Aufgaben-Kennung abgeleitet. Er ist damit stabil, aber nicht ' +
+      'der gespeicherte, und lässt sich nicht weiterdrehen.'
+  )
+  return PROJECT_PHRASES[fnv1a(task.task_id) % PROJECT_PHRASES.length]
+}

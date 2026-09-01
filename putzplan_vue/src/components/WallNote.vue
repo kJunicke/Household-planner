@@ -47,7 +47,7 @@ import { computed, ref, watch } from 'vue'
 import type { Task } from '@/types/Task'
 import { useTaskStore } from '@/stores/taskStore'
 import { useHouseholdStore } from '@/stores/householdStore'
-import { scheduleOf } from '@/lib/taskSchedule'
+import { projectPhraseOf } from '@/lib/projectPhrases'
 import { kindOfTaskType, rotationOf, subtaskColumns } from '@/lib/wallLayout'
 import { useTearGesture } from '@/composables/useTearGesture'
 import { useDirectionPress, type PressDirection } from '@/composables/useDirectionPress'
@@ -706,20 +706,39 @@ const noteStyle = computed((): Record<string, string> => {
   return style
 })
 
-const schedule = computed(() => scheduleOf(props.task))
-
 /**
- * Dringlichkeitsstufe für den Gummistempel (Karten-Redesign, Ticket 00a).
+ * Der **Grundabdruck** — der berechnete unterste Abdruck des Gummistempels
+ * (→ CONTEXT.md, „Stempel"). **Jeder Zettel trägt einen**, auch der, der noch
+ * Zeit hat; es gibt keinen Zettel ohne Stempel mehr.
  *
- *   'hot'   überfällig oder nie gemacht  → NIE / FÄLLIG
- *   'today' heute fällig geworden        → HEUTE
- *   null    hat Zeit                     → kein Stempel
+ *   tägliche Aufgabe            → BEDARF   (sie wird nicht fällig, sie fällt an)
+ *   Projekt                     → Projektspruch (es kann nicht in Verzug geraten)
+ *   noch nie erledigt           → NEU
+ *   sonst                       → FÄLLIG
+ *
+ * **Der Typ schlägt NEU, und die Reihenfolge dieser Prüfungen ist die ganze
+ * Regel.** Eine nagelneue tägliche Aufgabe zeigt BEDARF, ein nagelneues Projekt
+ * seinen Spruch — beide werden nie abgeschlossen, stünden bei umgekehrter
+ * Prüfreihenfolge also DAUERHAFT auf NEU. Der Fehler wäre still: der Stempel
+ * sähe plausibel aus, er stünde nur nie wieder um.
+ *
+ * **`NIE` und `HEUTE` sind ersatzlos entfallen.** `NEU` ersetzt `NIE` und heißt
+ * dasselbe — noch nie abgeschlossen —, klingt aber nicht wie ein Urteil über die
+ * Bewohner. `HEUTE` fällt weg, weil auf der Wand alle fälligen Aufgaben gleich
+ * dringend sind; „heute dran" gegen „liegt schon länger" wäre eine Rangfolge,
+ * und Rangfolgen macht die Wand nicht (→ ADR-0002). Aus demselben Grund gibt es
+ * hier **keine Dringlichkeitsstufe mehr**, die den Stempel einfärben könnte: die
+ * früheren Klassen `--hot`/`--today` sind mit ihrer Aussage verschwunden.
+ *
+ * **Der Grundabdruck verfällt nicht.** Er wird berechnet und kommt von selbst
+ * wieder; was von Hand daraufgelegt wird, ist das Überstempeln und hängt an
+ * `emphasis_level` (→ Ticket `02`/`03`). Und er **ordnet nicht** (→ ADR-0002).
  *
  * **Kein Ring an der Reißzwecke.** Der Handoff (Punkt 7) sah zusätzlich einen
  * farbigen Ring um die Reißzwecke vor — Ticket 10 hat die Reißzwecke seither
  * der Zuweisungsfarbe gegeben (`--owner`), ein Ring wäre sofort wieder
- * entfernt worden. Der Stempel hier ist deshalb der EINZIGE Träger der
- * Dringlichkeit am Zettel (→ CONTEXT.md, „Stempel").
+ * entfernt worden. Der Stempel hier ist deshalb die EINZIGE Stelle am Zettel,
+ * die den Stand einer Aufgabe zeigt (→ CONTEXT.md, „Stempel").
  *
  * **Es gibt bewusst keinen zweiten Text mit der genauen Tageszahl daneben**
  * (früher `metaLabel`/`.meta`, „3 Tage" / „heute" / „nie" in Rot — entfernt,
@@ -732,19 +751,11 @@ const schedule = computed(() => scheduleOf(props.task))
  * wieder eine Tageszahl anzeigen will, widerspricht damit dem Glossareintrag
  * „Stempel" — das ist eine Domänenentscheidung, keine UI-Petitesse.
  */
-const urgency = computed((): 'hot' | 'today' | null => {
-  if (props.task.task_type === 'daily') return null
-  const { status, daysOverdue } = schedule.value
-  if (status === 'never-done') return 'hot'
-  if (status === 'overdue') return (daysOverdue ?? 0) > 0 ? 'hot' : 'today'
-  return null
-})
-
-/** Was der Gummistempel sagt. */
-const stampLabel = computed((): string | null => {
-  if (urgency.value === 'hot') return schedule.value.status === 'never-done' ? 'NIE' : 'FÄLLIG'
-  if (urgency.value === 'today') return 'HEUTE'
-  return null
+const stampLabel = computed((): string => {
+  // ERST der Typ, DANN der Erledigungs-Status. Nicht umstellen, siehe oben.
+  if (props.task.task_type === 'daily') return 'BEDARF'
+  if (props.task.task_type === 'project') return projectPhraseOf(props.task)
+  return props.task.last_completed_at ? 'FÄLLIG' : 'NEU'
 })
 
 // --- Bearbeiten und seine Folgedialoge --------------------------------------
@@ -969,22 +980,34 @@ const handlePostponeConfirm = async (targetDate: string) => {
           {{ tracksProgress ? `${doneSubtasks}/${subtasks.length}` : subtasks.length }}
         </span>
       </button>
-      <!-- Der Gummistempel: erscheint NUR, wenn es brennt — ein Zettel, der
-           Zeit hat, zeigt nichts, und deshalb sieht man den einen, der
-           schreit. Er steht IM FLUSS der Fußzeile, nicht darüber: so kann er
-           sich mit keinem Knopf überschneiden, egal wie schmal der Zettel
-           wird — die Zeile schiebt ihn zur Seite, statt ihn zu überlagern.
+      <!-- Der Gummistempel, sein Grundabdruck (→ `stampLabel` im Skript).
+           **JEDER Zettel trägt einen**, auch der, der noch Zeit hat: ohne
+           sichtbaren Abdruck gäbe es keine Fläche zum Antippen, und das
+           Überstempeln hängt daran (→ Ticket `02`).
 
-           **Er ist der EINZIGE Träger der Dringlichkeit am Zettel** (→
-           CONTEXT.md, „Stempel"). Vorher stand daneben zusätzlich die
-           genaue Tageszahl in Rot (`.meta`, „3 Tage" / „heute" / „nie") — das
-           war eine zweite Anzeige derselben Aussage, und dazu eine Farbe, die
-           das Glossar für den Stempel ausdrücklich ausschließt. Die
+           Er steht IM FLUSS der Fußzeile, nicht darüber: so kann er sich mit
+           keinem Knopf überschneiden, egal wie schmal der Zettel wird — die
+           Zeile schiebt ihn zur Seite, statt ihn zu überlagern.
+
+           **`v-if` gibt es hier bewusst nicht mehr.** Das Element ist ab jetzt
+           unbedingt da, und die Breitenmessung in `WallView.vue` verlässt sich
+           darauf: sie sucht `.due-stamp` per `querySelector` und zählt danach
+           die Flex-`gap`s der Fußzeile ab. **Klassenname und Platz als
+           DIREKTES Flex-Kind von `.foot` sind Vertrag mit dieser Messung** —
+           wer eines von beidem ändert, ohne `WallView.vue` mitzuziehen,
+           bekommt eine still falsche Zettelbreite: kein Fehler, keine Warnung,
+           nur ein Zettel, der nicht passt.
+
+           **Er ist die EINZIGE Stelle am Zettel, die den Stand einer Aufgabe
+           zeigt** (→ CONTEXT.md, „Stempel"). Vorher stand daneben zusätzlich
+           die genaue Tageszahl in Rot (`.meta`, „3 Tage" / „heute" / „nie") —
+           das war eine zweite Anzeige derselben Aussage, und dazu eine Farbe,
+           die das Glossar für den Stempel ausdrücklich ausschließt. Die
            Tageszahl fehlt jetzt bewusst: auf der Wand gelten alle fälligen
            Aufgaben als GLEICH dringend, eine Zählung „3 Tage überfällig"
            widerspräche dem. Das ist kein Informationsverlust, sondern die
            Auflösung eines Widerspruchs — nicht wieder einführen. -->
-      <span v-if="stampLabel" class="due-stamp" :class="`due-stamp--${urgency}`">
+      <span class="due-stamp">
         {{ stampLabel }}
       </span>
     </div>
@@ -1344,19 +1367,33 @@ const handlePostponeConfirm = async (targetDate: string) => {
   margin: -1px 0 2px 7px;
 }
 
-/* --- Der Gummistempel: NIE / FÄLLIG / HEUTE (Ticket 00a) -------------------
-   Einziger Träger der Dringlichkeit am Zettel (→ CONTEXT.md, „Stempel")
-   — kein Ring an der Reißzwecke, siehe `urgency` im Skript. Erscheint NUR,
-   wenn es brennt: ein Zettel, der Zeit hat, zeigt nichts.
+/* --- Der Gummistempel: sein Grundabdruck -----------------------------------
+   NEU / FÄLLIG / BEDARF / Projektspruch (→ `stampLabel` im Skript).
+   Einzige Stelle am Zettel, die den Stand einer Aufgabe zeigt (→ CONTEXT.md,
+   „Stempel") — kein Ring an der Reißzwecke. **Jeder Zettel trägt einen**;
+   es gibt keinen stempellosen Zustand mehr.
+
    Steht IM FLUSS der Fußzeile (ein normales Flex-Kind, keine Überlagerung) —
    dadurch schiebt die Zeile ihn zur Seite, statt dass er einen Knopf
-   überdeckt. */
+   überdeckt. Als direktes Kind von `.foot` ist das zugleich Vertrag mit der
+   Breitenmessung in `WallView.vue`, siehe Kommentar am Element.
+
+   **Eine Farbrampe gibt es bewusst nicht.** Früher trug der Stempel je nach
+   Dringlichkeitsstufe eine eigene Farbe; die Stufen sind mit den beiden
+   abgeschafften Stempelwörtern entfallen (siehe `stampLabel` im Skript, dort
+   sind sie einmalig und abschließend benannt). Auf der Wand sind alle
+   fälligen Aufgaben gleich
+   dringend — eine Abstufung am Grundabdruck wäre eine Rangfolge, und
+   Rangfolgen macht die Wand nicht (→ ADR-0002). Die Steigerung liegt allein
+   im Überstempeln von Hand (→ Ticket `03`), nicht im berechneten Abdruck. */
 .due-stamp {
+  position: relative;
   flex: 0 0 auto;
   padding: 1px 5px;
   border: 2px solid currentColor;
   border-radius: 3px;
   transform: rotate(-9deg);
+  color: var(--pw-ink);
   opacity: 0.55;
   font-size: 10.8px;
   font-weight: 900;
@@ -1364,12 +1401,28 @@ const handlePostponeConfirm = async (targetDate: string) => {
   white-space: nowrap;
 }
 
-.due-stamp--hot {
-  color: var(--color-danger);
-}
+/* Die Trefferfläche: mindestens 44 px hoch, obwohl der Abdruck rund 18 px
+   misst. Ein Daumen trifft sonst den Zettel statt den Stempel.
 
-.due-stamp--today {
-  color: var(--pw-accent);
+   Die Fläche liegt ABSOLUT und damit AUSSER dem Fluss — sie darf die Fußzeile
+   weder höher noch breiter machen, sonst ginge sie in `footWidthFull` und über
+   `min-height: 44px` der Fußzeile auch in die Wandhöhe ein. `padding` oder
+   `min-height` am Stempel selbst wären genau dieser Fehler.
+
+   Sie ist hier noch tot: in diesem Schritt ist nichts antippbar, der Stempel
+   trägt keinen Handler (→ Ticket `02`, das die Fläche braucht). Deshalb auch
+   `pointer-events: none` — solange nichts auf den Tipp reagiert, würde die
+   unsichtbare Fläche nur die Gesten des Zettels darunter schlucken. */
+.due-stamp::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 100%;
+  min-width: 44px;
+  height: 44px;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
 }
 
 /* --- Punkte als aufgeklebter Sticker (Ticket 00a) --------------------------
