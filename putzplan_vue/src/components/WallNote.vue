@@ -554,10 +554,11 @@ const markTorn = (subtaskId: string) => {
  * sofort und **ohne Kranz**, weil es nur ein Ziel hat. Genau das leistet dieser
  * Wächter: startet die Geste hier nicht, erscheint auch keine Beschriftung.
  *
- * **Was hier bewusst NICHT mehr steht: `.mini`, `.edit`, `.subs-badge`.**
+ * **Was hier bewusst NICHT steht: `.mini`, `.edit`, `.subs-badge` — und seit
+ * Ticket 02 auch `.due-stamp` nicht.**
  * Ticket 01 dreht die Regel um — *der ganze Zettel ist Griff*. Ein Finger, der
- * auf dem Bearbeiten-Stift, dem Unteraufgaben-Abzeichen oder der Zeile eines
- * aufgeklappten Zettelchens aufsetzt, muss den Zettel genauso greifen können
+ * auf dem Bearbeiten-Stift, dem Unteraufgaben-Abzeichen, dem Stempel oder der
+ * Zeile eines aufgeklappten Zettelchens aufsetzt, muss den Zettel genauso greifen können
  * wie leeres Papier; wo er aufsetzt, ist für das Greifen ohne Bedeutung.
  *
  * Die Knöpfe verlieren dadurch nichts: sie hängen an `@click`, feuern also
@@ -757,6 +758,48 @@ const stampLabel = computed((): string => {
   if (props.task.task_type === 'project') return projectPhraseOf(props.task)
   return props.task.last_completed_at ? 'FÄLLIG' : 'NEU'
 })
+
+/**
+ * Der **Nachdruck** — was von Hand auf den Grundabdruck gelegt wurde
+ * (Ticket `02`, → CONTEXT.md „Überstempeln"). `null` heißt: der Zettel ist
+ * sauber, es gilt allein der Grundabdruck.
+ *
+ * **Die Modulo-Logik steht hier bewusst NICHT** — sie liegt im Store
+ * (`cycleEmphasisLevel`). Diese Stelle zeigt nur an, was gerade gilt.
+ */
+const emphasisLabel = computed((): string | null => {
+  if (props.task.emphasis_level === 1) return 'WICHTIG'
+  if (props.task.emphasis_level === 2) return 'DRINGEND'
+  return null
+})
+
+/**
+ * Ein Tipp auf den Stempel dreht ihn weiter: sauber → WICHTIG → DRINGEND →
+ * sauber (Ticket `02`).
+ *
+ * **Kein `await`, keine Auswertung des Rückgabewerts, kein Toast.** Der Automat
+ * im Store ist optimistisch — der Wert steht, bevor diese Funktion zurückkehrt,
+ * und genau darauf beruht das Gummistempel-Gefühl: mehrfaches schnelles
+ * Antippen ist ausdrücklich vorgesehen. Ein Erfolgs-Toast blitzte dabei dreimal
+ * auf. Scheitert das Schreiben, springt der Wert zurück und der Store meldet es
+ * selbst mit **einem** Toast (`onError` dort).
+ *
+ * **Kein eigener Doppeltipp-Riegel.** Anders als beim Erledigen entsteht hier
+ * durch einen zweiten Griff keine zweite Buchung: `emphasis_level` ist ein
+ * Zustand, kein Ereignis, und `runOptimistic` reiht die Schreibvorgänge je
+ * `task_id` hintereinander auf (`enqueue`). Drei schnelle Taps ergeben drei
+ * Umläufe des Werts und einen Endzustand, der stimmt — nichts wird gebucht.
+ *
+ * **Der Stempel steht bewusst nicht in `isPressControl`** (Begründung dort):
+ * Gedrückthalten auf ihm greift weiterhin den Zettel und öffnet den Kranz. Dass
+ * dabei nicht ZUSÄTZLICH gestempelt wird, erledigt der Klick-Wächter am Fenster
+ * in `useDirectionPress` — er sieht den nachlaufenden Klick in der Einfangphase,
+ * also vor dem `@click.stop` am Stempel. Ein kurzer Tipp (unter 420 ms) macht
+ * den Wächter nie scharf und kommt unangetastet hier an.
+ */
+const onStampTap = () => {
+  void taskStore.cycleEmphasisLevel(props.task.task_id)
+}
 
 // --- Bearbeiten und seine Folgedialoge --------------------------------------
 // Der Zettel zeigt nur den Bearbeiten-Knopf. Zuweisen, Unteraufgaben und
@@ -1007,8 +1050,56 @@ const handlePostponeConfirm = async (targetDate: string) => {
            Aufgaben als GLEICH dringend, eine Zählung „3 Tage überfällig"
            widerspräche dem. Das ist kein Informationsverlust, sondern die
            Auflösung eines Widerspruchs — nicht wieder einführen. -->
-      <span class="due-stamp">
+      <!-- Antippbar seit Ticket `02`: ein Tipp dreht den Nachdruck weiter
+           (→ `onStampTap` im Skript). `@click.stop` hält den Zettel davon ab,
+           dabei auch noch auf- oder zuzuklappen (`onSurfaceTap` an der
+           Wurzel) — es ist die EINZIGE Abgrenzung zwischen den beiden
+           Tipp-Zielen auf diesem Zettel.
+
+           **Der Stempel kommt trotzdem NICHT in `isPressControl`**: der ganze
+           Zettel bleibt Griff, gerade unten, wo der Daumen liegt. Genau wie
+           `.edit` und `.subs-badge`, die auch Knöpfe sind und auch nicht darin
+           stehen. Gedrückthalten öffnet hier also weiterhin den Kranz; der
+           nachlaufende Klick wird vom Wächter am Fenster geschluckt, bevor er
+           dieses `@click.stop` erreicht.
+
+           Kein `<button>`: das Element ist Vertrag mit der Breitenmessung in
+           `WallView.vue` (Klassenname UND Platz als direktes Flex-Kind von
+           `.foot`), und ein Knopf brächte eigene Polster, Schrift und Kästen
+           mit, die diese Messung still verschieben. -->
+      <span
+        class="due-stamp"
+        :data-emphasis="props.task.emphasis_level"
+        :title="emphasisLabel ? `Überstempelt: ${emphasisLabel} — tippen zum Weiterdrehen` : 'Tippen: überstempeln'"
+        @click.stop="onStampTap"
+      >
         {{ stampLabel }}
+        <!-- Der Nachdruck liegt ABSOLUT über dem Grundabdruck und geht damit
+             weder in Breite noch Höhe der Fußzeile ein. Das ist keine Kosmetik:
+             `layoutSignature` in `WallView.vue` kennt `emphasis_level`
+             bewusst nicht, es wird nach einem Tipp also NICHT neu gepackt
+             (→ ADR-0002, der Stempel ordnet nichts um). Stünde das Wort im
+             Fluss, wüchse die Fußzeile über die gepackte Zettelbreite hinaus
+             und liefe in die beiden Griffe rechts.
+
+             **Das Bild gehört Ticket `03`** — dort bleiben die unteren
+             Abdrücke sichtbar liegen und bekommen ihre Rampe.
+
+             **Was hier NICHT behauptet werden darf: dass genau ein Wort
+             dastünde.** Der Nachdruck ist kleiner gesetzt als der
+             Grundabdruck (Platzrechnung, Begründung im CSS) und deckt ihn
+             deshalb nur links ab — rechts schaut der Rest des Grundworts
+             frei heraus. QC-Messung über 93 Wandzettel: bei WICHTIG bei **50
+             von 93**, schlimmster Überstand 42,5 px; bei DRINGEND noch bei
+             **10 von 93**. Der Projektspruch `IN PLANUNG` liest sich mit
+             WICHTIG als `[WICHTIG]NUNG` — zwei angeschnittene Wörter
+             nebeneinander.
+
+             Als ZUSTANDSANZEIGE ist das tragfähig und deshalb hier bewusst
+             so belassen: welche Stufe gilt, ist eindeutig ablesbar, und
+             Ticket `02` ist ausdrücklich Zustand, nicht Bild. **Aufzulösen
+             hat den Fall Ticket `03`**, das den Stapel ohnehin neu baut. -->
+        <span v-if="emphasisLabel" class="emphasis-print">{{ emphasisLabel }}</span>
       </span>
     </div>
 
@@ -1389,6 +1480,10 @@ const handlePostponeConfirm = async (targetDate: string) => {
 .due-stamp {
   position: relative;
   flex: 0 0 auto;
+  /* Seit Ticket `02` ein Bedienelement, kein Schild mehr — die Fläche muss das
+     mit der Maus auch sagen. `.zettel--tappable` färbt den Zeiger nur an
+     Zetteln MIT Unteraufgaben; der Stempel ist an jedem Zettel antippbar. */
+  cursor: pointer;
   padding: 1px 5px;
   border: 2px solid currentColor;
   border-radius: 3px;
@@ -1409,10 +1504,17 @@ const handlePostponeConfirm = async (targetDate: string) => {
    `min-height: 44px` der Fußzeile auch in die Wandhöhe ein. `padding` oder
    `min-height` am Stempel selbst wären genau dieser Fehler.
 
-   Sie ist hier noch tot: in diesem Schritt ist nichts antippbar, der Stempel
-   trägt keinen Handler (→ Ticket `02`, das die Fläche braucht). Deshalb auch
-   `pointer-events: none` — solange nichts auf den Tipp reagiert, würde die
-   unsichtbare Fläche nur die Gesten des Zettels darunter schlucken. */
+   Seit Ticket `02` ist sie LEBENDIG: das frühere `pointer-events: none` ist
+   weg, weil der Stempel jetzt einen Handler trägt (`@click.stop` am Element).
+   Ein Klick auf das Pseudoelement zielt auf `.due-stamp` selbst — es ist ein
+   Kind, kein Geschwister —, der Handler dort fängt ihn also mit.
+
+   **Sie schluckt dem Zettel nichts.** Die Long-Press-Geste hängt an der
+   Wurzel und lebt vom Hochblubbern; sie startet auf dieser Fläche genauso wie
+   auf blankem Papier (der Stempel steht NICHT in `isPressControl`). Und die
+   Fläche ist nur so hoch wie die Fußzeile selbst (44 px) und liegt in ihr —
+   sie deckt keinen der beiden Griffe rechts ab, die hinter `padding-right:
+   88px` freigehalten sind. */
 .due-stamp::after {
   content: '';
   position: absolute;
@@ -1422,7 +1524,81 @@ const handlePostponeConfirm = async (targetDate: string) => {
   min-width: 44px;
   height: 44px;
   transform: translate(-50%, -50%);
-  pointer-events: none;
+}
+
+/* Der NACHDRUCK: WICHTIG / DRINGEND, von Hand aufgestempelt (Ticket `02`,
+   → CONTEXT.md „Überstempeln").
+
+   ABSOLUT über dem Grundabdruck und damit außer dem Fluss — dieselbe
+   Begründung wie bei der Trefferfläche darüber, und hier noch schärfer: die
+   Wand packt nach einem Tipp NICHT neu (`layoutSignature` kennt
+   `emphasis_level` nicht, → ADR-0002), die Fußzeile darf also nicht breiter
+   werden, als sie beim Packen gemessen wurde.
+
+   `background: var(--pw-paper)` deckt den Grundabdruck ab — aber **nur so
+   weit, wie der Nachdruck reicht, und der ist schmaler** (siehe die
+   Platzrechnung unten). Rechts bleibt der Rest des Grundworts stehen: bei
+   WICHTIG an 50 von 93 Wandzetteln, schlimmster Überstand 42,5 px; bei
+   DRINGEND an 10 von 93 (QC-Messung). Es steht also gerade NICHT genau ein
+   Wort da. Für die Zustandsanzeige reicht es — welche Stufe gilt, ist
+   eindeutig —, für das Bild nicht.
+
+   **Das gestapelte Bild — die unteren Abdrücke bleiben liegen, nach oben
+   prominenter, mit Farbrampe — ist Ticket `03`**, das diesen Block als Ganzes
+   ersetzt und dabei auch den Abschneide-Fall aufzulösen hat. Deshalb hier
+   bewusst keine Farbe: `currentColor` wie der Grundabdruck, keine Rampe. */
+.emphasis-print {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  padding: 1px 3px;
+  border: 1.5px solid currentColor;
+  border-radius: 3px;
+  background: var(--pw-paper);
+  /* KLEINER als der Grundabdruck, und das ist eine Platzrechnung, keine
+     Gestaltung: „DRINGEND" hat acht Zeichen, „NEU" drei. In der Schriftgröße
+     des Grundabdrucks misst der Nachdruck 74 px — daneben steht auf dem
+     schmalsten Zettel bei 390 px Wandbreite nur 51 px Platz, bis der
+     Bearbeiten-Stift beginnt (gemessen über alle 94 Zettel der Testwand).
+     Breiter werden darf die Fußzeile nicht: die Wand packt nach einem Tipp
+     nicht neu (→ `layoutSignature`, ADR-0002).
+
+     **Der Rest Überdeckung mit dem Bearbeiten-Stift ist damit nicht weg,
+     nur klein**: QC-Messung 6 Zettel mit 1, 1, 1, 1, 2 und 11 px. Der
+     11-px-Fall trägt KEIN `zettel--meta-top`, fällt also auch nicht unter die
+     Linksbündig-Regel weiter unten. **Rein optisch, kein geschluckter Klick**:
+     `elementFromPoint` auf drei Punkten der Stift-Fläche liefert nie
+     `.emphasis-print` — der Stift steht später im DOM und gewinnt die
+     Trefferprüfung. An Ticket `03` übergeben.
+
+     (Meine erste Meldung lautete „4 von 94, maximal 1 px" — die war zu
+     freundlich gerechnet, weil sie den Fall ohne `meta-top` nicht erfasst
+     hatte. Die Zahlen oben sind die nachgemessenen.) */
+  font-size: 8.6px;
+  letter-spacing: 0.2px;
+  white-space: nowrap;
+}
+
+/* Bei `zettel--meta-top` wandert der Punkte-Sticker in die obere Ecke, der
+   Stempel rückt an den linken Rand der Fußzeile (7 px) — dort ist nach links
+   am wenigsten Luft. Deshalb wird der Nachdruck hier LINKSBÜNDIG am
+   Grundabdruck ausgerichtet statt mittig.
+
+   **Ehrlich zur Begründung**: ich hatte diese Regel mit „17 von 94 Zetteln,
+   3,5 px über die Papierkante" begründet. **Das ist nicht reproduzierbar.**
+   Die QC-Gegenprobe erzeugt den Überstand nicht — mit der Regel 0 Überstände,
+   OHNE sie ebenfalls 0. Die Zahlen stammen aus einem Messlauf mit einem
+   ungestylten Prüf-Element (ohne das `data-v-`-Attribut der scoped styles,
+   also ohne `position: absolute`) und waren damit wertlos.
+
+   Was bleibt: die Regel kauft ein paar Pixel Luft nach links und schadet dort
+   nicht. Sie ist aber **nicht** kostenlos — sie schiebt den Nachdruck nach
+   rechts und trägt damit zur Stift-Überdeckung bei, die oben beziffert ist.
+   Bewusst behalten, nicht als gemessene Notwendigkeit gelesen werden. */
+.zettel--meta-top .emphasis-print {
+  left: 0;
+  transform: translateY(-50%);
 }
 
 /* --- Punkte als aufgeklebter Sticker (Ticket 00a) --------------------------
