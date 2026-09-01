@@ -150,6 +150,17 @@ const edgePoint = (d: PressDirection) => {
 // Gemessen wird **jede Zeile einzeln**, geklemmt nach der breitesten: welche
 // Zeile die breitere ist, entscheidet die Schrift, nicht die Zahl der
 // Buchstaben („Aufwand" gegen „anpassen").
+//
+// **Heute löst die Klemme nie aus** (Ticket 17): sie greift erst ab ~100 px
+// Zeilenbreite, die längste Beschriftung („anpassen") misst 68,4 px, und bei
+// 360–420 px Fensterbreite bleiben ≥ 20 px Luft. Wer eine längere Beschriftung
+// ergänzt, aktiviert sie — und muss vorher zwei bekannte Schwächen beheben:
+//
+// 1. Die Zwillinge messen ein nacktes `<text>`, die echte Beschriftung ist
+//    `<text><tspan>` — gemessen 6,8 % Überschätzung (94,47 gegen 88,45). Die
+//    Klemme griffe also etwas zu früh; falsch herum wird sie dadurch nicht.
+// 2. `measureLabels()` läuft einmalig ohne `document.fonts.ready` — trifft die
+//    Schrift später ein, bleibt `halfWidth` veraltet.
 const measureEls = new Map<string, SVGTextElement>()
 const measureKey = (d: PressDirection, line: string) => `${d}::${line}`
 const setMeasureEl = (key: string, el: unknown) => {
