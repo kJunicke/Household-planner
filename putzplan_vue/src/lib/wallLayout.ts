@@ -623,11 +623,6 @@ export function packWall(
   /** Weiche Untergrenze für die aktuell gepackte Gruppe, siehe Funktionskommentar. */
   let floor = 0
 
-  const spanOf = (note: WallNoteMetrics) => {
-    const width = Math.min(note.width, wallWidth)
-    return Math.min(columns, Math.max(1, Math.ceil(width / SKYLINE_RESOLUTION)))
-  }
-
   /**
    * Der waagerechte Versatz je Zettel, einmal gerechnet.
    *
@@ -875,6 +870,13 @@ export function packWall(
      * passt und vorher auch schon darüber lag, kommt hier zum Zug. Ohne Vorgabe
      * steht dort `Infinity`, dann ist die Bedingung wirkungslos und es packt wie
      * vor Ticket 13.
+     *
+     * **„Passt darüber" wird je SPALTE geprüft, nicht je Zettel, und notfalls
+     * ohne Zierabstand** (Ticket 16): vorher wurde erst die niedrigste Spalte
+     * gewählt und der ganze Zettel verworfen, wenn genau die nicht passte —
+     * ein Zettel, der vorher über der Vorgabe lag, fiel dadurch komplett unter
+     * sie, obwohl in einer anderen Spalte rechnerisch Platz war. Details an
+     * `noteTier` in der Schleife.
      */
     const packFree = (limitTop: number) => {
       const limited = limitTop !== Infinity
@@ -896,24 +898,53 @@ export function packWall(
           // Wand) darf.
           if (limited && (note.previousTop ?? -Infinity) >= limitTop - 0.001) continue
 
-          const span = spanOf(note)
-
           let noteTop = Infinity
           let noteColumn = 0
-          // **`span` ist hier nur noch die Schleifengrenze, nicht mehr der
-          // reservierte Bereich.** Seit Ticket 14 entscheidet `drawnBox`, welche
-          // Spalten ein Zettel belegt (`colStart … colEnd`), und `colEnd` hängt
-          // nicht an `span`: es kommt aus der gezeichneten, auf
-          // `[0, wallWidth − width]` geklemmten Position. Der Name `spanOf`
-          // behauptet an dieser Stelle also mehr, als die Größe noch bedeutet —
-          // umbenannt wird er trotzdem nicht, weil die Sperrlinie einer Vorgabe
-          // (Ticket 13) ihn weiter im ursprünglichen Sinn braucht.
+          // **Spaltenwahl vor einer Sperrlinie (Ticket 16).** Bewertet wird
+          // die Nähe der erreichbaren Oberkante zur ALTEN (`previousTop`),
+          // nicht die niedrigste Oberkante — und nur unter den Spalten, in
+          // denen der Zettel GANZ über die Sperrlinie passt. Ohne
+          // Vorgeschichte (neuer Zettel) zählt wie bisher die niedrigste
+          // Oberkante; ohne Sperrlinie (`limited` falsch) ändert sich nichts.
           //
-          // Als Grenze bleibt er richtig: `start + span <= columns` läuft über
-          // alle Startspalten, in denen der Zettel überhaupt Platz hätte, und
-          // was darüber hinausginge, klemmte `drawnBox` ohnehin auf dieselbe
-          // rechte Kante — es käme keine neue Kandidatenposition dazu.
-          for (let start = 0; start + span <= columns; start++) {
+          // Die WELCHER-Zettel-zuerst-Wahl (unten, „Der Tiebreak…") bleibt
+          // dagegen gierig nach niedrigster Oberkante. Eine Platzierung in der
+          // Reihenfolge der alten Oberkanten wurde erprobt und verworfen: sie
+          // bewegte in der Harness MEHR Zettel über der Vorgabe (2,4 statt
+          // 0,9 je Aufklappen) — ohne x-Vorgeschichte driften die Zettel
+          // seitlich, und die alte Anordnung entsteht doch nicht.
+          const prevTarget = limited ? note.previousTop : undefined
+          let noteScore = Infinity
+          /**
+           * Stufe der gefundenen Spalte (Ticket 16): 0 = passt samt Zierabstand
+           * (Skyline), 1 = passt nur ohne ihn (`contentLine`). Die Skyline
+           * führt unter jedem Zettel `gapOf` (2…15 px) Zierde; eine Lücke, in
+           * die der Zettel rechnerisch hineinpasst, nimmt ihn damit oft nicht
+           * mehr auf, und er fiele komplett unter die Sperrlinie. Die zweite
+           * Stufe sucht deshalb gegen die echten Unterkanten: lieber ohne
+           * Zierabstand über der Sperrlinie als ganz darunter. Überlappfrei
+           * bleibt beides — `place` klemmt ohnehin gegen die echten Rechtecke
+           * (`placedBoxes`), und die Marge für den y-Versatz
+           * (`JITTER_DOWN_MAX`) wird auch in Stufe 1 verlangt, damit die
+           * Sperrlinie selbst nicht nachrutscht.
+           */
+          let noteTier = 2
+          // **Über ALLE Startspalten, nicht mehr `start + span <= columns`**
+          // (Ticket 16). Die alte Grenze stand mit der Begründung da, was
+          // darüber hinausginge, klemmte `drawnBox` ohnehin auf dieselbe
+          // rechte Kante — das stimmt nur für nichtnegativen x-Versatz: bei
+          // negativem `dx` liegt die gezeichnete Position um bis zu 5 px LINKS
+          // der Startspalte, und die letzten Startspalten vor der Wandkante
+          // ergeben dann noch ungeklemmte, NEUE Kandidatenpositionen. Belegt
+          // an einer Harness-Wand: eine 94 px hohe Lücke an der rechten Kante
+          // blieb unerreichbar, weil die einzige passende Startspalte hinter
+          // der alten Grenze lag, und der Zettel fiel unter die Sperrlinie.
+          // Hinter der Klemmung entstehen jetzt Duplikate derselben rechten
+          // Kante — die kosten nur Rechenzeit, keine neuen Positionen. Der
+          // Helfer `spanOf` ist damit entfallen; die Sperrlinie einer Vorgabe
+          // rechnet seit Ticket 14 ohnehin mit `colStart … colEnd` aus
+          // `drawnBox`.
+          for (let start = 0; start < columns; start++) {
             // Bewertet wird der Kasten, in dem der Zettel am Ende TATSÄCHLICH
             // steht (`drawnBox`), nicht `start … start + span`. Das ist der
             // Kern von Ticket 14: der Versatz muss vor der Wahl bekannt sein,
@@ -923,17 +954,41 @@ export function packWall(
             for (let k = box.colStart; k < box.colEnd; k++) {
               if (skyline[k] > top) top = skyline[k]
             }
-            if (top < noteTop - 0.001) {
+            // Vor einer Sperrlinie zählen nur Spalten, in denen der Zettel
+            // GANZ über sie passt — samt der Strecke, die der y-Versatz ihn
+            // noch nach unten schieben kann (geprüft wird die geplante
+            // Oberkante, gezeichnet die verschobene). Der Ausschluss steht
+            // seit Ticket 16 HIER statt nach der Spaltenwahl: vorher wurde
+            // erst die niedrigste Spalte gewählt und dann der ganze Zettel
+            // verworfen, wenn genau diese nicht passte — obwohl eine andere,
+            // etwas tiefere Spalte noch über der Sperrlinie frei war.
+            let tier = 0
+            if (limited && top + note.height + JITTER_DOWN_MAX > limitTop) {
+              // Stufe 1 (Ticket 16, siehe `noteTier`): passt der Zettel ohne
+              // den Zierabstand der Skyline — gegen die echten Unterkanten
+              // (`contentLine`) — noch ganz über die Sperrlinie?
+              let face = floor
+              for (let k = box.colStart; k < box.colEnd; k++) {
+                if (contentLine[k] > face) face = contentLine[k]
+              }
+              if (face + note.height + JITTER_DOWN_MAX > limitTop) continue
+              tier = 1
+              top = face
+            }
+            // Bewertung: vor einer Sperrlinie die Nähe zur ALTEN Oberkante
+            // (Ticket 16 — die alte Anordnung reproduzieren, statt sie neu zu
+            // würfeln), sonst und ohne Vorgeschichte die niedrigste Oberkante.
+            // Eine Spalte mit Zierabstand (Stufe 0) sticht jede ohne (Stufe 1).
+            const score = prevTarget === undefined ? top : Math.abs(top - prevTarget)
+            if (tier < noteTier || (tier === noteTier && score < noteScore - 0.001)) {
+              noteTier = tier
+              noteScore = score
               noteTop = top
               noteColumn = start
             }
           }
+          if (limited && noteTop === Infinity) continue
           if (noteTop === Infinity) noteTop = floor
-
-          // Ganz darüber passen heißt: samt der Strecke, die der y-Versatz ihn
-          // noch nach unten schieben kann. Geprüft wird die geplante Oberkante,
-          // gezeichnet die verschobene.
-          if (limited && noteTop + note.height + JITTER_DOWN_MAX > limitTop) continue
 
           const hash = fnv1a(note.id)
           const better =
