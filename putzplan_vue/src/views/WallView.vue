@@ -705,7 +705,71 @@ const relayout = (animate: boolean, tappedId?: string) => {
     lineHeights.set(task.task_id, Number.isFinite(lineHeight) && lineHeight > 0 ? lineHeight : 0)
   }
 
+  // Die frisch getroffene `metaTop`-Entscheidung wird VORWÄRTS ans DOM
+  // übergeben, bevor irgendeine Höhe gemessen wird (Ticket 19 — die
+  // Resize-Hälfte des Mechanismus aus Ticket 13).
+  //
+  // Das Set unten erreicht das DOM als Klasse `zettel--meta-top` erst im
+  // NÄCHSTEN Tick; Schritt 3 (Zeilen zählen) und Schritt 4 (Höhen messen)
+  // laufen aber noch in DIESEM. Für jeden Zettel, dessen Entscheidung gerade
+  // gekippt ist, beschrieben beide Schritte damit die ALTE Fassung: nach einer
+  // Breitenänderung kippten 20 von 86 Zetteln, 16 Höhen änderten sich NACH dem
+  // Packlauf um bis zu +53 px, und `packed.height` blieb rund 300 px unter dem
+  // konvergierten Wert — sichtbar, weil diese Zahl als Inline-Höhe am
+  // Wand-Element steht. Der Resize-Wächter (`width === lastWidth`) lässt
+  // bewusst nur EINEN Lauf zu, es gab also nichts, das das später heilte.
+  //
+  // Die Klasse selbst darf hier NICHT gesetzt werden — sie gehört
+  // ausschließlich Vue (Begründung oben im Messblock). Sie schaltet aber nur
+  // `display` an zwei ohnehin vorhandenen Knoten um (`WallNote.vue`:
+  // `.zettel--meta-top .corner { display: flex }`, `.zettel--meta-top .foot >
+  // .points { display: none }`). Genau diese Wirkung wird deshalb als
+  // Inline-`display` vorweggenommen: das DOM zeigt die NEUE Fassung sofort,
+  // die Messungen treffen sie, und wenn Vue im nächsten Tick die Klasse
+  // schreibt, ändert sich an der Darstellung nichts mehr.
+  //
+  // Aufgeräumt wird per `nextTick`, NACH Vues DOM-Update: dann sagt die Klasse
+  // dasselbe wie der Inline-Stil, und der Stil muss weg, weil er sonst jede
+  // SPÄTERE Klassenänderung überstimmen würde (Inline schlägt Stylesheet).
+  // Sofortiges Zurücknehmen nach der Messung wäre falsch: bis zum Klassen-
+  // Update stünde wieder die alte Fassung im DOM, und genau das — Höhen, die
+  // sich nach dem Packlauf noch ändern — ist der Fehler dieses Tickets.
+  //
+  // Der Lade-Pfad bleibt davon unberührt, sobald er konvergiert ist (dort
+  // kippt keine Entscheidung, die Schleife unten findet nichts); im expanded-
+  // Zweig kippt nie etwas, weil die Entscheidung dort mitgenommen wird
+  // (Ticket 13).
+  const flippedEls: HTMLElement[] = []
+  for (const shape of shapes) {
+    const el = elements.get(shape.id)
+    if (!el) continue
+    const isMetaTop = nextMetaTopIds.has(shape.id)
+    if (isMetaTop === metaTopIds.value.has(shape.id)) continue
+    const cornerEl = el.querySelector<HTMLElement>('.corner')
+    const footPointsEl = el.querySelector<HTMLElement>('.foot > .points')
+    // `flex` und `grid` sind die Werte der jeweiligen Stylesheet-Regeln in
+    // `WallNote.vue` (`.zettel--meta-top .corner` bzw. `.points`).
+    if (cornerEl) cornerEl.style.display = isMetaTop ? 'flex' : 'none'
+    if (footPointsEl) footPointsEl.style.display = isMetaTop ? 'none' : 'grid'
+    flippedEls.push(el)
+  }
   metaTopIds.value = nextMetaTopIds
+
+  // Das Aufräumen wird NACH der Zuweisung oben angemeldet: erst dann steht
+  // Vues Flush an, und `nextTick` hängt sich an genau diesen Flush — der
+  // Rückruf läuft also verlässlich NACH dem Klassen-Update. Vorher angemeldet
+  // liefe er an einer bereits aufgelösten Promise womöglich DAVOR, und die
+  // alte Fassung stünde für einen Moment wieder im DOM.
+  if (flippedEls.length > 0) {
+    nextTick(() => {
+      for (const el of flippedEls) {
+        const cornerEl = el.querySelector<HTMLElement>('.corner')
+        const footPointsEl = el.querySelector<HTMLElement>('.foot > .points')
+        if (cornerEl) cornerEl.style.display = ''
+        if (footPointsEl) footPointsEl.style.display = ''
+      }
+    })
+  }
 
   // Schritt 2 — Breiten planen (zweiter Packlauf, siehe `planNoteWidths`).
   const planned = planNoteWidths(shapes, usableWidth)
