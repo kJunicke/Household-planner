@@ -588,6 +588,22 @@ export function packWall(
    */
   const contentLine = new Array<number>(columns).fill(0)
   const placed: PackedNote[] = []
+  /**
+   * Die fertigen Rechtecke des bereits Gesetzten — dieselbe Reihenfolge wie
+   * `placed`, nur mit Breite und Höhe dazu.
+   *
+   * Gebraucht für die **senkrechte Klemmung** in `place`: sie klemmt gegen die
+   * echten Rechtecke, nicht gegen `contentLine`. `contentLine` ist auf
+   * `SKYLINE_RESOLUTION` gerundet und meldet deshalb Berührung, wo in Wahrheit
+   * eine Lücke ist — jeder so verschobene Zettel kostet Wandhöhe, ohne dass er
+   * irgendetwas verdecken würde. Auf einer durch den Rand ohnehin schmaleren
+   * Wand ist das nicht zu verschenken.
+   *
+   * Ein paralleles Feld statt zusätzlicher Felder in `PackedNote`: die
+   * Schnittstelle nach außen bleibt unverändert, Breite und Höhe sind
+   * Rechenzwischenstand und keine Zusage an den Aufrufer.
+   */
+  const placedBoxes: Array<{ x: number; width: number; y: number; height: number }> = []
 
   // Gruppen in Eingabereihenfolge sammeln, dann nach Gruppennummer aufsteigend
   // abarbeiten (fällig → täglich → Projekt). Die Wand reicht die Zettel zwar
@@ -612,6 +628,70 @@ export function packWall(
     return Math.min(columns, Math.max(1, Math.ceil(width / SKYLINE_RESOLUTION)))
   }
 
+  /**
+   * Der waagerechte Versatz je Zettel, einmal gerechnet.
+   *
+   * `drawnBox` läuft im Suchlauf **je Kandidatenspalte** — ohne diesen Merker
+   * liefe `fnv1a` über jede Kennung einige hunderttausend Mal statt einmal.
+   * Der Merker ändert nichts am Ergebnis: beide Werte hängen ausschließlich an
+   * der Kennung.
+   *
+   * `indent` steht hier ohne die Bedingung `column === 0` — die kennt nur
+   * `drawnBox`, weil erst dort die Spalte feststeht.
+   */
+  const offsetCache = new Map<string, { jitter: number; indent: number }>()
+  const offsetsOf = (note: WallNoteMetrics, pinned: boolean) => {
+    // Ein aufgeklappter oder vorgegebener Zettel bekommt keinen Versatz.
+    //
+    // **`pinned` schaltet seit Ticket 14 auch den x-Jitter ab**, nicht mehr nur
+    // die Einrückung. Vorher bekam eine Vorgabe, die nicht zugleich aufgeklappt
+    // war, sehr wohl x-Jitter. Das war folgenlos, solange die Sperrlinie über
+    // die feste Spalte lief; seit sie über die GEZEICHNETE Position läuft,
+    // stünde sie um den Versatz daneben. Der einzige heutige Aufrufer setzt
+    // Vorgaben immer aufgeklappt und wandbreit — die Lücke war latent, nicht
+    // erreichbar. Sie ist jetzt zu.
+    if (note.expanded || pinned) return { jitter: 0, indent: 0 }
+    const hit = offsetCache.get(note.id)
+    if (hit) return hit
+    const fresh = { jitter: jitterOf(note.id, 'x', 5), indent: indentOf(note.id) }
+    offsetCache.set(note.id, fresh)
+    return fresh
+  }
+
+  /**
+   * **Die einzige Stelle, die weiß, wo ein Zettel tatsächlich gezeichnet wird.**
+   *
+   * Vor Ticket 14 stand der Versatz (`jitterOf` + `indentOf`) erst in `place` —
+   * gesucht und reserviert wurde über `bestColumn … bestColumn + span`,
+   * gezeichnet aber bei `bestColumn × SKYLINE_RESOLUTION + dx`. Die
+   * Reservierung kannte `dx` nicht: ein nach rechts versetzter Zettel ragte in
+   * Spalten, die niemand für ihn zurückgelegt hatte.
+   *
+   * **Deshalb liefert dieser Helfer die Spalten und wird VOR der Spaltensuche
+   * gerufen, nicht danach.** „Erst suchen, dann breiter reservieren" wäre zu
+   * wenig: ein Zettel mit negativem `dx` ragt nach **links** in eine Spalte,
+   * deren Skyline höher liegen kann als die gefundene Oberkante — er würde in
+   * seinen linken Nachbarn gezeichnet, obwohl rechts alles sauber reserviert
+   * ist. Die Suche muss den fertigen Kasten bewerten, nicht den geplanten.
+   *
+   * Keine Zirkularität, obwohl `indentOf` an der linken Spalte hängt: die
+   * Spalte kommt als Parameter herein, der Helfer entscheidet sie nicht.
+   *
+   * `colEnd` ist **exklusiv**.
+   */
+  const drawnBox = (note: WallNoteMetrics, column: number, pinned: boolean) => {
+    const width = Math.min(note.width, wallWidth)
+    const offsets = offsetsOf(note, pinned)
+    const dx = offsets.jitter + (column === 0 ? offsets.indent : 0)
+    const x = Math.max(0, Math.min(wallWidth - width, column * SKYLINE_RESOLUTION + dx))
+    const colStart = Math.max(0, Math.floor(x / SKYLINE_RESOLUTION))
+    const colEnd = Math.min(
+      columns,
+      Math.max(colStart + 1, Math.ceil((x + width) / SKYLINE_RESOLUTION))
+    )
+    return { x, width, colStart, colEnd }
+  }
+
   for (const groupKey of groupKeys) {
     const members = byGroup.get(groupKey)!
     const pool = members.filter(note => !pinnedTops.has(note.id))
@@ -631,14 +711,12 @@ export function packWall(
      * liegen bleiben) und macht ihn zur Sperrlinie über die ganze Wandbreite.
      */
     const place = (note: WallNoteMetrics, column: number, top: number, pinned: boolean) => {
-      const width = Math.min(note.width, wallWidth)
-      const span = spanOf(note)
-
-      const indent = note.expanded || pinned || column !== 0 ? 0 : indentOf(note.id)
-      const dx = (note.expanded ? 0 : jitterOf(note.id, 'x', 5)) + indent
+      // Dieselbe Rechnung wie im Suchlauf (`packFree`) — beide fragen
+      // `drawnBox`. Weicht die eine von der anderen ab, reserviert der Packer
+      // wieder woanders, als er zeichnet; genau das war der Fehler vor
+      // Ticket 14.
+      const { x, width, colStart, colEnd } = drawnBox(note, column, pinned)
       const dy = note.expanded || pinned ? 0 : jitterOf(note.id, 'y', 4) - 2.5
-
-      const x = Math.max(0, Math.min(wallWidth - width, column * SKYLINE_RESOLUTION + dx))
 
       // Eine Vorgabe wird zusätzlich gegen die UNTERKANTEN ihrer eigenen
       // Spalten geklemmt (Ticket 13, QC-Befund 1).
@@ -664,16 +742,52 @@ export function packWall(
       // Fehler saß: an der Gruppengrenze.
       let clamped = top
       if (pinned) {
-        for (let k = column; k < column + span; k++) {
+        // Über die GEZEICHNETEN Spalten, nicht über `column … column + span`.
+        // Zöge man diese Schleife bei der Umstellung auf `drawnBox` nicht mit,
+        // klemmte die Vorgabe gegen fremde Spalten — exakt der QC-Befund aus
+        // Ticket 13 (199 Fälle, 28,9 px Überdeckung, zu klein gemeldete
+        // Wandhöhe). Heute ist eine Vorgabe stets wandbreit und beginnt bei
+        // Spalte 0, beide Bereiche wären also gleich; das ist eine Eigenschaft
+        // des einzigen Aufrufers, keine dieser Funktion.
+        for (let k = colStart; k < colEnd; k++) {
           if (contentLine[k] > clamped) clamped = contentLine[k]
         }
+      }
+
+      // **Senkrechte Klemmung gegen die echten Rechtecke** (Ticket 14).
+      //
+      // `dy` liegt in [−6,5; +1,5], der Abstand darunter (`gapOf`) bei 2…15 px
+      // — der tatsächliche Abstand `gapOf + dy` konnte damit bis auf −4,5 px
+      // fallen, gemessen wurden −3,80 px. Der Zettel wird deshalb nach unten
+      // gegen die Unterkante jedes bereits gesetzten Zettels geklemmt, mit dem
+      // er sich waagerecht überschneidet. Ergebnis: **0 px Überlapp per
+      // Konstruktion**, und der Versatz bleibt überall dort stehen, wo er
+      // nichts anrichtet — kein Eingriff an `jitterOf`, keine verschobene Mitte.
+      //
+      // **Bewusst nicht gegen `contentLine`.** Die ist auf
+      // `SKYLINE_RESOLUTION` gerundet und schöbe Zettel nach unten, die sich
+      // gar nicht berühren; das zahlte sich in Wandhöhe (Zusage aus Ticket 02).
+      //
+      // Warum das reicht, damit am Ende KEIN Paar überlappt: jeder Zettel wird
+      // beim Setzen gegen alles Vorherige geklemmt, und die Klemmung schiebt
+      // ihn nur nach unten. Jedes Paar wird also genau einmal geprüft — beim
+      // Setzen des späteren der beiden.
+      //
+      // Die Klemmung kann `y` nur ANHEBEN, nie senken: die Skyline führt über
+      // denselben Spalten bereits `Unterkante + Abstand`, `top` liegt also
+      // ohnehin nicht darunter. Sie greift genau dann, wenn `dy` negativ ist.
+      let contentMax = 0
+      for (const box of placedBoxes) {
+        if (box.x >= x + width || x >= box.x + box.width) continue
+        const bottom = box.y + box.height
+        if (bottom > contentMax) contentMax = bottom
       }
 
       // Auf `floor` geklemmt: der y-Versatz darf einen Zettel etwas anheben,
       // aber niemals über die Untergrenze der Gruppe hinaus — sonst könnte der
       // Jitter allein die Gruppengrenze unterlaufen. Für einen vorgegebenen
       // Zettel ist das dieselbe Klemmung, nur ohne Versatz.
-      const y = Math.max(floor, clamped + dy)
+      const y = Math.max(floor, contentMax, clamped + dy)
 
       const vGap = note.expanded ? EXPANDED_GAP : gapOf(note.id)
       const bottom = y + note.height + vGap
@@ -685,16 +799,24 @@ export function packWall(
       // Spalten auf `bottom` und fände den Wert bereits überschrieben vor
       // (Ticket 13, QC-Befund 1; die zu klein gemeldete `height` kam daher).
       //
-      // **Voraussetzung**, damit das freie Packen dabei bitidentisch bleibt:
-      // `note.height + vGap` muss größer sein als der maximale Aufwärtsschub des
-      // y-Versatzes (6,5 px). Sonst dürfte `bottom` unter die Skyline fallen, und
-      // was vorher gesenkt wurde, bliebe jetzt stehen. Der kleinste Zettel im
-      // Bestand misst 71 px, `height + vGap` also mindestens 73 — Faktor 11.
-      // Nachgemessen: mit erzwungenen Höhen von 1…5 px weichen 296 von 4000
-      // Wänden ab, mit echten Höhen 0 von 5000. Wer Zettel unter ~10 px zulässt
-      // (oder `display:none` misst), muss hier nachdenken.
+      // **Voraussetzung** dafür, dass die Zuweisung beim freien Packen
+      // unschädlich bleibt: `note.height + vGap` muss größer sein als der
+      // maximale Aufwärtsschub des y-Versatzes. Sonst dürfte `bottom` unter die
+      // Skyline fallen, und was vorher gesenkt wurde, bliebe jetzt stehen. Der
+      // kleinste Zettel im Bestand misst 71 px, `height + vGap` also mindestens
+      // 73 — Faktor 11. Wer Zettel unter ~10 px zulässt (oder `display:none`
+      // misst), muss hier nachdenken.
+      //
+      // Der Aufwärtsschub war bis Ticket 13 mit 6,5 px beziffert (der volle
+      // Ausschlag von `dy`) und mit „freies Packen bleibt bitidentisch, 0 von
+      // 5000 Wänden" belegt. **Beides gilt nicht mehr.** Die senkrechte
+      // Klemmung oben verkleinert den Aufwärtsschub — sie kann ihn nie
+      // vergrößern —, die Voraussetzung ist also weiter erfüllt, aber sie steht
+      // jetzt auf einer kleineren Zahl als 6,5. Und jedes `y` ändert sich durch
+      // die Klemmung: der alte Bit-Identitäts-Beleg ist hinfällig und durch den
+      // Vorgabe-Fuzz aus Ticket 14 ersetzt.
       const face = y + note.height
-      for (let k = column; k < column + span; k++) {
+      for (let k = colStart; k < colEnd; k++) {
         if (skyline[k] < bottom) skyline[k] = bottom
         if (contentLine[k] < face) contentLine[k] = face
       }
@@ -703,17 +825,33 @@ export function packWall(
         // Sperrlinie: in den eigenen Spalten steht die Skyline auf der
         // Unterkante, in allen übrigen mindestens auf der Oberkante. Damit kann
         // kein später gesetzter Zettel seitlich an ihm vorbei nach oben.
+        // Auch hier die GEZEICHNETEN Spalten — dieselbe Falle wie bei der
+        // `contentLine`-Klemmung oben: mit `column … column + span` stünde die
+        // Sperrlinie um den Versatz neben dem Zettel, den sie festhalten soll.
         for (let k = 0; k < columns; k++) {
-          const barrier = k >= column && k < column + span ? bottom : y
+          const barrier = k >= colStart && k < colEnd ? bottom : y
           if (skyline[k] < barrier) skyline[k] = barrier
         }
       } else if (!note.expanded) {
         // Waagerechte Luft zum rechten Nachbarn reservieren (siehe
         // Funktionskommentar): die Spalten direkt rechts vom Zettel bleiben bis
-        // zu `rowGapOf(note.id)` px auf derselben Höhe blockiert.
-        const marginColumns = Math.ceil(rowGapOf(note.id) / SKYLINE_RESOLUTION)
-        const marginEnd = Math.min(columns, column + span + marginColumns)
-        for (let k = column + span; k < marginEnd; k++) {
+        // zu `rowGapOf(note.id)` px auf derselben Höhe blockiert. Rechts vom
+        // GEZEICHNETEN Kasten, nicht rechts von der geplanten Spalte.
+        //
+        // **Ab der exakten rechten Kante gerechnet, nicht ab `colEnd`**
+        // (Ticket 14a-2). `colEnd + ceil(rowGap / SKYLINE_RESOLUTION)` rundet
+        // zweimal auf: einmal die Kante des Zettels, einmal den Abstand — bis zu
+        // ~7 px, die niemand bestellt hat. Bis Ticket 14 holte der Nachbar sie
+        // über negativen x-Versatz zurück; seit die Reservierung die gezeichnete
+        // Position kennt, kann er das nicht mehr, und der Aufschlag stand
+        // ungefiltert im Bild (gemessen: 63,8 % der Nachbarpaare über dem Ziel
+        // von 8…16 px, Median 17,61 px). Eine Rundung bleibt zwangsläufig — die
+        // Skyline kennt nur ganze Spalten.
+        const marginEnd = Math.min(
+          columns,
+          Math.ceil((x + width + rowGapOf(note.id)) / SKYLINE_RESOLUTION)
+        )
+        for (let k = colEnd; k < marginEnd; k++) {
           if (skyline[k] < bottom) skyline[k] = bottom
         }
       }
@@ -723,6 +861,7 @@ export function packWall(
       // fertigen Position vergeben (siehe „Stapelreihenfolge" nach der
       // Schleife und `PackedNote.z`).
       placed.push({ id: note.id, x, y, z: 0 })
+      placedBoxes.push({ x, width, y, height: note.height })
       // `y`, nicht die geplante Oberkante — siehe Funktionskommentar, „Weiche
       // Gruppengrenze". Über die ganze Gruppe maximiert, nicht nur über den
       // zuletzt platzierten Zettel.
@@ -761,9 +900,27 @@ export function packWall(
 
           let noteTop = Infinity
           let noteColumn = 0
+          // **`span` ist hier nur noch die Schleifengrenze, nicht mehr der
+          // reservierte Bereich.** Seit Ticket 14 entscheidet `drawnBox`, welche
+          // Spalten ein Zettel belegt (`colStart … colEnd`), und `colEnd` hängt
+          // nicht an `span`: es kommt aus der gezeichneten, auf
+          // `[0, wallWidth − width]` geklemmten Position. Der Name `spanOf`
+          // behauptet an dieser Stelle also mehr, als die Größe noch bedeutet —
+          // umbenannt wird er trotzdem nicht, weil die Sperrlinie einer Vorgabe
+          // (Ticket 13) ihn weiter im ursprünglichen Sinn braucht.
+          //
+          // Als Grenze bleibt er richtig: `start + span <= columns` läuft über
+          // alle Startspalten, in denen der Zettel überhaupt Platz hätte, und
+          // was darüber hinausginge, klemmte `drawnBox` ohnehin auf dieselbe
+          // rechte Kante — es käme keine neue Kandidatenposition dazu.
           for (let start = 0; start + span <= columns; start++) {
+            // Bewertet wird der Kasten, in dem der Zettel am Ende TATSÄCHLICH
+            // steht (`drawnBox`), nicht `start … start + span`. Das ist der
+            // Kern von Ticket 14: der Versatz muss vor der Wahl bekannt sein,
+            // sonst wird woanders reserviert als gezeichnet.
+            const box = drawnBox(note, start, false)
             let top = floor
-            for (let k = start; k < start + span; k++) {
+            for (let k = box.colStart; k < box.colEnd; k++) {
               if (skyline[k] > top) top = skyline[k]
             }
             if (top < noteTop - 0.001) {
