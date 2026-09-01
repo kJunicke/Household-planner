@@ -234,16 +234,14 @@ export const useTaskStore = defineStore('tasks', () => {
                     task.assigned_to = null
                 }
                 // Überstempeln gilt für EINEN Durchlauf (→ CONTEXT.md, "Überstempeln").
-                // Spiegelt die Edge Function: tägliche Aufgaben setzen ihren
-                // Nachdruck NICHT beim Erledigen zurück, sondern nächtlich per
-                // Cron (reset_recurring_tasks) — sie werden nie „completed" und
-                // können mehrfach am Tag erledigt werden. Projekte werden nie
-                // fertig und sind hier ebenfalls ausgenommen.
-                // Die Regel steht an DREI Stellen: hier, in complete-task und im
-                // nächtlichen Cron (reset_recurring_tasks). Sie greift bewusst nach
-                // dem EIGENEN task_type, nicht nach dem Elternknoten — entschieden am
-                // 26.08.2026, Begründung im Glossar. Wer eine ändert, ändert alle drei.
-                if (task.task_type !== 'daily' && task.task_type !== 'project') {
+                // Spiegelt die Edge Function: zurückgesetzt wird beim Erledigen,
+                // sonst nie — auch bei täglichen Aufgaben. Ausgenommen sind allein
+                // Projekte: sie werden nie fertig, ihr Stapel bleibt stehen.
+                // Die Regel steht an ZWEI Stellen: hier und in complete-task. Sie
+                // greift bewusst nach dem EIGENEN task_type, nicht nach dem
+                // Elternknoten — Begründung im Glossar (CONTEXT.md, "Überstempeln").
+                // Wer eine ändert, ändert beide.
+                if (task.task_type !== 'project') {
                     task.emphasis_level = 0
                 }
 
