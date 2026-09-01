@@ -53,6 +53,8 @@ import {
   defaultNoteWidth,
   packWall,
   planNoteWidths,
+  rememberWallHeight,
+  rememberedWallHeight,
   rotationOf,
   type WallNoteShape
 } from '@/lib/wallLayout'
@@ -211,6 +213,82 @@ const wallEl = ref<HTMLElement | null>(null)
 const wallHeight = ref(0)
 
 /**
+ * Hat auf dieser Ansicht schon **ein** Packlauf durchgehalten?
+ *
+ * Bis dahin sitzt jeder Zettel auf `left: 0; top: 0` (`WallNote.vue`) — sie
+ * liegen also alle gestapelt auf demselben Punkt. Solange das so ist, zeigt die
+ * Wand den Platzhalter statt der Zettel (Ticket 02).
+ *
+ * **Das ist bewusst NICHT der übliche Wächter `isLoading && liste.length === 0`
+ * der anderen Ansichten.** `WallView` läuft ohne `keep-alive` und wird bei jedem
+ * Reiterwechsel neu montiert; die Aufgaben liegen dann bereits im Store,
+ * `wallTasks` ist also sofort nicht leer und `isLoading` womöglich schon wieder
+ * `false` — und genau in diesem Moment sind die Zettel unpositioniert. Der
+ * Wächter muss „noch nie erfolgreich gepackt" heißen, nicht „lädt noch", sonst
+ * sieht es in der Entwicklung richtig aus und bricht im gemeldeten Fall.
+ *
+ * Einmal `true`, bleibt es `true`: die Zettel stehen dann irgendwo Gültigem,
+ * und ein späterer vertagter Lauf darf die Wand nicht erneut ausblenden.
+ */
+const hasPacked = ref(false)
+
+/**
+ * Mindesthöhe der Wand, solange der Platzhalter steht.
+ *
+ * Erste Wahl ist die zuletzt gepackte Höhe aus `wallLayout` — sie überlebt das
+ * Neumontieren beim Reiterwechsel und trifft bei gleichen Aufgaben fast exakt,
+ * was gleich kommt. Gelesen wird sie **einmal** beim Aufbau: während der
+ * Platzhalter steht, kommt kein neuer Packlauf durch, und ein Wert, der sich
+ * unter dem Platzhalter noch ändert, wäre selbst ein Höhensprung.
+ *
+ * Ohne Vorwissen — erster Aufruf nach dem Laden der App — bleibt nur ein
+ * **geschätzter** Startwert. `60vh` ist absichtlich kleiner als das Fenster:
+ * `.wall-page` trägt `min-height: 100vh`, solange der Platzhalter also unter
+ * der Fensterhöhe bleibt, ist die Seite in dieser Phase genau ein Bildschirm
+ * hoch und ein späteres Schrumpfen der Wand bewegt nichts.
+ *
+ * **Der Schutz ist nicht unbedingt, er hat eine Grenze.** Das Polster von
+ * `.wall-page` (`10px + 148px` plus App-Header plus Safe-Area) liegt INNERHALB
+ * der 100vh; für die Wand bleiben `100vh − 158px − Header − Safe-Area`. Ab
+ * etwa 640 px Fensterhöhe — kurzes Fenster, oder ein Header, der mit der
+ * Mitgliederzahl wächst — kippt die Rechnung um einige zehn Pixel ins
+ * Negative, und dann bewegt auch das Schrumpfen etwas.
+ *
+ * Der Wachstumsfall (gepackte Wand höher als das Fenster) bleibt ohnehin. Beide
+ * treffen ausschließlich den allerersten Aufruf einer Sitzung; ab dem zweiten
+ * trägt das Höhengedächtnis. Bewusst in Kauf genommen, statt dafür eine zweite
+ * Schätzung einzuführen.
+ */
+const placeholderMinHeight = (() => {
+  const remembered = rememberedWallHeight()
+  return remembered > 0 ? `${remembered}px` : '60vh'
+})()
+
+let revealFrame = 0
+
+/**
+ * Gibt die Zettel frei — einen Frame **nach** dem geglückten Packlauf.
+ *
+ * Aufgerufen wird sie in `relayout` **hinter** der Schleife, die `left`/`top`
+ * schreibt, und nur bei vollständigem Lauf (→ `skipped`). Beides gehört
+ * zusammen: die Freigabe darf erst fallen, wenn wirklich jeder Zettel steht.
+ *
+ * Der gewartete Frame verhindert einen Höhensprung: `wallHeight` erreicht das DOM
+ * erst im nächsten Vue-Tick. Fiele `hasPacked` im selben Tick, verlöre die Wand
+ * ihre Mindesthöhe genau in dem Moment, in dem ihre echte Höhe von `0` aus
+ * gesetzt wird. Ein Frame später steht die Höhe bereits (`.wall--unpacked`
+ * schaltet die Transition dafür ab), und das Ablegen der Mindesthöhe kostet
+ * nichts mehr.
+ */
+const revealNotes = () => {
+  if (hasPacked.value || revealFrame) return
+  revealFrame = requestAnimationFrame(() => {
+    revealFrame = 0
+    hasPacked.value = true
+  })
+}
+
+/**
  * Aufgeklappte Zettel. Mehrere dürfen gleichzeitig offen sein — ein Zettel, der
  * sich beim Antippen eines anderen still schließt, nimmt dem Aufklappen die
  * Verlässlichkeit.
@@ -339,9 +417,9 @@ const setNoteEl = (taskId: string, instance: unknown) => {
  * wieder dort landet, wo er als schmaler Zettel schon vorher lag. Gebraucht
  * wird die Kennung hier nur noch, um ihn von der Flug-Animation auszunehmen.
  */
-const relayout = (animate: boolean, tappedId?: string) => {
+const relayout = (animate: boolean, tappedId?: string): boolean => {
   const wall = wallEl.value
-  if (!wall) return
+  if (!wall) return false
 
   // `EDGE` steht hier und beim Setzen von `left` (`note.x + EDGE`) — es muss
   // an beiden Stellen derselbe Wert sein, und deshalb ist es eine Konstante
@@ -352,7 +430,7 @@ const relayout = (animate: boolean, tappedId?: string) => {
   // Klemmung hängt, über die Kante ragen — ohne dass irgendetwas darauf
   // aufmerksam macht.
   const usableWidth = wall.clientWidth - 2 * EDGE
-  if (usableWidth <= 0) return
+  if (usableWidth <= 0) return false
 
   const before = new Map(lastPositions)
 
@@ -391,9 +469,32 @@ const relayout = (animate: boolean, tappedId?: string) => {
   const elements = new Map<string, HTMLElement>()
   const lineHeights = new Map<string, number>()
 
+  /**
+   * Zettel, die dieser Lauf übersprungen hat, weil zu ihnen kein Element
+   * vorlag. Beide Schleifen — Messen und Positionieren — zählen hier hoch, und
+   * ein Lauf mit auch nur einem übersprungenen Zettel gilt als **nicht**
+   * geglückt (Ticket 02).
+   *
+   * Vor Ticket 02 war das folgenlos: die Zettel waren ohnehin sichtbar und der
+   * nächste Lauf räumte auf. Jetzt ist der Rückgabewert das Freigabesignal für
+   * den Platzhalter — ein Lauf, der nur einen Teil positioniert und trotzdem
+   * `true` meldet, stellt genau die gestapelten Zettel frei, die dieses Ticket
+   * beseitigt, und zwar ohne jede Vertagung. Der Rückgabewert muss halten, was
+   * er behauptet.
+   *
+   * Erreichbar ist der Zustand vor allem über die Nachhol-Leiter: sie ruft
+   * `relayout` direkt aus einem `requestAnimationFrame`, also NICHT hinter
+   * `nextTick`. Ändert sich `wallTasks` in dem Moment (Realtime-Subscription),
+   * misst sie einen Stand, den Vue noch nicht gepatcht hat.
+   */
+  let skipped = 0
+
   for (const task of wallTasks.value) {
     const el = noteEls.get(task.task_id)
-    if (!el) continue
+    if (!el) {
+      skipped++
+      continue
+    }
 
     // Aufgeklappt heißt: volle Wandbreite, ohne Messung.
     //
@@ -851,7 +952,24 @@ const relayout = (animate: boolean, tappedId?: string) => {
       width: widths.get(shape.id) ?? 0,
       height: el.offsetHeight,
       expanded: expandedIds.value.has(shape.id),
-      group: taskGroups.get(shape.id) ?? 0,
+      // **`-1`, nicht `0` — das ist Absicht, bitte nicht „aufräumen".**
+      //
+      // Die drei Listen oben (`pendingTasks` / `dailyTasks` / `projectTasks`)
+      // teilen `wallTasks` heute vollständig auf, dieser Fall tritt also nicht
+      // ein. Wenn er je einträte, wäre `0` die schlechteste Antwort: Gruppe 0
+      // ist eine ECHTE Gruppe (fällig, Reißzwecke), und `fastenersOfGroup` in
+      // `wallLayout.ts` gäbe dem Zettel damit still die Befestigung mit dem
+      // KLEINSTEN Überstand. Die Wand polsterte oben zu knapp und die
+      // Befestigung ragte wieder über den Kork (Ticket 04).
+      //
+      // `-1` ist keine Gruppe. `fastenersOfGroup` findet dafür nichts und fällt
+      // auf ALLE Befestigungen zurück — die Wand polstert dann für die
+      // ungünstigste. Erst dadurch ist das Netz dort überhaupt erreichbar.
+      //
+      // Für das Packen selbst ist der Wert unschädlich: `packWall` gruppiert
+      // nur und sortiert die Gruppenschlüssel aufsteigend, ein unbekannter
+      // Zettel landet also schlicht ganz oben in einer eigenen Gruppe.
+      group: taskGroups.get(shape.id) ?? -1,
       // Wo dieser Zettel im vorigen Lauf stand. `packWall` braucht das nur,
       // solange eine Vorgabe im Spiel ist: wer vorher unter oder neben dem
       // vorgegebenen Zettel lag, darf danach nicht darüber stehen. Beim ersten
@@ -877,7 +995,10 @@ const relayout = (animate: boolean, tappedId?: string) => {
 
   for (const note of packed.notes) {
     const el = noteEls.get(note.id)
-    if (!el) continue
+    if (!el) {
+      skipped++
+      continue
+    }
     // Derselbe `EDGE` wie oben bei `usableWidth` — siehe die Begründung dort.
     const x = note.x + EDGE
     const y = note.y
@@ -921,8 +1042,26 @@ const relayout = (animate: boolean, tappedId?: string) => {
   // hält. Gemessen wurde vor dem Umbau ein Nachzug von bis zu 906 px pro
   // Aufklappen; nach oben war er bei `scrollY = 0` abgeschnitten, sodass der
   // Zettel dann doch aus dem Bild sprang.
-  if (!animate || prefersReducedMotion?.matches) return
+  // Geglückt ist der Lauf nur, wenn JEDER gerenderte Zettel eine Position
+  // bekommen hat (→ `skipped`). Sonst meldet er `false`, wird vertagt und
+  // nachgeholt — und der Platzhalter bleibt so lange stehen.
+  const complete = skipped === 0
+  if (complete) {
+    // Erst jetzt darf die Wand ihre Zettel zeigen; vorher säßen sie alle auf
+    // `left: 0; top: 0` übereinander. Die Positionen oben stehen bereits, und
+    // `revealNotes` wartet zusätzlich einen Frame ab (Begründung dort).
+    revealNotes()
+    // Gedächtnisstütze für die Mindesthöhe des Platzhalters beim nächsten
+    // Montieren (→ `placeholderMinHeight`). Ebenfalls NUR bei vollständigem
+    // Lauf: ein Lauf mit übersprungenen Zetteln packt weniger und liefert eine
+    // zu kleine Höhe — gemerkt würde daraus eine Mindesthöhe, die beim nächsten
+    // Montieren zu klein ist, also genau der Sprung, den sie verhindern soll.
+    rememberWallHeight(packed.height)
+  }
+
+  if (!animate || prefersReducedMotion?.matches) return complete
   animateMoves(moved)
+  return complete
 }
 
 /**
@@ -973,7 +1112,7 @@ const toggleNote = (taskId: string) => {
   expandedIds.value = next
   // Erst nach dem Rendern der Zettelchen packen — vorher ist die Höhe des
   // Zettels noch die alte.
-  nextTick(() => relayout(true, taskId))
+  nextTick(() => runRelayout(true, taskId))
 }
 
 /**
@@ -1036,8 +1175,99 @@ const animateMoves = (
   })
 }
 
+/**
+ * Ein Packlauf ohne brauchbare Wandbreite ist **nicht gescheitert, sondern
+ * vertagt** (Ticket 02).
+ *
+ * `relayout` bricht still ab, wenn das Wand-Element fehlt oder keine brauchbare
+ * Breite hat — und bis Ticket 02 versuchte es danach niemand erneut:
+ * `layoutSignature` ändert sich beim Reiterwechsel nicht (dieselben Aufgaben),
+ * und der Resize-Wächter (`width === lastWidth`) schluckt den Nachschlag. Der
+ * Abbruch war endgültig bis zum Neuladen, die Zettel blieben gestapelt liegen.
+ *
+ * Deshalb hängt die Vertagung am **Rückgabewert**, nicht an den beiden bekannten
+ * `return`-Stellen: ein dritter, heute unbekannter Abbruchweg muss nur `false`
+ * liefern und wird ohne weiteres Zutun mit nachgeholt. Der dritte gibt es
+ * bereits — ein Lauf, der Zettel ohne Element übersprungen hat (→ `skipped`),
+ * meldet ebenfalls `false` und wird nachgeholt.
+ *
+ * **Was die Nachhol-Schleife stoppt** — zwei getrennte Bremsen:
+ * 1. Die Frame-Leiter ist auf `MAX_DEFER_FRAMES` begrenzt. Bleibt die Breite
+ *    dauerhaft unbrauchbar (Wand `display: none`, Breite 0), läuft sie einmal
+ *    ab und hört auf — es wird nichts gepollt.
+ * 2. Danach hängt der Nachschlag nur noch am `ResizeObserver`, der von sich aus
+ *    ausschließlich bei einer echten Größenänderung feuert. Kein Timer, kein
+ *    Selbstaufruf.
+ * Ein geglückter Lauf entwaffnet die Vertagung sofort.
+ */
+const MAX_DEFER_FRAMES = 60
+
+/**
+ * Steht ein Nachschlag aus?
+ *
+ * Mehr als ein Merker ist es nicht: ein vertagter Lauf **animiert nicht** und
+ * trägt keinen angetippten Zettel mit, es gibt also nichts zu merken außer
+ * „ja". Beides hängt zusammen: In den beiden Breiten-Fällen bricht der Lauf ab,
+ * ohne eine einzige Position zu schreiben — es gibt kein „vorher", von dem aus
+ * ein Zettel fliegen könnte. Und `tappedId` mitzutragen hieße, die Ausnahme
+ * „der Angetippte steht still" Frames später auf eine Handlung anzuwenden, die
+ * längst vorbei ist. Ohne `animate` fällt beides zusammen weg, statt sich zu
+ * widersprechen.
+ *
+ * Beim dritten Abbruchweg (`skipped > 0`) stimmt das Erste **nicht**: dort ist
+ * `lastPositions` bereits geleert und ein Teil der Zettel steht schon. Ein
+ * „vorher" gäbe es also — verloren geht damit eine Animation, eine falsche
+ * entsteht nicht. Das ist der Preis dafür, dass hier nur ein Merker steht statt
+ * eines Gedächtnisses für Absichten, und er ist bewusst bezahlt.
+ */
+let relayoutDeferred = false
+let deferFrame = 0
+let deferFramesLeft = 0
+
+const cancelDeferredRelayout = () => {
+  relayoutDeferred = false
+  deferFramesLeft = 0
+  if (deferFrame) {
+    cancelAnimationFrame(deferFrame)
+    deferFrame = 0
+  }
+}
+
+/**
+ * Einziger Weg, einen Packlauf auszulösen. Glückt er, ist alles wie bisher;
+ * bricht er ab, wird er vertagt statt fallen gelassen.
+ */
+const runRelayout = (animate: boolean, tappedId?: string) => {
+  if (relayout(animate, tappedId)) {
+    cancelDeferredRelayout()
+    return
+  }
+
+  // Ein vertagter Lauf holt die Wand nur in Ordnung: ohne Animation, ohne
+  // angetippten Zettel (Begründung bei `relayoutDeferred`).
+  relayoutDeferred = true
+  deferFramesLeft = MAX_DEFER_FRAMES
+  if (deferFrame) return
+  const step = () => {
+    deferFrame = 0
+    if (!relayoutDeferred) return
+    if (relayout(false)) {
+      cancelDeferredRelayout()
+      return
+    }
+    // Bremse 1 — ab hier wartet der Observer. `relayoutDeferred` bleibt dabei
+    // ABSICHTLICH gesetzt: nur so bleibt der Resize-Wächter unten entschärft
+    // und jedes spätere Feuern zieht den Lauf nach. Das ist kein vergessenes
+    // Aufräumen; der Merker wird ausschließlich von einem geglückten Lauf oder
+    // vom Aushängen der Ansicht gelöscht.
+    if (deferFramesLeft-- <= 0) return
+    deferFrame = requestAnimationFrame(step)
+  }
+  deferFrame = requestAnimationFrame(step)
+}
+
 const scheduleRelayout = (animate: boolean) => {
-  nextTick(() => relayout(animate))
+  nextTick(() => runRelayout(animate))
 }
 
 /**
@@ -1104,9 +1334,14 @@ onMounted(async () => {
     lastWidth = wallEl.value.clientWidth
     resizeObserver = new ResizeObserver(() => {
       const width = wallEl.value?.clientWidth ?? 0
-      if (width === lastWidth) return
+      // `&& !relayoutDeferred`: steht ein vertagter Lauf aus, ist genau dieser
+      // Wächter das, was den Nachschlag bisher verschluckt hat (Ticket 02) —
+      // beim Reiterwechsel ist die Breite dieselbe wie beim abgebrochenen Lauf.
+      // Eine Schleife entsteht daraus nicht: der Observer feuert von sich aus
+      // nur bei einer echten Größenänderung.
+      if (width === lastWidth && !relayoutDeferred) return
       lastWidth = width
-      relayout(false)
+      runRelayout(false)
     })
     resizeObserver.observe(wallEl.value)
   }
@@ -1127,7 +1362,7 @@ onMounted(async () => {
   // um deren Breite anders aus als nach einem Neuladen — genau das Bild aus dem
   // QC-Befund (ein Zettel rutscht beim Umschalten in die zweite Reihe, nach dem
   // Neuladen steht er wieder oben). Ein Frame später steht der Zustand.
-  document.fonts?.ready.then(() => requestAnimationFrame(() => relayout(false)))
+  document.fonts?.ready.then(() => requestAnimationFrame(() => runRelayout(false)))
 })
 
 onUnmounted(() => {
@@ -1136,6 +1371,10 @@ onUnmounted(() => {
   // Aussehen weiter nach, wo sie niemand liest.
   taskStore.stopProjectEffortTotals()
   resizeObserver?.disconnect()
+  // Sonst liefe die Frame-Leiter eines vertagten Laufs an der ausgehängten
+  // Ansicht weiter (Ticket 02).
+  cancelDeferredRelayout()
+  if (revealFrame) cancelAnimationFrame(revealFrame)
 })
 
 // --- Suche, Erstellen, Quick-Aufgabe (funktional unverändert) ----------------
@@ -1227,21 +1466,43 @@ const handleCreateQuickTask = async (data: {
          hier bewusst NICHT mehr eingebunden, sonst rendert sie doppelt. -->
 
     <!-- Die Wand: Kork, absolut positionierte Zettel, keine Überschriften. -->
-    <div ref="wallEl" class="pw-wall wall" :style="{ height: `${wallHeight}px` }">
-      <WallNote
-        v-for="task in wallTasks"
-        :key="task.task_id"
-        :ref="instance => setNoteEl(task.task_id, instance)"
-        :task="task"
-        :expanded="expandedIds.has(task.task_id)"
-        :meta-top="metaTopIds.has(task.task_id)"
-        @toggle="toggleNote"
-        @gesture-start="gestureNoteId = $event"
-        @gesture-end="gestureNoteId = gestureNoteId === $event ? null : gestureNoteId"
-      />
+    <div
+      ref="wallEl"
+      class="pw-wall wall"
+      :class="{ 'wall--unpacked': !hasPacked }"
+      :style="{
+        height: `${wallHeight}px`,
+        minHeight: hasPacked ? undefined : placeholderMinHeight
+      }"
+    >
+      <!-- Platzhalter, solange noch kein Packlauf durchgehalten hat (Ticket 02).
+           Er steht IN der Wand: so trägt die Wand selbst die Mindesthöhe und die
+           Seite springt nicht, wenn die Zettel erscheinen. -->
+      <div v-if="!hasPacked" class="skeleton-loading wall-skeleton">
+        <div class="skeleton-card"></div>
+        <div class="skeleton-card"></div>
+      </div>
+
+      <!-- Die Zettel werden IMMER gerendert, auch vor dem ersten Packlauf —
+           `relayout` misst sie am DOM, ein `v-if` hier nähme ihm die Vorlage.
+           Verborgen werden sie deshalb nur optisch, über die Hülle: `opacity`
+           lässt die Messung unberührt (anders als `display: none`). -->
+      <div class="wall-notes">
+        <WallNote
+          v-for="task in wallTasks"
+          :key="task.task_id"
+          :ref="instance => setNoteEl(task.task_id, instance)"
+          :task="task"
+          :expanded="expandedIds.has(task.task_id)"
+          :meta-top="metaTopIds.has(task.task_id)"
+          @toggle="toggleNote"
+          @gesture-start="gestureNoteId = $event"
+          @gesture-end="gestureNoteId = gestureNoteId === $event ? null : gestureNoteId"
+        />
+      </div>
     </div>
 
-    <p v-if="!taskStore.isLoading && wallTasks.length === 0" class="wall-empty">
+    <p v-if="hasPacked && !taskStore.isLoading && wallTasks.length === 0" class="wall-empty">
       Nichts angepinnt.
     </p>
 
@@ -1375,18 +1636,72 @@ const handleCreateQuickTask = async (data: {
 }
 
 /* Der Bezugsrahmen der absolut positionierten Zettel. Die Höhe kommt aus dem
-   Packen, nicht aus dem Inhalt. `.pw-wall` (pinnwand.css) liefert den Kork. */
+   Packen, nicht aus dem Inhalt. `.pw-wall` (pinnwand.css) liefert den Kork.
+
+   KEIN `padding-top` für die überstehenden Befestigungen. Das Polster steckt im
+   Packen selbst (`topPaddingFor` in `wallLayout.ts`): die oberste Reihe beginnt
+   nicht bei `y = 0`, sondern darunter, und `packed.height` bringt den Betrag
+   mit. Hier ginge es auch gar nicht — der Betrag ist keine Konstante, sondern
+   hängt an Breite und Neigung der gepackten Zettel (Begründung dort). Ein
+   Polster an dieser Stelle wäre eine zweite, stille Quelle derselben Zahl, und
+   die absolut positionierten Zettel rechnen ohnehin gegen die Padding-Box:
+   ein `padding-top` verschöbe sie nicht einmal. */
 .wall {
   position: relative;
   width: 100%;
   /* Während der Breitenmessung ist ein Zettel kurzzeitig `max-content` breit
      und kann die Wand überragen. `clip` verhindert, dass dabei ein waagerechter
      Bildlauf aufblitzt; `visible` in der Senkrechten hält Reißzwecke und
-     Klebeband sichtbar, die über die Oberkante hinausragen. */
+     Klebeband sichtbar, die über die Oberkante hinausragen. Das bleibt so,
+     obwohl seit Ticket 04 oben Platz für sie reserviert ist: es trägt weiter
+     den Fall, dass ein Zettel während der Breitenmessung kurzzeitig übersteht. */
   overflow-x: clip;
   overflow-y: visible;
   border: 2px solid rgba(0, 0, 0, 0.12);
   transition: height 0.42s cubic-bezier(0.2, 0.8, 0.3, 1);
+}
+
+/* Vor dem ersten geglückten Packlauf (Ticket 02). Die Mindesthöhe steht als
+   Inline-Style am Element (→ `placeholderMinHeight`), weil sie aus der zuletzt
+   gepackten Höhe kommt und keine Konstante ist. Hier bleibt nur, was sich nicht
+   rechnen lässt: Die erste Höhe darf NICHT von `0` heranfahren — sie steht
+   schon, bevor die Zettel sichtbar werden, und ein Wachsen unter dem
+   Platzhalter wäre genau der Höhensprung, den die Mindesthöhe verhindert. */
+.wall--unpacked {
+  transition: none;
+}
+
+/* Die Hülle der Zettel ist NUR ein Deckel für das Einblenden: `position:
+   static`, damit die absolut positionierten Zettel weiterhin gegen `.wall`
+   rechnen, und ohne eigene Größe, weil ihre Kinder alle aus dem Fluss sind. */
+.wall-notes {
+  opacity: 1;
+  transition: opacity 0.15s ease-out;
+}
+
+/* `opacity`, nicht `display: none` oder `visibility`: `relayout` misst die
+   Zettel am DOM (`getBoundingClientRect`), und ausgeblendete Elemente messen
+   sich als 0 — die Wand käme nie über den ersten Lauf hinaus. */
+.wall--unpacked .wall-notes {
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* Der Platzhalter liegt IN der Wand, aber nicht unter den Zetteln — beim
+   Erscheinen ist er weg, die Regel wirkt also nur währenddessen. */
+.wall-skeleton {
+  margin: 0;
+  padding: 8px;
+}
+
+.wall-skeleton .skeleton-card {
+  height: 120px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wall-notes {
+    transition: none;
+  }
 }
 
 .wall-empty {

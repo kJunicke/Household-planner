@@ -544,26 +544,32 @@ const markTorn = (subtaskId: string) => {
 /**
  * Was diese Geste NICHT starten darf.
  *
- * Das Eselsohr und die Griffe der Zettelchen haben ihre eigene Geste
- * (`useTearGesture`), der Bearbeiten-Knopf seinen Klick. Weil `pointerdown` bis
- * zum Wurzelelement hochblubbert, würde der Long-Press dort sonst **zusätzlich**
- * mitlaufen: ein Zug am Eselsohr hätte nach 420 ms auch die Richtungen
- * eingeblendet, und dieselbe Fingerbewegung nach unten hätte zweimal erledigt.
+ * **Nur noch die Abreiß-Griffe** (Ticket 01). Das Eselsohr des Zettels
+ * (`.ear`) und die Mini-Eselsohren der Zettelchen (`.mini-ear`) haben ihre
+ * eigene Geste (`useTearGesture`); weil `pointerdown` bis zum Wurzelelement
+ * hochblubbert, liefe der Long-Press dort sonst **zusätzlich** mit: ein Zug am
+ * Eselsohr hätte nach 420 ms auch die Richtungen eingeblendet, und dieselbe
+ * Fingerbewegung nach unten hätte zweimal erledigt. Das **Abreißen** ist
+ * außerdem laut Glossar ausdrücklich vom **Greifen** ausgenommen — es greift
+ * sofort und **ohne Kranz**, weil es nur ein Ziel hat. Genau das leistet dieser
+ * Wächter: startet die Geste hier nicht, erscheint auch keine Beschriftung.
  *
- * Das ganze Zettelchen (`.mini`) ist ausgenommen, nicht nur sein Griff: es liegt
- * im aufgeklappten Zettel als eigene Fläche darin, und ein Long-Press auf einer
- * Unteraufgabe, der Richtungen für den ELTERN-Zettel einblendet, wäre eine
- * Aussage über das falsche Ding.
+ * **Was hier bewusst NICHT mehr steht: `.mini`, `.edit`, `.subs-badge`.**
+ * Ticket 01 dreht die Regel um — *der ganze Zettel ist Griff*. Ein Finger, der
+ * auf dem Bearbeiten-Stift, dem Unteraufgaben-Abzeichen oder der Zeile eines
+ * aufgeklappten Zettelchens aufsetzt, muss den Zettel genauso greifen können
+ * wie leeres Papier; wo er aufsetzt, ist für das Greifen ohne Bedeutung.
  *
- * **`.subs-badge` dazugekommen (Karten-Redesign, Ticket 00a).** Das
- * Unteraufgaben-Zeichen in der Fußzeile ist jetzt ein echter Knopf mit
- * eigenem `@click.stop` (auf-/zuklappen) — ohne diesen Eintrag würde ein
- * langes Drücken darauf denselben Fehler reproduzieren, den dieser Wächter für
- * Eselsohr, Zettelchen und Stift verhindert: die Richtungen blendeten sich
- * ein, statt dass der Knopf sein eigenes Antippen bekommt.
+ * Die Knöpfe verlieren dadurch nichts: sie hängen an `@click`, feuern also
+ * ohnehin erst beim Loslassen, und ein Loslassen NACH überschrittener
+ * Halte-Schwelle schluckt der Klick-Wächter am Fenster (`armClickGuard` in
+ * `useDirectionPress`, feuert bei `fired` auch ohne anliegende Richtung). Wer
+ * gespürt hat, dass er greift, bekommt beim Loslassen also weder ein
+ * Bearbeiten-Modal noch ein Auf-/Zuklappen. Ein kurzer Tipp läuft wie gehabt
+ * durch — unter 420 ms wird der Wächter nie scharf.
  */
 const isPressControl = (target: EventTarget | null): boolean =>
-  target instanceof Element && target.closest('.ear, .mini, .edit, .subs-badge') !== null
+  target instanceof Element && target.closest('.ear, .mini-ear') !== null
 
 /**
  * Die Belegung ist in `WallDirectionMenu` beschriftet und hier ausgeführt —
@@ -615,6 +621,7 @@ const {
   onPointerMove: onPressMove,
   onPointerUp: onPressUp,
   onPointerCancel: onPressCancel,
+  onTouchStart: onPressTouchStart,
   onTouchMove: onPressTouchMove
 } = press
 
@@ -840,6 +847,18 @@ const handlePostponeConfirm = async (targetDate: string) => {
 </script>
 
 <template>
+  <!-- `@contextmenu.prevent` (Ticket 01): die native Langdruck-Geste des
+       Browsers ist der einzige Mechanismus, der ortsabhängig ist — sie hängt
+       daran, WAS unter dem Finger liegt (Text, Bild, Auswahlbares), während
+       unser eigener Timer in `useDirectionPress` die Stelle gar nicht kennt.
+       Sie feuert die native Haptik (die App selbst ruft nirgends
+       `navigator.vibrate`) und nimmt uns danach den Zeiger per `pointercancel`
+       weg. `user-select: none` unterdrückt nur die SICHTBARE Auswahl — Marker
+       und Lupe bleiben deshalb aus, die Geste läuft trotzdem. Erst das
+       Abbestellen des Kontextmenüs bricht sie ab; genau das tut auch das
+       ältere `useLongPress` der Listen, das seit jeher `@contextmenu` bindet.
+       Am Zettel geht dabei nichts verloren: er ist ein Knopf, kein Fließtext,
+       und ein Kontextmenü hat dort keine Aufgabe. -->
   <div
     ref="root"
     class="zettel"
@@ -860,7 +879,9 @@ const handlePostponeConfirm = async (targetDate: string) => {
     @pointermove="onPressMove"
     @pointerup="onPressUp"
     @pointercancel="onPressCancel"
+    @touchstart.passive="onPressTouchStart"
     @touchmove="onPressTouchMove"
+    @contextmenu.prevent
   >
     <!-- Befestigung: Reißzwecke / Klebeband / Büroklammern.
          Sie ist das Typ-Signal, deshalb kein Text daneben. -->
@@ -1012,8 +1033,13 @@ const handlePostponeConfirm = async (targetDate: string) => {
          genau dort, wo ein Zug nach unten oder rechts enden kann. Dass er das
          Modal trotzdem nicht öffnet, regelt der Klick-Wächter am Fenster (→
          `useDirectionPress`) — er sieht den Klick in der Einfangphase, vor
-         diesem `@click.stop`. Der Long-Press startet auf diesem Knopf selbst
-         ohnehin nicht: `.edit` steht in `isPressControl` (siehe Skript). -->
+         diesem `@click.stop`.
+
+         **Seit Ticket 01 startet der Long-Press auch AUF diesem Knopf**:
+         `.edit` steht nicht mehr in `isPressControl`, der ganze Zettel ist
+         Griff. Derselbe Wächter trägt beide Fälle — wer hier lange drückt,
+         greift den Zettel, und beim Loslassen ohne Bewegung öffnet sich
+         KEIN Modal. Ein kurzer Tipp öffnet es wie bisher. -->
     <button class="edit" title="Aufgabe bearbeiten" @click.stop="showEditModal = true">
       <i class="bi bi-pencil" aria-hidden="true"></i>
     </button>
@@ -1183,7 +1209,16 @@ const handlePostponeConfirm = async (targetDate: string) => {
      „deutlich dicker als bisher" für den inzwischen wieder entfernten
      Zuweisungs-Rahmen; die Forderung ist mit ihm entfallen). Konstant für
      alle Zustände, damit Zuweisen/Zurücknehmen keinen Sprung im Innenraum
-     auslöst (`box-sizing: border-box`). */
+     auslöst (`box-sizing: border-box`).
+
+     ACHTUNG, diese 2px stehen nicht nur hier: der umschließende Block der
+     absolut positionierten Befestigungen (`.pin`, `.tape`, `.clip`) ist die
+     PADDING-Box dieses Elements, während die Wand gegen die Border-Box
+     positioniert. Jede Befestigung sitzt dadurch 2px tiefer und 2px weiter
+     innen, als ihr eigenes CSS aussagt — und genau daraus rechnet die Wand ihr
+     oberes Polster. Wer diesen Wert ändert, ändert `ZETTEL_BORDER` in
+     `src/lib/wallLayout.ts` mit, sonst ragen die Befestigungen wieder über den
+     Kork (Ticket 04). */
   border: 2px solid transparent;
   border-radius: 3px;
   background: var(--pw-paper);
@@ -2050,6 +2085,9 @@ const handlePostponeConfirm = async (targetDate: string) => {
 }
 
 /* --- Typ 1: offene Putzaufgabe — weißes Papier, Reißzwecke ---------------- */
+/* Ragt über die Oberkante des Zettels; die Wand hält oben Platz dafür frei.
+   Wer diesen Wert oder die Maße ändert, ändert `FASTENERS` in
+   `src/lib/wallLayout.ts` mit (Ticket 04). */
 .pin {
   position: absolute;
   top: -7px;
@@ -2093,6 +2131,14 @@ const handlePostponeConfirm = async (targetDate: string) => {
   font-size: 15px;
 }
 
+/* Ragt über die Oberkante des Zettels. Wie weit, hängt nicht nur an diesem
+   `top`: der Rahmen von `.zettel` senkt es um 2px, `rotate(-4deg)` weiter unten
+   hebt es zusammen mit der Neigung des Zettels selbst (`rotationOf`, -3…+3deg,
+   siehe `noteStyle`) wieder an, und weil der Streifen mit 46px der breiteste
+   ist, schlägt die Drehung bei ihm am stärksten durch. Die Wand hält oben Platz
+   dafür frei; gerechnet wird das in `FASTENERS` / `overhangOf` in
+   `src/lib/wallLayout.ts`. Wer `top`, `width`, `height` oder die Drehung
+   ändert, ändert die Zeile dort mit (Ticket 04). */
 .tape {
   position: absolute;
   top: -9px;
@@ -2100,7 +2146,21 @@ const handlePostponeConfirm = async (targetDate: string) => {
   margin-left: -23px;
   width: 46px;
   height: 16px;
-  background: rgba(255, 255, 255, 0.62);
+  /* Trägt die Zuweisungsfarbe (Ticket 03) — die dritte Befestigungssorte,
+     Ticket 10 hatte nur die Reißzwecke geregelt. ZWEI bewusste Abweichungen
+     von `.pin` und `.clip`, bitte nicht „angleichen":
+
+     1. Durchscheinend, nicht deckend. `user_color` ist ein roher Hexwert ohne
+        Alphakanal, die 62 % müssen deshalb beim Mischen entstehen. Ein
+        `rgba()`-Literal kann die Personenfarbe nicht aufnehmen, und `opacity`
+        am Element wäre kein Ersatz: sie schlüge auch auf die Tintenkontur
+        (`border` gleich darunter) und den Schlagschatten durch. Der Streifen
+        soll Klebeband bleiben, kein buntes Washi-Tape.
+     2. OHNE Zuständigkeit KEIN Rückfall auf `--owner-none`, sondern
+        durchscheinendes Weiß — exakt das bisherige Bild. Reißzwecke und
+        Büroklammer zeigen „niemand zuständig" aktiv an, der Klebestreifen
+        nicht. Nutzerentscheidung (Q32/Q33). */
+  background: color-mix(in srgb, var(--owner, #ffffff) 62%, transparent);
   border: 1.5px solid rgba(36, 31, 26, 0.42);
   transform: rotate(-4deg);
   box-shadow: 0 1px 0 rgba(0, 0, 0, 0.12);
@@ -2132,6 +2192,13 @@ const handlePostponeConfirm = async (targetDate: string) => {
   font-size: 18px;
 }
 
+/* Ragt über die Oberkante des Zettels; die Wand hält oben Platz dafür frei.
+   Wer diesen Wert, die Maße oder die Kantenlage und Drehung von
+   `.clip--l`/`.clip--r` ändert, ändert `FASTENERS` in `src/lib/wallLayout.ts`
+   mit (Ticket 04). Die Kantenlage ist dort der wichtigste Teil: `left: 12px`
+   bzw. `right: 12px` geht als `inset` (12 + halbe Breite) in die Rechnung ein
+   und ist bei breiten Zetteln der DOMINIERENDE Beitrag — eine Klammer an der
+   Kante fährt mit der Neigung des Zettels nach oben. */
 .clip {
   position: absolute;
   top: -8px;
@@ -2165,6 +2232,14 @@ const handlePostponeConfirm = async (targetDate: string) => {
   border-radius: 2px;
 }
 
+/* Die `12px` sind nicht nur Zierde: sie setzen die Klammern an die KANTEN des
+   Zettels, und dort hebt die Neigung des Zettels (`rotationOf`, siehe
+   `noteStyle`) sie mit an — je breiter der Zettel, desto stärker. Auf einem
+   aufgeklappten Projekt über die volle Wandbreite ist dieser Hebel der GRÖSSTE
+   Beitrag zum Überstand, größer als `top` und die Drehung zusammen. Die Wand
+   hält oben Platz dafür frei. Wer hier `left`/`right` oder die Drehung ändert,
+   ändert `FASTENERS` in `src/lib/wallLayout.ts` mit — dort stehen beide
+   Klammern als getrennte Zeilen mit `anchor` und `inset` (Ticket 04). */
 .clip--l {
   left: 12px;
   transform: rotate(-7deg);

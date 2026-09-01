@@ -399,6 +399,290 @@ export interface PackedWall {
 const SKYLINE_RESOLUTION = 4
 
 /**
+ * Die Rahmenbreite von `.zettel` (`WallNote.vue`, `border: 2px solid transparent`).
+ *
+ * **Unsichtbar, aber nicht folgenlos.** Bei universellem `box-sizing:
+ * border-box` (`src/assets/base.css`) belegt der Rahmen Platz INNERHALB der
+ * Breite, die `WallView` setzt. Der umschließende Block einer absolut
+ * positionierten Befestigung ist die **Padding-Box** von `.zettel`, der Packer
+ * positioniert aber gegen die **Border-Box** (`el.style.top = note.y`). Jede
+ * Befestigung sitzt damit 2 px tiefer und 2 px weiter innen, als ihr eigenes
+ * CSS vermuten lässt — wer diesen Rahmen ändert, verschiebt alle drei
+ * Befestigungen und damit das obere Polster der Wand.
+ */
+const ZETTEL_BORDER = 2
+
+/**
+ * Wo eine Befestigung waagerecht auf dem Zettel sitzt. Entscheidend für den
+ * Überstand, weil der geneigte Zettel alles, was nicht in seiner Mitte sitzt,
+ * mit anhebt oder absenkt (→ `overhangOf`).
+ *
+ * - `center` — `left: 50%` plus negatives `margin-left` in halber Breite.
+ * - `left` / `right` — `inset` ist der Abstand von der jeweiligen Kante der
+ *   **Padding-Box** bis zur **Mitte** der Befestigung.
+ */
+type FastenerAnchor = 'center' | 'left' | 'right'
+
+/**
+ * Die **Befestigungen** (→ CONTEXT.md) als Geometrie, abgeschrieben aus den
+ * CSS-Regeln in `WallNote.vue`.
+ *
+ * **Warum das hier steht.** Jede Befestigung sitzt konstruktiv über der
+ * Oberkante ihres Zettels (negatives `top`). Steht ein Zettel in der obersten
+ * Reihe, ragt sie damit über die Oberkante der WAND — der Befund aus Ticket 04.
+ * Die Wand muss oben Platz reservieren, und wie viel, ist keine freie Setzung
+ * des Layouts, sondern eine Ablesung aus dem Stylesheet.
+ *
+ * **Es ist eine Zeile je Befestigung, nicht je Sorte.** Die beiden Hälften der
+ * doppelten Büroklammer stehen getrennt: sie sind verschieden gedreht (`-7deg`
+ * / `+6deg`) und sitzen an verschiedenen KANTEN. Genau diese Kantenlage
+ * entscheidet, welche von beiden der geneigte Zettel nach oben fährt, und sie
+ * ließe sich mit einer gemeinsamen Zeile gar nicht ausdrücken.
+ *
+ * **Die Regel lautet „so hoch wie die höchste Befestigung", nicht „11".**
+ * Deshalb steht hier die Geometrie und nicht das Ergebnis: wer eine vierte
+ * Befestigungssorte baut, trägt sie hier ein und bekommt das Polster geschenkt.
+ * Wer eine bestehende verschiebt, dreht oder umhängt, ändert diese Zeile mit.
+ *
+ * **Der Wermutstropfen: es ist eine Kopie.** Eine echte einzige Quelle — eine
+ * CSS-Custom-Property, an der `WallNote.vue` und diese Rechnung gemeinsam
+ * hängen — ist nicht herstellbar: der Packer rechnet in Zahlen, lange bevor ein
+ * Zettel im DOM steht, und die Werte am Element abzumessen hieße, sie in genau
+ * dem Moment zu brauchen, in dem es sie noch nicht gibt. Getragen wird die
+ * Kopplung deshalb durch Kommentare an BEIDEN Enden: die CSS-Regeln in
+ * `WallNote.vue` (`.zettel`, `.pin`, `.tape`, `.clip`) verweisen hierher.
+ *
+ * **Nicht enthalten:** `.pw-tape` aus `pinnwand.css` (62 × 20 px, `top: -10px`)
+ * hätte den größten Überstand von allen, ist aber **toter Code** — die Klasse
+ * kommt in keinem Markup vor, nur die gleichnamige CSS-Variable wird benutzt.
+ * Sollte sie je in Gebrauch kommen, gehört sie in diese Tabelle.
+ *
+ * **Ebenfalls nicht enthalten: Schlagschatten** (alle werfen nach unten) und
+ * die zusätzlichen Neigungen der Griff-Zustände (`.zettel--tearing` u. a., bis
+ * +9 deg).
+ *
+ * Letztere sind nicht bloß „kurz", sie sind **geometrisch ausgeschlossen**: die
+ * Zusatzneigung tritt ausschließlich zusammen mit einer Abwärtsbewegung auf
+ * (`translate(pull·0.1, pull) rotate(rotation + min(9, pull·0.09))` in
+ * `noteStyle`, immer mit `pull > 0`). Je Pixel `pull` wächst der Überstand um
+ * höchstens rund 0,24 px, während der Zettel um volle 1,0 px nach UNTEN
+ * wandert — Verhältnis rund 4 : 1 zugunsten von unten. Ein gegriffener Zettel
+ * ragt damit in keinem Moment weiter über den Kork als im Ruhezustand. Für ihn
+ * zu polstern wäre nicht nur teuer, es wäre gegenstandslos.
+ */
+const FASTENERS: ReadonlyArray<{
+  /** Die CSS-Regel in `WallNote.vue`, aus der diese Zeile abgeschrieben ist. */
+  css: string
+  /** Zettelgruppe, die diese Befestigung trägt — siehe `fastenersOfGroup`. */
+  group: 0 | 1 | 2
+  anchor: FastenerAnchor
+  /** Nur bei `left`/`right`: Padding-Box-Kante bis Mitte der Befestigung. */
+  inset: number
+  /** `top` der CSS-Regel, gegen die Padding-Box von `.zettel`. */
+  top: number
+  width: number
+  height: number
+  /** Eigene `rotate()`-Drehung in Grad. */
+  rotation: number
+}> = [
+  /** Reißzwecke — fällige (wiederkehrende, einmalige) Aufgaben. */
+  { css: '.pin', group: 0, anchor: 'center', inset: 0, top: -7, width: 14, height: 14, rotation: 0 },
+  /** Klebestreifen — tägliche Aufgaben. Der breiteste, deshalb der drehempfindlichste. */
+  {
+    css: '.tape',
+    group: 1,
+    anchor: 'center',
+    inset: 0,
+    top: -9,
+    width: 46,
+    height: 16,
+    rotation: -4
+  },
+  // Doppelte Büroklammer — Projekte. `inset` = `left: 12px` plus halbe Breite
+  // (7,5) = 19,5 px von der Padding-Box-Kante bis zur Mitte der Klammer.
+  /** Linke Hälfte der doppelten Büroklammer (`.clip` + `.clip--l`). */
+  {
+    css: '.clip--l',
+    group: 2,
+    anchor: 'left',
+    inset: 19.5,
+    top: -8,
+    width: 15,
+    height: 20,
+    rotation: -7
+  },
+  /** Rechte Hälfte der doppelten Büroklammer (`.clip` + `.clip--r`). */
+  {
+    css: '.clip--r',
+    group: 2,
+    anchor: 'right',
+    inset: 19.5,
+    top: -8,
+    width: 15,
+    height: 20,
+    rotation: 6
+  }
+]
+
+/**
+ * Die Befestigungen, die ein Zettel dieser Gruppe tragen KANN.
+ *
+ * `WallView` füllt die Gruppen aus `pendingTasks` / `dailyTasks` /
+ * `projectTasks`; welche Befestigung ein Zettel wirklich zeichnet, entscheidet
+ * `WallNote.vue` dagegen über `kindOfTaskType` (`open` / `daily` / `project`).
+ *
+ * **Das deckt sich NICHT überall Eins zu Eins, und zwar bei Gruppe 1.**
+ * `dailyTasks` ist `daily` **und** `one-time` (`useTaskBoard.ts`), aus
+ * `one-time` macht `kindOfTaskType` aber ein `'open'` — ein einmaliger Zettel
+ * liegt also in Gruppe 1 und trägt trotzdem eine **Reißzwecke**. Diese Funktion
+ * gibt ihm hier `.tape`.
+ *
+ * **Die Abweichung fällt auf die sichere Seite.** `.tape` überstehet weiter als
+ * `.pin` (bei 160 px: 9,7 gegen 5,4), das Polster wird für einen solchen Zettel
+ * also ÜBERschätzt, nie unterschätzt. Wer die Zuordnung eines Tages
+ * begradigt, gewinnt hier ein paar Pixel; nötig ist es nicht.
+ *
+ * Eine **unbekannte** Gruppe bekommt aus demselben Grund **alle**
+ * Befestigungen, nicht keine — sichtbarer Kork ist ein Schönheitsfehler, eine
+ * überstehende Befestigung ist der gemeldete Bug. Damit dieser Zweig überhaupt
+ * erreichbar ist, meldet `WallView` einen Zettel ohne Gruppenzuordnung als
+ * `-1` und nicht als `0`; ein `?? 0` dort führte ihn still zur KNAPPSTEN Sorte
+ * und machte dieses Netz wirkungslos.
+ */
+const fastenersOfGroup = (group: number): typeof FASTENERS => {
+  const own = FASTENERS.filter(f => f.group === group)
+  return own.length > 0 ? own : FASTENERS
+}
+
+const RAD = Math.PI / 180
+
+/**
+ * Wie weit eine Befestigung über die Oberkante ihres Zettels hinausragt —
+ * in Abhängigkeit von **Zettelbreite** und **Zettelneigung**.
+ *
+ * **Der Überstand ist keine Konstante.** Drei Dinge wirken zusammen:
+ *
+ * 1. **Der Zettelrahmen** verschiebt den Ursprung: `top` ist gegen die
+ *    Padding-Box gemessen, positioniert wird gegen die Border-Box
+ *    (→ `ZETTEL_BORDER`). Das SENKT den Überstand um 2 px.
+ * 2. **Die eigene Drehung** der Befestigung. Gedreht wird um die Mitte
+ *    (`transform-origin` steht nirgends, also der Vorgabewert `50% 50%`), die
+ *    Mitte bleibt liegen und die halbe Höhe der umschließenden Kiste wächst auf
+ *    `(b·sin α + h·cos α) / 2`. Das HEBT den Überstand.
+ * 3. **Die Neigung des Zettels** (`rotationOf`, −3…+3 deg, in `noteStyle` als
+ *    Inline-`transform`, ebenfalls um die Mitte). Sie wirkt doppelt: die
+ *    Drehungen **komponieren** (ein Klebestreifen steht faktisch −7…−1 deg), und
+ *    eine Befestigung, die NICHT in der Zettelmitte sitzt, fährt mit hoch, wenn
+ *    der Zettel sich zu ihr hin neigt. Der Hebel ist der Abstand zur Zettelmitte
+ *    — also **breitenabhängig**: auf einem wandbreiten aufgeklappten Projekt
+ *    hebt eine Klammer an der Kante um mehrere Pixel, auf einem 160-px-Zettel
+ *    kaum.
+ *
+ * Punkt 3 ist der Grund, warum ein Skalar das nicht tragen kann: der Überstand
+ * eines 320-px-Zettels ist ein anderer als der eines 160-px-Zettels, bei
+ * identischem CSS.
+ *
+ * **Bewusst weggelassen:** die Zettelneigung senkt die Oberkante in der
+ * Zettelmitte zusätzlich um `(H/2)·(1 − cos θ)`. Bei 3 deg sind das rund
+ * **0,05 px** an einem gewöhnlichen 80-px-Zettel und rund **0,34 px** an einem
+ * hohen aufgeklappten Projekt (H ≈ 500) — die Spanne wächst mit der
+ * Zettelhöhe. Der Term braucht genau diese Höhe und macht das Ergebnis nur
+ * KLEINER; ihn wegzulassen ist die konservative Seite und spart die
+ * Abhängigkeit.
+ *
+ * @param noteWidth Border-Box-Breite des Zettels, wie `WallView` sie setzt.
+ * @param tiltDeg   Neigung des Zettels in Grad (`rotationOf`).
+ * @returns Überstand über die Zettel-Oberkante in px, nie negativ.
+ */
+const overhangOf = (
+  fastener: (typeof FASTENERS)[number],
+  noteWidth: number,
+  tiltDeg: number
+): number => {
+  const tilt = tiltDeg * RAD
+  const total = (tiltDeg + fastener.rotation) * RAD
+  // Halbe Höhe der umschließenden Kiste der GEDREHTEN Befestigung.
+  const halfExtent =
+    (fastener.width * Math.abs(Math.sin(total)) +
+      fastener.height * Math.abs(Math.cos(total))) /
+    2
+  // Mitte der Befestigung, gegen die Border-Box des ungeneigten Zettels.
+  const centerY = ZETTEL_BORDER + fastener.top + fastener.height / 2
+  const centerX =
+    fastener.anchor === 'center'
+      ? noteWidth / 2
+      : fastener.anchor === 'left'
+        ? ZETTEL_BORDER + fastener.inset
+        : noteWidth - ZETTEL_BORDER - fastener.inset
+  // Hebelarm zur Zettelmitte, um die geneigt wird. Positiv = rechts der Mitte.
+  const lever = centerX - noteWidth / 2
+  return Math.max(0, halfExtent - centerY * Math.cos(tilt) - lever * Math.sin(tilt))
+}
+
+/**
+ * Das Polster, das die Wand oben freihält, damit **keine** Befestigung über den
+ * Kork hinausragt (Ticket 04) — aufgerundet auf ganze Pixel.
+ *
+ * **Gerechnet wird über die Zettel, die wirklich gepackt werden**, nicht über
+ * eine Tabellenzeile und nicht über einen Worst Case der Wandbreite. Jeder
+ * Zettel bringt beide Eingangsgrößen mit: seine gemessene Breite steht in
+ * `WallNoteMetrics`, seine Neigung ist `rotationOf(id)` — **deterministisch aus
+ * der Kennung**, dieselbe Funktion, die `WallNote.vue` für sein `transform`
+ * benutzt. Es wird also nichts geschätzt und kein ungünstigster Winkel
+ * angenommen: der Überstand jedes einzelnen Zettels ist exakt bekannt.
+ *
+ * **Das Maximum über ALLE Zettel, nicht über die oberste Reihe.** Die oberste
+ * Reihe steht erst fest, wenn gepackt ist — das Polster muss aber vorher
+ * feststehen, sonst müsste zweimal gepackt werden, und beim zweiten Lauf
+ * verschöbe das geänderte Polster womöglich wieder, wer oben steht. Diese
+ * Rückkopplung ist es nicht wert.
+ *
+ * **Der Preis, benannt:** steht der Zettel mit dem größten Überstand NICHT in
+ * der obersten Reihe, bleibt oben etwas leerer Kork stehen. Der Betrag ist die
+ * Differenz zweier Überstände, nicht der Überstand selbst — im Alltag (Mobil,
+ * Zettel um 160 px, gemischte Sorten) liegen alle Zettel zwischen rund 5 und
+ * 10 px, es geht also um **wenige Pixel**.
+ *
+ * **Der Preis hat aber auch eine Bewegung, und die gab es vorher nicht.** Für
+ * `.pin` und `.tape` ist der Hebelarm null, ihr Überstand hängt also gar nicht
+ * an der Breite — bei **Projekten** hängt er daran. Wer ein Projekt aufklappt
+ * (rund 144 px → volle Wandbreite), treibt `.clip--l` von rund 9,2 auf rund
+ * 13,8 px und damit das Polster von **10 auf 14 px**. Die ganze Wand rutscht in
+ * dem Moment 4–5 px nach unten, und das liegt über der FLIP-Schwelle von
+ * 0,6 px: **alle** Zettel fliegen die Animation mit, nicht nur die, die dem
+ * aufgeklappten ausweichen. Zuklappen bewegt sie ebenso zurück, und ebenso das
+ * Abreißen des letzten Projekts.
+ *
+ * Wahrscheinlich unauffällig, weil es genau im Aufklapp-Moment passiert, in dem
+ * sich ohnehin die halbe Wand bewegt — aber es ist eine neue Bewegung, und wer
+ * sie beim Testen sieht, soll sie hier wiederfinden statt sie für einen Fehler
+ * zu halten. Sie ist der Preis dafür, dass die Abnahme in JEDER Konstellation
+ * hält: ein zu knappes Polster verfehlt sie, ein Polster, das dem breitesten
+ * Fall dauerhaft folgt (also nie schrumpft), kostete stattdessen dauerhaft
+ * 4–5 px Kork.
+ *
+ * Ohne Zettel ist das Polster **0**: keine Befestigung, kein Platzbedarf. Die
+ * leere Wand bleibt damit 0 px hoch und trägt keinen Streifen Kork, den niemand
+ * bestellt hat (den sich `rememberWallHeight` in `WallView.vue` sonst als
+ * Mindesthöhe des Platzhalters merkte).
+ *
+ * Es kommt oben Platz **hinzu**, es wird nichts umgerechnet: die Abstände der
+ * Zettel untereinander sind unberührt, die Wand wächst um genau diesen Betrag
+ * nach oben. Die Unterkante bleibt bewusst ohne Polster (Ticket 04).
+ */
+function topPaddingFor(notes: readonly WallNoteMetrics[]): number {
+  let worst = 0
+  for (const note of notes) {
+    const tilt = rotationOf(note.id)
+    for (const fastener of fastenersOfGroup(note.group)) {
+      const overhang = overhangOf(fastener, note.width, tilt)
+      if (overhang > worst) worst = overhang
+    }
+  }
+  return Math.ceil(worst)
+}
+
+/**
  * Wie weit der y-Versatz einen Zettel höchstens nach UNTEN schiebt.
  * `jitterOf(id, 'y', 4) - 2.5` liegt in [−6,5; +1,5] — nach unten also 1,5 px.
  *
@@ -575,7 +859,23 @@ export function packWall(
   pins: readonly WallPin[] = []
 ): PackedWall {
   const columns = Math.max(1, Math.ceil(wallWidth / SKYLINE_RESOLUTION))
-  const skyline = new Array<number>(columns).fill(0)
+  /**
+   * Das obere Polster für die überstehenden Befestigungen (Ticket 04).
+   *
+   * Aus den Zetteln gerechnet, die gleich gepackt werden — Breite und Neigung
+   * gehen beide ein, siehe `topPaddingFor`. Einmal vorab, weil der Wert die
+   * ganze Rechnung trägt und sich währenddessen nicht ändern darf.
+   */
+  const topPadding = topPaddingFor(notes)
+  // Die Skyline startet NICHT bei 0, sondern beim Polster für die
+  // Befestigungen (→ `topPadding`). Damit rechnet der ganze Packer von
+  // Anfang an in Wandkoordinaten MIT Polster: `height` bringt es mit, die
+  // Vorgaben (`pins`) und `previousTop` — beide stammen aus einem früheren
+  // Packergebnis — liegen im selben Bezugssystem, und niemand muss irgendwo
+  // etwas hinein- oder herausrechnen. Ein Versatz erst am Ausgang hätte genau
+  // diese Umrechnung am Eingang nach sich gezogen, mit einer Drift je Lauf,
+  // sobald man sie vergisst.
+  const skyline = new Array<number>(columns).fill(topPadding)
   /**
    * Die UNTERKANTEN des bereits Gesetzten, je Spalte — ohne den Abstand, den
    * `skyline` zusätzlich führt (`gapOf` bzw. `EXPANDED_GAP`).
@@ -620,8 +920,22 @@ export function packWall(
   /** Vorgegebene Oberkanten, Konflikte bereits aufgelöst (siehe `resolvePins`). */
   const pinnedTops = resolvePins(pins, id => heights.get(id))
 
-  /** Weiche Untergrenze für die aktuell gepackte Gruppe, siehe Funktionskommentar. */
-  let floor = 0
+  /**
+   * Weiche Untergrenze für die aktuell gepackte Gruppe, siehe Funktionskommentar.
+   *
+   * Startet auf dem Polster für die Befestigungen (→ `topPadding`), nicht
+   * auf 0. Die angehobene Skyline allein reicht dafür NICHT: `y` ist
+   * `max(floor, contentMax, top + dy)`, und der y-Versatz `dy` zieht bis zu
+   * 6,5 px nach oben — der oberste Zettel würde sich das Polster wieder
+   * abziehen und seine Befestigung stünde erneut über dem Kork. `floor` ist
+   * genau die Klemme, die das schon für die Gruppengrenze verhindert; die
+   * Oberkante der Wand ist derselbe Fall.
+   *
+   * Die Abstände der Zettel untereinander bleiben davon unberührt: schon vorher
+   * konnte der oberste Zettel seinen Aufwärtsversatz nicht nutzen (`max(0, …)`),
+   * das Bild ist also um genau das Polster verschoben, sonst identisch.
+   */
+  let floor = topPadding
 
   /**
    * Der waagerechte Versatz je Zettel, einmal gerechnet.
@@ -1052,5 +1366,38 @@ export function packWall(
   // ruhender Zettel einen aktiv gezogenen verdecken. `WallView.vue` nutzt
   // zusätzlich 600…(600+n) für die Fluganimation, ebenfalls oberhalb dieses
   // Bereichs.
-  return { notes: placed, height: Math.max(0, ...skyline) }
+  // Ohne `Math.max(0, …)`: `skyline` hat immer mindestens eine Spalte
+  // (`columns` ist auf 1 geklemmt) und liegt nie unter ihrem Startwert
+  // `topPadding` — der eine 0 wäre unerreichbar und läse sich wie ein Schutz,
+  // den es nicht gibt. Die leere Wand kommt von selbst auf 0 heraus: ohne
+  // Zettel ist `topPadding` 0 und die Skyline unberührt.
+  return { notes: placed, height: Math.max(...skyline) }
+}
+
+/**
+ * Die zuletzt gepackte Wandhöhe — **modulweit**, nicht je Ansicht (Ticket 02).
+ *
+ * `WallView` läuft bewusst ohne `keep-alive` und wird bei jedem Reiterwechsel
+ * neu montiert. Der Platzhalter vor dem ersten Packlauf braucht aber eine
+ * Mindesthöhe, sonst springt die Seite in dem Moment, in dem die Zettel
+ * erscheinen — und eine geschätzte Konstante ist immer nur für genau eine
+ * Wandhöhe richtig, in die eine Richtung wächst die Seite, in die andere
+ * schrumpft sie.
+ *
+ * Beim Reiterwechsel sind es dieselben Aufgaben und damit fast dieselbe Höhe.
+ * Ein Wert, der die Ansicht überlebt, trifft sie also nahezu exakt, statt zu
+ * raten. Der Zustand ist bewusst schlicht: er ist nur eine Gedächtnisstütze für
+ * die Darstellung, nichts hängt fachlich daran, und ein falscher Wert kostet
+ * höchstens den Sprung, den es ohne ihn ohnehin gäbe.
+ */
+let lastPackedHeight = 0
+
+/** Merkt sich die Höhe eines geglückten Packlaufs. `0` wird nicht gemerkt. */
+export function rememberWallHeight(height: number): void {
+  if (height > 0) lastPackedHeight = height
+}
+
+/** Zuletzt gepackte Höhe in px, oder `0`, wenn in dieser Sitzung noch nie gepackt wurde. */
+export function rememberedWallHeight(): number {
+  return lastPackedHeight
 }
