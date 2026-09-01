@@ -85,8 +85,50 @@ const doneTasks = computed((): readonly Task[] => board.completedTasks.value)
 
 // --- Layout ------------------------------------------------------------------
 
-/** Luft zum Wandrand, damit ein geneigter Zettel samt Schatten nicht überhängt. */
-const EDGE = 6
+/**
+ * Luft zum Wandrand links und rechts — **fest, nicht anteilig**.
+ *
+ * **Warum fest.** Der Rand existiert für den **Daumen**: ein Zettel ganz am
+ * Rand muss noch zu greifen und zu ziehen sein. Ein Daumen wächst nicht mit
+ * der Bildschirmbreite. Ein anteiliger Rand gibt ausgerechnet dort am
+ * wenigsten, wo am wenigsten Platz ist — und kostet dort am meisten. Gemessen
+ * (Ticket 14, QC): 5 % geben dem 412-px-Gerät 19,6 px und dem 360-px-Gerät
+ * 17,0 px — praktisch dasselbe für den Daumen —, kosten das 360-px-Gerät aber
+ * **+22,9 % Wandhöhe**, das 390-px-Gerät nur +3,6 % (Rand allein, siehe
+ * nächsten Absatz). Ein Prozentsatz wurde deshalb verworfen; wer ihn wieder
+ * einführt, dreht das Ergebnis um.
+ *
+ * **Was die 12 px kosten — und was der Packer kostet.** Ticket 14 hat zwei
+ * Dinge zugleich geändert: diesen Rand (14a-0) und die Reservierung im Packer
+ * (14a-1/14a-2, → `wallLayout.ts`). Beides schlägt auf die Wandhöhe durch, und
+ * die beiden Anteile sind auseinanderzuhalten, sonst hält der nächste Leser
+ * den Rand für teurer oder billiger, als er ist. Im Browser gemessen (QC zu
+ * Ticket 14, identischer Bestand von 86 Zetteln, Ausgangswert 4847,63 px bei
+ * 390 px Fensterbreite):
+ *
+ * | Fenster | Rand allein | Packer allein | **gesamt** |
+ * |---|---|---|---|
+ * | 390 px | +0,66 % | +1,86 % | **+2,53 %** (→ 4970,49) |
+ * | 375 px | +5,77 % | +3,77 % | **+9,76 %** |
+ * | 360 px | +17,47 % | +4,06 % | **+22,24 %** (5207,55 → 6365,82) |
+ *
+ * **Diese Zahlen stammen aus dem Browser, nicht aus der Node-Fuzz-Bank.** Die
+ * Bank aus der Entwicklung von 14a-2 sagte für 390 px 5076,76 px (+4,47 %) —
+ * rund 2,1 % daneben, weil sie mit den Breiten der Baseline rechnet, statt sie
+ * neu zu planen. Für Vorher-Nachher-Vergleiche taugt sie, als Absolutwert
+ * nicht. Wer die Tabelle fortschreibt, misst im Browser.
+ *
+ * **Die 12 sind ein Kompromiss, keine Herleitung** — eine runde Zahl zwischen
+ * Greifbarkeit und Wandhöhe. Sie sind ausdrücklich **nicht** auf die
+ * gemessene Klippe hin optimiert: bei `usableWidth ≈ 324` kostet ein einzelnes
+ * Pixel +8,3 % Höhe (bei 360 px Fenster liegt sie zwischen Rand 7 und 8). Ein
+ * knapp darunter geparkter Rand wäre scheinbar gratis und **bräche still**,
+ * sobald sich ein Aufgabentitel ändert — die Klippe ist eine Eigenschaft des
+ * heutigen Bestands, nicht des Codes.
+ *
+ * Bezugsgröße bleibt die Wand (`wall.clientWidth`), nie `window.innerWidth`.
+ */
+const EDGE = 12
 
 /**
  * Zuschlag auf jede gemessene Breite.
@@ -301,6 +343,14 @@ const relayout = (animate: boolean, tappedId?: string) => {
   const wall = wallEl.value
   if (!wall) return
 
+  // `EDGE` steht hier und beim Setzen von `left` (`note.x + EDGE`) — es muss
+  // an beiden Stellen derselbe Wert sein, und deshalb ist es eine Konstante
+  // und keine Rechnung: `packWall` klemmt jeden Zettel intern auf
+  // `[0, usableWidth − Breite]`, die rechte Wandkante steht also bei
+  // `EDGE + usableWidth`. Wer den Rand hier aus der Wandbreite rechnet und
+  // dort auch nur um 1 px anders rundet, lässt genau den Zettel, der an der
+  // Klemmung hängt, über die Kante ragen — ohne dass irgendetwas darauf
+  // aufmerksam macht.
   const usableWidth = wall.clientWidth - 2 * EDGE
   if (usableWidth <= 0) return
 
@@ -764,6 +814,7 @@ const relayout = (animate: boolean, tappedId?: string) => {
   for (const note of packed.notes) {
     const el = noteEls.get(note.id)
     if (!el) continue
+    // Derselbe `EDGE` wie oben bei `usableWidth` — siehe die Begründung dort.
     const x = note.x + EDGE
     const y = note.y
     el.style.left = `${x}px`
