@@ -239,6 +239,10 @@ export const useTaskStore = defineStore('tasks', () => {
                 // Cron (reset_recurring_tasks) — sie werden nie „completed" und
                 // können mehrfach am Tag erledigt werden. Projekte werden nie
                 // fertig und sind hier ebenfalls ausgenommen.
+                // Die Regel steht an DREI Stellen: hier, in complete-task und im
+                // nächtlichen Cron (reset_recurring_tasks). Sie greift bewusst nach
+                // dem EIGENEN task_type, nicht nach dem Elternknoten — entschieden am
+                // 26.08.2026, Begründung im Glossar. Wer eine ändert, ändert alle drei.
                 if (task.task_type !== 'daily' && task.task_type !== 'project') {
                     task.emphasis_level = 0
                 }
@@ -501,7 +505,15 @@ export const useTaskStore = defineStore('tasks', () => {
     }
 
     // NACHDRUCK — Stempel-Automat 0 (kein Nachdruck) → 1 WICHTIG → 2 DRINGEND → 0
-    // (→ CONTEXT.md, "Überstempeln"; Ticket 09a). Der Automat liegt bewusst hier im
+    // (→ CONTEXT.md, "Überstempeln"; Ticket 09a).
+    //
+    // ACHTUNG: hat Stand 26.08.2026 KEINEN Aufrufer. 09a hat das Datenmodell und
+    // diesen Automaten geliefert, die Bedienung am Zettel nie — es lässt sich in
+    // der App derzeit nichts stempeln. Wer hier Verhalten ändert, ändert Verhalten,
+    // das niemand auslösen kann. Die Bedienung wird zugeschnitten in
+    // .scratch/ueberstempeln-bedienung/.
+    //
+    // Der Automat liegt bewusst hier im
     // Store statt im Zettel-Component: die Fußzeile muss nur antippen und den
     // aktuellen Wert anzeigen, nicht die Modulo-Logik kennen.
     //

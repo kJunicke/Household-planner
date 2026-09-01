@@ -250,6 +250,12 @@ Deno.serve(async (req) => {
     //   ist taskId hier ohnehin nie ein Projekt selbst — Projekt-Arbeit läuft
     //   über den "Am Projekt arbeiten"-Subtask — aber die Ausnahme steht
     //   trotzdem explizit da, statt sich auf diesen Nebeneffekt zu verlassen.)
+    //
+    // Die Regel steht an DREI Stellen: hier, im Store (optimistischer Pfad) und im
+    // nächtlichen Cron (reset_recurring_tasks). Sie greift bewusst nach dem EIGENEN
+    // task_type, nicht nach dem Elternknoten — entschieden am 26.08.2026,
+    // Begründung im Glossar (CONTEXT.md, "Überstempeln"). Wer eine ändert, ändert
+    // alle drei.
     if (taskDetails.task_type !== 'daily' && taskDetails.task_type !== 'project') {
       updateData.emphasis_level = 0
     }

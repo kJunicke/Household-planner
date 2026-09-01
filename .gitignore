@@ -22,3 +22,6 @@ skills-lock.json
 
 # Lokaler Issue-Tracker (Specs & Tickets, siehe docs/agents/issue-tracker.md)
 .scratch/
+
+# Handoff-Dokumente (lokal, nicht versioniert)
+handoffs/

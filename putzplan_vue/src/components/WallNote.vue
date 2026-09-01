@@ -1396,8 +1396,16 @@ const handlePostponeConfirm = async (targetDate: string) => {
 }
 
 /* Der Stern ist absichtlich der einzige, der aus der Reihe fällt: größer,
-   golden, stärker geneigt. Fünf Punkte sind der Ausreißer. Werte über 5
-   (Bonus-Unteraufgaben) fallen ebenfalls hierauf — bekannt offen. */
+   golden, stärker geneigt. Fünf Punkte sind der Ausreißer.
+
+   Korrektur 26.08.2026: hier stand "Werte über 5 (Bonus-Unteraufgaben) fallen
+   ebenfalls hierauf — bekannt offen". Das trifft nicht zu. tasks.effort und
+   task_completions.effort_override tragen beide einen CHECK auf höchstens 5;
+   'bonus' bedeutet eine eigene Completion-Zeile mit eigenem Wert ≤ 5, nicht
+   eine Summe. In 2910 Completions kommt kein Wert über 5 vor. Das Math.min(5, …)
+   in pointsShapeClass ist für Nicht-Projekte damit reine Vorsorge. Real werden
+   Werte über 5 erst, wenn die Punkte-Skala verdoppelt wird — dann fällt mit der
+   CHECK-Grenze auch diese Palette an (Backlog: 51 und 40). */
 .points--s5 {
   width: 39.1px;
   height: 39.1px;

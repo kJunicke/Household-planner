@@ -1,195 +1,125 @@
 # CONTEXT
 
-Domänensprache von **Putzplan**. Diese Begriffe werden im Code, in Specs und in Tickets
-einheitlich verwendet. Architekturentscheidungen liegen unter [docs/adr/](docs/adr/).
+Domänensprache von **Putzplan** — einheitlich in Code, Specs und Tickets.
+Architekturentscheidungen: [docs/adr/](docs/adr/).
 
 ## Glossar
 
-### Kadenz
-
-Der Wiederholungsabstand einer Aufgabe in Tagen (`recurrence_days`). Nur Aufgaben vom Typ
-`recurring` mit `recurrence_days > 0` haben eine Kadenz. Tägliche Aufgaben, einmalige
-Aufgaben und Projekte haben **keine** Kadenz — für sie gibt es keine Fälligkeit.
-
-Gezählt wird in **Kalendertagen**, nicht in 24-Stunden-Perioden: eine Aufgabe, die gestern
-um 23:00 Uhr erledigt wurde, hat heute um 07:00 Uhr einen Tag hinter sich.
-
 ### Fälligkeit
-
-Der Zeitpunkt, zu dem eine erledigte Aufgabe nach Ablauf ihrer Kadenz wieder ansteht.
-„Fällig in X Tagen" beschreibt den Countdown einer **erledigten** Aufgabe.
+- Zeitpunkt, zu dem eine erledigte Aufgabe nach Ablauf ihrer Kadenz wieder ansteht.
+- „Fällig in X Tagen" = Countdown einer **erledigten** Aufgabe.
 
 ### dran
-
-Eine Aufgabe ist **dran**, wenn sie offen ist und getan werden sollte. Ob eine Aufgabe dran
-ist, entscheidet allein die Datenbank über `tasks.completed` — geschrieben vom nächtlichen
-Cron, von der Edge Function `complete-task` und von der manuellen Aktion „wieder dreckig".
-
-Das Frontend leitet diesen Zustand **nicht** ab, sondern liest ihn
-→ [ADR-0001](docs/adr/0001-completed-ist-zustand-keine-ableitung.md).
+- Offen und zu tun.
+- Einzige Quelle: `tasks.completed` in der DB — geschrieben vom nächtlichen Cron, von der Edge Function `complete-task` und von **wieder dreckig**.
+- Das Frontend liest den Zustand, es leitet ihn nicht ab → [ADR-0001](docs/adr/0001-completed-ist-zustand-keine-ableitung.md).
 
 ### überfällig
-
-Eine Aufgabe ist **überfällig**, wenn sie dran ist und ihre Kadenz bereits abgelaufen ist.
-Die Zahl der Überfällig-Tage zählt **ab der Kadenz**, nicht ab der letzten Erledigung:
-
-> Kadenz 7, zuletzt vor 10 Tagen erledigt → **3 Tage überfällig**.
-
-Diese Unterscheidung ist der Grund, warum Aufgaben mit langer Kadenz nicht dauerhaft als
-stark überfällig gelten.
+- Dran **und** Kadenz abgelaufen.
+- Überfällig-Tage zählen **ab der Kadenz**, nicht ab der letzten Erledigung.
+  - Kadenz 7, zuletzt vor 10 Tagen erledigt → **3 Tage überfällig**.
+- Deshalb gelten lange Kadenzen nicht dauerhaft als stark überfällig.
 
 ### noch nie gemacht
-
-Eine wiederkehrende Aufgabe ohne jede Erledigung (`last_completed_at` ist leer). Sie gilt
-als **maximal dringend** und steht in jeder geordneten Liste ganz oben. Sie ist kein
-Sonderfall der Überfälligkeit, sondern ein eigener Zustand — eine Tageszahl gibt es für sie
-nicht. Auf der Pinnwand trägt sie den Grundabdruck **NEU** → **Stempel**.
+- Wiederkehrende Aufgabe ohne jede Erledigung (`last_completed_at` leer).
+- **Maximal dringend**, steht in jeder geordneten Liste ganz oben.
+- Eigener Zustand, kein Sonderfall der Überfälligkeit — keine Tageszahl.
+- Auf der Pinnwand: Grundabdruck **NEU** → **Stempel**.
 
 ### Stempel
-
-Der Gummistempel in der Fußzeile eines **Zettels** — die einzige Stelle, an der auf der
-Pinnwand steht, wie es um eine Aufgabe bestellt ist. **Jeder Zettel trägt einen.**
-
-Der unterste Abdruck ist **berechnet** und ergibt sich aus Kadenz und letzter Erledigung:
-**NEU**, solange eine Aufgabe noch nie erledigt wurde, sonst **FÄLLIG**. Tägliche Aufgaben
-tragen **ROUTINE**, Projekte einen eigenen Spruch — bei beiden sagt der Grundabdruck nichts
-über Dringlichkeit aus, weil beide nie in Verzug geraten können. Darüber legt der Haushalt
-von Hand nach → **Überstempeln**.
-
-**Der Stempel ordnet nicht.** Auf der Wand gelten alle fälligen Aufgaben als gleich
-dringend; innerhalb einer Gruppe entscheidet der Platz, nicht der Stempel — eine Wand ist
-keine Liste. Eine mit DRINGEND gestempelte Aufgabe darf unter einer ungestempelten hängen,
-und das ist kein Fehler → [ADR-0002](docs/adr/0002-stempel-ordnet-nicht.md).
-
-In **Listen** ordnet derselbe berechnete Vergleichswert die Aufgaben sehr wohl. Dort gibt es
-keine Stempel: die Reihenfolge ist die Aussage.
+- Gummistempel in der Fußzeile eines **Zettels**; **jeder Zettel trägt einen**.
+- Einzige Stelle auf der Pinnwand, die den Stand einer Aufgabe zeigt.
+- Unterster Abdruck ist **berechnet** aus Kadenz und letzter Erledigung:
+  - **NEU**, solange nie erledigt, sonst **FÄLLIG**.
+  - Tägliche Aufgaben: **ROUTINE**. Projekte: eigener Spruch. Beide sagen nichts über Dringlichkeit — sie geraten nie in Verzug.
+  - Darüber legt der Haushalt von Hand nach → **Überstempeln**.
+- **Der Stempel ordnet nicht.** Auf der Wand sind alle fälligen Aufgaben gleich dringend; innerhalb einer Gruppe entscheidet der Platz. Eine DRINGEND-Aufgabe darf unter einer ungestempelten hängen → [ADR-0002](docs/adr/0002-stempel-ordnet-nicht.md).
+- In **Listen** ordnet derselbe berechnete Vergleichswert sehr wohl — dort gibt es keine Stempel, die Reihenfolge ist die Aussage.
 
 ### Überstempeln
-
-Die Aussage, die ein Haushaltsmitglied einem **Zettel** von Hand mitgibt: „diesmal ist es
-wichtig". Damit handelt der Haushalt untereinander aus, was zuerst zählt — im Unterschied
-zum Grundabdruck des **Stempels**, den niemand setzt, sondern der sich aus dem Zeitplan
-ergibt.
-
-Ein Tipp auf den Stempel legt den nächsten Abdruck obenauf: **WICHTIG**, dann **DRINGEND**.
-Der nächste Tipp macht den Zettel wieder sauber — er zeigt danach nur noch seinen
-Grundabdruck, als hätte ihn nie jemand angefasst. Die vorherigen Abdrücke bleiben sichtbar
-liegen, der oberste gilt; die Höhe des Stapels ist selbst eine Aussage.
-
-Überstempeln gilt für **einen Durchlauf**, nicht für die Aufgabe: mit dem Erledigen fällt es
-weg. Bliebe es stehen, wäre nach ein paar Wochen alles dringend. Der **Grundabdruck**
-verfällt nicht — der wird berechnet und kommt von selbst wieder.
+- Von Hand gesetzte Aussage eines Haushaltsmitglieds: „diesmal ist es wichtig" — so handelt der Haushalt untereinander aus, was zuerst zählt.
+- Tipp auf den Stempel legt den nächsten Abdruck obenauf: **WICHTIG** → **DRINGEND** → wieder sauber (nur noch Grundabdruck).
+- **Träger sind Zettel und Projekte — Zettelchen nicht.** Was zuerst zählt, handelt der Haushalt über ganze Aufgaben aus, nicht über einzelne Häkchen einer Checkliste.
+- Vorherige Abdrücke bleiben sichtbar liegen; der oberste gilt, die Stapelhöhe ist selbst eine Aussage.
+- Gilt für **einen Durchlauf**: mit dem Erledigen fällt es weg (sonst wäre nach Wochen alles dringend).
+- **Der Verfall folgt dem eigenen `task_type`, nicht dem Elternknoten:** wiederkehrende Aufgaben verlieren den Nachdruck beim **Erledigen**; **tägliche** erst **nächtlich** im Cron, weil sie nie erledigt werden und der Stempel sonst mitten am Tag durch den nächsten Handgriff verschwände; **Projekte gar nicht** — sie werden nie fertig, ihr Nachdruck bleibt stehen.
+- Getragen von `tasks.emphasis_level`: **0** nur Grundabdruck, **1** WICHTIG, **2** DRINGEND. Die Verfallsregel steht im Code an **drei** Stellen — nächtlicher Cron, Edge Function `complete-task`, optimistischer Pfad im Store. Alle drei verweisen hierher; wer eine ändert, ändert alle drei.
+- Der **Grundabdruck** verfällt nicht — er wird berechnet und kommt von selbst wieder.
+- **Noch nicht bedienbar:** die Spalte, der Cron und `taskStore.cycleEmphasisLevel` stehen, aber kein Component ruft sie auf — heute lässt sich nichts stempeln → `.scratch/ueberstempeln-bedienung/`.
 
 ### Kranz
+- Vier beschriftete Richtungen, die beim Gedrückthalten eines **Zettels** erscheinen; sie erklären, was das Ziehen in die jeweilige Richtung tut.
+- Stehen an den **Bildschirmrändern**, nicht um den Zettel — sonst verdeckt der Daumen die Hälfte.
+- Erklärt die Geste, ersetzt sie nicht: gezogen wird mit demselben Finger; Loslassen ohne erreichte Richtung tut nichts.
+- **Projekte haben keinen Kranz** — bei ihnen führt nur eine Richtung zu etwas.
+- **Am Eselsohr erscheint kein Kranz** — das **Abreißen** ist eine eigene Geste mit eigenem Ziel, keine Richtungswahl.
+- Zu vermeiden: *Kreideränder*, *Randbeschriftung*.
 
-Die vier beschrifteten Richtungen, die erscheinen, wenn man einen **Zettel** gedrückt hält:
-die Erklärung dessen, was beim Ziehen in die jeweilige Richtung geschieht. Sie stehen an den
-**Bildschirmrändern**, nicht um den Zettel herum — sonst verdeckt der Daumen die Hälfte
-davon.
-
-Der Kranz erklärt die Geste, er ersetzt sie nicht: gezogen wird weiter mit demselben Finger,
-und wer loslässt, ohne eine Richtung erreicht zu haben, hat nichts getan. **Projekte haben
-keinen Kranz** — bei ihnen führt nur die eine Richtung überhaupt zu etwas.
+### Greifen
+- Gedrückthalten eines **Zettels**, bis er in der Hand liegt und sich ziehen lässt; das Telefon bestätigt es spürbar.
+- Ab der Bestätigung gehört der Zeiger dem Zettel: der ganze Zettel ist Griff, nichts darauf nimmt ihn wieder weg.
+- Das **Eselsohr** ist ausgenommen — es greift sofort und ohne Kranz, weil es nur ein Ziel hat.
 
 ### Aufklappen
+- Tipp auf einen Zettel mit Unteraufgaben: zeigt seine Zettelchen, nimmt die volle Wandbreite ein.
+- Ein aufgeklappter Zettel **bleibt liegen, wo er hängt**; Zettel im Weg rutschen unter ihn.
+- Zuklappen stellt den vorigen Zustand wieder her.
 
-Der Tipp auf einen Zettel mit Unteraufgaben: er zeigt seine Zettelchen und nimmt dafür die
-volle Wandbreite ein. Ein aufgeklappter Zettel **bleibt liegen, wo er hängt**; die Zettel,
-die ihm im Weg sind, rutschen unter ihn. Zuklappen stellt den vorigen Zustand wieder her.
-
-### Reißzwecke
-
-Die Nadel, mit der ein Zettel an der Wand steckt — und der einzige Träger der **Zuweisung**:
-ist jemand zuständig, hat sie dessen Farbe, sonst bleibt sie neutral. Kein Rahmen, keine
-zweite Farbstelle am Zettel. Projekte hängen stattdessen an einer doppelten Büroklammer, die
-dieselbe Aussage trägt.
+### Befestigung
+- Was einen **Zettel** an der Wand hält. Die Sorte hängt am Aufgabentyp: **Reißzwecke** (wiederkehrend, einmalig), **Klebestreifen** (täglich), **doppelte Büroklammer** (Projekt).
+- Die Befestigung ist der **einzige Träger der Zuweisung**: Farbe der zuständigen Person, sonst neutral. Kein Rahmen, keine zweite Farbstelle — ein Zeichen, eine Aussage.
+- Die Aussage gehört der Rolle, nicht der Form: **jede** Sorte trägt die Zuweisungsfarbe, sonst hätte ein Zettel je nach Typ verschieden viel zu sagen.
 
 ### wieder dreckig
-
-Die manuelle Aktion, mit der ein Haushaltsmitglied eine erledigte Aufgabe wieder auf dran
-setzt, obwohl ihre Kadenz noch nicht abgelaufen ist. Ihre Einschätzung hat Vorrang vor dem
-Zeitplan; die App setzt diese Entscheidung nicht zurück.
+- Manuelle Aktion: setzt eine erledigte Aufgabe wieder auf dran, obwohl die Kadenz noch läuft.
+- Die Einschätzung des Haushalts hat Vorrang vor dem Zeitplan; die App setzt sie nicht zurück.
 
 ### verschieben
-
-Die manuelle Aktion, die eine Aufgabe bis zu einem gewählten Termin aus dem Weg räumt,
-**ohne** dass jemand sie erledigt hat: keine Punkte, kein Verlaufseintrag, und der
-Zeitpunkt der letzten Erledigung bleibt unangetastet — das Intervall läuft danach im
-gewohnten Rhythmus weiter.
-
-Der Termin wird auf drei Wegen bestimmt: nach dem Intervall der Aufgabe (Vorauswahl,
-sofern eine Kadenz existiert), über eine selbst eingegebene Anzahl Tage — ausdrücklich
-auch weniger als das Intervall — oder über ein frei gewähltes Datum. Frühestens morgen.
-
-Die Aufgabe verlässt „Jetzt dran" und erscheint unter **Erledigt**, dort aber mit dem
-Kennzeichen „verschoben auf …" statt einer Fälligkeit. Am gewählten Tag holt der
-nächtliche Cron sie von selbst zurück.
-
-Technisch: `completed` wird gesetzt (damit bleibt es die alleinige Antwort auf „ist die
-Aufgabe dran") und das **Verschiebe-Datum** in einer eigenen Spalte hinterlegt. Diese
-Spalte ist keine zweite Dranheits-Quelle, sondern nur der Weckruf für den Cron.
-„Wieder dreckig" leert sie.
-
-Nicht verfügbar bei täglichen Aufgaben (setzen sich nächtlich selbst zurück) und
-Projekten (durchgehend bearbeitbar, sammeln keine Überfällig-Tage).
+- Manuelle Aktion: räumt eine Aufgabe bis zu einem Termin aus dem Weg, **ohne** Erledigung — keine Punkte, kein Verlaufseintrag, letzte Erledigung unangetastet; das Intervall läuft im gewohnten Rhythmus weiter.
+- Termin auf drei Wegen:
+  - nach dem Intervall der Aufgabe (Vorauswahl, sofern eine Kadenz existiert),
+  - eigene Anzahl Tage — ausdrücklich auch weniger als das Intervall,
+  - frei gewähltes Datum.
+  - Frühestens morgen.
+- Die Aufgabe verlässt „Jetzt dran" und erscheint unter **Erledigt** mit „verschoben auf …" statt einer Fälligkeit. Am gewählten Tag holt der nächtliche Cron sie zurück.
+- Technisch: `completed` wird gesetzt (bleibt alleinige Antwort auf „ist die Aufgabe dran"), das **Verschiebe-Datum** liegt in einer eigenen Spalte — nur Weckruf für den Cron, keine zweite Dranheits-Quelle. „Wieder dreckig" leert sie.
+- Nicht verfügbar bei täglichen Aufgaben (setzen sich nächtlich selbst zurück) und Projekten (durchgehend bearbeitbar, sammeln keine Überfällig-Tage).
 
 ### Wochenziel
-
-Die Punktzahl, die der Haushalt sich für eine Woche gemeinsam vornimmt. Sie gehört dem
-Haushalt, nicht einer Person, und jedes Mitglied darf sie ändern.
-
-Gemessen wird sie gegen die Summe aller Erledigungen der laufenden Woche — **ein** Balken
-für alle, aufgeteilt in ein Farbsegment je Mitglied. Das ist ausdrücklich **keine
-Rangliste**: die Farbanteile beantworten „wer hat was gemacht", nie „wer liegt vorn".
-
-Es gibt keine Historie: sichtbar ist immer nur die laufende Woche. Eine geänderte Zielzahl
-gilt deshalb sofort, ein geänderter Wochenstart dagegen erst ab der nächsten Woche — sonst
-verschwänden bereits gesammelte Punkte scheinbar.
+- Punktzahl, die der Haushalt sich gemeinsam für eine Woche vornimmt; gehört dem Haushalt, jedes Mitglied darf sie ändern.
+- Gemessen gegen die Summe aller Erledigungen der laufenden Woche: **ein** Balken für alle, ein Farbsegment je Mitglied.
+- Ausdrücklich **keine Rangliste** — die Farbanteile beantworten „wer hat was gemacht", nie „wer liegt vorn".
+- Keine Historie, immer nur die laufende Woche:
+  - geänderte Zielzahl gilt sofort,
+  - geänderter Wochenstart erst ab nächster Woche — sonst verschwänden gesammelte Punkte scheinbar.
 
 ### Zettel
-
-Eine einzelne Aufgabe im Pinnwand-Aussehen: ein Stück Papier an der Wand. Das Papier trägt
-den Typ der Aufgabe — wiederkehrend, täglich, einmalig und Projekt sehen unterschiedlich
-aus. Ein Zettel ist immer **genau eine** Aufgabe; er hat ein **Eselsohr** und lässt sich
-**abreißen**.
+- Eine einzelne Aufgabe im Pinnwand-Aussehen: ein Stück Papier an der Wand.
+- Das Papier trägt den Typ: wiederkehrend, täglich, einmalig und Projekt sehen unterschiedlich aus.
+- Immer **genau eine** Aufgabe; hat ein **Eselsohr** und lässt sich **abreißen**.
 
 ### langer Zettel
-
-Das Papier, auf dem eine **Liste** steht — Einkauf, Packliste oder To-do. Nicht die Liste
-selbst, sondern ihre Hülle: Kante, Linien, Kopfzeile. Ein langer Zettel trägt **viele**
-Einträge, hat kein Eselsohr und wird nicht abgerissen.
-
-Das ist der Gegenbegriff zum **Zettel**: eine Aufgabe an der Wand gegenüber einer Liste auf
-einem Screen. Die beiden teilen die Papier-Optik, aber weder Inhalt noch Gesten.
+- Papier, auf dem eine **Liste** steht (Einkauf, Packliste, To-do) — nicht die Liste selbst, sondern ihre Hülle: Kante, Linien, Kopfzeile.
+- Trägt **viele** Einträge, hat kein Eselsohr, wird nicht abgerissen.
+- Gegenbegriff zum **Zettel**: Aufgabe an der Wand vs. Liste auf einem Screen — gleiche Papier-Optik, weder Inhalt noch Gesten geteilt.
 
 ### Abreißen
-
-Die Geste, mit der eine Aufgabe erledigt wird: den Zettel am **Eselsohr** greifen und nach
-unten ziehen. Fachlich passiert dasselbe wie bei jeder Erledigung — die Punkte werden über
-die Edge Function `complete-task` verbucht, die Aufgabe verlässt „Jetzt dran".
-
-Abreißen ist ein **Griff, kein Urteil**: es lässt sich unmittelbar danach zurücknehmen,
-solange der Fetzen sichtbar ist. Das unterscheidet es von **wieder dreckig**, das eine
-inhaltliche Aussage über den Zustand der Wohnung ist und keine Korrektur eines Fehlgriffs.
+- Geste zum Erledigen: den Zettel am **Eselsohr** greifen und nach unten ziehen.
+- Fachlich dasselbe wie jede Erledigung — Punkte über die Edge Function `complete-task`, die Aufgabe verlässt „Jetzt dran".
+- Ein **Griff, kein Urteil**: unmittelbar zurücknehmbar, solange der **Fetzen** hängt. Anders als **wieder dreckig**, das eine Aussage über den Zustand der Wohnung ist statt Korrektur eines Fehlgriffs.
 
 ### Eselsohr
-
-Die angeknickte Ecke unten rechts an jedem Zettel — der Griff zum **Abreißen**. Es ist die
-einzige Stelle, an der die Geste beginnen darf, und es ist gesperrt, solange die Wand
-scrollt.
+- Angeknickte Ecke unten rechts an jedem Zettel — der Griff zum **Abreißen**.
+- Einzige Stelle, an der die Geste beginnen darf; gesperrt, solange die Wand scrollt.
+- Kein **Greifen**: kein Warten, kein Kranz. Zu vermeiden: *Quick Complete*, *Schnellerledigung*.
 
 ### Fetzen
-
-Der Papierrest, der nach dem Abreißen einer Aufgabe unter der Wand hängen bleibt. Er trägt
-den Titel der Aufgabe und die Punkte, die sie eingebracht hat. Solange er hängt, ist die
-Erledigung widerrufbar. Er verfällt **nicht** von selbst: er verschwindet erst, wenn man die
-Pinnwand verlässt, das Aussehen umschaltet oder neu lädt. Es hängt immer nur **einer** — ein
-neuer Abriss ersetzt den vorigen, und der ältere ist damit endgültig.
+- Papierrest, der nach dem Abreißen unter der Wand hängen bleibt; trägt Titel und Punkte der Aufgabe.
+- Solange er hängt, ist die Erledigung widerrufbar → **Zurückkleben**.
+- Verfällt **nicht** von selbst: verschwindet erst beim Verlassen der Pinnwand, beim Umschalten des Aussehens oder beim Neuladen.
+- Es hängt immer nur **einer** — ein neuer Abriss ersetzt den vorigen, der ältere ist damit endgültig.
 
 ### Zurückkleben
-
-Der Tipp auf den Fetzen. Er macht die Erledigung rückgängig: die Aufgabe kehrt an die Wand
-zurück, die Punkte verschwinden aus dem Wochenziel, und die Erledigung wird aus der Historie
-**gelöscht** statt gegengebucht (sie hat nicht stattgefunden). Nicht zu verwechseln mit
-„wieder dreckig" im Erledigt-Streifen — das setzt die Aufgabe erneut auf „dran", **behält**
-aber die Punkte.
+- Tipp auf den Fetzen macht die Erledigung rückgängig: Aufgabe zurück an die Wand, Punkte raus aus dem Wochenziel.
+- Die Erledigung wird aus der Historie **gelöscht** statt gegengebucht — sie hat nicht stattgefunden.
+- Nicht zu verwechseln mit **wieder dreckig** im Erledigt-Streifen: das setzt erneut auf „dran", **behält** aber die Punkte.
