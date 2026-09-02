@@ -21,7 +21,8 @@ brannte. Eine Aufgabe, die noch Zeit hatte, zeigte gar keinen — es gab nichts 
 **Es gibt genau einen Stempel je Zettel, und jeder Zettel trägt ihn.**
 
 Sein unterster Abdruck ist berechnet: NEU für eine noch nie erledigte Aufgabe, sonst
-FÄLLIG. Tägliche Aufgaben tragen ROUTINE, Projekte einen Spruch ohne
+FÄLLIG. Tägliche Aufgaben tragen BEDARF (bis zum 01.09.2026 war hier ROUTINE
+vorgesehen — sie werden nicht fällig, sie fallen an), Projekte einen Spruch ohne
 Dringlichkeitsbedeutung — beide können nicht in Verzug geraten. HEUTE entfällt
 ersatzlos; auf der Wand sind alle fälligen Aufgaben gleich dringend.
 

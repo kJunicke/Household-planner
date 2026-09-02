@@ -2,7 +2,8 @@
 - **Tests sind grundsätzlich manuell.** Es gibt bewusst kein Test-Framework, Tests immer im Browser mit Chrome Erweiterung. Messfallen im ferngesteuerten Tab → [docs/testing.md](docs/testing.md)
 
 - Entwicklung ist immer Mobile First. Auf kleinen Viewport optimieren.
-- wenn ein invokter skill vom user vermeintlich nicht existiert suche nach ihm, bevor du entscheidest, dass dieser nicht existiert.
+- Alle features müssen auf Android und IOS funktionieren
+- wenn ein invocter skill vom user vermeintlich nicht existiert suche nach ihm, bevor du entscheidest, dass dieser nicht existiert.
 
 ## Agent skills
 

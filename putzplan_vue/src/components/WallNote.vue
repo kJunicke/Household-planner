@@ -48,7 +48,7 @@ import type { Task } from '@/types/Task'
 import { useTaskStore } from '@/stores/taskStore'
 import { useHouseholdStore } from '@/stores/householdStore'
 import { projectPhraseOf } from '@/lib/projectPhrases'
-import { kindOfTaskType, rotationOf, subtaskColumns } from '@/lib/wallLayout'
+import { jitterOf, kindOfTaskType, rotationOf, subtaskColumns } from '@/lib/wallLayout'
 import { useTearGesture } from '@/composables/useTearGesture'
 import { useDirectionPress, type PressDirection } from '@/composables/useDirectionPress'
 import { flyPoints } from '@/lib/pointsFlight'
@@ -776,6 +776,129 @@ const emphasisLabel = computed((): string | null => {
 })
 
 /**
+ * Grundneigung des Abdrucks in Grad, dazu die Streubreite je Lage: **−9° ± 5°**.
+ * Beides aus der Abnahme am Bild (Variante F, `stempel-optik-prototypen.md`),
+ * nicht frei gewählt — der Nutzer will die Neigung ausdrücklich sehen.
+ */
+const STAMP_TILT = -9
+const STAMP_TILT_JITTER = 5
+
+/**
+ * Versatz einer UNTEREN Lage gegen die oberste, in Pixeln: ±5,5.
+ *
+ * **Ein Messergebnis, kein Geschmack.** Der Wert stand ursprünglich auf 3 px;
+ * sobald die oberste Lage deckt (und genau das ist Variante F), verschwinden
+ * die unteren darunter vollständig — der Stapel wäre unsichtbar, und die
+ * Stapelhöhe soll die Aussage tragen. Bei 5,5 px lugen die Rahmen erkennbar
+ * hervor. Nicht „aufräumen".
+ *
+ * Der Versatz läuft über `transform` und geht deshalb **nicht** in die Breite
+ * der Fußzeile ein — was die Breite bestimmt, steht am `.due-stamp`-CSS.
+ */
+const STAMP_OFFSET = 5.5
+
+/** Eine Lage des Abdruckstapels, von unten (Grundabdruck) nach oben. */
+interface StampLayer {
+  /** Index in der Rampe: 0 Grundabdruck, 1 WICHTIG, 2 DRINGEND. */
+  level: 0 | 1 | 2
+  text: string
+  /** Die zurzeit oberste, gültige Lage — voll deckend, mit Papier-Halo. */
+  top: boolean
+  /** Noch nicht gestempelt: unsichtbar, aber **weiterhin gemessen** (siehe unten). */
+  reserved: boolean
+  transform: string
+  /**
+   * Wieviel breiter der Papier-Halo dieser Lage sein muss, um die Lagen
+   * DARUNTER zu verdecken — nur an der obersten Lage von Belang, sonst 0.
+   * Ausführlich am `.stamp-layer--top`-Block im CSS.
+   */
+  haloSlack: number
+}
+
+/**
+ * Der **Abdruckstapel** (Ticket `03`, Variante F „Papier-Halo",
+ * → CONTEXT.md „Überstempeln").
+ *
+ * **Alle drei Lagen stehen IMMER im DOM — auch die noch nicht gestempelten.**
+ * Das ist die Stelle, an der dieses Ticket still kaputtginge: nach einem Tipp
+ * wird bewusst NICHT neu gepackt (`layoutSignature` in `WallView.vue` kennt
+ * `emphasis_level` nicht, → ADR-0002). Wüchse die Fußzeile beim Stempeln,
+ * schöbe sich das Layout unter dem Finger weg — oder bliebe, schlimmer, falsch
+ * gepackt stehen. Die noch nicht gesetzten Lagen sind deshalb nur
+ * `visibility: hidden`: unsichtbar, aber im Grid weiterhin vermessen. Der
+ * Stapel hat seinen Platz damit **von Anfang an**, unabhängig von der Stufe.
+ * (Gemessen: `style.left/top/width` aller Zettel und die Wandhöhe sind auf
+ * Stufe 0 und Stufe 2 bis auf den letzten Pixel gleich.)
+ *
+ * **Der Weg, der stattdessen nahelag, ist gemessen und gescheitert:** die
+ * Nachdrücke ABSOLUT über den Grundabdruck legen, so wie es Ticket `02` tat.
+ * Er kostet tatsächlich keinen Pixel — Wandhöhe und alle Positionen bleiben
+ * exakt auf dem stempellosen Stand, 0 von 93 Zetteln bewegen sich. Er
+ * scheitert an einer Arithmetik, die nichts mit der Optik zu tun hat: die
+ * Breite eines Zettels wird aus dem GRUNDABDRUCK plus den 88 px für Stift und
+ * Eselsohr gerechnet. Auf einem schmalen Zettel (`NEU`, 38,8 px, Zettel 156 px)
+ * beginnt der Stift damit unmittelbar rechts vom Grundabdruck — für die 79 px
+ * von `DRINGEND` ist dort kein Platz, egal wie man die Lage verankert. Nach
+ * links geht es nicht, dort sind nur 9 px bis zur Papierkante. Gemessen: der
+ * Kasten der obersten Lage lief auf **86 von 93** Zetteln in den Stift (bis
+ * 28,02 px), und auf **36 von 93** lag das WORT unter der sichtbaren
+ * Stift-Glyphe, die später im DOM steht und deshalb darüber gezeichnet wird.
+ * Geschluckte Klicks gab es keine (`elementFromPoint` auf Stift und Eselsohr:
+ * 0 von 93), die Papierkante hielt ebenfalls — aber der oberste Abdruck war
+ * nicht mehr sauber lesbar, und genau das ist der Zweck dieses Tickets.
+ *
+ * **Versatz und Neigung kommen deterministisch aus der Aufgaben-Kennung**
+ * (`jitterOf`, derselbe FNV-1a wie beim Zettelversatz) — nie `Math.random`, nie
+ * die Listenposition. Ein Stempel, der beim Neuladen woanders sitzt, sieht aus
+ * wie ein Fehler; auf einem zweiten Gerät säße er anders als hier.
+ *
+ * **Der Versatz hängt an der LAGE, nicht an ihrer Rolle — und JEDE Lage hat
+ * einen, auch der Grundabdruck.** Das ist keine Feinheit. Hing er an `top`,
+ * dann sprang der Grundabdruck in dem Moment beiseite, in dem der erste
+ * Nachdruck daraufkam: er war bis dahin die oberste Lage und saß bei 0/0.
+ * Nicht der neue Abdruck bewegte sich, sondern der alte. Das widerspricht dem
+ * Ticket („vorherige Abdrücke **bleiben liegen**") und der Sache selbst — ein
+ * Abdruck, der einmal auf dem Papier ist, verrutscht nicht mehr. Vom
+ * Maintainer am Gerät bemerkt, bevor es committet war.
+ *
+ * Dass auch Lage 0 einen Versatz bekommt, ist Absicht und nicht bloß der
+ * bequemste Weg, den Sprung loszuwerden: ein handgesetzter Stempel sitzt nie
+ * exakt, genau wie die Neigung. Und es ist das, was den Stapel überhaupt
+ * sichtbar macht — läge der Grundabdruck mittig unter einem deckenden
+ * Nachdruck, sähe man beim Überstempeln nichts von ihm.
+ */
+const stampLayers = computed((): StampLayer[] => {
+  const texts = [stampLabel.value, 'WICHTIG', 'DRINGEND']
+  const level = props.task.emphasis_level
+  const id = props.task.task_id
+  const offsets = texts.map((_, index) => jitterOf(id, `stamp-dx${index}`, STAMP_OFFSET))
+
+  return texts.map((text, index) => {
+    const top = index === level
+    const tilt = STAMP_TILT + jitterOf(id, `stamp-rot${index}`, STAMP_TILT_JITTER)
+    const dx = offsets[index]
+    const dy = jitterOf(id, `stamp-dy${index}`, STAMP_OFFSET)
+
+    // Der Halo muss den seitlichen Versatz der Lagen DARUNTER ausgleichen —
+    // und nur den. Auf Stufe 0 gibt es keine, der Zuschlag ist dort 0.
+    // Verdoppelt, weil der Kasten mittig in der Zelle sitzt und der Zuschlag
+    // sich damit auf beide Seiten verteilt.
+    const slack = top
+      ? 2 * Math.max(0, ...offsets.slice(0, index).map(other => Math.abs(other - dx)))
+      : 0
+
+    return {
+      level: index as 0 | 1 | 2,
+      text,
+      top,
+      reserved: index > level,
+      transform: `translate(${dx}px, ${dy}px) rotate(${tilt}deg)`,
+      haloSlack: slack
+    }
+  })
+})
+
+/**
  * Ein Tipp auf den Stempel dreht ihn weiter: sauber → WICHTIG → DRINGEND →
  * sauber (Ticket `02`).
  *
@@ -1075,33 +1198,31 @@ const handlePostponeConfirm = async (targetDate: string) => {
         :title="emphasisLabel ? `Überstempelt: ${emphasisLabel} — tippen zum Weiterdrehen` : 'Tippen: überstempeln'"
         @click.stop="onStampTap"
       >
-        {{ stampLabel }}
-        <!-- Der Nachdruck liegt ABSOLUT über dem Grundabdruck und geht damit
-             weder in Breite noch Höhe der Fußzeile ein. Das ist keine Kosmetik:
-             `layoutSignature` in `WallView.vue` kennt `emphasis_level`
-             bewusst nicht, es wird nach einem Tipp also NICHT neu gepackt
-             (→ ADR-0002, der Stempel ordnet nichts um). Stünde das Wort im
-             Fluss, wüchse die Fußzeile über die gepackte Zettelbreite hinaus
-             und liefe in die beiden Griffe rechts.
+        <!-- Der Abdruckstapel (Ticket `03`, → `stampLayers` im Skript).
 
-             **Das Bild gehört Ticket `03`** — dort bleiben die unteren
-             Abdrücke sichtbar liegen und bekommen ihre Rampe.
+             **Immer alle drei Lagen**, auch die noch nicht gestempelten: die
+             stehen als `.stamp-layer--reserved` unsichtbar, aber im Grid
+             weiterhin gemessen. Ohne sie wüchse die Fußzeile beim Stempeln,
+             und die Wand packt nach einem Tipp nicht neu (`layoutSignature`
+             kennt `emphasis_level` nicht, → ADR-0002). Ausführlich bei
+             `stampLayers`.
 
-             **Was hier NICHT behauptet werden darf: dass genau ein Wort
-             dastünde.** Der Nachdruck ist kleiner gesetzt als der
-             Grundabdruck (Platzrechnung, Begründung im CSS) und deckt ihn
-             deshalb nur links ab — rechts schaut der Rest des Grundworts
-             frei heraus. QC-Messung über 93 Wandzettel: bei WICHTIG bei **50
-             von 93**, schlimmster Überstand 42,5 px; bei DRINGEND noch bei
-             **10 von 93**. Der Projektspruch `IN PLANUNG` liest sich mit
-             WICHTIG als `[WICHTIG]NUNG` — zwei angeschnittene Wörter
-             nebeneinander.
-
-             Als ZUSTANDSANZEIGE ist das tragfähig und deshalb hier bewusst
-             so belassen: welche Stufe gilt, ist eindeutig ablesbar, und
-             Ticket `02` ist ausdrücklich Zustand, nicht Bild. **Aufzulösen
-             hat den Fall Ticket `03`**, das den Stapel ohnehin neu baut. -->
-        <span v-if="emphasisLabel" class="emphasis-print">{{ emphasisLabel }}</span>
+             `v-for` über `level` statt über den Text: zwei Lagen können
+             denselben Text tragen (ein Projekt mit dem Spruch „DRINGEND"
+             käme sonst zum Schlüsselkonflikt). -->
+        <span
+          v-for="layer in stampLayers"
+          :key="layer.level"
+          class="stamp-layer"
+          :class="[
+            `stamp-layer--l${layer.level}`,
+            layer.top ? 'stamp-layer--top' : 'stamp-layer--under',
+            { 'stamp-layer--reserved': layer.reserved }
+          ]"
+          :style="{ transform: layer.transform, '--halo-slack': `${layer.haloSlack.toFixed(2)}px` }"
+          :aria-hidden="layer.top ? undefined : 'true'"
+          >{{ layer.text }}</span
+        >
       </span>
     </div>
 
@@ -1314,6 +1435,17 @@ const handlePostponeConfirm = async (targetDate: string) => {
      Als benutzerdefinierte Eigenschaft hier deklariert (nicht direkt bei
      `.pin`), damit sie an die Reißzwecke als Kindelement vererbt wird. */
   --owner-none: color-mix(in srgb, var(--pw-free) 45%, var(--pw-paper));
+  /* **Die Papierfarbe DIESES Zettels**, als benutzerdefinierte Eigenschaft
+     deklariert und damit an die Kinder vererbt (Ticket `03`). Gebraucht wird
+     sie vom Papier-Halo der obersten Stempellage weit unten: der Halo muss die
+     Farbe dieses Zettels treffen, nicht die des Standardpapiers, sonst stünde
+     auf einem gelben Notizblock oder auf Packpapier ein weißer Kasten.
+
+     Die drei Typen überschreiben sie bei sich (`.zettel--daily`,
+     `.zettel--project`) — **zusammen mit ihrem `background`, direkt daneben**.
+     Wer dort das Papier ändert und diese Zeile vergisst, bekommt keinen
+     Fehler, nur einen Halo in der falschen Farbe. */
+  --note-paper: var(--pw-paper);
   /* Rahmen: bewusst konturlos (`transparent`), die Zuweisungsfarbe steht nach
      der Korrektur zu Ticket 10 ausschließlich an der Reißzwecke (`.pin`
      unten) — kein farbiger Rahmen mehr, das mochte der Nutzer nicht.
@@ -1463,45 +1595,48 @@ const handlePostponeConfirm = async (targetDate: string) => {
   margin: -1px 0 2px 7px;
 }
 
-/* --- Der Gummistempel: sein Grundabdruck -----------------------------------
-   NEU / FÄLLIG / BEDARF / Projektspruch (→ `stampLabel` im Skript).
-   Einzige Stelle am Zettel, die den Stand einer Aufgabe zeigt (→ CONTEXT.md,
-   „Stempel") — kein Ring an der Reißzwecke. **Jeder Zettel trägt einen**;
-   es gibt keinen stempellosen Zustand mehr.
+/* --- Der Gummistempel: der Abdruckstapel -----------------------------------
+   Ein Zettel, an dem jemand dreimal nachgedrückt hat, sieht auch danach aus:
+   die vorherigen Abdrücke verschwinden nicht, sie bleiben unter dem nächsten
+   liegen. Der oberste gilt und ist am besten lesbar, und die **Stapelhöhe ist
+   selbst eine Aussage** — man sieht einem Zettel ohne Lesen an, ob einmal oder
+   mehrfach nachgedrückt wurde (Ticket `03`, → CONTEXT.md „Überstempeln").
 
-   Steht IM FLUSS der Fußzeile (ein normales Flex-Kind, keine Überlagerung) —
-   dadurch schiebt die Zeile ihn zur Seite, statt dass er einen Knopf
-   überdeckt. Als direktes Kind von `.foot` ist das zugleich Vertrag mit der
-   Breitenmessung in `WallView.vue`, siehe Kommentar am Element.
+   Die Optik ist **Variante F, „Papier-Halo"**, aus zwei Runden Prototypen
+   abgenommen (`stempel-optik-prototypen.md`). Die Werte, die dort GEMESSEN
+   wurden und nicht Geschmack sind, stehen an ihrer Stelle einzeln benannt.
 
-   **Eine Farbrampe gibt es bewusst nicht.** Früher trug der Stempel je nach
-   Dringlichkeitsstufe eine eigene Farbe; die Stufen sind mit den beiden
-   abgeschafften Stempelwörtern entfallen (siehe `stampLabel` im Skript, dort
-   sind sie einmalig und abschließend benannt). Auf der Wand sind alle
-   fälligen Aufgaben gleich
-   dringend — eine Abstufung am Grundabdruck wäre eine Rangfolge, und
-   Rangfolgen macht die Wand nicht (→ ADR-0002). Die Steigerung liegt allein
-   im Überstempeln von Hand (→ Ticket `03`), nicht im berechneten Abdruck. */
+   Der Stapel steht IM FLUSS der Fußzeile (ein normales Flex-Kind, keine
+   Überlagerung) — dadurch schiebt die Zeile ihn zur Seite, statt dass er einen
+   Knopf überdeckt. **Klassenname `.due-stamp` und der Platz als DIREKTES
+   Flex-Kind von `.foot` sind Vertrag mit der Breitenmessung in
+   `WallView.vue`** (dort steht ein Laufzeit-Wächter); wer eines von beidem
+   ändert, bekommt eine still falsche Zettelbreite.
+
+   **Die Breite ist das Maximum über ALLE Lagen, nicht die der obersten.** Der
+   Fall, an dem das kippt: ein Projekt trägt unten seinen zehnstelligen Spruch
+   und darüber das kürzere DRINGEND — die breiteste Lage liegt also UNTEN.
+   Lägen die unteren Lagen absolut, zählten sie nicht zur Breite, ragten aber
+   heraus, und der Zettel würde zu schmal gepackt. Deshalb liegen alle Lagen
+   als Grid-Elemente in DERSELBEN Zelle (`grid-area: 1 / 1`, unten): der Stapel
+   misst damit immer seine breiteste Lage.
+
+   **`place-items: center`, nicht `stretch`:** die Lagen sollen ihre eigene
+   natürliche Breite behalten und mittig übereinander liegen. Mit `stretch`
+   wären alle so breit wie die breiteste — die schmaleren Abdrücke bekämen
+   einen Rahmen um Luft statt um ihr Wort. */
 .due-stamp {
   position: relative;
+  display: inline-grid;
+  place-items: center;
   flex: 0 0 auto;
   /* Seit Ticket `02` ein Bedienelement, kein Schild mehr — die Fläche muss das
      mit der Maus auch sagen. `.zettel--tappable` färbt den Zeiger nur an
      Zetteln MIT Unteraufgaben; der Stempel ist an jedem Zettel antippbar. */
   cursor: pointer;
-  padding: 1px 5px;
-  border: 2px solid currentColor;
-  border-radius: 3px;
-  transform: rotate(-9deg);
-  color: var(--pw-ink);
-  opacity: 0.55;
-  font-size: 10.8px;
-  font-weight: 900;
-  letter-spacing: 0.8px;
-  white-space: nowrap;
 }
 
-/* Die Trefferfläche: mindestens 44 px hoch, obwohl der Abdruck rund 18 px
+/* Die Trefferfläche: mindestens 44 px hoch, obwohl ein Abdruck rund 18 px
    misst. Ein Daumen trifft sonst den Zettel statt den Stempel.
 
    Die Fläche liegt ABSOLUT und damit AUSSER dem Fluss — sie darf die Fußzeile
@@ -1509,17 +1644,16 @@ const handlePostponeConfirm = async (targetDate: string) => {
    `min-height: 44px` der Fußzeile auch in die Wandhöhe ein. `padding` oder
    `min-height` am Stempel selbst wären genau dieser Fehler.
 
-   Seit Ticket `02` ist sie LEBENDIG: das frühere `pointer-events: none` ist
-   weg, weil der Stempel jetzt einen Handler trägt (`@click.stop` am Element).
-   Ein Klick auf das Pseudoelement zielt auf `.due-stamp` selbst — es ist ein
-   Kind, kein Geschwister —, der Handler dort fängt ihn also mit.
+   Sie liegt am STAPEL, nicht an einer Lage: das Ziel ist der Stempel als
+   Ganzes, und ein Klick auf das Pseudoelement zielt auf `.due-stamp` selbst —
+   es ist ein Kind, kein Geschwister —, der Handler dort fängt ihn also mit.
 
-   **Sie schluckt dem Zettel nichts.** Die Long-Press-Geste hängt an der
-   Wurzel und lebt vom Hochblubbern; sie startet auf dieser Fläche genauso wie
-   auf blankem Papier (der Stempel steht NICHT in `isPressControl`). Und die
-   Fläche ist nur so hoch wie die Fußzeile selbst (44 px) und liegt in ihr —
-   sie deckt keinen der beiden Griffe rechts ab, die hinter `padding-right:
-   88px` freigehalten sind. */
+   **Sie schluckt dem Zettel nichts.** Die Long-Press-Geste hängt an der Wurzel
+   und lebt vom Hochblubbern; sie startet auf dieser Fläche genauso wie auf
+   blankem Papier (der Stempel steht NICHT in `isPressControl`). Und die Fläche
+   ist nur so hoch wie die Fußzeile selbst (44 px) und liegt in ihr — sie deckt
+   keinen der beiden Griffe rechts ab, die hinter `padding-right: 88px`
+   freigehalten sind. */
 .due-stamp::after {
   content: '';
   position: absolute;
@@ -1531,79 +1665,144 @@ const handlePostponeConfirm = async (targetDate: string) => {
   transform: translate(-50%, -50%);
 }
 
-/* Der NACHDRUCK: WICHTIG / DRINGEND, von Hand aufgestempelt (Ticket `02`,
-   → CONTEXT.md „Überstempeln").
+/* Eine Lage des Stapels. Maße und Typografie sind unverändert die des früheren
+   einzelnen Abdrucks — die Schriftgröße ist ausdrücklich KEIN Stellknopf
+   (Prototypen-Runde 3: 11 px sind die dokumentierte Untergrenze, alles
+   darunter nähme die Anhebung des Karten-Redesigns zurück).
 
-   ABSOLUT über dem Grundabdruck und damit außer dem Fluss — dieselbe
-   Begründung wie bei der Trefferfläche darüber, und hier noch schärfer: die
-   Wand packt nach einem Tipp NICHT neu (`layoutSignature` kennt
-   `emphasis_level` nicht, → ADR-0002), die Fußzeile darf also nicht breiter
-   werden, als sie beim Packen gemessen wurde.
-
-   `background: var(--pw-paper)` deckt den Grundabdruck ab — aber **nur so
-   weit, wie der Nachdruck reicht, und der ist schmaler** (siehe die
-   Platzrechnung unten). Rechts bleibt der Rest des Grundworts stehen: bei
-   WICHTIG an 50 von 93 Wandzetteln, schlimmster Überstand 42,5 px; bei
-   DRINGEND an 10 von 93 (QC-Messung). Es steht also gerade NICHT genau ein
-   Wort da. Für die Zustandsanzeige reicht es — welche Stufe gilt, ist
-   eindeutig —, für das Bild nicht.
-
-   **Das gestapelte Bild — die unteren Abdrücke bleiben liegen, nach oben
-   prominenter, mit Farbrampe — ist Ticket `03`**, das diesen Block als Ganzes
-   ersetzt und dabei auch den Abschneide-Fall aufzulösen hat. Deshalb hier
-   bewusst keine Farbe: `currentColor` wie der Grundabdruck, keine Rampe. */
-.emphasis-print {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  padding: 1px 3px;
-  border: 1.5px solid currentColor;
+   `transform` steht NICHT hier, sondern als Inline-Stil am Element: Versatz
+   und Neigung kommen je Lage deterministisch aus der Aufgaben-Kennung
+   (→ `stampLayers` im Skript). Weil beides über `transform` läuft, geht es
+   NICHT in die Breite der Fußzeile ein — die Lagen liegen versetzt
+   übereinander, nicht nebeneinander, und der Stapel bleibt so breit wie sein
+   breitestes Wort. */
+.stamp-layer {
+  grid-area: 1 / 1;
+  padding: 1px 5px;
+  border: 2px solid currentColor;
   border-radius: 3px;
-  background: var(--pw-paper);
-  /* KLEINER als der Grundabdruck, und das ist eine Platzrechnung, keine
-     Gestaltung: „DRINGEND" hat acht Zeichen, „NEU" drei. In der Schriftgröße
-     des Grundabdrucks misst der Nachdruck 74 px — daneben steht auf dem
-     schmalsten Zettel bei 390 px Wandbreite nur 51 px Platz, bis der
-     Bearbeiten-Stift beginnt (gemessen über alle 94 Zettel der Testwand).
-     Breiter werden darf die Fußzeile nicht: die Wand packt nach einem Tipp
-     nicht neu (→ `layoutSignature`, ADR-0002).
-
-     **Der Rest Überdeckung mit dem Bearbeiten-Stift ist damit nicht weg,
-     nur klein**: QC-Messung 6 Zettel mit 1, 1, 1, 1, 2 und 11 px. Der
-     11-px-Fall trägt KEIN `zettel--meta-top`, fällt also auch nicht unter die
-     Linksbündig-Regel weiter unten. **Rein optisch, kein geschluckter Klick**:
-     `elementFromPoint` auf drei Punkten der Stift-Fläche liefert nie
-     `.emphasis-print` — der Stift steht später im DOM und gewinnt die
-     Trefferprüfung. An Ticket `03` übergeben.
-
-     (Meine erste Meldung lautete „4 von 94, maximal 1 px" — die war zu
-     freundlich gerechnet, weil sie den Fall ohne `meta-top` nicht erfasst
-     hatte. Die Zahlen oben sind die nachgemessenen.) */
-  font-size: 8.6px;
-  letter-spacing: 0.2px;
+  font-size: 10.8px;
+  font-weight: 900;
+  letter-spacing: 0.8px;
   white-space: nowrap;
 }
 
-/* Bei `zettel--meta-top` wandert der Punkte-Sticker in die obere Ecke, der
-   Stempel rückt an den linken Rand der Fußzeile (7 px) — dort ist nach links
-   am wenigsten Luft. Deshalb wird der Nachdruck hier LINKSBÜNDIG am
-   Grundabdruck ausgerichtet statt mittig.
+/* Die Farbrampe **blau → orange → rot**, vom Maintainer am 01.09.2026
+   ausdrücklich der reinen Deckungs-Eskalation vorgezogen.
 
-   **Ehrlich zur Begründung**: ich hatte diese Regel mit „17 von 94 Zetteln,
-   3,5 px über die Papierkante" begründet. **Das ist nicht reproduzierbar.**
-   Die QC-Gegenprobe erzeugt den Überstand nicht — mit der Regel 0 Überstände,
-   OHNE sie ebenfalls 0. Die Zahlen stammen aus einem Messlauf mit einem
-   ungestylten Prüf-Element (ohne das `data-v-`-Attribut der scoped styles,
-   also ohne `position: absolute`) und waren damit wertlos.
+   **Der Grundabdruck bekommt hier sein Blau.** Ticket `01` hatte ihn
+   einheitlich auf `--pw-ink` gestellt, weil die alten Stufen mit den
+   abgeschafften Wörtern NIE/HEUTE wegfielen — das war ein Zwischenzustand, bis
+   dahin war die Wand einfarbig und ein überfälliger Zettel drängte optisch
+   nicht.
 
-   Was bleibt: die Regel kauft ein paar Pixel Luft nach links und schadet dort
-   nicht. Sie ist aber **nicht** kostenlos — sie schiebt den Nachdruck nach
-   rechts und trägt damit zur Stift-Überdeckung bei, die oben beziffert ist.
-   Bewusst behalten, nicht als gemessene Notwendigkeit gelesen werden. */
-.zettel--meta-top .emphasis-print {
-  left: 0;
-  transform: translateY(-50%);
+   **Und das kostet FÄLLIG sein Rot.** Der Stempel ist seit Ticket `01` nicht
+   mehr selten: JEDER Zettel trägt ihn. Bliebe der berechnete Abdruck rot, wäre
+   die ganze Wand rot und DRINGEND hätte keine Steigerung mehr übrig. Rot heißt
+   ab hier „ein Mensch hat das gesagt", nicht „der Kalender ist abgelaufen" —
+   genau die Rangfolge, die ADR-0002 aufmacht.
+
+   Die beiden Festwerte sind aus dem Prototypen übernommen und **nicht gegen
+   die Personenfarben am Zettelrand geprüft** — dieselbe offene Baustelle wie
+   bei den Punkte-Stickern, dort ebenso benannt. */
+.stamp-layer--l0 {
+  color: #3a4a6b;
+}
+
+.stamp-layer--l1 {
+  color: #a35a12;
+}
+
+.stamp-layer--l2 {
+  color: var(--color-danger);
+}
+
+/* Die OBERSTE Lage ist **voll deckend** und bekommt die Papierfarbe des
+   Zettels als Hintergrund — den „Papier-Halo", der der Variante ihren Namen
+   gibt.
+
+   **Beides ist ein Messergebnis, kein Geschmack.** An der Durchsichtigkeit der
+   obersten Lage ist die erste Prototypenrunde gescheitert: dort war jede Lage
+   durchsichtig, und die unteren Wörter schienen durch die BUCHSTABEN des
+   obersten. Nicht „aufräumen".
+
+   Der Halo löst den offenen Befund aus Ticket `02`: der frühere Nachdruck war
+   mit 8,6 px schmaler als viele Grundabdrücke, deckte nur links ab, und rechts
+   schaute der Rest des Grundworts heraus — bei WICHTIG an 50 von 93 Zetteln,
+   schlimmster Überstand 42,5 px; `IN PLANUNG` las sich mit WICHTIG als
+   `[WICHTIG]NUNG`.
+
+   **Gleiche Schriftgröße genügt dafür NICHT**, und genau daran ist der erste
+   Anlauf gescheitert: neun Grundabdrücke — sämtlich Projektsprüche — sind
+   längere Wörter als `WICHTIG`, und ein Halo kann nur verdecken, was er
+   überdeckt. Gemessen blieben 8 von 93 Zetteln übrig, bis 13,06 px; `IN
+   PLANUNG` las sich als `WICHTIG G`. Dieselbe Krankheit, nur kleiner.
+
+   Deshalb bemisst sich der Halo an der **Zelle**, nicht an seinem eigenen
+   Wort: alle drei Lagen liegen in derselben Grid-Zelle, die Zelle ist also so
+   breit wie die BREITESTE Lage. `min-width: 100%` zieht die oberste Lage auf
+   genau diese Breite.
+
+   `--halo-slack` gleicht obendrein den seitlichen VERSATZ aus. Eine Lage kann
+   um bis zu ±`STAMP_OFFSET` streuen, zwei Lagen also um 11 px gegeneinander;
+   ohne Ausgleich schaute die untere seitlich hervor. Der Wert wird je Zettel
+   **gerechnet, nicht pauschal gesetzt** (→ `haloSlack` im Skript) — und das
+   ist keine Feinsinnigkeit, sondern die Reparatur eines gemessenen Schadens:
+   ein pauschaler Zuschlag von 11 px hing wegen `place-items: center` auf
+   BEIDEN Seiten je 5,5 px über, obwohl je Zettel nur eine Seite gebraucht
+   wird. Gemessen stand der Halo damit auf 34 von 93 Zetteln bis zu 2,4 px
+   neben dem Papier (`.zettel` hat `overflow: visible`), und die 88 px für
+   Stift und Eselsohr wurden statt um 1,4 um bis zu 8,0 px angeknabbert.
+
+   Gerechnet ist der Zuschlag **auf Stufe 0 gleich null** — dort gibt es keine
+   Lage darunter, die zu verdecken wäre. Das ist der Normalfall auf der Wand
+   und war zugleich der häufigste Schadensfall.
+
+   Die zyklische Prozentangabe (`100%` an einem Grid-Element, dessen Spur sich
+   nach dem Inhalt richtet) soll die Spur laut Spezifikation NICHT aufblähen.
+   Gemessen stimmt das: Wandhöhe und Stempelbreiten sind mit und ohne
+   `min-width` gleich. **Gemessen wurde allerdings nur Chrome** — WebKit ist
+   genau hier für Abweichungen bekannt. Wenn auf dem iPhone die Zettel breiter
+   aussehen als hier, ist das die erste Stelle zum Nachsehen.
+
+   Das `text-align: center` gehört dazu: der Kasten ist breiter als sein Wort,
+   und ohne Zentrierung klebte das Wort links — gemessen 11,3 px im Median.
+
+   `--note-paper` kommt vom `.zettel` und wird vererbt (weiß / gelb /
+   Packpapier je nach Typ) — der Halo trifft damit die Farbe DIESES Zettels,
+   nicht die des Standardpapiers. */
+.stamp-layer--top {
+  min-width: calc(100% + var(--halo-slack, 0px));
+  background: var(--note-paper);
+  text-align: center;
+}
+
+/* Die unteren Lagen bleiben durchsichtig und lugen an den Rändern hervor —
+   dort, und nur dort, steckt die sichtbare Stapelhöhe. 40 % für den
+   Grundabdruck, 60 % für WICHTIG; nach oben also immer prominenter. */
+.stamp-layer--under.stamp-layer--l0 {
+  opacity: 0.4;
+}
+
+.stamp-layer--under.stamp-layer--l1 {
+  opacity: 0.6;
+}
+
+/* Eine noch nicht gestempelte Lage: unsichtbar, aber **weiterhin gemessen**.
+
+   `visibility: hidden` und nicht `display: none` — das ist der ganze Punkt.
+   Ein `display: none`-Kind fällt aus dem Grid und damit aus der Breite; die
+   Fußzeile wüchse dann bei jedem Tipp, und die Wand packt nach einem Tipp
+   NICHT neu (`layoutSignature` in `WallView.vue` kennt `emphasis_level` nicht,
+   → ADR-0002). Das Layout schöbe sich unter dem Finger weg oder bliebe falsch
+   gepackt stehen. So hat der Stapel seinen Platz von Anfang an, unabhängig von
+   der Stufe. Ausführlich bei `stampLayers` im Skript.
+
+   Der Preis, benannt: JEDER Zettel ist so breit wie sein dreilagiger Stapel,
+   auch der ungestempelte. Das ist gemessen und gehört zur Breitenfrage aus
+   Ticket `78`, nicht hierher. */
+.stamp-layer--reserved {
+  visibility: hidden;
 }
 
 /* --- Punkte als aufgeklebter Sticker (Ticket 00a) --------------------------
@@ -2169,7 +2368,7 @@ const handlePostponeConfirm = async (targetDate: string) => {
    rund 1500 auf rund 1936 px².
 
    `touch-action: none` ist die zweite Hälfte des Scroll-Schutzes: nur so wird
-   aus einem Zug nach unten überhaupt eine Geste statt eines Bildlaufs. Solange
+   aus einem Zug nach unten überhaupt eine Geste statt eines Bildlaufs.
    **Dauerhaft**, ohne Ausnahme.
 
    Früher schaltete `.ear--locked` während des Bildlaufs auf `pan-y` zurück:
@@ -2362,6 +2561,9 @@ const handlePostponeConfirm = async (targetDate: string) => {
 /* --- Typ 2: tägliche Aufgabe — gelber Notizblock, Klebestreifen ----------- */
 .zettel--daily {
   background: var(--pw-paper-day);
+  /* Papierfarbe für den Halo der obersten Stempellage — siehe `--note-paper`
+     an `.zettel`. Gehört zum `background` darüber und wird mit ihm geändert. */
+  --note-paper: var(--pw-paper-day);
   border-radius: 11px;
   padding-top: 10px;
 }
@@ -2411,6 +2613,10 @@ const handlePostponeConfirm = async (targetDate: string) => {
 /* --- Typ 3: Projekt — Packpapier, doppelte Büroklammer, kantig ------------ */
 .zettel--project {
   background: var(--pw-paper-proj);
+  /* Wie bei `.zettel--daily`: Papierfarbe für den Halo, siehe `--note-paper`
+     an `.zettel`. Die Streifen des `background-image` darunter bleiben außen
+     vor — der Halo ist eine Fläche, kein Ausschnitt des Papiers. */
+  --note-paper: var(--pw-paper-proj);
   background-image: repeating-linear-gradient(
     0deg,
     rgba(0, 0, 0, 0.045) 0 1px,
