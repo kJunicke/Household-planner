@@ -2369,22 +2369,35 @@ const handlePostponeConfirm = async (targetDate: string) => {
 
    `touch-action: none` ist die zweite Hälfte des Scroll-Schutzes: nur so wird
    aus einem Zug nach unten überhaupt eine Geste statt eines Bildlaufs.
-   **Dauerhaft**, ohne Ausnahme.
+   **Dauerhaft**, ohne Ausnahme — und ausgerechnet `none`.
+
+   Der Wert wird **einmal** ermittelt, beim Aufsetzen des Fingers, und gilt
+   dann für die ganze Geste: „changes … will be ignored for the duration of the
+   action" (Pointer Events L3); WebKit friert ihn je Berührung ein. Ein
+   Umschalten mitten im Zug wirkt also nicht — es gälte erst für die NÄCHSTE
+   Berührung. Und `none` ist auf iOS der einzige verlässliche Wert: die
+   Achsenwerte `pan-x`/`pan-y` sind im UI-Prozess laut WebKit-eigenem Kommentar
+   gar nicht sauber umgesetzt.
 
    Früher schaltete `.ear--locked` während des Bildlaufs auf `pan-y` zurück:
    „wer in eine fliegende Wand greift, scrollt weiter". Die Regel ist raus
-   (iOS-Korrektur), weil sie eine Rückkopplung war. `pan-y` heißt: der Zug am
-   Eselsohr scrollt die Seite — was den Scroll-Wächter erneut scharf setzt, was
-   `pan-y` erneut anlegt. Einmal hineingeraten, kam die Wand nicht mehr heraus;
-   auf dem iPhone war das der Dauerzustand, weil dort schon das Gummiband der
-   Homescreen-App den Wächter scharf hält (→ `useScrollQuiet`). Gemeldet als
-   „das Eselsohr wird größer, aber die Seite scrollt trotzdem".
+   (iOS-Korrektur), weil sie eine Rückkopplung war — eine über Berührungen
+   hinweg, nicht innerhalb einer: griff man in die fliegende Wand, lag `pan-y`
+   an, der nächste Zug am Eselsohr scrollte, das setzte den Wächter erneut
+   scharf, und `pan-y` lag wieder an. Auf dem iPhone kam die Wand da nicht mehr
+   heraus, weil schon das Gummiband der Homescreen-App den Wächter dauerhaft
+   scharf hielt (→ `useScrollQuiet`). Gemeldet als „das Eselsohr wird größer,
+   aber die Seite scrollt trotzdem".
 
    Der Schutz vor dem Fehlgriff in die fliegende Wand geht dabei NICHT
    verloren: er sitzt weiterhin im Riegel am `pointerdown` von
-   `useTearGesture`. Was entfällt, ist allein die Möglichkeit, eine fliegende
-   Wand ausgerechnet am Eselsohr weiterzuscrollen — 44 × 44 px je Zettel, und
-   ein Fingerdruck stoppt den Schwung ohnehin. */
+   `useTearGesture` — und der ist tragend, weil `touch-action: none` laut
+   WebKit ausgerechnet während des Momentum-Scrollings nicht greift. Was
+   entfällt, ist allein die Möglichkeit, eine fliegende Wand ausgerechnet am
+   Eselsohr weiterzuscrollen — 44 × 44 px je Zettel, und ein Fingerdruck stoppt
+   den Schwung ohnehin.
+
+   Belege in `docs/research/ios-gesten-webkit.md`. */
 .ear {
   position: absolute;
   right: 0;
