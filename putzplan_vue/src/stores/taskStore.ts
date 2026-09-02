@@ -505,11 +505,14 @@ export const useTaskStore = defineStore('tasks', () => {
     // NACHDRUCK — Stempel-Automat 0 (kein Nachdruck) → 1 WICHTIG → 2 DRINGEND → 0
     // (→ CONTEXT.md, "Überstempeln"; Ticket 09a).
     //
-    // ACHTUNG: hat Stand 26.08.2026 KEINEN Aufrufer. 09a hat das Datenmodell und
-    // diesen Automaten geliefert, die Bedienung am Zettel nie — es lässt sich in
-    // der App derzeit nichts stempeln. Wer hier Verhalten ändert, ändert Verhalten,
-    // das niemand auslösen kann. Die Bedienung wird zugeschnitten in
-    // .scratch/ueberstempeln-bedienung/.
+    // Aufgerufen von `onStampTap` in WallNote.vue — dem Tipp auf den Stempel in
+    // der Fußzeile. Das ist der EINZIGE Aufrufer.
+    //
+    // Bis zum 02.09.2026 hatte diese Funktion keinen: 09a lieferte Datenmodell und
+    // Automaten, die Bedienung am Zettel nie. Zwei Backlog-Tickets haben deshalb
+    // monatelang Randfälle eines Verhaltens beschrieben, das kein Nutzer auslösen
+    // konnte, und eine Spec hat eine Regel umgekehrt, die niemand im Betrieb prüfen
+    // konnte — weil sie nichts steuerte.
     //
     // Der Automat liegt bewusst hier im
     // Store statt im Zettel-Component: die Fußzeile muss nur antippen und den
