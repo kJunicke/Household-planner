@@ -184,6 +184,28 @@
   font-weight: normal;
 }
 
+/* Kein Gummiband am Seitenende (iOS-Korrektur).
+
+   Auf dem iPhone federt WebKit die ganze Seite, sobald man am oberen oder
+   unteren Ende weiterzieht — in der Homescreen-App (standalone) ist das der
+   Normalfall, weil dort keine Adressleiste den ersten Zug wegnimmt. Jedes
+   Federn und jedes Zurueckfedern meldet `scroll`, und der Scroll-Waechter der
+   Pinnwand (→ `src/composables/useScrollQuiet.ts`) stand dadurch praktisch
+   dauerhaft scharf: Abreissen und Langdruck wurden an der Wurzel abgelehnt.
+
+   Der Waechter filtert solche Ereignisse inzwischen selbst ueber die
+   Positionsaenderung. Das hier ist die Behebung an der Quelle statt am
+   Symptom — und nebenbei fuehlt sich eine App vom Homescreen ohne federnde
+   Seite richtiger an. `contain` statt `none`: Wischen zum Neuladen (Android)
+   und die Zurueck-Geste bleiben unangetastet, nur der Ueberhang entfaellt.
+
+   Auf `html` UND `body`, weil nicht festgelegt ist, welches der beiden der
+   Browser als scrollendes Element behandelt. */
+html,
+body {
+  overscroll-behavior-y: contain;
+}
+
 body {
   min-height: 100vh;
   color: var(--color-text-primary);

@@ -25,6 +25,25 @@ import {
  *
  * Handler am Griff binden:
  *   @pointerdown @pointermove @pointerup @pointercancel
+ *   @touchstart.passive @touchmove
+ *
+ * ## Warum zusaetzlich Touch-Ereignisse (iOS-Korrektur)
+ *
+ * `touch-action: none` am Griff ist die *Absichtserklaerung*, dass hier nicht
+ * gescrollt wird — mehr nicht. Android Chrome haelt sich daran, WebKit auf dem
+ * iPhone nicht zuverlaessig: gemeldet wurde ein Griff, der das Aktiv-Feedback
+ * zeigt (`.ear:active`, der Finger kommt also an) — waehrend die Seite unter
+ * ihm trotzdem wegscrollt. Die Geste wird nie erkannt, weil der Zettel dem
+ * Finger nicht folgt.
+ *
+ * Der Mechanismus, den WebKit garantiert respektiert, ist `preventDefault()`
+ * auf einem **nicht-passiven** `touchmove`. Genau das leistet `onTouchMove`.
+ * `touch-action` bleibt trotzdem stehen: es ist der billigere Weg, wo er
+ * funktioniert, und beide sagen dasselbe.
+ *
+ * **Nicht auf `touchstart`.** Dort unterdrueckte `preventDefault()` auf iOS
+ * auch den nachfolgenden Klick — und am Zettelchen erledigt ein Antippen
+ * (`onMiniEarClick`). Auf `touchmove` bleibt der Klick unangetastet.
  */
 
 /**
@@ -74,6 +93,18 @@ export function useTearGesture(options: {
   let startX = 0
   let startY = 0
   let recognized = false
+  /**
+   * Welche **Beruehrung** dieser Geste gehoert (`Touch.identifier`), oder `-1`.
+   *
+   * Nicht dasselbe wie `pointerId` und daraus auch nicht ableitbar: die beiden
+   * Nummernkreise sind unabhaengig. Deshalb wird der Wert am `touchstart`
+   * eingesammelt (→ `onTouchStart`) und nicht am `pointerdown`.
+   *
+   * Bleibt `-1`, wenn es gar keine Beruehrung gibt (Maus, Stift) oder wenn die
+   * Browser-Automatisierung synthetische Zeiger ohne `touchstart` schickt
+   * (→ `docs/testing.md`). Dann gibt es auch nichts abzubestellen.
+   */
+  let touchId = -1
   /** Die Geste hat ausgelöst → den nachlaufenden Klick schlucken. */
   let consumedClick = false
 
@@ -84,6 +115,7 @@ export function useTearGesture(options: {
     candidateId = null
     handleEl = null
     pointerId = -1
+    touchId = -1
     recognized = false
     activeId.value = null
     pull.value = 0
@@ -162,6 +194,46 @@ export function useTearGesture(options: {
     event.preventDefault()
   }
 
+  /**
+   * Sammelt die `Touch.identifier` **dieser** Geste ein.
+   *
+   * Der Browser feuert `pointerdown` vor `touchstart`; wenn wir hier ankommen,
+   * steht also schon fest, ob der Griff ueberhaupt Kandidat ist
+   * (`candidateId`) — hat der Scroll-Waechter ihn abgelehnt, notieren wir
+   * nichts und `onTouchMove` laesst den Bildlauf in Ruhe.
+   *
+   * Rein beobachtend, deshalb passiv zu binden (`@touchstart.passive`).
+   */
+  const onTouchStart = (event: TouchEvent) => {
+    if (candidateId === null || touchId !== -1) return
+    const touch = event.changedTouches.item(0)
+    if (touch) touchId = touch.identifier
+  }
+
+  /**
+   * Bestellt den Bildlauf ab, solange dieser Griff die Geste haelt.
+   *
+   * Muss als **nicht-passiver** Zuhoerer haengen — in einem Vue-Template ohne
+   * `.passive`-Modifier ist er das. Mit `.passive` waere `preventDefault()`
+   * wirkungslos und die ganze Korrektur umsonst.
+   *
+   * **Ab der ERSTEN Bewegung, nicht erst nach der Achsenerkennung.** Der Griff
+   * traegt `touch-action: none`; er sagt damit ohnehin zu, dass von hier aus
+   * nicht gescrollt wird. Erst ab der Erkennung abzubestellen kaeme zu spaet:
+   * WebKit hat den Bildlauf dann schon begonnen, und ein begonnener Bildlauf
+   * laesst sich nicht mehr abbestellen (`cancelable` ist dann `false`).
+   */
+  const onTouchMove = (event: TouchEvent) => {
+    if (candidateId === null || touchId === -1) return
+    // Ein fremder Finger bewegt hier nichts.
+    let own = false
+    for (let i = 0; i < event.touches.length; i += 1) {
+      if (event.touches.item(i)?.identifier === touchId) own = true
+    }
+    if (!own) return
+    if (event.cancelable) event.preventDefault()
+  }
+
   const onPointerUp = (event: PointerEvent) => {
     if (candidateId === null || event.pointerId !== pointerId) return
     const id = candidateId
@@ -208,6 +280,8 @@ export function useTearGesture(options: {
     onPointerMove,
     onPointerUp,
     onPointerCancel,
+    onTouchStart,
+    onTouchMove,
     swallowClick
   }
 }
