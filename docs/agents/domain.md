@@ -31,3 +31,19 @@ If the concept you need isn't in the glossary yet, that's a signal — either yo
 If your output contradicts an existing ADR, surface it explicitly rather than silently overriding:
 
 > _Contradicts ADR-0007 (event-sourced orders) — but worth reopening because…_
+
+**Das ist keine Formsache.** Am 26.08.2026 hat eine Spec die Verfallsregel des Überstempelns
+umgekehrt und die Frage dabei als erstmals entschieden dargestellt — acht Tage nachdem
+[ADR-0002](../adr/0002-stempel-ordnet-nicht.md) das Gegenteil festgelegt hatte, mit demselben
+Argument, das die Spec als Gegenargument vorbrachte. Der ADR wurde nie zurückgezogen. Es gab
+danach **zwei gültig aussehende Wahrheiten**, `CONTEXT.md` trug beide zwölf Zeilen
+auseinander, und drei Backlog-Tickets verwiesen auf die falsche. Aufgefallen ist es erst, als
+jemand ein halbes Jahr später etwas bauen wollte.
+
+Zwei Regeln daraus:
+
+- **Ein ADR gilt, bis er ausdrücklich zurückgezogen ist.** Wer ihm widerspricht, schreibt das
+  in den ADR — nicht nur in das neue Dokument.
+- **Wer eine Festlegung ersetzt, liest vorher, was in der ersetzten Quelle wirklich steht.**
+  Dieselbe Spec begründete die Ersetzung eines Tickets mit einer Prämisse, die in dem Ticket
+  nachweislich nicht stand. Ein Satz wie „ersetzt X" ohne Beleg aus X ist wertlos.

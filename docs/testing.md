@@ -58,6 +58,54 @@ greifen auf die WAAPI nicht. Nötig ist vor **jeder** Messung:
 document.querySelectorAll('*').forEach(el => el.getAnimations().forEach(a => a.cancel()))
 ```
 
+### 6. `npx tsc` prüft `.vue`-Dateien überhaupt nicht
+
+Es meldet dann sauber und ist trotzdem das falsche Werkzeug. Ein Umsetzer hat so einen
+Typfehler in `WallNote.vue` als „tsc sauber" gemeldet; er lag nicht daran, dass er ihn
+übersehen hätte, sondern daran, dass er das Gate nie ausgeführt hat.
+
+```
+npx vue-tsc --noEmit -p tsconfig.app.json
+```
+
+### 7. Die Wand ist im verborgenen Tab unsichtbar UND unklickbar
+
+`.wall-notes` steht auf `opacity: 0; pointer-events: none`, bis `hasPacked` gesetzt ist —
+und gesetzt wird es in einem `requestAnimationFrame`, das im verborgenen Tab **nie feuert**.
+Jeder `elementFromPoint`-Test läuft dann stumm ins Leere und meldet „nichts überdeckt
+irgendetwas", ohne dass irgendetwas gemessen wurde.
+
+`hasPacked` vor solchen Tests von Hand setzen.
+
+### 8. `wall.style.height` rundet auf ganze Pixel
+
+Die CSSOM gibt `10129px` zurück, wo der Vue-`ref` `10129.010000000004` hält. Wer
+Wandhöhen auf Gleichheit vergleicht, verliert damit genau die Nachkommastellen, um die es
+geht — und ein „identisch" ist dann keine Aussage. Die Höhe aus dem `ref` lesen, nicht aus
+dem Stil.
+
+### 9. Ein per `createElement` erzeugtes Prüf-Element trägt kein `data-v-`
+
+Damit greifen die scoped styles der Komponente nicht. Das Ding steht auf `position: static`
+statt absolut, bestimmt die Elternbreite mit und liefert Zahlen, die es im echten Layout nie
+gibt. So sind einmal „17 von 94 Zetteln ragen 3,5 px über die Papierkante" entstanden — die
+Gegenprobe fand null.
+
+Zum Vergleichen zweier CSS-Fassungen ist ein **injizierter Override** (`<style>` im Tab) das
+sichere Mittel; die Datei selbst anzufassen ist unnötig und lädt zum Vergessen ein.
+
+### 10. Ein Deploy ist erst geprüft, wenn das Bundle geprüft ist
+
+Der Git-Stand sagt nichts darüber, was das Telefon lädt. Die App ist eine PWA mit
+Workbox-Precaching und `registerType: autoUpdate`; der Service Worker liefert die alte
+Fassung aus, bis er sich erneuert — auf iOS besonders zäh, weil das System die App
+suspendiert statt sie zu beenden, sodass Wegwischen aus dem App-Umschalter oft nicht
+reicht.
+
+Im ausgelieferten Bundle nach einer Zeichenkette suchen, die es **nur** im neuen Stand gibt.
+Und für den Gerätetest einen Vorschaltpunkt vorsehen, an dem der Tester ohne
+Entwicklerwerkzeug erkennt, welche Fassung läuft.
+
 ## Repo-weite Formatierer
 
 `npm run lint` läuft mit `--fix` quer über die uncommitteten Dateien anderer

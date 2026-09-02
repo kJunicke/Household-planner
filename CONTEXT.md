@@ -47,14 +47,15 @@ Architekturentscheidungen: [docs/adr/](docs/adr/).
 - Von Hand gesetzte Aussage eines Haushaltsmitglieds: „diesmal ist es wichtig" — so handelt der Haushalt untereinander aus, was zuerst zählt.
 - Tipp auf den Stempel legt den nächsten Abdruck obenauf: **WICHTIG** → **DRINGEND** → wieder sauber (nur noch Grundabdruck).
 - **Träger sind Zettel und Projekte — Zettelchen nicht.** Was zuerst zählt, handelt der Haushalt über ganze Aufgaben aus, nicht über einzelne Häkchen einer Checkliste.
-- Vorherige Abdrücke bleiben sichtbar liegen; der oberste gilt, die Stapelhöhe ist selbst eine Aussage.
+- Vorherige Abdrücke bleiben sichtbar liegen — der **Abdruckstapel**. Der oberste gilt und ist am besten lesbar; die Stapelhöhe ist selbst eine Aussage. Man sieht einem Zettel an, ob einmal oder mehrfach nachgedrückt wurde, ohne ein Wort zu lesen. Ein einmal gesetzter Abdruck **verrutscht nicht mehr**, wenn ein weiterer daraufkommt.
+- Jeder Zettel hält den Platz für den ganzen Stapel frei, auch der ungestempelte — sonst schöbe sich die Wand beim Stempeln unter dem Finger weg. Das macht die Wand spürbar länger und ist bewusst so → [ADR-0003](docs/adr/0003-der-stapel-haelt-seinen-platz-frei.md).
 - Gilt für **einen Durchlauf**: mit dem Erledigen fällt es weg (sonst wäre nach Wochen alles dringend).
 - **Zurückgesetzt wird beim Erledigen, sonst nie** — auch bei **täglichen** Aufgaben. Ein nächtliches Zurücksetzen gibt es nicht. Der bewusst gezahlte Preis: wer eine tägliche Aufgabe morgens auf DRINGEND stempelt und sie mittags abhakt, verliert den Stapel sofort, obwohl der Tag noch läuft.
 - **Projekte verlieren ihn gar nicht** — sie werden nie fertig, ihr Stapel bleibt stehen. Räumt jemand den Stapel von Hand ab, wechselt ihr **Projektspruch**.
 - **Der Verfall folgt dem eigenen `task_type`, nicht dem Elternknoten.**
 - Getragen von `tasks.emphasis_level`: **0** nur Grundabdruck, **1** WICHTIG, **2** DRINGEND. Die Verfallsregel steht im Code an **zwei** Stellen — Edge Function `complete-task` und optimistischer Pfad im Store. Beide verweisen hierher; wer eine ändert, ändert beide.
 - Der **Grundabdruck** verfällt nicht — er wird berechnet und kommt von selbst wieder.
-- **Noch nicht bedienbar:** die Spalte und `taskStore.cycleEmphasisLevel` stehen, aber kein Component ruft sie auf — heute lässt sich nichts stempeln → `.scratch/ueberstempeln-bedienung/`.
+- **Der Stempel ist zugleich Bedienelement und Anzeige.** Ein Tipp stempelt, Gedrückthalten öffnet weiterhin den **Kranz** — der Zettel bleibt auf ganzer Fläche Griff, gerade unten, wo der Daumen liegt.
 
 ### Kranz
 - Vier beschriftete Richtungen, die beim Gedrückthalten eines **Zettels** erscheinen; sie erklären, was das Ziehen in die jeweilige Richtung tut.
