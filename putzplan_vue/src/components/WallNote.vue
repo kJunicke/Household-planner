@@ -463,6 +463,8 @@ const {
   onPointerMove: onTearMove,
   onPointerUp: onTearUp,
   onPointerCancel: onTearCancel,
+  onTouchStart: onTearTouchStart,
+  onTouchMove: onTearTouchMove,
   swallowClick: swallowTearClick
 } = tear
 
@@ -1017,12 +1019,13 @@ const handlePostponeConfirm = async (targetDate: string) => {
         <button
           v-if="!tracksProgress || !subtask.completed"
           class="mini-ear"
-          :class="{ 'ear--locked': tearScrolling }"
           :title="`„${subtask.title}“ abreißen`"
           @pointerdown="onTearDown(subtask.task_id, $event)"
           @pointermove="onTearMove"
           @pointerup="onTearUp"
           @pointercancel="onTearCancel"
+          @touchstart.passive="onTearTouchStart"
+          @touchmove="onTearTouchMove"
           @click="onMiniEarClick(subtask.task_id, $event)"
         ></button>
       </div>
@@ -1063,12 +1066,14 @@ const handlePostponeConfirm = async (targetDate: string) => {
     <button
       v-if="!props.expanded"
       class="ear"
-      :class="{ 'ear--locked': tearScrolling, 'ear--ready': isTearReady }"
+      :class="{ 'ear--ready': isTearReady }"
       :title="`„${props.task.title}“ nach unten abreißen`"
       @pointerdown="onTearDown(NOTE_HANDLE, $event)"
       @pointermove="onTearMove"
       @pointerup="onTearUp"
       @pointercancel="onTearCancel"
+      @touchstart.passive="onTearTouchStart"
+      @touchmove="onTearTouchMove"
       @click="swallowTearClick"
     ></button>
 
@@ -1936,11 +1941,22 @@ const handlePostponeConfirm = async (targetDate: string) => {
 
    `touch-action: none` ist die zweite Hälfte des Scroll-Schutzes: nur so wird
    aus einem Zug nach unten überhaupt eine Geste statt eines Bildlaufs. Solange
-   die Seite scrollt (plus Nachlauf), schaltet `.ear--locked` auf `pan-y`
-   zurück — wer in eine fliegende Wand greift, scrollt weiter und reißt nichts
-   ab; `touch-action: pan-y` als Dauerzustand ist dagegen **keine** Option,
-   damit beginnt der Browser beim Zug nach unten selbst zu scrollen und
-   schickt `pointercancel`, bevor die Geste je erkannt würde. */
+   **Dauerhaft**, ohne Ausnahme.
+
+   Früher schaltete `.ear--locked` während des Bildlaufs auf `pan-y` zurück:
+   „wer in eine fliegende Wand greift, scrollt weiter". Die Regel ist raus
+   (iOS-Korrektur), weil sie eine Rückkopplung war. `pan-y` heißt: der Zug am
+   Eselsohr scrollt die Seite — was den Scroll-Wächter erneut scharf setzt, was
+   `pan-y` erneut anlegt. Einmal hineingeraten, kam die Wand nicht mehr heraus;
+   auf dem iPhone war das der Dauerzustand, weil dort schon das Gummiband der
+   Homescreen-App den Wächter scharf hält (→ `useScrollQuiet`). Gemeldet als
+   „das Eselsohr wird größer, aber die Seite scrollt trotzdem".
+
+   Der Schutz vor dem Fehlgriff in die fliegende Wand geht dabei NICHT
+   verloren: er sitzt weiterhin im Riegel am `pointerdown` von
+   `useTearGesture`. Was entfällt, ist allein die Möglichkeit, eine fliegende
+   Wand ausgerechnet am Eselsohr weiterzuscrollen — 44 × 44 px je Zettel, und
+   ein Fingerdruck stoppt den Schwung ohnehin. */
 .ear {
   position: absolute;
   right: 0;
@@ -1954,11 +1970,6 @@ const handlePostponeConfirm = async (targetDate: string) => {
   touch-action: none;
   user-select: none;
   -webkit-user-select: none;
-}
-
-.ear--locked {
-  /* Während des Scrollens gehört die Geste wieder dem Browser. */
-  touch-action: pan-y;
 }
 
 /* Die angeknickte Ecke selbst. */
