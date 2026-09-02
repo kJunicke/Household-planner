@@ -36,10 +36,24 @@ import {
  * ihm trotzdem wegscrollt. Die Geste wird nie erkannt, weil der Zettel dem
  * Finger nicht folgt.
  *
- * Der Mechanismus, den WebKit garantiert respektiert, ist `preventDefault()`
- * auf einem **nicht-passiven** `touchmove`. Genau das leistet `onTouchMove`.
- * `touch-action` bleibt trotzdem stehen: es ist der billigere Weg, wo er
- * funktioniert, und beide sagen dasselbe.
+ * `touch-action` ist auf iOS seit iOS 13 umgesetzt und wird im Regelfall auch
+ * respektiert — die frueher hier stehende pauschale Behauptung, WebKit halte
+ * sich nicht daran, war falsch. Belegte Loecher gibt es trotzdem: waehrend
+ * **Momentum-Scrolling** greift nach Aussage eines WebKit-Entwicklers auch
+ * `touch-action: none` nicht, und verschachtelte Hierarchien mit
+ * unterschiedlichen Werten sind offen fehlerhaft. Gegen den ersten Fall steht
+ * der Riegel am `pointerdown` (`if (scrolling.value) return`) — er ist deshalb
+ * **tragend**, nicht bloss eine Bequemlichkeit.
+ *
+ * Der zweite Weg ist `preventDefault()` auf einem **nicht-passiven**
+ * `touchmove` (→ `onTouchMove`). Er hat auf iOS allerdings eine **Frist**:
+ * sobald WebKit die Pan-Geste beginnt (`scrollViewWillBeginDragging`), setzt
+ * es `_touchEventsCanPreventNativeGestures = NO`, und jedes weitere
+ * `preventDefault()` ist wirkungslos (`event.cancelable` wird `false`). Genau
+ * darum bestellt `onTouchMove` ab der ERSTEN Bewegung ab und nicht erst nach
+ * der Achsenerkennung.
+ *
+ * Belege in `docs/research/ios-gesten-webkit.md`.
  *
  * **Nicht auf `touchstart`.** Dort unterdrueckte `preventDefault()` auf iOS
  * auch den nachfolgenden Klick — und am Zettelchen erledigt ein Antippen
@@ -105,13 +119,22 @@ export function useTearGesture(options: {
    * (→ `docs/testing.md`). Dann gibt es auch nichts abzubestellen.
    */
   let touchId = -1
+  /**
+   * Haben WIR den Zeiger ausdruecklich eingefangen?
+   *
+   * Nur dann darf `reset()` ihn wieder freigeben. Bei `touch` faengt der
+   * Browser implizit ein; diese Fassung wieder freizugeben waere eine fremde
+   * Entscheidung, die wir nie getroffen haben.
+   */
+  let captured = false
   /** Die Geste hat ausgelöst → den nachlaufenden Klick schlucken. */
   let consumedClick = false
 
   const reset = () => {
-    if (recognized && handleEl && handleEl.hasPointerCapture?.(pointerId)) {
+    if (captured && handleEl && handleEl.hasPointerCapture?.(pointerId)) {
       handleEl.releasePointerCapture(pointerId)
     }
+    captured = false
     candidateId = null
     handleEl = null
     pointerId = -1
@@ -173,17 +196,25 @@ export function useTearGesture(options: {
       // Erst jetzt einfangen: ab hier gehören alle weiteren Ereignisse diesem
       // Griff, auch wenn der Finger den Zettel verlässt.
       //
-      // Im `try`, weil `setPointerCapture` einen `NotFoundError` wirft, wenn der
-      // Zeiger nicht (mehr) aktiv ist. Beim QC trat das mit **synthetischen**
-      // Zeigern der Browser-Automatisierung auf — ein Artefakt der Simulation,
-      // kein Produktfehler. Es darf die Geste trotzdem nicht abbrechen: ohne
-      // Einfangen läuft sie weiter, solange der Finger über dem Griff bleibt,
-      // und es fehlte höchstens ein Frame Zugweg. Ein Wurf hier hätte dagegen
-      // den ganzen Zug verschluckt.
-      try {
-        handleEl?.setPointerCapture?.(event.pointerId)
-      } catch {
-        // Kein Einfangen — die Geste läuft ohne weiter.
+      // **Nur fuer Maus und Stift.** Bei `touch` ist der Zeiger laut Pointer
+      // Events L3 §9.4 schon beim `pointerdown` **implizit** eingefangen, und
+      // WebKit setzt das auch so um (`PointerCaptureController.cpp`). Der
+      // ausdrueckliche Aufruf brachte dort also nichts — und ist wegen eines
+      // offenen WebKit-Fehlers, bei dem das erste `pointermove` nach
+      // `setPointerCapture` NICHT eingefangen ist, sogar riskant. Belege in
+      // `docs/research/ios-gesten-webkit.md`.
+      //
+      // Im `try`, weil `setPointerCapture` einen `NotFoundError` wirft, wenn
+      // der Zeiger nicht (mehr) aktiv ist — beim QC mit synthetischen Zeigern
+      // der Browser-Automatisierung beobachtet. Ein Wurf darf die Geste nicht
+      // verschlucken; ohne Einfangen laeuft sie weiter.
+      if (event.pointerType !== 'touch') {
+        try {
+          handleEl?.setPointerCapture?.(event.pointerId)
+          captured = true
+        } catch {
+          // Kein Einfangen — die Geste läuft ohne weiter.
+        }
       }
     }
 

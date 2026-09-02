@@ -37,7 +37,11 @@ import { useScrollQuiet } from './useScrollQuiet'
  * solcher Fleck über die **ganze** Zettelfläche wäre ein Vielfaches davon und
  * würde die Wand praktisch unscrollbar machen.
  *
- * Deshalb steht hier **kein** `touch-action`. Der Bildlauf bleibt bis zum
+ * Deshalb steht hier **kein** `touch-action`. **Und schon gar nicht
+ * `manipulation`:** mit diesem Wert liefert iOS gar kein `pointercancel` mehr
+ * (offener WebKit-Fehler), womit der Touch-Rueckfallweg weiter unten tot waere
+ * — er haengt genau an diesem Ereignis. Belege in
+ * `docs/research/ios-gesten-webkit.md`. Der Bildlauf bleibt bis zum
  * Auslösen vollständig zuständig; abgeschaltet wird er erst danach, und zwar
  * über einen nicht-passiven `touchmove`, der nur im geöffneten Zustand
  * `preventDefault()` ruft (→ `onTouchMove`). Das geht auf, weil der Finger im
@@ -146,6 +150,11 @@ export function useDirectionPress(options: {
    * eigene an.
    */
   let touchId = -1
+  /** Die Art des Zeigers — entscheidet ueber das ausdrueckliche Einfangen. */
+  let pointerType = ''
+  /** Haben WIR eingefangen? Nur dann darf `reset()` freigeben (→ `captured`
+   *  in `useTearGesture`, gleiche Begruendung). */
+  let captured = false
   let active = false
   let startX = 0
   let startY = 0
@@ -204,9 +213,11 @@ export function useDirectionPress(options: {
   const reset = () => {
     clearTimer()
     dropTouchWatch()
-    if (open.value && el && el.hasPointerCapture?.(pointerId)) {
+    if (captured && el && el.hasPointerCapture?.(pointerId)) {
       el.releasePointerCapture(pointerId)
     }
+    captured = false
+    pointerType = ''
     active = false
     el = null
     pointerId = -1
@@ -238,6 +249,7 @@ export function useDirectionPress(options: {
     active = true
     el = event.currentTarget as HTMLElement
     pointerId = event.pointerId
+    pointerType = event.pointerType
     startX = event.clientX
     startY = event.clientY
 
@@ -261,15 +273,25 @@ export function useDirectionPress(options: {
       // Ab hier gehören alle weiteren Ereignisse diesem Zettel, auch wenn der
       // Finger ihn verlässt — die Zugstrecke ist länger als ein kleiner Zettel.
       //
-      // Im `try`, aus demselben Grund wie in `useTearGesture`: synthetische
-      // Zeiger der Browser-Automatisierung lassen `setPointerCapture` mit
-      // `NotFoundError` scheitern. Ohne Einfangen läuft die Geste weiter,
-      // solange der Finger über dem Zettel bleibt — ein Wurf hier verschlänge
-      // dagegen die ganze Geste.
-      try {
-        el?.setPointerCapture?.(pointerId)
-      } catch {
-        // Kein Einfangen — die Geste läuft ohne weiter.
+      // **Nur fuer Maus und Stift.** Bei `touch` ist der Zeiger laut Pointer
+      // Events L3 §9.4 schon beim `pointerdown` **implizit** eingefangen, und
+      // WebKit setzt das auch so um (`PointerCaptureController.cpp`). Der
+      // ausdrueckliche Aufruf brachte dort also nichts — und ist wegen eines
+      // offenen WebKit-Fehlers, bei dem das erste `pointermove` nach
+      // `setPointerCapture` NICHT eingefangen ist, sogar riskant. Belege in
+      // `docs/research/ios-gesten-webkit.md`.
+      //
+      // Im `try`, weil `setPointerCapture` einen `NotFoundError` wirft, wenn
+      // der Zeiger nicht (mehr) aktiv ist — beim QC mit synthetischen Zeigern
+      // der Browser-Automatisierung beobachtet. Ein Wurf darf die Geste nicht
+      // verschlucken; ohne Einfangen laeuft sie weiter.
+      if (pointerType !== 'touch') {
+        try {
+          el?.setPointerCapture?.(pointerId)
+          captured = true
+        } catch {
+          // Kein Einfangen — die Geste läuft ohne weiter.
+        }
       }
     }, PRESS_MS)
   }
@@ -349,7 +371,9 @@ export function useDirectionPress(options: {
   // (nativ, die App vibriert nirgends), und der Griff ist sofort wieder weg.
   //
   // Die Touch-Ereignisse laufen unabhängig davon weiter, solange der Finger
-  // liegt. Wir hören ab dem Abbruch am **Fenster** zu und führen die Geste mit
+  // liegt. Das ist keine Hoffnung, sondern belegt: WebKit ruft beim Beginn des
+  // Bildlaufs `cancelPointersForGestureRecognizer:` — das bricht ausschliesslich
+  // die ZEIGER ab, die UIKit-Touches laufen unberuehrt weiter. Wir hören ab dem Abbruch am **Fenster** zu und führen die Geste mit
   // denselben Zahlen weiter (Ursprung, `directionOf`, Klick-Wächter) — der
   // Nutzer merkt vom Wechsel nichts.
   //

@@ -22,46 +22,64 @@ import { onUnmounted, readonly, ref } from 'vue'
 const SCROLL_QUIET_MS = 300
 
 /**
- * Ab wie vielen Pixeln Positionsänderung ein `scroll`-Ereignis als **echter**
- * Bildlauf zählt (iOS-Korrektur).
+ * Was hier als Bildlauf zaehlt — und was nicht (iOS).
  *
- * Der Wächter hing früher am blossen Auftreten des Ereignisses. Auf Android
- * geht das auf, auf iOS nicht: WebKit feuert `scroll` auch dann, wenn sich
- * nichts bewegt hat oder nichts bewegen KONNTE —
+ * Der Waechter hing frueher am blossen Auftreten des `scroll`-Ereignisses.
+ * Auf Android geht das auf, auf iOS nicht: dort federt WebKit die ganze Seite,
+ * sobald man am Ende weiterzieht, und **meldet die Gummiband-Position
+ * ungeklemmt an das DOM**. Jede Federbewegung ist damit ein echter Bildlauf mit
+ * echten, grossen Deltas — nicht etwa ein Ereignis ohne Bewegung, wie eine
+ * fruehere Fassung dieses Kommentars behauptete. Ein Schwellwert auf die
+ * Schrittweite faengt das ausdruecklich NICHT.
  *
- * - **Gummiband** (elastic overscroll): jeder Zug am oberen oder unteren Ende
- *   federt die ganze Seite, meldet Bildlauf und federt zurück. In der
- *   Homescreen-App (standalone) ist das der Normalfall, weil dort keine
- *   Adressleiste den ersten Zug wegnimmt.
- * - **Ein- und Ausfahren der Adressleiste** und jede Änderung des visuellen
- *   Viewports.
- * - **Sub-Pixel-Rundung** beim Zurückfedern.
+ * Was das Gummiband dagegen sicher verraet, ist die Position selbst: sie liegt
+ * ausserhalb von `0 … scrollHeight − innerHeight`. Genau daran wird es hier
+ * erkannt. Solche Ereignisse setzen den Waechter nicht scharf, und der Rueckweg
+ * aus dem Gummiband in den gueltigen Bereich ebenso wenig — auch er ist keine
+ * Handlung des Nutzers, sondern das Zurueckschnellen der Feder.
  *
- * Jedes dieser Ereignisse setzte den Wächter für 300 ms scharf. Da sie in
- * Serie kommen, stand er auf dem iPhone praktisch dauerhaft — und ein
- * dauerhaft scharfer Wächter heisst: `useTearGesture` und `useDirectionPress`
- * lehnen JEDEN Fingerdruck an der Wurzel ab. Genau das war der gemeldete
- * Fehler „klappt manchmal, meist nicht".
+ * In der Homescreen-App fiel das am staerksten auf, weil dort keine
+ * Adressleiste den ersten Zug wegnimmt. Ergebnis war ein praktisch dauerhaft
+ * scharfer Waechter — und der lehnt jeden Fingerdruck an der Wurzel ab
+ * („klappt manchmal, meist nicht").
  *
- * Deshalb wird jetzt die **Position** verglichen, nicht das Ereignis gezählt.
- * 2 px ist gesetzt, nicht gemessen: unter der kleinsten Strecke, die ein
- * Mensch als Bildlauf wahrnimmt, und über allem, was Rundung und Gummiband
- * an Rauschen erzeugen.
+ * `overscroll-behavior-y: none` auf `html` (→ `src/assets/base.css`) sollte das
+ * Gummiband schon vorher abstellen. Diese Pruefung bleibt als Netz: der Wert
+ * wirkt erst ab Safari 16.4, und mehrere WebKit-Tickets dazu sind offen.
+ *
+ * Belege in `docs/research/ios-gesten-webkit.md`.
  */
-const SCROLL_MIN_DELTA = 2
+
+/** Liegt diese Position im gueltigen Bereich, oder ist sie Gummiband? */
+const inScrollRange = (y: number): boolean => {
+  const max = Math.max(
+    0,
+    document.documentElement.scrollHeight - window.innerHeight
+  )
+  // Eine Toleranz von 1 px gegen Rundung zwischen Layout- und Scroll-Metrik.
+  return y >= -1 && y <= max + 1
+}
 
 const scrolling = ref(false)
 let quietTimer: number | null = null
 let users = 0
+/** Die zuletzt gesehene Position — und ob sie im gueltigen Bereich lag. */
 let lastY = 0
+let lastInRange = true
 
 const onWindowScroll = () => {
   const y = window.scrollY
+  const wasInRange = lastInRange
+  const isInRange = inScrollRange(y)
   const moved = Math.abs(y - lastY)
   lastY = y
-  // Kein echter Weg → kein Bildlauf. Der Nachlauf eines schon laufenden
-  // Bildlaufs wird dadurch NICHT verlängert; er läuft aus, wie er soll.
-  if (moved < SCROLL_MIN_DELTA) return
+  lastInRange = isInRange
+
+  // Gummiband — weder das Ausfedern noch der Rueckweg daraus ist ein Bildlauf.
+  if (!isInRange || !wasInRange) return
+  // Ereignis ohne Bewegung. Nicht belegt notwendig, aber kostenlos.
+  if (moved === 0) return
+
   scrolling.value = true
   if (quietTimer !== null) clearTimeout(quietTimer)
   quietTimer = window.setTimeout(() => {
@@ -74,6 +92,7 @@ export const retainScrollWatch = () => {
   users += 1
   if (users !== 1) return
   lastY = window.scrollY
+  lastInRange = inScrollRange(lastY)
   window.addEventListener('scroll', onWindowScroll, { passive: true })
 }
 

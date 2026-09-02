@@ -184,26 +184,38 @@
   font-weight: normal;
 }
 
-/* Kein Gummiband am Seitenende (iOS-Korrektur).
+/* Kein Gummiband am Seitenende (iOS).
 
    Auf dem iPhone federt WebKit die ganze Seite, sobald man am oberen oder
-   unteren Ende weiterzieht — in der Homescreen-App (standalone) ist das der
-   Normalfall, weil dort keine Adressleiste den ersten Zug wegnimmt. Jedes
-   Federn und jedes Zurueckfedern meldet `scroll`, und der Scroll-Waechter der
-   Pinnwand (→ `src/composables/useScrollQuiet.ts`) stand dadurch praktisch
-   dauerhaft scharf: Abreissen und Langdruck wurden an der Wurzel abgelehnt.
+   unteren Ende weiterzieht. Das ist kein kosmetisches Problem: WebKit meldet
+   die Gummiband-Position **ungeklemmt** an das DOM, jede Federbewegung ist
+   also ein echter Bildlauf mit echten `scroll`-Ereignissen. Der Scroll-Waechter
+   der Pinnwand (→ `src/composables/useScrollQuiet.ts`) haelt daraufhin jede
+   Geste fuer einen Bildlauf und lehnt sie ab. In der Homescreen-App faellt das
+   am meisten auf, weil dort keine Adressleiste den ersten Zug wegnimmt.
 
-   Der Waechter filtert solche Ereignisse inzwischen selbst ueber die
-   Positionsaenderung. Das hier ist die Behebung an der Quelle statt am
-   Symptom — und nebenbei fuehlt sich eine App vom Homescreen ohne federnde
-   Seite richtiger an. `contain` statt `none`: Wischen zum Neuladen (Android)
-   und die Zurueck-Geste bleiben unangetastet, nur der Ueberhang entfaellt.
+   **`none`, ausdruecklich nicht `contain`.** Die Spezifikation trennt beide
+   Werte genau an dieser Stelle: `contain` „must not modify the behavior of how
+   local boundary default actions should behave, such as showing any overscroll
+   affordances" — es unterbindet nur die Verkettung nach aussen und laesst das
+   Gummiband stehen. Erst `none` nimmt zusaetzlich die Affordanz. WebKit setzt
+   das genauso um und schaltet `UIScrollView.bounces` nur bei einem Wert
+   ungleich `None` ab.
+   Quelle: <https://drafts.csswg.org/css-overscroll-behavior-1/>
 
-   Auf `html` UND `body`, weil nicht festgelegt ist, welches der beiden der
-   Browser als scrollendes Element behandelt. */
-html,
-body {
-  overscroll-behavior-y: contain;
+   **Nur auf `html`.** Fuer den Viewport liest WebKit den Wert allein vom
+   `documentElement`; eine Propagation von `body` gibt es fuer diese
+   Eigenschaft nicht (anders als bei `overflow`). Eine zusaetzliche Zeile auf
+   `body` waere wirkungslos.
+
+   Wirksam ab **Safari 16.4** — davor greift `none` auf nicht scrollbaren
+   Seiten nicht. Und auch danach ist es eine Verbesserung, keine Garantie:
+   mehrere WebKit-Tickets dazu sind offen. Der Waechter prueft deshalb
+   zusaetzlich selbst auf Gummiband-Positionen.
+
+   Ausfuehrlich belegt in `docs/research/ios-gesten-webkit.md`. */
+html {
+  overscroll-behavior-y: none;
 }
 
 body {
