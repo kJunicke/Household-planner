@@ -1940,7 +1940,8 @@ const handlePostponeConfirm = async (targetDate: string) => {
    rund 1500 auf rund 1936 px².
 
    `touch-action: none` ist die zweite Hälfte des Scroll-Schutzes: nur so wird
-   aus einem Zug nach unten überhaupt eine Geste statt eines Bildlaufs. Solange
+   aus einem Zug nach unten überhaupt eine Geste statt eines Bildlaufs.
+
    **Dauerhaft**, ohne Ausnahme — und ausgerechnet `none`.
 
    Der Wert wird **einmal** ermittelt, beim Aufsetzen des Fingers, und gilt
