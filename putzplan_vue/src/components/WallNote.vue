@@ -927,6 +927,10 @@ const stampLayers = computed((): StampLayer[] => {
  * Ein Tipp auf den Stempel dreht ihn weiter: sauber → WICHTIG → DRINGEND →
  * sauber (Ticket `02`).
  *
+ * **An einem Projekt wechselt beim letzten Schritt zusätzlich der Grundabdruck**
+ * — das Abräumen zieht einen neuen Projektspruch (Ticket `04`). Auch das macht
+ * der Store; diese Stelle weiß davon nichts und soll es nicht wissen.
+ *
  * **Kein `await`, keine Auswertung des Rückgabewerts, kein Toast.** Der Automat
  * im Store ist optimistisch — der Wert steht, bevor diese Funktion zurückkehrt,
  * und genau darauf beruht das Gummistempel-Gefühl: mehrfaches schnelles

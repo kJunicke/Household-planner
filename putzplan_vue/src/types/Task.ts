@@ -45,6 +45,20 @@ export interface Task {
   // 2 DRINGEND → 0, siehe taskStore.cycleEmphasisLevel. Rein optisch — ändert
   // weder Gruppe noch Reihenfolge auf der Pinnwand.
   emphasis_level: 0 | 1 | 2
+
+  // Projektspruch (→ CONTEXT.md, "Projektspruch"): der Listenplatz des Grundabdrucks
+  // eines PROJEKTS in `PROJECT_PHRASES` (src/lib/projectPhrases.ts), 0–99. Gespeichert
+  // und nicht gerechnet — der Spruch gehört dem Haushalt, alle Geräte sehen dasselbe
+  // Wort und ein Neuladen überlebt es. Gezogen wird er bei der Anlage (DB-Default
+  // `floor(random() * 100)`) und danach jedes Mal neu, wenn der Abdruckstapel
+  // abgeräumt wird (2 → 0, siehe taskStore.cycleEmphasisLevel).
+  //
+  // Steht auf JEDER Zeile, nicht nur auf Projekten: die Spalte ist `NOT NULL` mit
+  // Default (Migration 20260901160000). Gelesen wird sie ausschließlich für
+  // `task_type === 'project'`; an allen anderen Zeilen trägt sie einen gültigen, aber
+  // bedeutungslosen Wert. Deshalb steht sie hier ohne `| null` — wer sie an einer
+  // Nicht-Projekt-Zeile liest, hat kein fehlendes Feld, sondern die falsche Frage.
+  project_saying_index: number
   }
 
 export interface TaskCompletion {

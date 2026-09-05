@@ -11,12 +11,17 @@
  * prüft nur die Zeichenlänge — `PROJECT_PHRASE_MAX_LENGTH` und
  * `findOverlongProjectPhrases()` unten sind dafür da.
  *
- * **Gelesen, nicht gezogen.** Der Spruch gehört dem Haushalt: er wird bei der Anlage
- * eines Projekts gezogen und in einer Spalte auf `tasks` gespeichert, damit alle Geräte
- * dasselbe Wort sehen und es ein Neuladen übersteht. Diese Datei löst den gespeicherten
- * Listenplatz nur auf. Das Weiterdrehen beim Abräumen des Stapels ist ein eigener Schritt
- * (→ Ticket `04`).
+ * **Gespeichert, nicht gerechnet.** Der Spruch gehört dem Haushalt: er wird bei der
+ * Anlage eines Projekts gezogen und in `tasks.project_saying_index` gespeichert, damit
+ * alle Geräte dasselbe Wort sehen und es ein Neuladen übersteht.
+ *
+ * Diese Datei kann beides: den gespeicherten Listenplatz **auflösen**
+ * (`projectPhraseOf`) und den nächsten **ziehen** (`drawProjectPhraseSlot`). Geschrieben
+ * wird hier nichts — das tut `taskStore.cycleEmphasisLevel` beim Abräumen des
+ * Abdruckstapels (Stufe 2 → 0), und nur dort.
  */
+
+import type { Task } from '@/types/Task'
 
 /** Die harte Grenze: der Stempel geht in die Zettelbreite ein. */
 export const PROJECT_PHRASE_MAX_LENGTH = 10
@@ -64,46 +69,86 @@ export function findOverlongProjectPhrases(): string[] {
 }
 
 /**
- * Der Name der Spalte auf `tasks`, die den Listenplatz des Spruchs hält.
- *
- * Angelegt von Ticket `00`, in derselben Migration wie der Rückbau des Verfalls
- * (`20260901160000_emphasis_no_nightly_reset_and_project_saying.sql`): `INTEGER NOT NULL`,
- * `CHECK BETWEEN 0 AND 99`, Default gesetzt, bestehende Projekte beim Anlegen der Spalte
- * zufällig befüllt. **Die Migration ist ausgeführt und in Produktion**; der Normalfall ist
- * also, dass hier ein gültiger Wert ankommt — nachgewiesen für 13 von 13 Projekten im
- * Bestand.
- *
- * Weicht der Name je ab, ist DIESE Zeile die einzige Stelle, die sich ändert — genau
- * dafür ist der Zugriff hier gekapselt. `Task` in `src/types/Task.ts` kennt die Spalte
- * (noch) nicht; deshalb wird sie hier über einen Cast gelesen statt über das Interface.
- */
-const PHRASE_SLOT_COLUMN = 'project_saying_index'
-
-/**
  * Alles, was diese Datei von einer Aufgabe braucht.
  *
- * Bewusst **keine** Index-Signatur (früher
+ * Seit dem Weiterdrehen (Ticket `04`) steht `project_saying_index` **im `Task`-Interface**
+ * (`src/types/Task.ts`) — es gibt keinen Cast mehr auf eine undeklarierte Spalte. Der
+ * Grund für die Änderung: das Weiterdrehen muss die Spalte auch **schreiben** und im
+ * Fehlerfall zurückrollen; ein zweiter Cast an einer zweiten Stelle wäre eine zweite
+ * Gelegenheit gewesen, den Spaltennamen still zu vertippen.
+ *
+ * Bewusst ein `Pick` und nicht `Task` selbst: diese Datei braucht zwei Felder, nicht
+ * dreißig. Und bewusst **keine** Index-Signatur (früher
  * `{ task_id: string } & Partial<Record<string, unknown>>`): TypeScript weist einem Typ
  * mit Index-Signatur kein Interface ohne eine solche zu, `projectPhraseOf(props.task)`
- * war damit ein Typfehler — zur Laufzeit unsichtbar, im Build-Gate rot. Der Zugriff auf
- * die undeklarierte Spalte passiert stattdessen an genau einer Stelle per Cast, siehe
- * `storedPhraseSlot()`.
+ * war damit ein Typfehler — zur Laufzeit unsichtbar, im Build-Gate rot.
  */
-type PhraseCarrier = { task_id: string }
+type PhraseCarrier = Pick<Task, 'task_id' | 'project_saying_index'>
 
 /**
  * Liest den gespeicherten Listenplatz.
  *
  * Liefert `null`, wenn der Wert **fehlt oder unbrauchbar** ist; der Aufrufer meldet das
- * laut. Ein Wert außerhalb 0–99 wird ausdrücklich **nicht** per Modulo umgeklappt: der
+ * laut. Die Prüfung bleibt trotz des jetzt deklarierten Feldes eine **Laufzeitprüfung**:
+ * die Zeile kommt aus der Datenbank, das Interface ist eine Behauptung über sie und kein
+ * Beweis — eine alte zwischengespeicherte Zeile oder ein `select` mit Spaltenliste liefert
+ * hier sehr wohl `undefined`.
+ *
+ * Ein Wert außerhalb 0–99 wird ausdrücklich **nicht** per Modulo umgeklappt: der
  * `CHECK`-Constraint verbietet ihn ohnehin, und ein Umklappen ergäbe ein plausibel
  * aussehendes falsches Wort. Lieber laut falsch als leise plausibel.
  */
 function storedPhraseSlot(task: PhraseCarrier): number | null {
-  const raw = (task as unknown as Record<string, unknown>)[PHRASE_SLOT_COLUMN]
+  const raw: unknown = task.project_saying_index
   if (typeof raw !== 'number' || !Number.isInteger(raw)) return null
   if (raw < 0 || raw >= PROJECT_PHRASES.length) return null
   return raw
+}
+
+/**
+ * Der gespeicherte Listenplatz einer Aufgabe, oder `null`, wenn er unbrauchbar ist.
+ *
+ * Für den Schreibweg: `cycleEmphasisLevel` muss wissen, von WELCHEM Platz aus es
+ * weiterdreht, damit „nie derselbe zweimal hintereinander" überhaupt prüfbar ist. Es
+ * bekommt hier bewusst den **Platz** und nicht den Text — gespeichert wird der Platz, und
+ * ein Rückweg vom Wort zur Zahl wäre bei zwei gleichen Wörtern mehrdeutig.
+ */
+export function projectPhraseSlotOf(task: PhraseCarrier): number | null {
+  return storedPhraseSlot(task)
+}
+
+/**
+ * Zieht den **nächsten** Listenplatz — das Weiterdrehen beim Abräumen des Stapels.
+ *
+ * Zwei Zusagen, und die zweite ist die teure:
+ *
+ * 1. **Zufällig aus den übrigen 99.** Gleichverteilt, damit sich ein Haushalt über viele
+ *    Durchläufe wirklich durch die Sammlung stempelt und nicht um drei Sprüche kreist.
+ * 2. **Nie derselbe zweimal hintereinander.** Ein Abräumen, nach dem dasselbe Wort
+ *    dasteht, sieht aus wie ein Fehlschlag beim Speichern — der Nutzer tippt erneut und
+ *    hat dann versehentlich wieder gestempelt.
+ *
+ * Umgesetzt als Versatz `1 … 99` auf den aktuellen Platz, modulo 100, **nicht** als
+ * „ziehen und bei Gleichstand neu ziehen": die Schleife hätte keine obere Schranke, und
+ * der Versatz ist über die 99 Alternativen exakt gleichverteilt statt nur „fast immer".
+ *
+ * `Math.random()` ist hier richtig und widerspricht der Regel „Versatz und Neigung eines
+ * Abdrucks kommen deterministisch aus der Aufgaben-Kennung" nicht: **gezogen wird das
+ * Wort, nicht seine Lage**, und das Ergebnis der Ziehung wird gespeichert. Ein Spruch, der
+ * sich beim Neuladen ändert, entstünde erst, wenn jemand das Speichern wegließe.
+ *
+ * `currentSlot === null` heißt „es gab noch keinen brauchbaren" — dann fällt die zweite
+ * Zusage weg (es gibt nichts zu wiederholen) und alle 100 stehen zur Wahl.
+ */
+export function drawProjectPhraseSlot(currentSlot: number | null): number {
+  const count = PROJECT_PHRASES.length
+  const from =
+    currentSlot !== null && Number.isInteger(currentSlot) && currentSlot >= 0 && currentSlot < count
+      ? currentSlot
+      : null
+  if (from === null) return Math.floor(Math.random() * count)
+  const offset = 1 + Math.floor(Math.random() * (count - 1))
+  return (from + offset) % count
 }
 
 /**
@@ -134,7 +179,8 @@ function fnv1a(input: string): number {
  * Der Spruch eines Projekts.
  *
  * Der Regelweg ist der **gespeicherte** Listenplatz — der Spruch gehört dem Haushalt,
- * nicht dem Gerät, und nur ein gespeicherter Wert lässt sich weiterdrehen (→ Ticket `04`).
+ * nicht dem Gerät, und nur ein gespeicherter Wert lässt sich weiterdrehen
+ * (→ `drawProjectPhraseSlot`, geschrieben in `taskStore.cycleEmphasisLevel`).
  *
  * **Der Rückfall ist ein Notausgang, kein zweiter Regelweg.** Er greift nur, wenn die
  * Spalte fehlt, `null` ist oder außerhalb 0–99 liegt — seit die Migration in Produktion
@@ -155,7 +201,7 @@ export function projectPhraseOf(task: PhraseCarrier): string {
 
   warnOnce(
     task.task_id,
-    `Kein brauchbarer Listenplatz in \`tasks.${PHRASE_SLOT_COLUMN}\` — der Spruch wird ` +
+    'Kein brauchbarer Listenplatz in `tasks.project_saying_index` — der Spruch wird ' +
       'ersatzweise aus der Aufgaben-Kennung abgeleitet. Er ist damit stabil, aber nicht ' +
       'der gespeicherte, und lässt sich nicht weiterdrehen.'
   )

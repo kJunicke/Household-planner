@@ -3,6 +3,7 @@ import { defineStore } from 'pinia'
 import type { Task, TaskCompletion, EnrichedCompletion } from '@/types/Task'
 import { supabase } from '@/lib/supabase'
 import { formatPostponeDate } from '@/lib/taskSchedule'
+import { drawProjectPhraseSlot, projectPhraseSlotOf } from '@/lib/projectPhrases'
 import { useHouseholdStore } from './householdStore'
 import { useAuthStore } from './authStore'
 import { useToastStore } from './toastStore'
@@ -21,6 +22,22 @@ const isOptimistic = (c: TaskCompletion | EnrichedCompletion): c is OptimisticCo
 
 /** Die Task-Felder, die eine Erledigung anfasst — und die ein Rückgängig zurückschreibt. */
 type RowSnapshot = Pick<Task, 'task_id' | 'completed' | 'last_completed_at' | 'postponed_until' | 'assigned_to' | 'emphasis_level'>
+
+/**
+ * Die Task-Felder, die ein **Stempeltipp** anfasst (→ `cycleEmphasisLevel`).
+ *
+ * Ein eigener Typ neben `RowSnapshot` und **nicht** dieselbe Liste: der Stempel fasst
+ * `project_saying_index` an, eine Erledigung nie (Projekte verlieren ihren Nachdruck gar
+ * nicht, → CONTEXT.md „Überstempeln"). Stünde die Spalte in `RowSnapshot`, führe sie
+ * durch `undoCompletion` mit, das seine Felder einzeln zurückschreibt — und ein
+ * Zurückkleben könnte einen Projektspruch überschreiben, der mit dieser Erledigung nichts
+ * zu tun hatte.
+ *
+ * Umgekehrt MUSS der Spruch hier drinstehen: der Tipp, der den Stapel abräumt, ändert
+ * **zwei** Werte. Rollte nur die Stufe zurück, stünde nach einem gescheiterten Schreiben
+ * der alte Stapel mit dem neuen Spruch da — ein Zustand, den es serverseitig nie gab.
+ */
+type StampSnapshot = Pick<Task, 'task_id' | 'emphasis_level' | 'project_saying_index'>
 
 /**
  * Was nötig ist, um eine Erledigung zurückzunehmen (→ `undoCompletion`).
@@ -414,8 +431,8 @@ export const useTaskStore = defineStore('tasks', () => {
      * Rücknahme mehrerer Task-Zeilen über das gemeinsame Muster
      * (nachladen, nur bei Nichtexistenz Schnappschuss).
      */
-    const restoreRows = async (
-        snapshot: RowSnapshot[],
+    const restoreRows = async <S extends Record<string, unknown>>(
+        snapshot: S[],
         skipReload = false
     ) => {
         await revertRows({
@@ -523,10 +540,17 @@ export const useTaskStore = defineStore('tasks', () => {
     // 29 mehrfaches schnelles Antippen ausdrücklich vorsieht. Rein optisch: kein
     // Effekt auf Gruppe oder Reihenfolge, deshalb kein Toast bei Erfolg (würde
     // bei drei Taps hintereinander dreimal aufblitzen).
+    //
+    // AN EINEM PROJEKT SCHREIBT DIESER AUTOMAT ZWEI SPALTEN, nicht eine: der
+    // Übergang 2 → 0 räumt den Stapel ab und zieht dabei einen neuen
+    // Projektspruch (Ticket `04`, → CONTEXT.md „Projektspruch"). Beide Werte
+    // gehören zusammen — sie werden zusammen angewandt, zusammen geschrieben
+    // und im Fehlerfall zusammen zurückgenommen. Ein halber Rückfall (Stufe
+    // zurück, Spruch neu) wäre ein Zustand, den der Server nie gesehen hat.
     const cycleEmphasisLevel = async (taskId: string): Promise<boolean> => {
         const toastStore = useToastStore()
 
-        const { applied } = runOptimistic<RowSnapshot>({
+        const { applied } = runOptimistic<StampSnapshot>({
             entityId: taskId,
             apply: () => {
                 const task = tasks.value.find(t => t.task_id === taskId)
@@ -534,8 +558,33 @@ export const useTaskStore = defineStore('tasks', () => {
                     console.error('Cannot cycle emphasis: task not in local state', taskId)
                     return null
                 }
-                const snapshot = snapshotOf(task)
-                task.emphasis_level = ((task.emphasis_level + 1) % 3) as 0 | 1 | 2
+                // NICHT `snapshotOf`: das ist der Schnappschuss einer ERLEDIGUNG. Der
+                // Stempel fasst andere Felder an — siehe `StampSnapshot`.
+                const snapshot: StampSnapshot = {
+                    task_id: task.task_id,
+                    emphasis_level: task.emphasis_level,
+                    project_saying_index: task.project_saying_index
+                }
+
+                const next = ((task.emphasis_level + 1) % 3) as 0 | 1 | 2
+                task.emphasis_level = next
+
+                // ABRÄUMEN (2 → 0) DREHT DEN PROJEKTSPRUCH WEITER
+                // (→ CONTEXT.md, „Projektspruch"; Ticket `04`).
+                //
+                // Genau dieser eine Übergang, und nur an einem PROJEKT: solange der
+                // Stapel wächst (0 → 1 → 2), bleibt der Untergrund liegen — WICHTIG und
+                // DRINGEND legen sich darüber, und ein Grundabdruck, der dabei das Wort
+                // wechselte, sähe aus wie ein zweiter, unverstandener Vorgang.
+                //
+                // Der neue Platz wird GEZOGEN und GESPEICHERT, nicht aus der
+                // Aufgaben-Kennung gerechnet: eine Ableitung wäre je Gerät gleich, aber
+                // eben auch je Abräumen gleich — der Spruch bliebe für immer derselbe.
+                // Deshalb hängt er an einer Spalte und nicht an einer Formel.
+                if (next === 0 && task.task_type === 'project') {
+                    task.project_saying_index = drawProjectPhraseSlot(projectPhraseSlotOf(task))
+                }
+
                 return snapshot
             },
 
@@ -543,14 +592,34 @@ export const useTaskStore = defineStore('tasks', () => {
                 const task = tasks.value.find(t => t.task_id === taskId)
                 if (!task) throw new Error('Task not found')
 
+                // `project_saying_index` steht nur im UPDATE, wenn die Zeile ein Projekt
+                // ist. An jeder anderen Aufgabe trägt die Spalte zwar einen gültigen Wert
+                // (NOT NULL mit Default), er bedeutet dort aber nichts — ihn bei jedem
+                // Stempeltipp mitzuschreiben hieße, eine Spalte anzufassen, die diese
+                // Aufgabe gar nicht benutzt.
+                //
+                // Gelesen wird der Wert aus dem AKTUELLEN lokalen Zustand, nicht aus einer
+                // beim Tippen gemerkten Variablen: drei schnelle Taps stehen als drei
+                // Commits in derselben Kette (`enqueue`), und jeder soll den Stand
+                // schreiben, der dann gilt — nicht den, der beim eigenen Tap galt.
+                const patch: { emphasis_level: 0 | 1 | 2; project_saying_index?: number } = {
+                    emphasis_level: task.emphasis_level
+                }
+                if (task.task_type === 'project') {
+                    patch.project_saying_index = task.project_saying_index
+                }
+
                 const { error } = await supabase
                     .from('tasks')
-                    .update({ emphasis_level: task.emphasis_level })
+                    .update(patch)
                     .eq('task_id', taskId)
 
                 if (error) throw error
             },
 
+            // Zurück springt BEIDES — Stufe und Spruch. Der Schnappschuss trägt beide
+            // Felder, `revertRows` lädt die Zeile ohnehin frisch und fällt nur bei
+            // Netzfehlern auf ihn zurück.
             revert: async (snapshot, error) => {
                 await restoreRows([snapshot], isNetworkError(error))
             },
