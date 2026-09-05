@@ -195,6 +195,16 @@ watch(() => props.open, (isOpen) => {
     return () => document.removeEventListener('keydown', handleEsc)
   }
 })
+
+// --- Der ausgelieferte Stand ------------------------------------------------
+//
+// Zur Bauzeit eingesetzt (→ `define` in `vite.config.ts`), nicht zur Laufzeit
+// ermittelt: nur so beschreibt der Wert wirklich das Bundle, das gerade auf
+// dem Geraet liegt. Als `const` und nicht als `ref`, weil sich daran nach dem
+// Bauen nichts mehr aendert.
+const buildCommit = __BUILD_COMMIT__
+const buildDate = __BUILD_DATE__
+
 </script>
 
 <template>
@@ -400,6 +410,17 @@ watch(() => props.open, (isOpen) => {
         <button @click="handleLogout" class="btn btn-danger w-100">
           <i class="bi bi-box-arrow-right"></i> Logout
         </button>
+
+        <!-- Der ausgelieferte Stand. Beantwortet genau eine Frage: laeuft hier
+             der Code, den ich gerade teste? Auf dem Homescreen liefert der
+             Service Worker sonst unbemerkt die alte Fassung aus.
+
+             `user-select: text`, damit die Kennung beim Melden eines Fehlers
+             kopiert werden kann — ueberall sonst in der App ist die Auswahl
+             fuer die Gesten abgeschaltet. -->
+        <p class="build-stamp" :title="`Stand ${buildDate}, Commit ${buildCommit}`">
+          Version {{ buildCommit }} · {{ buildDate }}
+        </p>
       </div>
     </aside>
   </Transition>
@@ -822,6 +843,20 @@ watch(() => props.open, (isOpen) => {
   padding: var(--spacing-lg);
   border-top: 1px solid var(--color-border);
   background: var(--color-background);
+}
+
+/* Bewusst leise: die Kennung wird gesucht, wenn man sie braucht, und soll
+   sonst nicht mit dem Abmelden um Aufmerksamkeit ringen. Tabellenziffern,
+   damit der Commit nicht wie Fliesstext aussieht. */
+.build-stamp {
+  margin: var(--spacing-sm) 0 0;
+  text-align: center;
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text-secondary);
+  opacity: 0.7;
+  user-select: text;
+  -webkit-user-select: text;
 }
 
 /* Utilities */
