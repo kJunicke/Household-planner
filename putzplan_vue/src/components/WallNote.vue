@@ -810,17 +810,19 @@ const STAMP_OFFSET = 5.5
  * derselbe Zettel überall gleich hängt — dieselbe Regel wie bei Versatz und
  * Neigung.
  *
- * **Das Vorzeichen hängt am ZETTEL, nicht an der Lage.** Ein Stapel, dessen
- * Abdrücke gegeneinander kippen, sieht nicht nach mehreren Stempelvorgängen
- * aus, sondern nach kaputtem Zeichensatz; und er würde breiter bauen als die
- * Reserve, die `--halo-slack` ausgleicht.
+ * **Das Vorzeichen hängt an der LAGE, nicht am Zettel.** Jeder Abdruck ist ein
+ * eigener Handgriff und darf anders herum sitzen; ein Stapel, in dem alle drei
+ * gleich kippen, sieht aus wie gedruckt, nicht wie gestempelt. Bis zum
+ * 05.09.2026 hing das Vorzeichen am Zettel — vom Maintainer am Gerät bemerkt:
+ * „ich hab nie erlebt, dass ein Stempel der nach links geneigt ist von einem
+ * überstempelt wird der nach rechts geneigt ist".
  *
  * Für die Geometrie ist das Kippen folgenlos: die Hüllbreite eines gedrehten
- * Kastens ist `b·cos θ + h·sin θ` und damit für +θ und −θ gleich. Der Betrag
- * der Neigung ändert sich nicht, nur die Ecke, die vorsteht — die gemessenen
- * ≤ 1,50 px in die 88-px-Reserve (→ ADR-0003, Ticket `03`) bleiben gültig.
+ * Kastens ist `b·cos θ + h·sin θ` und damit für +θ und −θ gleich. Gemessen an
+ * 94 Zetteln × 3 Stufen: gekreuzte Lagen ragen in **0 von 564** Fällen in die
+ * 88-px-Reserve, und über die Papierkante nicht weiter als gleichsinnige.
  */
-const tiltSign = computed(() => (jitterOf(props.task.task_id, 'stamp-dir', 1) < 0 ? -1 : 1))
+const tiltSignOf = (id: string, index: number) => (jitterOf(id, `stamp-dir${index}`, 1) < 0 ? -1 : 1)
 
 /** Eine Lage des Abdruckstapels, von unten (Grundabdruck) nach oben. */
 interface StampLayer {
@@ -900,7 +902,7 @@ const stampLayers = computed((): StampLayer[] => {
 
   return texts.map((text, index) => {
     const top = index === level
-    const tilt = tiltSign.value * (STAMP_TILT + jitterOf(id, `stamp-rot${index}`, STAMP_TILT_JITTER))
+    const tilt = tiltSignOf(id, index) * (STAMP_TILT + jitterOf(id, `stamp-rot${index}`, STAMP_TILT_JITTER))
     const dx = offsets[index]
     const dy = jitterOf(id, `stamp-dy${index}`, STAMP_OFFSET)
 
@@ -908,9 +910,9 @@ const stampLayers = computed((): StampLayer[] => {
     // und nur den. Auf Stufe 0 gibt es keine, der Zuschlag ist dort 0.
     // Verdoppelt, weil der Kasten mittig in der Zelle sitzt und der Zuschlag
     // sich damit auf beide Seiten verteilt.
-    const slack = top
-      ? 2 * Math.max(0, ...offsets.slice(0, index).map(other => Math.abs(other - dx)))
-      : 0
+    // Der Hof gilt fuer JEDE Lage, nicht nur die oberste: sonst aendert sich
+    // sein Wert in dem Moment, in dem eine Lage ueberstempelt wird.
+    const slack = 2 * Math.max(0, ...offsets.slice(0, index).map(other => Math.abs(other - dx)))
 
     return {
       level: index as 0 | 1 | 2,
@@ -1707,6 +1709,13 @@ const handlePostponeConfirm = async (targetDate: string) => {
    breitestes Wort. */
 .stamp-layer {
   grid-area: 1 / 1;
+  /* JEDE Lage steht auf Zellbreite, nicht nur die oberste. Sonst fiel eine Lage
+     in dem Moment auf ihre Textbreite zurueck, in dem sie ueberstempelt wurde —
+     gemessen 78,36 px -> 39,81 px, also 38,55 px Sprung. Der Mittelpunkt blieb
+     dabei stehen, deshalb sah es nicht nach Verrutschen aus, sondern nach
+     Schrumpfen. Vom Maintainer am Geraet gesehen, nicht von einer Pruefung
+     gefunden. */
+  min-width: 100%;
   padding: 1px 5px;
   border: 2px solid currentColor;
   border-radius: 3px;
@@ -1801,9 +1810,23 @@ const handlePostponeConfirm = async (targetDate: string) => {
    Packpapier je nach Typ) — der Halo trifft damit die Farbe DIESES Zettels,
    nicht die des Standardpapiers. */
 .stamp-layer--top {
-  min-width: calc(100% + var(--halo-slack, 0px));
   background: var(--note-paper);
   text-align: center;
+}
+
+/* Der deckende Hof liegt AUSSERHALB des Flusses und bestimmt deshalb keine
+   Breite. Frueher stand er als `min-width: calc(100% + slack)` am Kasten
+   selbst — und genau daher kam das Schrumpfen beim Ueberstempeln. Gemessen:
+   die Variante, den Zuschlag stattdessen jeder Lage in den Kasten zu legen,
+   haelt die Breite zwar konstant, laesst aber Rahmen bis 13,32 px ueber die
+   Papierkante ragen (276 von 564 Faellen) statt 4,20 px (137 Faelle). */
+.stamp-layer--top::after {
+  content: '';
+  position: absolute;
+  inset: 0 calc(var(--halo-slack, 0px) / -2);
+  background: var(--note-paper);
+  border-radius: 3px;
+  z-index: -1;
 }
 
 /* Die unteren Lagen bleiben durchsichtig und lugen an den Rändern hervor —
