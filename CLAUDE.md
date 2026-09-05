@@ -4,6 +4,15 @@
 - Entwicklung ist immer Mobile First. Auf kleinen Viewport optimieren.
 - Alle features müssen auf Android und IOS funktionieren
 - wenn ein invocter skill vom user vermeintlich nicht existiert suche nach ihm, bevor du entscheidest, dass dieser nicht existiert.
+- **Jede Änderung am Code wird von einem zweiten Agenten geprüft — immer, auch die
+  einzeilige.** Wer baut, prüft nicht. Das gilt ausdrücklich auch dann, wenn die
+  Hauptinstanz selbst gebaut hat: dann geht sie trotzdem an einen unabhängigen QC.
+  Am 05.09.2026 hat genau diese Ausnahme („ist doch nur CSS") einen Fehler
+  durchgelassen, den der Maintainer in Minuten am Gerät sah — abgeschnittene
+  Stempelränder auf 261 von 282 Lagen. Die eigene Messung hatte ihn nicht gefunden,
+  weil sie „wie breit" fragte und nicht „sieht es ganz aus".
+- **Eine Messung ist kein Blick.** Wer Geometrie misst, hat nicht geprüft, ob etwas
+  richtig aussieht. Beides beauftragen.
 
 ## Agent skills
 
