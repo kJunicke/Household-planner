@@ -1117,8 +1117,8 @@ const handlePostponeConfirm = async (targetDate: string) => {
        `navigator.vibrate`) und nimmt uns danach den Zeiger per `pointercancel`
        weg. `user-select: none` unterdrückt nur die SICHTBARE Auswahl — Marker
        und Lupe bleiben deshalb aus, die Geste läuft trotzdem. Erst das
-       Abbestellen des Kontextmenüs bricht sie ab; genau das tut auch das
-       ältere `useLongPress` der Listen, das seit jeher `@contextmenu` bindet.
+       Abbestellen des Kontextmenüs bricht sie ab; genau das tat auch das
+       frühere Langdrücken der Listen, das seit jeher `@contextmenu` band.
        Am Zettel geht dabei nichts verloren: er ist ein Knopf, kein Fließtext,
        und ein Kontextmenü hat dort keine Aufgabe. -->
   <div

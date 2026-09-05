@@ -10,15 +10,20 @@
 import { onMounted, onUnmounted, ref, computed, watch } from 'vue'
 import type { ChecklistStore } from '@/stores/createChecklistStore'
 import type { CategoryGroup, ChecklistItem } from '@/types/Checklist'
+import type { ImportSource } from '@/types/CategoryImport'
 import { categoryColor } from '@/lib/categoryColor'
+import { categoryRank, compareCategoryGroups } from '@/lib/categoryOrder'
 import { useGraceWindow } from '@/composables/useGraceWindow'
 import { useCategoryRail } from '@/composables/useCategoryRail'
+import { useCategoryDrag } from '@/composables/useCategoryDrag'
+import { useNetworkStatus } from '@/composables/useNetworkStatus'
 import ListEditModal from '@/components/ListEditModal.vue'
 import ChecklistItemEditModal from '@/components/ChecklistItemEditModal.vue'
 import ChecklistItemRow from '@/components/ChecklistItemRow.vue'
 import CategoryRail from '@/components/CategoryRail.vue'
-import CategorySearchModal, { type CategoryCandidate } from '@/components/CategorySearchModal.vue'
+import CategoryCreateModal from '@/components/CategoryCreateModal.vue'
 import CategoryEditModal from '@/components/CategoryEditModal.vue'
+import ListAddBar from '@/components/ListAddBar.vue'
 import LongSheet from '@/components/LongSheet.vue'
 
 export interface ChecklistLabels {
@@ -34,6 +39,14 @@ export interface ChecklistLabels {
   emptyText: string
   /** Word after the X/Y progress count, e.g. 'gepackt'. */
   progressVerb: string
+  /** Placeholder der oberen Leiste, z. B. 'Gegenstand hinzufügen…'. */
+  addPlaceholder: string
+  /** Wortwahl eines Eintrags, z. B. { one: 'Gegenstand', many: 'Gegenstände' }. */
+  itemNoun: { one: string; many: string }
+  /** Beiwort der erledigten Einträge, Mehrzahl: 'gepackte' / 'erledigte'. */
+  doneMany: string
+  /** Dasselbe in der Einzahl: 'gepackter Gegenstand' / 'erledigter Eintrag'. */
+  doneOne: string
   /** Bootstrap icon class of the list-note block. */
   notesIcon: string
   /** Title of the list-note block, e.g. 'Reise-Notizen'. */
@@ -53,6 +66,7 @@ const props = defineProps<{
 }>()
 
 const store = props.store
+const { isOnline } = useNetworkStatus()
 
 // --- Modals -----------------------------------------------------------------
 const showCreateListModal = ref(false)
@@ -62,9 +76,9 @@ const copySourceId = ref('') // '' = empty list
 const showListEditModal = ref(false)
 const editingList = ref<{ list_id: string; name: string } | null>(null)
 const showResetConfirm = ref(false)
-const showCategorySearch = ref(false)
+const showCategoryCreate = ref(false)
 const editingItem = ref<ChecklistItem | null>(null)
-const editingCategory = ref<{ name: string; count: number } | null>(null)
+const editingCategory = ref<{ name: string; count: number; doneCount: number } | null>(null)
 
 // --- Per-section UI state (session-only, reset on list switch) ---------------
 const addDraft = ref<Record<string, string>>({})
@@ -119,26 +133,59 @@ watch(
   }
 )
 
-const categoryLabels = computed(() =>
-  store.itemsByCategory.filter(g => !g.isUncategorized).map(g => g.label)
+// --- Grace window for freshly-checked items ---------------------------------
+// Just-packed items stay visible (struck-through) for a moment so a mis-check
+// can be undone quickly, before they fold into the collapsed "erledigt" group.
+const { graceIds, markGrace, clearGrace, clearAllGrace } = useGraceWindow(6000)
+
+// --- Angezeigte Sektionen (Gruppierung + Rückgängig-Fenster) -----------------
+// Der Store zählt jeden abgehakten Eintrag sofort als erledigt. Solange ein
+// Eintrag im Rückgängig-Fenster steht, ist er aber noch sichtbar offen — die
+// Sektion darf deshalb weder als „vollständig" gelten noch schon ans Ende
+// rutschen. Also `doneCount` hier neu bilden und *danach* mit derselben Regel
+// wie der Einkauf sortieren, statt die Reihenfolge nachzubauen.
+/**
+ * `displaySections`-Eintrag: `doneCount` ist grace-korrigiert (für Sortierung,
+ * Rang, Einklappen, Add-Zeile). `rawDoneCount` ist der ungefilterte Store-Wert
+ * — die Kopfzeile zeigt ihn sofort an, sonst widerspricht sie 6s lang dem
+ * Gesamtfortschritt (`store.overallProgress`), der ebenfalls roh zählt.
+ */
+export interface DisplayCategoryGroup extends CategoryGroup {
+  rawDoneCount: number
+}
+
+const displaySections = computed<DisplayCategoryGroup[]>(() =>
+  store.itemsByCategory
+    .map(g => {
+      const doneCount = g.items.filter(i => i.packed && !graceIds.value.has(i.item_id)).length
+      return {
+        ...g,
+        doneCount,
+        rawDoneCount: g.doneCount,
+        isComplete: doneCount === g.total && g.total > 0,
+      }
+    })
+    .sort(compareCategoryGroups)
 )
+
+/** Vollständig = keine sichtbar offenen Einträge mehr, aber auch nicht leer. */
+const isCategoryComplete = (group: CategoryGroup): boolean => categoryRank(group) === 1
 
 // Sobald eine Kategorie wieder Einträge trägt, verfällt ihr Tipp-Vermerk. Bleibt
 // er stehen, würde eine später erneut geleerte Kategorie fälschlich normal groß
 // bleiben — der Tipp darf nicht ewig nachwirken.
-watch(
-  () => store.itemsByCategory,
-  (groups) => {
-    for (const group of groups) {
-      if (!isCategoryEmpty(group)) undampedCategories.value.delete(group.key)
-    }
+watch(displaySections, (groups) => {
+  for (const group of groups) {
+    if (!isCategoryEmpty(group)) undampedCategories.value.delete(group.key)
   }
-)
+})
 
 // --- Section open/collapse --------------------------------------------------
+// Standard: nur aktive Kategorien (Rang 0) stehen offen. Vollständige und leere
+// klappen ein — die eine ist abgearbeitet, die andere hat nichts zu zeigen.
 const isSectionOpen = (group: CategoryGroup): boolean => {
   const override = sectionOverride.value.get(group.key)
-  return override !== undefined ? override : !group.isComplete
+  return override !== undefined ? override : categoryRank(group) === 0
 }
 
 const toggleSection = (group: CategoryGroup) => {
@@ -162,11 +209,17 @@ const onCatHeaderClick = (group: CategoryGroup) => {
 }
 
 // --- Contextual add line ----------------------------------------------------
+// Kategorieweise, nicht listenweit (Entscheidung des Leads, E1): beim Packen
+// wird man Kategorie für Kategorie fertig — solange in *dieser* Kategorie noch
+// nichts erledigt ist, schreibt man vermutlich noch daran.
 const isAddOpen = (group: CategoryGroup): boolean =>
-  forcedAddOpen.value.has(group.key) || group.packedCount === 0
+  forcedAddOpen.value.has(group.key) || group.doneCount === 0
 
+// Der Plus-Knopf in der Kopfzeile holt die Zeile auch dann zurück, wenn die
+// Sektion gerade eingeklappt ist — sonst schreibt man ins Unsichtbare.
 const openAddLine = (group: CategoryGroup) => {
   forcedAddOpen.value.add(group.key)
+  sectionOverride.value.set(group.key, true)
 }
 
 // --- Name suggestions (from all items across the household's lists) ---------
@@ -219,6 +272,39 @@ const handleSectionAdd = async (group: CategoryGroup) => {
   qtyFieldOpen.value.delete(group.key)
 }
 
+// --- Obere Leiste -----------------------------------------------------------
+/** Namensvorschläge aus allen Listen des Haushalts, höchstens fünf. */
+const topNameSuggestions = (query: string): string[] => {
+  const q = query.trim().toLowerCase()
+  if (!q) return []
+  const seen = new Set<string>()
+  const out: string[] = []
+  for (const it of store.items) {
+    const name = it.name.trim()
+    const lower = name.toLowerCase()
+    if (!lower.includes(q) || seen.has(lower)) continue
+    seen.add(lower)
+    out.push(name)
+    if (out.length >= 5) break
+  }
+  return out
+}
+
+/**
+ * Ein getippter Kategoriename, den es noch nicht gibt, wird beim Speichern
+ * angelegt. Zurück kommt der kanonische Name der Zeile — so landet „bad" nicht
+ * als zweite Schreibweise neben „Bad".
+ */
+const ensureCategory = async (name: string | null) => {
+  if (!name?.trim()) return null
+  return await store.createCategory(name)
+}
+
+const onTopAdd = async (name: string, quantity: number, category: string) => {
+  const target = await ensureCategory(category)
+  await store.addItem(name, target, quantity)
+}
+
 // --- Item interactions ------------------------------------------------------
 const openItemEdit = (item: ChecklistItem) => {
   editingItem.value = item
@@ -228,7 +314,8 @@ const handleItemSave = async (
   itemId: string,
   patch: { name: string; category: string | null; quantity: number }
 ) => {
-  await store.updateItem(itemId, patch)
+  const category = await ensureCategory(patch.category)
+  await store.updateItem(itemId, { ...patch, category })
   editingItem.value = null
 }
 
@@ -237,11 +324,6 @@ const handleItemDelete = async (itemId: string) => {
   await store.removeItem(itemId)
   editingItem.value = null
 }
-
-// --- Grace window for freshly-checked items ---------------------------------
-// Just-packed items stay visible (struck-through) for a moment so a mis-check
-// can be undone quickly, before they fold into the collapsed "erledigt" group.
-const { graceIds, markGrace, clearGrace, clearAllGrace } = useGraceWindow(6000)
 
 const onItemToggle = (item: ChecklistItem) => {
   const willPack = !item.packed
@@ -331,28 +413,46 @@ const handleReset = async () => {
   showResetConfirm.value = false
 }
 
-const handleCreateCategory = (name: string) => {
-  store.addCategory(name)
+// --- Kategorien -------------------------------------------------------------
+/** Anlegen, Umhängen und Übernehmen in einem Zug — der Store schreibt alles. */
+const handleCreateCategory = async (
+  name: string,
+  itemIds: string[],
+  importFrom: ImportSource | null
+) => {
+  await store.createCategory(name, itemIds, { importFrom: importFrom ?? undefined })
+  showCategoryCreate.value = false
 }
 
-// Data for the shared CategorySearchModal (import mode: copies source items).
-const importCandidates = computed(() => store.categoryImportCandidates(''))
-const importPreviewItems = (c: CategoryCandidate) =>
-  store.importPreview(c.sourceListId, c.category)
-    .map(i => ({ key: i.item_id, name: i.name, quantity: i.quantity }))
-const importDupeNames = (c: CategoryCandidate) =>
-  new Set(
-    store.currentListItems
-      .filter(i => (i.category ?? '').toLowerCase() === c.category.toLowerCase())
-      .map(i => i.name.trim().toLowerCase())
-  )
-const handleCategoryImport = (c: CategoryCandidate) => {
-  store.importCategory(c.sourceListId, c.category)
-}
+/** Einträge der aktuellen Liste in der Gestalt, die die Erstell-Maske braucht. */
+const pickableItems = computed(() =>
+  store.currentListItems.map(i => ({
+    id: i.item_id,
+    name: i.name,
+    quantity: i.quantity,
+    category: i.category,
+    done: i.packed,
+  }))
+)
+
+const importPreviewFor = (source: ImportSource, name: string) =>
+  store.importPreview(source.listId, name).map(i => ({
+    id: i.item_id,
+    name: i.name,
+    quantity: i.quantity,
+    category: i.category,
+    done: i.packed,
+  }))
 
 const openCategoryEdit = (group: CategoryGroup) => {
   if (!group.category) return
-  editingCategory.value = { name: group.category, count: group.total }
+  // Erledigte zählen getrennt: die zweite Löschvariante nimmt sie mit (E2),
+  // und eine Kategorie mit erledigten Einträgen ist nicht „leer".
+  editingCategory.value = {
+    name: group.category,
+    count: group.total - group.doneCount,
+    doneCount: group.doneCount,
+  }
 }
 
 const handleCategoryRename = async (oldName: string, newName: string) => {
@@ -360,9 +460,31 @@ const handleCategoryRename = async (oldName: string, newName: string) => {
   editingCategory.value = null
 }
 
-const handleCategoryDelete = async (name: string) => {
-  await store.deleteCategory(name)
+const handleCategoryDelete = async (name: string, withItems: boolean) => {
+  await store.deleteCategory(name, { withItems })
   editingCategory.value = null
+}
+
+// --- Ziehen zwischen Kategorien ---------------------------------------------
+/** Kurz nach dem Ablegen hervorgehoben, damit der Sprung nachvollziehbar bleibt. */
+const justMovedId = ref<string | null>(null)
+let moveHighlightTimer: number | null = null
+
+const { bind: bindDrag } = useCategoryDrag({
+  // Eigener Gruppenname je Listentyp: Packliste und To-do dürfen einander
+  // nichts abgeben, auch wenn beide gleichzeitig im Baum hängen.
+  group: `${props.railStorageKey}-items`,
+  categoryOf: (el) => el.dataset.catName || null,
+  onMove: (itemId, category) => {
+    justMovedId.value = itemId
+    if (moveHighlightTimer !== null) clearTimeout(moveHighlightTimer)
+    moveHighlightTimer = window.setTimeout(() => { justMovedId.value = null }, 600)
+    store.moveItemToCategory(itemId, category)
+  },
+})
+
+const setDropEl = (key: string, el: unknown) => {
+  bindDrag(key, el instanceof HTMLElement ? el : null)
 }
 
 // --- Notes ------------------------------------------------------------------
@@ -388,13 +510,19 @@ const {
   setSectionEl,
   scrollToKey: scrollToCategory,
 } = useCategoryRail({
-  keys: () => store.itemsByCategory.map(g => g.key),
+  keys: () => displaySections.value.map(g => g.key),
   storageKey: props.railStorageKey,
+})
+
+// Zurück im Netz: die offline gesammelten Kategorie-Mutationen nachschicken.
+watch(isOnline, async (online) => {
+  if (online && store.hasPendingMutations) await store.syncMutations()
 })
 
 onMounted(async () => {
   await store.loadLists()
   await store.loadItems()
+  await store.loadCategories()
   notesDraft.value = store.currentList?.notes ?? ''
   store.subscribe()
 })
@@ -443,6 +571,18 @@ onUnmounted(() => {
         </template>
 
         <template v-if="store.currentListId">
+        <!-- Obere Leiste: Name · Menge · Zielkategorie · Hinzufügen · Kategorie anlegen -->
+        <ListAddBar
+          :list-id="store.currentListId"
+          :category-options="store.categorySuggestions"
+          :name-suggestions="topNameSuggestions"
+          :suggest-category="store.suggestCategoryFor"
+          :placeholder="labels.addPlaceholder"
+          :disabled="store.isLoading"
+          @add="onTopAdd"
+          @create-category="showCategoryCreate = true"
+        />
+
         <!-- Gesamt-Fortschritt -->
         <div v-if="store.currentListItems.length > 0" class="progress-header">
           <div class="progress-label">
@@ -498,19 +638,23 @@ onUnmounted(() => {
         <div class="checklist-body" :class="{ 'rail-open': showRail && !railCollapsed }">
           <div class="cat-column">
           <div
-            v-for="group in store.itemsByCategory"
+            v-for="group in displaySections"
             :key="group.key"
             :ref="(el) => setSectionEl(group.key, el)"
             :data-cat-key="group.key"
             class="cat-section"
             :class="{
               'cat-uncategorized': group.isUncategorized,
-              'cat-complete': group.isComplete,
+              'cat-complete': isCategoryComplete(group),
               'cat-damped': isCategoryDamped(group),
             }"
           >
+            <!-- Die Kopfzeile ist selbst Ablageziel: eine eingeklappte
+                 Kategorie hat sonst keine Fläche zum Hineinziehen. -->
             <div
               class="cat-header"
+              :ref="(el) => setDropEl(`${group.key}::head`, el)"
+              :data-cat-name="group.category ?? ''"
               role="button"
               tabindex="0"
               @click="onCatHeaderClick(group)"
@@ -521,12 +665,20 @@ onUnmounted(() => {
               <span class="cat-name">{{ group.label }}</span>
               <div class="cat-header-right">
                 <span class="cat-count" v-if="group.total > 0">
-                  <i v-if="group.isComplete" class="bi bi-check-circle-fill cat-complete-icon"></i>
-                  {{ group.packedCount }}/{{ group.total }}
+                  <i v-if="isCategoryComplete(group)" class="bi bi-check-circle-fill cat-complete-icon"></i>
+                  {{ group.rawDoneCount }}/{{ group.total }}
                 </span>
                 <button
+                  v-if="!isAddOpen(group)"
+                  class="cat-icon-btn"
+                  @click.stop="openAddLine(group)"
+                  :title="`${labels.itemNoun.one} hinzufügen`"
+                >
+                  <i class="bi bi-plus-lg"></i>
+                </button>
+                <button
                   v-if="!group.isUncategorized"
-                  class="cat-edit-btn"
+                  class="cat-icon-btn"
                   @click.stop="openCategoryEdit(group)"
                   title="Kategorie bearbeiten"
                 >
@@ -539,12 +691,22 @@ onUnmounted(() => {
               </div>
             </div>
 
-            <div v-if="isSectionOpen(group)" class="cat-body">
+            <div
+              v-if="isSectionOpen(group)"
+              :ref="(el) => setDropEl(group.key, el)"
+              :data-cat-name="group.category ?? ''"
+              class="cat-body"
+            >
               <!-- Offen: noch nicht erledigt + gerade abgehakt (Grace) -->
+              <!-- Gepackte Zeilen tragen keine `data-item-id` und sind damit
+                   nicht ziehbar — auch die im Rückgängig-Fenster. Ziehen in und
+                   aus „erledigt" bleibt wie im Einkauf außerhalb. -->
               <ChecklistItemRow
                 v-for="item in openRows(group)"
                 :key="item.item_id"
                 :item="item"
+                :data-item-id="item.packed ? null : item.item_id"
+                :class="{ 'row-moved': item.item_id === justMovedId }"
                 @toggle="onItemToggle(item)"
                 @increment="onItemIncrement(item)"
                 @decrement="onItemDecrement(item)"
@@ -555,7 +717,7 @@ onUnmounted(() => {
               <template v-if="doneRows(group).length > 0">
                 <button class="done-toggle" @click="toggleDone(group.key)">
                   <i class="bi bi-check2-circle done-check"></i>
-                  <span>{{ doneRows(group).length }} erledigt</span>
+                  <span>{{ doneRows(group).length }} {{ labels.progressVerb }}</span>
                   <i
                     class="bi ms-auto"
                     :class="isDoneOpen(group.key) ? 'bi-chevron-up' : 'bi-chevron-down'"
@@ -639,17 +801,12 @@ onUnmounted(() => {
               </button>
             </div>
           </div>
-
-          <!-- + Kategorie -->
-          <button class="add-category-btn" @click="showCategorySearch = true">
-            <i class="bi bi-plus-lg me-1"></i> Kategorie
-          </button>
           </div>
 
           <!-- Rechte Kategorie-Schnellnav (einklappbar) -->
           <CategoryRail
             v-if="showRail"
-            :groups="store.itemsByCategory"
+            :groups="displaySections"
             :active-key="activeCatKey"
             :collapsed="railCollapsed"
             @select="scrollToCategory"
@@ -671,33 +828,42 @@ onUnmounted(() => {
     </div>
   </div>
 
-  <!-- Eintrag bearbeiten Modal (Long-Press / Rechtsklick) -->
+  <!-- Eintrag bearbeiten Modal (✎-Knopf der Zeile) -->
   <ChecklistItemEditModal
     v-if="editingItem"
     :item="editingItem"
-    :existing-categories="categoryLabels"
+    :category-options="store.categorySuggestions"
     @save="handleItemSave"
     @delete="handleItemDelete"
     @close="editingItem = null"
   />
 
-  <!-- Kategorie-Suche / Import -->
-  <CategorySearchModal
-    v-if="showCategorySearch"
-    :existing-labels="categoryLabels"
-    :candidates="importCandidates"
-    :preview-items="importPreviewItems"
-    :target-dupe-names="importDupeNames"
+  <!-- Kategorie anlegen (Name · Zuordnung · Einträge übernehmen) -->
+  <CategoryCreateModal
+    v-if="showCategoryCreate"
+    :items="pickableItems"
+    :category-options="store.categorySuggestions"
+    :item-noun="labels.itemNoun"
+    :import-sources-for="store.importSourcesFor"
+    :import-preview="importPreviewFor"
     @create="handleCreateCategory"
-    @import="handleCategoryImport"
-    @close="showCategorySearch = false"
+    @close="showCategoryCreate = false"
   />
 
   <!-- Kategorie bearbeiten / löschen -->
   <CategoryEditModal
     v-if="editingCategory"
+    variants
     :category="editingCategory.name"
     :item-count="editingCategory.count"
+    :purchased-count="editingCategory.doneCount"
+    :wording="{
+      itemOne: labels.itemNoun.one,
+      itemMany: labels.itemNoun.many,
+      doneMany: labels.doneMany,
+      doneOne: labels.doneOne,
+      deleteDoneToo: true,
+    }"
     @rename="handleCategoryRename"
     @delete="handleCategoryDelete"
     @close="editingCategory = null"
@@ -959,9 +1125,10 @@ onUnmounted(() => {
   flex-shrink: 0;
 }
 
-/* 30×28 sichtbar, 40×40 treffbar. Die 12px Abstand oben sind Bedingung:
-   bei weniger überlappen sich die erweiterten Flächen. */
-.cat-edit-btn {
+/* 30×28 sichtbar, 40×40 treffbar. Die 12px Abstand oben sind Bedingung, keine
+   Optik: jede Trefferfläche wächst um 5px zur Seite. Bei weniger Abstand
+   überlappen sie sich und der Griff aufs Plus landet auf „bearbeiten". */
+.cat-icon-btn {
   position: relative;
   background: none;
   border: none;
@@ -977,12 +1144,12 @@ onUnmounted(() => {
   font-size: var(--font-md);
   border-radius: var(--radius-sm);
 }
-.cat-edit-btn::after {
+.cat-icon-btn::after {
   content: '';
   position: absolute;
   inset: -6px -5px;
 }
-.cat-edit-btn:hover { opacity: 1; color: var(--color-primary); }
+.cat-icon-btn:hover { opacity: 1; color: var(--color-primary); }
 .cat-dot {
   display: inline-block;
   width: 8px;
@@ -999,15 +1166,36 @@ onUnmounted(() => {
   white-space: nowrap;
 }
 .cat-uncategorized .cat-name { color: var(--color-text-muted); font-weight: 500; }
+/* Fortschritt als dezentes Badge statt als zweite Überschrift — wie im Einkauf,
+   dort steht nur eine Zahl, hier gepackt/gesamt. */
 .cat-count {
-  font-size: var(--font-sm);
+  font-size: var(--font-xs);
   color: var(--color-text-secondary);
+  background: var(--color-background-elevated);
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  padding: 0 6px;
+  margin-right: 6px;
   display: inline-flex;
   align-items: center;
   gap: 4px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 .cat-complete-icon { color: var(--color-success); }
-.cat-chevron { color: var(--color-text-muted); }
+.cat-chevron { color: var(--color-text-muted); font-size: var(--font-sm); }
+
+/* Ziehen: die Vorschau bleibt blass an der alten Stelle, der aufgenommene
+   Eintrag hebt sich ab. */
+.drag-ghost { opacity: 0.35; }
+.drag-chosen { border-color: var(--color-primary); }
+/* Frisch verschobener Eintrag kurz hervorheben: er springt nach dem Loslassen
+   an seinen Platz in der Zielsektion, der Sprung soll nachvollziehbar bleiben. */
+.row-moved { animation: row-moved 600ms ease-out; }
+@keyframes row-moved {
+  from { background: var(--color-primary-subtle, rgba(99, 102, 241, 0.18)); }
+  to { background: transparent; }
+}
 
 /* ---- Gedämpfte (leere) Kategorien — Ticket 05 -----------------------------
    Verhalten (leer ⇒ gedämpft, Antippen hebt es für die Sitzung auf) sitzt in
@@ -1157,25 +1345,6 @@ onUnmounted(() => {
 }
 .add-reopen:hover { color: var(--color-primary); }
 
-/* ---- + Kategorie ---- */
-.add-category-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 100%;
-  padding: var(--spacing-sm);
-  margin-top: var(--spacing-xs);
-  background: none;
-  border: 1px dashed var(--color-border-hover);
-  border-radius: var(--radius-md);
-  color: var(--color-text-secondary);
-  font-size: var(--font-sm);
-  font-weight: 500;
-  cursor: pointer;
-  min-height: var(--touch-target-dense);
-}
-.add-category-btn:hover { border-color: var(--color-primary); color: var(--color-primary); }
-
 /* ==========================================================================
    PINNWAND-AUSSEHEN — „Der lange Zettel" auf Packliste und To-do
    --------------------------------------------------------------------------
@@ -1190,9 +1359,9 @@ onUnmounted(() => {
    fuer das, was es hier wirklich gibt: kein `.qty-badge`, kein `.star-btn`,
    keine `.row-priority` — Packliste/To-do kennen weder Prioritaet noch den
    Einkaufs-Mengen-Chip. Umgekehrt hat die Checkliste Elemente, die der
-   Einkauf nicht hat (`.pack-stepper`, `.done-toggle`, `.add-reopen`,
-   `.add-category-btn`) — die bekommen hier ihre eigene Behandlung in
-   derselben Bildsprache (dieselben `--pw-*`-Tokens), keine Kopie.
+   Einkauf nicht hat (`.pack-stepper`, `.done-toggle`, `.add-reopen`) — die
+   bekommen hier ihre eigene Behandlung in derselben Bildsprache (dieselben
+   `--pw-*`-Tokens), keine Kopie.
 
    `ListItemRow`/`ChecklistItemRow` werden ueber `:deep()` unterhalb von
    `.cat-column` angefasst — aus demselben Grund wie in ShoppingView: die
@@ -1256,7 +1425,13 @@ onUnmounted(() => {
   border-radius: 0;
   border: 1.5px solid var(--pw-line);
 }
+/* Auf Papier gibt es keine Badges: das Rund und die Fuellung fallen weg, die
+   Zahl bleibt als Tinte stehen — derselbe Tausch wie im Einkauf. */
 :root[data-design='pinnwand'] .cat-count {
+  background: none;
+  border: none;
+  border-radius: 0;
+  padding: 0;
   color: var(--pw-ink);
   font-size: var(--font-sm);
   font-weight: 800;
@@ -1270,11 +1445,11 @@ onUnmounted(() => {
 /* 18px Abstand + erweiterte Trefferflaeche = 48×48px, die sich beruehren
    statt zu ueberlappen — dieselbe Rechnung wie im Einkauf. */
 :root[data-design='pinnwand'] .cat-header-right { gap: 18px; }
-:root[data-design='pinnwand'] .cat-edit-btn {
+:root[data-design='pinnwand'] .cat-icon-btn {
   color: var(--pw-ink);
   opacity: 1;
 }
-:root[data-design='pinnwand'] .cat-edit-btn::after { inset: -10px -9px; }
+:root[data-design='pinnwand'] .cat-icon-btn::after { inset: -10px -9px; }
 
 /* ---- Gedämpfte (leere) Kategorien — eigene Optik fürs Pinnwand-Papier -----
    Höhere Spezifität als die Basisregeln oben (`:root[data-design] .cat-name`
@@ -1454,16 +1629,4 @@ onUnmounted(() => {
 :root[data-design='pinnwand'] .add-reopen { color: var(--pw-ink-soft); }
 :root[data-design='pinnwand'] .add-reopen:hover { color: var(--pw-ink); }
 
-/* ---- + Kategorie -----------------------------------------------------------
-   Ebenfalls checklisten-eigen: der Einkauf legt Kategorien ueber einen Knopf
-   in der oberen Leiste an (`.top-new-cat`, gibt es hier nicht). Bekommt
-   dieselbe gestrichelte Papier-Optik wie die Eingabezeile darueber. */
-:root[data-design='pinnwand'] .add-category-btn {
-  border: 2px dashed var(--pw-line);
-  color: var(--pw-ink-soft);
-}
-:root[data-design='pinnwand'] .add-category-btn:hover {
-  border-color: var(--pw-line);
-  color: var(--pw-ink);
-}
 </style>

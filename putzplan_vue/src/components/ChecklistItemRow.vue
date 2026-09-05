@@ -13,11 +13,11 @@ const emit = defineEmits<{
 </script>
 
 <template>
-  <!-- Packing keeps long-press-to-edit until stage 2 replaces it with dragging. -->
+  <!-- Bearbeitet wird über den ✎-Knopf der Zeile; das lange Drücken gehört dem
+       Ziehen zwischen Kategorien. -->
   <ListItemRow
     :checked="item.packed"
     :name="item.name"
-    edit-on-long-press
     @toggle="emit('toggle')"
     @edit="emit('edit')"
   >

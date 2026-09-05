@@ -6,6 +6,12 @@ import type { ShoppingCategory } from '@/types/ShoppingCategory'
 import type { PendingMutation } from '@/types/PendingMutation'
 import type { CategoryOption } from '@/types/CategoryOption'
 import { supabase } from '@/lib/supabase'
+import {
+  normalizeCategoryName,
+  categoryKey,
+  compareCategoryGroups,
+  buildCategoryOptions,
+} from '@/lib/categoryOrder'
 import { useHouseholdStore } from './householdStore'
 import { useAuthStore } from './authStore'
 import { useToastStore } from './toastStore'
@@ -17,8 +23,15 @@ const STORAGE_KEY_ITEMS = 'shopping_items_cache'
 const STORAGE_KEY_QUEUE = 'shopping_mutation_queue'
 const MAX_RETRIES = 5
 
-/** Sentinel key for the "Unkategorisiert" bucket (items with category === null). */
-export const UNCATEGORIZED = '__uncategorized__'
+// Schlüssel, Normalisierung und Reihenfolge liegen seit Etappe 2 in
+// `@/lib/categoryOrder` — geteilt mit Packliste und To-do. Der Einkauf reicht sie
+// unverändert weiter, damit `ShoppingView.vue` weiter aus dem Store importiert.
+export {
+  UNCATEGORIZED,
+  normalizeCategoryName,
+  categoryKey,
+  compareCategoryGroups,
+} from '@/lib/categoryOrder'
 
 export interface ShoppingCategoryGroup {
   /** Real category label, or null for the Unkategorisiert bucket. */
@@ -32,32 +45,6 @@ export interface ShoppingCategoryGroup {
   isUncategorized: boolean
   /** Position aus der Kategorientabelle; Altdaten ohne Zeile landen hinten. */
   sortOrder: number
-}
-
-/** Namensvergleich wie der eindeutige Index aus der Migration: getrimmt, case-insensitiv. */
-export const normalizeCategoryName = (name: string) => name.trim().toLowerCase()
-
-/**
- * Schlüssel einer Sektion. Muss überall gleich gebildet werden, sonst laufen
- * Gruppierung und Ansicht auseinander und dieselbe Kategorie erscheint doppelt.
- */
-export const categoryKey = (label: string | null) =>
-  label === null ? UNCATEGORIZED : normalizeCategoryName(label)
-
-/**
- * Reihenfolge der Sektionen: gefüllte benannte Kategorien nach sort_order →
- * gefülltes „Unkategorisiert" → leere benannte Kategorien → leeres
- * „Unkategorisiert". Leer heißt: gerade keine sichtbaren Produkte — deshalb
- * muss die Ansicht *nach* dem Einblenden der Produkte im Rückgängig-Fenster
- * erneut hiermit sortieren, statt die Regel nachzubauen.
- */
-export const compareCategoryGroups = (a: ShoppingCategoryGroup, b: ShoppingCategoryGroup) => {
-  const rank = (g: ShoppingCategoryGroup) =>
-    (g.items.length > 0 ? 0 : 2) + (g.isUncategorized ? 1 : 0)
-  const byRank = rank(a) - rank(b)
-  if (byRank !== 0) return byRank
-  if (a.sortOrder !== b.sortOrder) return a.sortOrder - b.sortOrder
-  return a.label.localeCompare(b.label)
 }
 
 export const useShoppingStore = defineStore('shopping', () => {
@@ -236,31 +223,13 @@ export const useShoppingStore = defineStore('shopping', () => {
    * gleichnamigen Treffer aus einer fremden Liste — sonst stünde derselbe Name
    * zweimal in der Liste und die Herkunftsangabe wäre irreführend.
    */
-  const categorySuggestions = computed<CategoryOption[]>(() => {
-    const listNames = new Map(lists.value.map(l => [l.list_id, l.name]))
-    const seen = new Set<string>()
-    const own: CategoryOption[] = []
-    const foreign: CategoryOption[] = []
-
-    for (const c of currentListCategories.value) {
-      const key = normalizeCategoryName(c.name)
-      if (seen.has(key)) continue
-      seen.add(key)
-      own.push({ name: c.name })
-    }
-
-    const rest = categories.value
-      .filter(c => c.list_id !== currentListId.value)
-      .sort((a, b) => a.name.localeCompare(b.name))
-    for (const c of rest) {
-      const key = normalizeCategoryName(c.name)
-      if (seen.has(key)) continue
-      seen.add(key)
-      foreign.push({ name: c.name, sourceListName: listNames.get(c.list_id) })
-    }
-
-    return [...own, ...foreign]
-  })
+  const categorySuggestions = computed<CategoryOption[]>(() =>
+    buildCategoryOptions(
+      categories.value,
+      currentListId.value,
+      new Map(lists.value.map(l => [l.list_id, l.name])),
+    ),
+  )
 
   const hasPendingMutations = computed(() => mutationQueue.value.length > 0)
 

@@ -116,6 +116,14 @@ Architekturentscheidungen: [docs/adr/](docs/adr/).
 - Trägt **viele** Einträge, hat kein Eselsohr, wird nicht abgerissen.
 - Gegenbegriff zum **Zettel**: Aufgabe an der Wand vs. Liste auf einem Screen — gleiche Papier-Optik, weder Inhalt noch Gesten geteilt.
 
+### Kategorie (Listen)
+- Dauerhaftes Objekt je Liste — eigene Zeile in `shopping_categories`, `packing_categories` oder `todo_categories` (PK `category_id`), nicht bloß ein Textfeld am Eintrag.
+- Kopplung zu Einträgen/Produkten läuft über den **Namen**, nicht über eine Fremdschlüsselspalte: getrimmt, groß-/kleinschreibungsunabhängig verglichen (`normalizeCategoryName`), `lower(name)` ist je Liste eindeutig (DB-Index). Namensgleichheit **ist** Zugehörigkeit → [ADR-0004](docs/adr/0004-kategorien-als-entitaet-kopplung-ueber-namen.md).
+- `NULL` bedeutet „**Unkategorisiert**" — keine eigene Zeile, kein Name.
+- Sektionen einer Liste ordnen sich nach Zustand: Rang 0 **aktiv** (mindestens ein offener Eintrag) → Rang 1 **vollständig** (nur erledigte) → Rang 2 **leer**. Innerhalb eines Rangs steht „Unkategorisiert" **zuletzt**.
+- Kategorie-Mutationen (anlegen, umbenennen, löschen, Einträge umhängen) laufen über dieselbe Offline-Warteschlange wie Einträge. Kollidiert beim Sync ein Name mit einer bereits bestehenden Zeile (zwei Geräte legen offline denselben Namen an, oder eine Umbenennung trifft eine vorhandene Kategorie), **verschmelzen** beide zu einer Zeile statt eines Fehlers.
+- Gilt gleichermaßen für Einkauf, Packliste und To-do — dieselbe Tabellenform, derselbe Vergleicher (`compareCategoryGroups`), unterschiedlich nur die Wortwahl der Oberfläche.
+
 ### Abreißen
 - Geste zum Erledigen: den Zettel am **Eselsohr** greifen und nach unten ziehen.
 - Fachlich dasselbe wie jede Erledigung — Punkte über die Edge Function `complete-task`, die Aufgabe verlässt „Jetzt dran".

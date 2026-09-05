@@ -1,11 +1,13 @@
 <script setup lang="ts">
 import { ref } from 'vue'
+import CategoryCombobox from '@/components/CategoryCombobox.vue'
 import type { ChecklistItem } from '@/types/Checklist'
+import type { CategoryOption } from '@/types/CategoryOption'
 
 const props = defineProps<{
   item: ChecklistItem
-  /** Category labels already used in the current list (for the datalist). */
-  existingCategories: string[]
+  /** Kategorien des Haushalts für die Combobox; die der aktuellen Liste zuerst. */
+  categoryOptions: CategoryOption[]
 }>()
 
 const emit = defineEmits<{
@@ -39,7 +41,7 @@ const stepQty = (delta: number) => {
     <div class="modal-overlay" @click.self="emit('close')">
       <div class="modal-content" @click.stop>
         <div class="modal-header">
-          <h5 class="modal-title">Item bearbeiten</h5>
+          <h5 class="modal-title">Eintrag bearbeiten</h5>
           <button class="btn-close" @click="emit('close')"></button>
         </div>
 
@@ -58,17 +60,12 @@ const stepQty = (delta: number) => {
 
           <div class="form-group">
             <label class="form-label">Kategorie</label>
-            <input
+            <CategoryCombobox
               v-model="category"
-              type="text"
-              class="form-control"
-              list="edit-category-options"
-              maxlength="100"
+              :options="categoryOptions"
               placeholder="Leer = Unkategorisiert"
+              @submit="handleSave"
             />
-            <datalist id="edit-category-options">
-              <option v-for="cat in existingCategories" :key="cat" :value="cat" />
-            </datalist>
           </div>
 
           <div class="form-group">

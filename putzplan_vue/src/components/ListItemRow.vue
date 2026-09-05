@@ -1,35 +1,28 @@
 <script setup lang="ts">
-import { useLongPress } from '@/composables/useLongPress'
-
-const props = withDefaults(defineProps<{
+defineProps<{
   /** Checked/done visual state (packed, purchased, …). */
   checked: boolean
   name: string
-  /**
-   * Long-press / right-click opens the edit modal. Shopping turns this off: the ✎ button
-   * took that job over and the hold gesture is reserved for dragging between categories.
-   */
-  editOnLongPress?: boolean
-}>(), { editOnLongPress: false })
+}>()
 
 const emit = defineEmits<{
   toggle: []
   edit: []
 }>()
 
-// Inner buttons and the trailing slot are exempt from tap-toggle & long-press.
+// Inner buttons and the trailing slot are exempt from the tap-toggle.
 const isControl = (t: EventTarget | null) =>
   t instanceof HTMLElement && !!t.closest('button, .row-trailing')
 
-const lp = useLongPress({
-  onLongPress: () => { if (props.editOnLongPress) emit('edit') },
-  onTap: () => emit('toggle'),
-  isControl,
-})
-
-// Without the gesture the browser keeps its own context menu.
-const onContextMenu = (e: Event) => {
-  if (props.editOnLongPress) lp.onContextMenu(e)
+/**
+ * Antippen hakt ab — mehr kennt die Zeile nicht. Das Bearbeiten hat der
+ * ✎-Knopf übernommen, und das lange Drücken gehört seit Etappe 2 überall dem
+ * Ziehen zwischen Kategorien; eine zweite Bedeutung derselben Geste würde sich
+ * mit SortableJS in die Quere kommen. Das Kontextmenü bleibt damit das native.
+ */
+const onClick = (e: MouseEvent) => {
+  if (isControl(e.target)) return
+  emit('toggle')
 }
 </script>
 
@@ -40,14 +33,9 @@ const onContextMenu = (e: Event) => {
     role="checkbox"
     :aria-checked="checked"
     tabindex="0"
-    @click="lp.onClick"
+    @click="onClick"
     @keydown.enter.prevent="emit('toggle')"
     @keydown.space.prevent="emit('toggle')"
-    @touchstart.passive="lp.onTouchStart"
-    @touchmove.passive="lp.onTouchMove"
-    @touchend="lp.onTouchEnd"
-    @touchcancel="lp.clearPress"
-    @contextmenu="onContextMenu"
   >
     <span class="list-check" :class="{ on: checked }">
       <i v-if="checked" class="bi bi-check-lg"></i>

@@ -12,11 +12,13 @@ export const useTodoStore = createChecklistStore({
   storeId: 'todo',
   listsTable: 'todo_lists',
   itemsTable: 'todo_items',
+  categoriesTable: 'todo_categories',
   channelPrefix: 'todo',
   labels: {
     loadListsError: 'Fehler beim Laden der To-do-Listen',
     createListError: 'Fehler beim Erstellen der To-do-Liste',
     loadItemsError: 'Fehler beim Laden der To-do-Liste',
     resetSuccess: 'Alle Einträge zurückgesetzt',
+    syncSuccess: 'To-do-Liste synchronisiert',
   },
 })

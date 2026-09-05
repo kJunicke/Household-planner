@@ -67,12 +67,12 @@ export type PressDirection = 'up' | 'down' | 'left' | 'right'
 
 /**
  * Haltezeit bis zum Einblenden. Gesetzt, nicht gemessen: dieselbe Größenordnung
- * wie das bestehende `useLongPress` (480 ms), etwas kürzer, weil danach noch
- * ein Zug folgt und die Geste sonst insgesamt zäh wirkt.
+ * wie das frühere Langdrücken der Listen (480 ms), etwas kürzer, weil danach
+ * noch ein Zug folgt und die Geste sonst insgesamt zäh wirkt.
  */
 const PRESS_MS = 420
 
-/** Bis hierhin gilt der Finger als still. Wie in `useLongPress`. */
+/** Bis hierhin gilt der Finger als still. Wie beim früheren Langdrücken der Listen. */
 const MOVE_TOLERANCE = 10
 
 /**

@@ -16,13 +16,13 @@ export interface PendingMutation {
     entity?: 'item' | 'category'
     itemId?: string // Für update/delete
     name?: string // Für create
-    listId?: string // Für create (shopping list)
+    listId?: string // Für create (Liste: Einkauf, Packliste oder To-do)
     category?: string | null // Für create (Kategorie, null = Unkategorisiert)
     quantity?: number // Für create (Menge, >= 1)
     updates?: Record<string, unknown> // Für update (purchased, is_priority, etc.)
     /** Für create: temp-ID des optimistischen Items → Verkettung von Folge-Mutationen. */
     tempId?: string
-    categoryId?: string // Für update/delete auf shopping_categories
+    categoryId?: string // Für update/delete auf der Kategorientabelle der Liste
     sortOrder?: number // Für create (Kategorie)
     /** Für create (Kategorie): temp-ID der optimistischen Zeile. */
     tempCategoryId?: string
