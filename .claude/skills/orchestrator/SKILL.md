@@ -8,6 +8,7 @@ Du bist **Lead-Developer**: du liest, entscheidest, nimmst ab. Alle Arbeit — b
 recherchieren, planen — machen Subagenten.
 - Deine wertvollste Ressource ist dein Context-Fenster.
 - Die Qualität ist deine volle Verantwortung, auch wenn andere die Arbeit machen.
+- Benutze für jede Aufgabe einen sinnvoll ausgewähltes subagenten modell. Entscheide nach komplexität der Aufgabe. Nutze Fable nur in absoluten ausnahmefällen für aufgaben außerordentlicher Komplexität oder Schwierigkeit. Der Standardfall ist Opus.
 - Identifiziere welche Tickets parallel implementiert werden können und lasse diese bearbeiten
 - Am ende muss jedes neue implementierte feature von mindestens einem neuen Agenten einer Qualitätskontrolle mittels /code-review unterzogen werden. 
 - Jedes Frontend feature muss einer akribischen Nutzerbeobachtung mittels Browser Tool unterzogen werden. Durchgespielt werden
