@@ -829,17 +829,11 @@ interface StampLayer {
   /** Index in der Rampe: 0 Grundabdruck, 1 WICHTIG, 2 DRINGEND. */
   level: 0 | 1 | 2
   text: string
-  /** Die zurzeit oberste, gültige Lage — voll deckend, mit Papier-Halo. */
+  /** Die zurzeit oberste, gültige Lage — voll deckend. */
   top: boolean
   /** Noch nicht gestempelt: unsichtbar, aber **weiterhin gemessen** (siehe unten). */
   reserved: boolean
   transform: string
-  /**
-   * Wieviel breiter der Papier-Halo dieser Lage sein muss, um die Lagen
-   * DARUNTER zu verdecken — nur an der obersten Lage von Belang, sonst 0.
-   * Ausführlich am `.stamp-layer--top`-Block im CSS.
-   */
-  haloSlack: number
 }
 
 /**
@@ -906,21 +900,12 @@ const stampLayers = computed((): StampLayer[] => {
     const dx = offsets[index]
     const dy = jitterOf(id, `stamp-dy${index}`, STAMP_OFFSET)
 
-    // Der Halo muss den seitlichen Versatz der Lagen DARUNTER ausgleichen —
-    // und nur den. Auf Stufe 0 gibt es keine, der Zuschlag ist dort 0.
-    // Verdoppelt, weil der Kasten mittig in der Zelle sitzt und der Zuschlag
-    // sich damit auf beide Seiten verteilt.
-    // Der Hof gilt fuer JEDE Lage, nicht nur die oberste: sonst aendert sich
-    // sein Wert in dem Moment, in dem eine Lage ueberstempelt wird.
-    const slack = 2 * Math.max(0, ...offsets.slice(0, index).map(other => Math.abs(other - dx)))
-
     return {
       level: index as 0 | 1 | 2,
       text,
       top,
       reserved: index > level,
-      transform: `translate(${dx}px, ${dy}px) rotate(${tilt}deg)`,
-      haloSlack: slack
+      transform: `translate(${dx}px, ${dy}px) rotate(${tilt}deg)`
     }
   })
 })
@@ -1250,7 +1235,7 @@ const handlePostponeConfirm = async (targetDate: string) => {
             layer.top ? 'stamp-layer--top' : 'stamp-layer--under',
             { 'stamp-layer--reserved': layer.reserved }
           ]"
-          :style="{ transform: layer.transform, '--halo-slack': `${layer.haloSlack.toFixed(2)}px` }"
+          :style="{ transform: layer.transform }"
           :aria-hidden="layer.top ? undefined : 'true'"
           >{{ layer.text }}</span
         >
@@ -1781,20 +1766,19 @@ const handlePostponeConfirm = async (targetDate: string) => {
    breit wie die BREITESTE Lage. `min-width: 100%` zieht die oberste Lage auf
    genau diese Breite.
 
-   `--halo-slack` gleicht obendrein den seitlichen VERSATZ aus. Eine Lage kann
-   um bis zu ±`STAMP_OFFSET` streuen, zwei Lagen also um 11 px gegeneinander;
-   ohne Ausgleich schaute die untere seitlich hervor. Der Wert wird je Zettel
-   **gerechnet, nicht pauschal gesetzt** (→ `haloSlack` im Skript) — und das
-   ist keine Feinsinnigkeit, sondern die Reparatur eines gemessenen Schadens:
-   ein pauschaler Zuschlag von 11 px hing wegen `place-items: center` auf
-   BEIDEN Seiten je 5,5 px über, obwohl je Zettel nur eine Seite gebraucht
-   wird. Gemessen stand der Halo damit auf 34 von 93 Zetteln bis zu 2,4 px
-   neben dem Papier (`.zettel` hat `overflow: visible`), und die 88 px für
-   Stift und Eselsohr wurden statt um 1,4 um bis zu 8,0 px angeknabbert.
+   **Einen seitlichen Zuschlag über die Zelle hinaus gibt es NICHT mehr.** Bis
+   zum 05.09.2026 trug die oberste Lage einen gerechneten Überstand
+   (`--halo-slack`), der den seitlichen Versatz der Lagen darunter zudecken
+   sollte. Solange die unteren Lagen auf ihre Textbreite zusammenfielen, war
+   das nötig. Seit alle Lagen auf Zellbreite stehen, richtet derselbe Zuschlag
+   nur noch Schaden an: gemessen an 94 Zetteln überdeckte er in **261 von 282**
+   Fällen den Rahmen der Lage darunter, bis zu **10,08 px** — die Abdrücke sahen
+   an den Seiten abgeschnitten aus. Gespart hätte er dafür wenig: ohne ihn liegt
+   in **17 von 282** Fällen etwas vom Wort darunter frei, höchstens **3,82 px**,
+   und das ist gerade der Rand des Kastens, kaum je ein Buchstabe.
 
-   Gerechnet ist der Zuschlag **auf Stufe 0 gleich null** — dort gibt es keine
-   Lage darunter, die zu verdecken wäre. Das ist der Normalfall auf der Wand
-   und war zugleich der häufigste Schadensfall.
+   Vom Maintainer am Gerät gesehen. 261 beschnittene Rahmen gegen 17 Zipfel ist
+   kein Tausch, den man macht.
 
    Die zyklische Prozentangabe (`100%` an einem Grid-Element, dessen Spur sich
    nach dem Inhalt richtet) soll die Spur laut Spezifikation NICHT aufblähen.
@@ -1814,20 +1798,6 @@ const handlePostponeConfirm = async (targetDate: string) => {
   text-align: center;
 }
 
-/* Der deckende Hof liegt AUSSERHALB des Flusses und bestimmt deshalb keine
-   Breite. Frueher stand er als `min-width: calc(100% + slack)` am Kasten
-   selbst — und genau daher kam das Schrumpfen beim Ueberstempeln. Gemessen:
-   die Variante, den Zuschlag stattdessen jeder Lage in den Kasten zu legen,
-   haelt die Breite zwar konstant, laesst aber Rahmen bis 13,32 px ueber die
-   Papierkante ragen (276 von 564 Faellen) statt 4,20 px (137 Faelle). */
-.stamp-layer--top::after {
-  content: '';
-  position: absolute;
-  inset: 0 calc(var(--halo-slack, 0px) / -2);
-  background: var(--note-paper);
-  border-radius: 3px;
-  z-index: -1;
-}
 
 /* Die unteren Lagen bleiben durchsichtig und lugen an den Rändern hervor —
    dort, und nur dort, steckt die sichtbare Stapelhöhe. 40 % für den
