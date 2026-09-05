@@ -55,3 +55,24 @@ Der Stempel ist die Aussage, nicht die Position.
 - **Nachdruck** heißt jetzt **Überstempeln**.
 - Zurückgesetzt wird beim Erledigen — auch bei täglichen Aufgaben. Der nächtliche Reset
   aus Ticket 09a entfällt und muss zurückgebaut werden.
+
+## Nachtrag · 05.09.2026 — am Projekt tragen alle drei Lagen einen Spruch
+
+Der Satz oben, „ein Tipp legt WICHTIG obenauf, der nächste DRINGEND", gilt weiter für
+jeden Zettel — **außer für Projekte**. Dort steht seit dem 05.09.2026 auf allen drei
+Stufen ein **Projektspruch**; `WICHTIG` und `DRINGEND` kommen an einem Projekt nicht mehr
+vor.
+
+Damit kehrt für Projekte zurück, was Ticket 09b vorgesehen hatte und was die Spec vom
+01.09.2026 mit dem Argument verworfen hatte, man könne einem Projekt dann nicht mehr
+*ablesen*, wie dringend es ist. Das Argument ist nicht falsch geworden, es wurde am Gerät
+gegen das Aussehen abgewogen und verloren: **die Stufe steht jetzt in der Farbe**
+(blau → orange → rot), nicht im Wort. Vom Maintainer entschieden, nachdem er die erste
+Fassung von Ticket `04` an der Wand gesehen hatte.
+
+**Die Entscheidung dieses ADR selbst bleibt unberührt:** es gibt weiterhin genau einen
+Stempel je Zettel, jeder Zettel trägt ihn, und er ordnet nichts um.
+
+**Was daran hängt und beim nächsten Umbau zu prüfen ist:** die Farbrampe ist am Projekt
+der **einzige** ablesbare Hinweis auf die Stufe. Wer sie ans Wort bindet oder abschwächt,
+nimmt Projekten die Aussage ganz — nicht nur ihre Hälfte.

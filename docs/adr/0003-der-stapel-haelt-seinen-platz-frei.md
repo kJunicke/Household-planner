@@ -24,7 +24,17 @@ unabhängig von der Stufe.
 
 **Der Preis ist gemessen und ausdrücklich in Kauf genommen:** die Wand wird bei 390 px
 Fensterbreite **37 % länger** und bei 412 px **55 %** (7387,70 → 10129,01 px bzw. 6554,07 →
-10129,01 px, an 93 echten Zetteln). Bei 412 px kippt sie dadurch von zwei Spalten auf eine.
+10129,01 px, am damaligen Bestand von 93 Zetteln). Bei 412 px kippt sie dadurch von zwei
+Spalten auf eine.
+
+> **Nachtrag 05.09.2026 — „echte Zettel" waren es nicht.** Der Bestand, an dem hier
+> gemessen wurde, besteht zu über vier Fünfteln aus Testaufgaben, die frühere Prüfläufe in
+> die Produktionsdatenbank geschrieben und nie weggeräumt haben (am 05.09. gezählt: **79
+> von 94** Zetteln tragen eine QC-Kennung, von den übrigen 15 sind weitere Altlasten). Die
+> **Mechanik** der Zahlen bleibt gültig — die Wandhöhe entsteht aus Zettelbreiten, und die
+> Breite hängt am Stempel, nicht am Titel. Der Bestand ist aber keine Stichprobe des
+> echten Haushalts, und die Prozentsätze oben sind auf einer Wand entstanden, die so nie
+> jemandem gehört hat. Wer sie nachmisst, misst zuerst nach, worauf.
 
 ## Alternativen
 

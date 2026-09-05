@@ -47,7 +47,7 @@ import { computed, ref, watch } from 'vue'
 import type { Task } from '@/types/Task'
 import { useTaskStore } from '@/stores/taskStore'
 import { useHouseholdStore } from '@/stores/householdStore'
-import { projectPhraseOf } from '@/lib/projectPhrases'
+import { projectPhraseOf, projectPhraseStackOf } from '@/lib/projectPhrases'
 import { jitterOf, kindOfTaskType, rotationOf, subtaskColumns } from '@/lib/wallLayout'
 import { useTearGesture } from '@/composables/useTearGesture'
 import { useDirectionPress, type PressDirection } from '@/composables/useDirectionPress'
@@ -766,13 +766,35 @@ const stampLabel = computed((): string => {
  * (Ticket `02`, → CONTEXT.md „Überstempeln"). `null` heißt: der Zettel ist
  * sauber, es gilt allein der Grundabdruck.
  *
+ * **An einem Projekt gibt es diese beiden Wörter nicht** (Ticket `04`,
+ * Nacharbeit vom 05.09.2026): dort trägt jede Stufe einen Projektspruch, die
+ * Stufe steht in der Farbe. Was oben liegt, sagt deshalb `stampLayers`, nicht
+ * dieser Wert — er wird nur noch für den Tooltip gebraucht und liefert an
+ * einem Projekt bewusst `null`, statt ein Wort zu behaupten, das dort nirgends
+ * steht.
+ *
  * **Die Modulo-Logik steht hier bewusst NICHT** — sie liegt im Store
  * (`cycleEmphasisLevel`). Diese Stelle zeigt nur an, was gerade gilt.
  */
 const emphasisLabel = computed((): string | null => {
+  if (props.task.task_type === 'project') return null
   if (props.task.emphasis_level === 1) return 'WICHTIG'
   if (props.task.emphasis_level === 2) return 'DRINGEND'
   return null
+})
+
+/**
+ * Der Tooltip am Stempel — die einzige Stelle, die den Stand in Worte fasst.
+ *
+ * Drei Fälle, weil ein Projekt keine Stufenwörter hat: ungestempelt (überall
+ * gleich), überstempelt an einem gewöhnlichen Zettel (das Wort steht da) und
+ * überstempelt an einem Projekt (das Wort steht NICHT da, die Stufe ist eine
+ * Farbe — also wird sie hier gezählt statt benannt).
+ */
+const stampTitle = computed((): string => {
+  if (props.task.emphasis_level === 0) return 'Tippen: überstempeln'
+  if (emphasisLabel.value) return `Überstempelt: ${emphasisLabel.value} — tippen zum Weiterdrehen`
+  return `Überstempelt: ${props.task.emphasis_level}× — tippen zum Weiterdrehen`
 })
 
 /**
@@ -889,7 +911,18 @@ interface StampLayer {
  * Nachdruck, sähe man beim Überstempeln nichts von ihm.
  */
 const stampLayers = computed((): StampLayer[] => {
-  const texts = [stampLabel.value, 'WICHTIG', 'DRINGEND']
+  // AN EINEM PROJEKT TRÄGT JEDE STUFE EINEN SPRUCH (Ticket `04`, Nacharbeit vom
+  // 05.09.2026, → CONTEXT.md „Projektspruch"). `WICHTIG` und `DRINGEND` kommen
+  // dort NICHT vor — die Dringlichkeit steht allein in der Farbe der obersten
+  // Lage (blau → orange → rot). Deshalb darf die Rampe nie ans Wort gebunden
+  // werden: sie ist am Projekt der einzige Hinweis, der übrig bleibt.
+  //
+  // Die drei Sprüche kommen aus dem EINEN gespeicherten Listenplatz
+  // (`projectPhraseStackOf`); hier wird nichts gezogen und nichts gerechnet.
+  const texts =
+    props.task.task_type === 'project'
+      ? projectPhraseStackOf(props.task)
+      : [stampLabel.value, 'WICHTIG', 'DRINGEND']
   const level = props.task.emphasis_level
   const id = props.task.task_id
   const offsets = texts.map((_, index) => jitterOf(id, `stamp-dx${index}`, STAMP_OFFSET))
@@ -1211,7 +1244,7 @@ const handlePostponeConfirm = async (targetDate: string) => {
       <span
         class="due-stamp"
         :data-emphasis="props.task.emphasis_level"
-        :title="emphasisLabel ? `Überstempelt: ${emphasisLabel} — tippen zum Weiterdrehen` : 'Tippen: überstempeln'"
+        :title="stampTitle"
         @click.stop="onStampTap"
       >
         <!-- Der Abdruckstapel (Ticket `03`, → `stampLayers` im Skript).
@@ -1223,9 +1256,12 @@ const handlePostponeConfirm = async (targetDate: string) => {
              kennt `emphasis_level` nicht, → ADR-0002). Ausführlich bei
              `stampLayers`.
 
-             `v-for` über `level` statt über den Text: zwei Lagen können
-             denselben Text tragen (ein Projekt mit dem Spruch „DRINGEND"
-             käme sonst zum Schlüsselkonflikt). -->
+             `v-for` über `level` statt über den Text: der Schlüssel ist die
+             LAGE, nicht das Wort. An einem Projekt stehen jetzt drei
+             Projektsprüche übereinander (Ticket `04`, Nacharbeit) — dass
+             darunter nie zweimal dasselbe Wort ist, garantiert
+             `projectPhraseStackOf`, aber diese Zusage gehört dorthin und nicht
+             in einen Vue-Schlüssel. -->
         <span
           v-for="layer in stampLayers"
           :key="layer.level"
@@ -1701,6 +1737,24 @@ const handlePostponeConfirm = async (targetDate: string) => {
      Schrumpfen. Vom Maintainer am Geraet gesehen, nicht von einer Pruefung
      gefunden. */
   min-width: 100%;
+  /* ZENTRIERT WIRD IN JEDER LAGE, nicht nur in der obersten. Der Kasten ist
+     breiter als sein Wort — er steht auf Zellbreite, also auf der Breite des
+     BREITESTEN Worts im Stapel —, und ohne Zentrierung klebt das Wort links
+     (gemessen 11,3 px im Median).
+
+     Bis zum 05.09.2026 stand diese Zeile am `.stamp-layer--top`-Block. Eine
+     Lage sprang damit in dem Moment nach links, in dem sie überstempelt wurde:
+     der Kasten blieb stehen (seit `min-width: 100%`), das WORT darin nicht.
+     Gemessen an 94 Zetteln über alle drei Stufen: `getComputedStyle` lieferte
+     `center` für die oberste und `left` für die unteren, **182 Lagen**
+     verschoben ihren Text, im schlimmsten Fall um **24,70 px**. Vom Maintainer
+     am Gerät gesehen — „der Stempel fällt nicht mehr zusammen, aber der Text
+     bewegt sich noch".
+
+     An einem PROJEKT fällt es am meisten auf: dort stehen drei verschieden
+     breite Sprüche in einem Kasten. Ein Abdruck, der einmal auf dem Papier
+     ist, verrutscht nicht mehr — auch nicht sein Wort. */
+  text-align: center;
   padding: 1px 5px;
   border: 2px solid currentColor;
   border-radius: 3px;
@@ -1787,15 +1841,14 @@ const handlePostponeConfirm = async (targetDate: string) => {
    genau hier für Abweichungen bekannt. Wenn auf dem iPhone die Zettel breiter
    aussehen als hier, ist das die erste Stelle zum Nachsehen.
 
-   Das `text-align: center` gehört dazu: der Kasten ist breiter als sein Wort,
-   und ohne Zentrierung klebte das Wort links — gemessen 11,3 px im Median.
-
    `--note-paper` kommt vom `.zettel` und wird vererbt (weiß / gelb /
    Packpapier je nach Typ) — der Halo trifft damit die Farbe DIESES Zettels,
-   nicht die des Standardpapiers. */
+   nicht die des Standardpapiers.
+
+   Das `text-align: center` stand bis zum 05.09.2026 HIER und gehört jetzt an
+   `.stamp-layer` — die Begründung steht dort. */
 .stamp-layer--top {
   background: var(--note-paper);
-  text-align: center;
 }
 
 

@@ -15,10 +15,17 @@
  * Anlage eines Projekts gezogen und in `tasks.project_saying_index` gespeichert, damit
  * alle Geräte dasselbe Wort sehen und es ein Neuladen übersteht.
  *
- * Diese Datei kann beides: den gespeicherten Listenplatz **auflösen**
- * (`projectPhraseOf`) und den nächsten **ziehen** (`drawProjectPhraseSlot`). Geschrieben
- * wird hier nichts — das tut `taskStore.cycleEmphasisLevel` beim Abräumen des
- * Abdruckstapels (Stufe 2 → 0), und nur dort.
+ * Diese Datei kann drei Dinge: den gespeicherten Listenplatz **auflösen**
+ * (`projectPhraseOf`), den nächsten **ziehen** (`drawProjectPhraseSlot`) und aus dem
+ * einen gespeicherten Platz den **ganzen Abdruckstapel** ableiten
+ * (`projectPhraseStackOf`). Geschrieben wird hier nichts — das tut
+ * `taskStore.cycleEmphasisLevel` beim Abräumen des Stapels (Stufe 2 → 0), und nur dort.
+ *
+ * **Ein Projekt trägt auf ALLEN DREI Stufen einen Spruch**, seit dem 05.09.2026 (Ticket
+ * `04`, Nacharbeit): `WICHTIG` und `DRINGEND` kommen an einem Projekt nicht mehr vor. Die
+ * Dringlichkeit liest man dort allein an der **Farbe** der obersten Lage ab
+ * (blau → orange → rot), nicht am Wort. Vom Maintainer am Gerät entschieden, nachdem die
+ * erste Fassung von `04` die Wörter auch auf Projekte gelegt hatte.
  */
 
 import type { Task } from '@/types/Task'
@@ -196,8 +203,19 @@ function fnv1a(input: string): number {
  * beim Neuladen ändert, sähe nach einem zweiten, schlimmeren Fehler aus.
  */
 export function projectPhraseOf(task: PhraseCarrier): string {
+  return PROJECT_PHRASES[effectivePhraseSlot(task)]
+}
+
+/**
+ * Der Platz, mit dem tatsächlich gearbeitet wird: der gespeicherte, sonst der abgeleitete.
+ *
+ * Eine eigene Funktion, weil ihn jetzt ZWEI Leser brauchen — der Grundabdruck und der
+ * ganze Stapel — und beide denselben bekommen müssen. Stünde der Rückfall zweimal da,
+ * könnten Grundabdruck und Stapel eines Projekts im Fehlerfall auseinanderlaufen.
+ */
+function effectivePhraseSlot(task: PhraseCarrier): number {
   const stored = storedPhraseSlot(task)
-  if (stored !== null) return PROJECT_PHRASES[stored]
+  if (stored !== null) return stored
 
   warnOnce(
     task.task_id,
@@ -205,5 +223,49 @@ export function projectPhraseOf(task: PhraseCarrier): string {
       'ersatzweise aus der Aufgaben-Kennung abgeleitet. Er ist damit stabil, aber nicht ' +
       'der gespeicherte, und lässt sich nicht weiterdrehen.'
   )
-  return PROJECT_PHRASES[fnv1a(task.task_id) % PROJECT_PHRASES.length]
+  return fnv1a(task.task_id) % PROJECT_PHRASES.length
+}
+
+/**
+ * Der **ganze Abdruckstapel** eines Projekts: drei Sprüche, von unten nach oben.
+ *
+ * An einem Projekt trägt jede Stufe einen Spruch — `WICHTIG` und `DRINGEND` kommen dort
+ * nicht vor (siehe Kopf dieser Datei). Die Stufe liest man an der **Farbe**, nicht am
+ * Wort; deshalb darf und muss die Farbrampe an der Lage hängen bleiben.
+ *
+ * **Gespeichert bleibt genau eine Zahl.** Die beiden oberen Plätze werden aus dem
+ * gespeicherten Grundplatz **abgeleitet**, nicht zusätzlich gespeichert. Das ist die ganze
+ * Sparsamkeit dieser Lösung und sie kostet nichts: der Stapel übersteht ein Neuladen und
+ * sieht auf jedem Gerät gleich aus, weil beide Zutaten — gespeicherter Platz und
+ * Aufgaben-Kennung — überall dieselben sind. Eine zweite und dritte Spalte hätte eine
+ * Migration gekostet, drei Werte, die man beim Abräumen konsistent halten muss, und einen
+ * neuen stillen Fehler: zwei Zeilen, in denen zwei der drei Plätze gleich sind.
+ *
+ * **Warum die drei Plätze garantiert verschieden sind.** Die beiden Versätze liegen in
+ * `1 … 99` und sind untereinander verschieden (der zweite wird aus `1 … 98` gezogen und um
+ * eins angehoben, sobald er den ersten erreicht — die klassische Auswahl ohne
+ * Zurücklegen, ohne Schleife). Drei paarweise verschiedene Versätze aus `0 … 99` ergeben
+ * modulo 100 drei paarweise verschiedene Plätze. Es gibt also keinen Stapel, auf dem
+ * dasselbe Wort zweimal steht — was wie ein nicht angekommener Tipp aussähe.
+ *
+ * **Das Abräumen wechselt den ganzen Stapel**, ohne dass es davon wüsste: die oberen
+ * beiden hängen am Grundplatz, und der wird beim Übergang 2 → 0 neu gezogen.
+ *
+ * Der Schlüssel steht beim Hashen VORN (`l1#…`, `l2#…`) — dieselbe Falle wie in
+ * `wallLayout.ts`: Schlüssel, die sich nur im letzten Zeichen unterscheiden, liefern bei
+ * FNV-1a messbar zusammenhängende Ergebnisse.
+ */
+export function projectPhraseStackOf(task: PhraseCarrier): [string, string, string] {
+  const count = PROJECT_PHRASES.length
+  const base = effectivePhraseSlot(task)
+
+  const first = 1 + (fnv1a(`stapel-l1#${task.task_id}#${base}`) % (count - 1))
+  const drawn = 1 + (fnv1a(`stapel-l2#${task.task_id}#${base}`) % (count - 2))
+  const second = drawn >= first ? drawn + 1 : drawn
+
+  return [
+    PROJECT_PHRASES[base],
+    PROJECT_PHRASES[(base + first) % count],
+    PROJECT_PHRASES[(base + second) % count]
+  ]
 }
