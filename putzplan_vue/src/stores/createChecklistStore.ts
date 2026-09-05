@@ -235,16 +235,25 @@ export function createChecklistStore(config: ChecklistStoreConfig) {
      * auf "Bad" zurückspringen, bis das wartende Update durchläuft — die
      * Einträge tragen aber schon "Badezimmer". Also den lokalen Namen halten,
      * falls es die temp-Zeile noch gibt.
+     *
+     * Gibt es die temp-Zeile lokal nicht mehr, hat der Nutzer sie offline
+     * schon wieder gelöscht — das `delete` wartet noch in der Warteschlange,
+     * weil es erst nach diesem `create` drankommt. Dann darf die echte Zeile
+     * nicht in `categories.value` landen (sie wäre sofort wieder sichtbar,
+     * bis der nächste Neuabgleich sie entfernt); nur die Warteschlange wird
+     * umgebogen, damit das wartende `delete` die echte ID statt der temp-ID trifft.
      */
     const reconcileTempCategory = (temp: string, real: CategoryRow) => {
       const localRow = categories.value.find(c => c.category_id === temp)
-      const merged = localRow ? { ...real, name: localRow.name ?? real.name } : real
 
-      const realExists = categories.value.some(c => c.category_id === real.category_id)
-      categories.value = categories.value.filter(
-        c => c.category_id !== temp && (!realExists || c.category_id !== real.category_id)
-      )
-      categories.value.push(merged)
+      if (localRow) {
+        const merged = { ...real, name: localRow.name ?? real.name }
+        const realExists = categories.value.some(c => c.category_id === real.category_id)
+        categories.value = categories.value.filter(
+          c => c.category_id !== temp && (!realExists || c.category_id !== real.category_id)
+        )
+        categories.value.push(merged)
+      }
 
       queue.rewrite(m => {
         if (m.payload.categoryId === temp) m.payload.categoryId = real.category_id
@@ -429,6 +438,11 @@ export function createChecklistStore(config: ChecklistStoreConfig) {
      * Menge, `packed` zurückgesetzt). Verwaiste Kategorienamen der Quelle
      * (Eintrag ohne Zeile) werden nicht zu Zeilen — sie erscheinen in der Kopie
      * wie in der Quelle als Waisensektion.
+     *
+     * Auch noch nicht synchronisierte (`temp_`-)Zeilen der Quelle werden mit
+     * kopiert: übernommen werden nur `name` und `sort_order`, die neue Zeile
+     * bekommt ihre eigene, echte `list_id` — der offene Sync-Zustand der
+     * Quellzeile hat darauf keinen Einfluss.
      */
     const copyList = async (sourceListId: string, newName: string) => {
       const householdStore = useHouseholdStore()
@@ -450,9 +464,7 @@ export function createChecklistStore(config: ChecklistStoreConfig) {
 
         if (listError) throw listError
 
-        const sourceCategories = categories.value.filter(
-          c => c.list_id === sourceListId && !c.category_id.startsWith('temp_')
-        )
+        const sourceCategories = categories.value.filter(c => c.list_id === sourceListId)
         if (sourceCategories.length > 0) {
           const catRows = sourceCategories.map(c => ({
             household_id: householdStore.currentHousehold!.household_id,
@@ -607,6 +619,17 @@ export function createChecklistStore(config: ChecklistStoreConfig) {
       const key = normalizeCategoryName(name)
       if (!key) return null
       return currentListCategories.value.find(c => normalizeCategoryName(c.name) === key) ?? null
+    }
+
+    /**
+     * Kanonischer Kategoriename zu einem rohen Eingabewert: getrimmt, leer wird
+     * `null`, sonst die Schreibweise der bestehenden Zeile oder — gibt es keine
+     * — der getrimmte Rohname selbst.
+     */
+    const canonicalCategoryName = (raw: string | null | undefined): string | null => {
+      const trimmed = raw?.trim() || null
+      if (trimmed === null) return null
+      return findCategoryRow(trimmed)?.name ?? trimmed
     }
 
     /** Einträge der aktuellen Liste mit diesem Kategorienamen — erledigte eingeschlossen. */
@@ -764,8 +787,7 @@ export function createChecklistStore(config: ChecklistStoreConfig) {
 
     /** Eintrag in eine andere Kategorie hängen (Ziehen) — offline-fähig. */
     const moveItemToCategory = async (itemId: string, category: string | null) => {
-      const trimmed = category?.trim() || null
-      const target = trimmed === null ? null : findCategoryRow(trimmed)?.name ?? trimmed
+      const target = canonicalCategoryName(category)
 
       const item = items.value.find(i => i.item_id === itemId)
       if (!item || (item.category ?? null) === target) return
@@ -853,7 +875,7 @@ export function createChecklistStore(config: ChecklistStoreConfig) {
         currentListItems.value
           .map(i => i.category)
           .find(c => !!c && normalizeCategoryName(c) === normalizeCategoryName(requestedLabel))
-      const finalLabel = existingLabel ?? (requestedLabel || null)
+      const finalLabel = existingLabel ?? canonicalCategoryName(requestedLabel)
 
       const existingNames = new Set(
         currentListItems.value
@@ -942,8 +964,7 @@ export function createChecklistStore(config: ChecklistStoreConfig) {
 
       if (!currentListId.value || !authStore.user) return null
 
-      const raw = category?.trim() || null
-      const cat = raw === null ? null : findCategoryRow(raw)?.name ?? raw
+      const cat = canonicalCategoryName(category)
       const qty = Math.max(1, Math.floor(quantity) || 1)
 
       try {
@@ -1011,8 +1032,7 @@ export function createChecklistStore(config: ChecklistStoreConfig) {
         const next: Partial<ChecklistItem> = {}
         if (patch.name !== undefined) next.name = patch.name.trim()
         if (patch.category !== undefined) {
-          const raw = patch.category?.trim() || null
-          next.category = raw === null ? null : findCategoryRow(raw)?.name ?? raw
+          next.category = canonicalCategoryName(patch.category)
         }
         if (patch.quantity !== undefined) {
           const qty = Math.max(1, Math.floor(patch.quantity) || 1)

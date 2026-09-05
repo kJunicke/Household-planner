@@ -11,6 +11,7 @@
  */
 import { computed, ref, watch } from 'vue'
 import { categoryColor } from '@/lib/categoryColor'
+import { normalizeCategoryName } from '@/lib/categoryOrder'
 import CategoryCombobox from '@/components/CategoryCombobox.vue'
 import type { CategoryOption } from '@/types/CategoryOption'
 import type { ImportSource } from '@/types/CategoryImport'
@@ -41,8 +42,6 @@ const emit = defineEmits<{
   create: [name: string, itemIds: string[], importFrom: ImportSource | null]
   close: []
 }>()
-
-const norm = (s: string) => s.trim().toLowerCase()
 
 const name = ref('')
 const selected = ref<Set<string>>(new Set())
@@ -97,17 +96,17 @@ const previewItems = computed<PickableItem[]>(() => {
  * getrimmten Kleinbuchstaben-Namen, wie dort auch.
  */
 const dupeNames = computed(() => {
-  const target = norm(name.value)
+  const target = normalizeCategoryName(name.value)
   const existing = props.items
-    .filter(i => norm(i.category ?? '') === target)
-    .map(i => norm(i.name))
+    .filter(i => normalizeCategoryName(i.category ?? '') === target)
+    .map(i => normalizeCategoryName(i.name))
   const picked = props.items
     .filter(i => selected.value.has(i.id))
-    .map(i => norm(i.name))
+    .map(i => normalizeCategoryName(i.name))
   return new Set([...existing, ...picked])
 })
 
-const isDupe = (item: PickableItem) => dupeNames.value.has(norm(item.name))
+const isDupe = (item: PickableItem) => dupeNames.value.has(normalizeCategoryName(item.name))
 
 /** Wie viele Einträge wirklich ankommen — Dubletten zählen nicht mit. */
 const importCount = computed(() => {

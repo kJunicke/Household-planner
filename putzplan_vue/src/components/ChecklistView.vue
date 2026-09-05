@@ -12,7 +12,7 @@ import type { ChecklistStore } from '@/stores/createChecklistStore'
 import type { CategoryGroup, ChecklistItem } from '@/types/Checklist'
 import type { ImportSource } from '@/types/CategoryImport'
 import { categoryColor } from '@/lib/categoryColor'
-import { categoryRank, compareCategoryGroups } from '@/lib/categoryOrder'
+import { categoryRank, compareCategoryGroups, normalizeCategoryName } from '@/lib/categoryOrder'
 import { useGraceWindow } from '@/composables/useGraceWindow'
 import { useCategoryRail } from '@/composables/useCategoryRail'
 import { useCategoryDrag } from '@/composables/useCategoryDrag'
@@ -226,14 +226,14 @@ const openAddLine = (group: CategoryGroup) => {
 const suggestFocusKey = ref<string | null>(null)
 
 const suggestionsFor = (group: CategoryGroup): string[] => {
-  const q = (addDraft.value[group.key] ?? '').trim().toLowerCase()
+  const q = normalizeCategoryName(addDraft.value[group.key] ?? '')
   if (!q) return []
-  const inSection = new Set(group.items.map(i => i.name.trim().toLowerCase()))
+  const inSection = new Set(group.items.map(i => normalizeCategoryName(i.name)))
   const seen = new Set<string>()
   const out: string[] = []
   for (const it of store.items) {
     const name = it.name.trim()
-    const lower = name.toLowerCase()
+    const lower = normalizeCategoryName(name)
     if (!lower.includes(q) || inSection.has(lower) || seen.has(lower)) continue
     seen.add(lower)
     out.push(name)
@@ -275,13 +275,13 @@ const handleSectionAdd = async (group: CategoryGroup) => {
 // --- Obere Leiste -----------------------------------------------------------
 /** Namensvorschläge aus allen Listen des Haushalts, höchstens fünf. */
 const topNameSuggestions = (query: string): string[] => {
-  const q = query.trim().toLowerCase()
+  const q = normalizeCategoryName(query)
   if (!q) return []
   const seen = new Set<string>()
   const out: string[] = []
   for (const it of store.items) {
     const name = it.name.trim()
-    const lower = name.toLowerCase()
+    const lower = normalizeCategoryName(name)
     if (!lower.includes(q) || seen.has(lower)) continue
     seen.add(lower)
     out.push(name)
@@ -444,14 +444,18 @@ const importPreviewFor = (source: ImportSource, name: string) =>
     done: i.packed,
   }))
 
-const openCategoryEdit = (group: CategoryGroup) => {
+const openCategoryEdit = (group: DisplayCategoryGroup) => {
   if (!group.category) return
   // Erledigte zählen getrennt: die zweite Löschvariante nimmt sie mit (E2),
-  // und eine Kategorie mit erledigten Einträgen ist nicht „leer".
+  // und eine Kategorie mit erledigten Einträgen ist nicht „leer". Aus
+  // `rawDoneCount` (ungefiltert), nicht dem grace-korrigierten `doneCount` —
+  // sonst widerspricht der Hinweistext im Modal bis zu 6 s dem sichtbaren
+  // Zustand (ein gerade abgehakter, noch im Rückgängig-Fenster stehender
+  // Eintrag zählt hier also schon als erledigt).
   editingCategory.value = {
     name: group.category,
-    count: group.total - group.doneCount,
-    doneCount: group.doneCount,
+    count: group.total - group.rawDoneCount,
+    doneCount: group.rawDoneCount,
   }
 }
 
