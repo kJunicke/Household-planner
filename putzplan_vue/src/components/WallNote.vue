@@ -776,11 +776,19 @@ const emphasisLabel = computed((): string | null => {
 })
 
 /**
- * Grundneigung des Abdrucks in Grad, dazu die Streubreite je Lage: **−9° ± 5°**.
- * Beides aus der Abnahme am Bild (Variante F, `stempel-optik-prototypen.md`),
- * nicht frei gewählt — der Nutzer will die Neigung ausdrücklich sehen.
+ * Betrag der Neigung eines Abdrucks in Grad, dazu die Streubreite je Lage:
+ * **9° ± 5°**. Beides aus der Abnahme am Bild (Variante F,
+ * `stempel-optik-prototypen.md`), nicht frei gewählt — der Nutzer will die
+ * Neigung ausdrücklich sehen.
+ *
+ * **Es ist ein Betrag, kein Winkel: die Richtung kommt aus `stampTiltSign`.**
+ * Bis zum 05.09.2026 stand hier −9 mit ±5 Streuung, und weil `jitterOf`
+ * symmetrisch um null streut, ergab das −14° … −4° — **jeder** Stempel der
+ * ganzen Wand nach links, keiner nach rechts. Vom Maintainer am Gerät
+ * bemerkt. Ein Vorzeichen, das nie kippt, ist keine Streuung, sondern eine
+ * feste Schräge mit Rauschen.
  */
-const STAMP_TILT = -9
+const STAMP_TILT = 9
 const STAMP_TILT_JITTER = 5
 
 /**
@@ -796,6 +804,23 @@ const STAMP_TILT_JITTER = 5
  * der Fußzeile ein — was die Breite bestimmt, steht am `.due-stamp`-CSS.
  */
 const STAMP_OFFSET = 5.5
+
+/**
+ * Nach links oder nach rechts? Deterministisch aus der Aufgaben-Kennung, damit
+ * derselbe Zettel überall gleich hängt — dieselbe Regel wie bei Versatz und
+ * Neigung.
+ *
+ * **Das Vorzeichen hängt am ZETTEL, nicht an der Lage.** Ein Stapel, dessen
+ * Abdrücke gegeneinander kippen, sieht nicht nach mehreren Stempelvorgängen
+ * aus, sondern nach kaputtem Zeichensatz; und er würde breiter bauen als die
+ * Reserve, die `--halo-slack` ausgleicht.
+ *
+ * Für die Geometrie ist das Kippen folgenlos: die Hüllbreite eines gedrehten
+ * Kastens ist `b·cos θ + h·sin θ` und damit für +θ und −θ gleich. Der Betrag
+ * der Neigung ändert sich nicht, nur die Ecke, die vorsteht — die gemessenen
+ * ≤ 1,50 px in die 88-px-Reserve (→ ADR-0003, Ticket `03`) bleiben gültig.
+ */
+const tiltSign = computed(() => (jitterOf(props.task.task_id, 'stamp-dir', 1) < 0 ? -1 : 1))
 
 /** Eine Lage des Abdruckstapels, von unten (Grundabdruck) nach oben. */
 interface StampLayer {
@@ -875,7 +900,7 @@ const stampLayers = computed((): StampLayer[] => {
 
   return texts.map((text, index) => {
     const top = index === level
-    const tilt = STAMP_TILT + jitterOf(id, `stamp-rot${index}`, STAMP_TILT_JITTER)
+    const tilt = tiltSign.value * (STAMP_TILT + jitterOf(id, `stamp-rot${index}`, STAMP_TILT_JITTER))
     const dx = offsets[index]
     const dy = jitterOf(id, `stamp-dy${index}`, STAMP_OFFSET)
 
