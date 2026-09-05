@@ -757,7 +757,26 @@ const noteStyle = computed((): Record<string, string> => {
 const stampLabel = computed((): string => {
   // ERST der Typ, DANN der Erledigungs-Status. Nicht umstellen, siehe oben.
   if (props.task.task_type === 'daily') return 'BEDARF'
+
+  // DIESER ZWEIG LÄUFT HEUTE NIE — und bleibt trotzdem stehen.
+  //
+  // `stampLabel` wird an genau einer Stelle gelesen: in `stampLayers`, und dort
+  // im NICHT-Projekt-Zweig des Ternärs. Für ein Projekt liefert seit der
+  // Nacharbeit vom 05.09.2026 `projectPhraseStackOf` alle drei Lagen auf einmal;
+  // an dieser Zeile kommt kein Projekt mehr vorbei.
+  //
+  // Er steht als Notausgang da, nicht aus Nachlässigkeit: `stampLabel` sagt
+  // „der Grundabdruck DIESER Aufgabe", und der Grundabdruck eines Projekts IST
+  // sein Spruch (→ CONTEXT.md, „Stempel": der Typ schlägt NEU). Ohne die Zeile
+  // wäre der Ausdruck für sich genommen falsch und lieferte einem künftigen
+  // zweiten Leser still `NEU`/`FÄLLIG` an einem Projekt — genau die Sorte
+  // Fehler, die plausibel aussieht.
+  //
+  // Was NICHT an ihm hängt: der `warnOnce`-Stolperdraht in `projectPhrases.ts`.
+  // Der sitzt in `effectivePhraseSlot` und wird von `projectPhraseStackOf`
+  // ebenso ausgelöst; er ginge also auch ohne diese Zeile nicht verloren.
   if (props.task.task_type === 'project') return projectPhraseOf(props.task)
+
   return props.task.last_completed_at ? 'FÄLLIG' : 'NEU'
 })
 
@@ -843,12 +862,26 @@ const STAMP_OFFSET = 5.5
  * Kastens ist `b·cos θ + h·sin θ` und damit für +θ und −θ gleich. Gemessen an
  * 94 Zetteln × 3 Stufen: gekreuzte Lagen ragen in **0 von 564** Fällen in die
  * 88-px-Reserve, und über die Papierkante nicht weiter als gleichsinnige.
+ *
+ * **„von 93" oder „von 94"?** Beides steht in dieser Datei, und beides stimmt
+ * für seinen Tag: die Messungen bis zum 04.09.2026 liefen an **93** Zetteln,
+ * die vom 05.09.2026 an **94** — der Bestand der Wand hat sich zwischen den
+ * Läufen geändert, die Zahlen sind nicht ineinander umzurechnen. Wer zwei
+ * Werte aus verschiedenen Blöcken vergleicht, vergleicht zwei Wände.
+ * (Nachgetragen am 05.09.2026; vorher stand die Vermischung undatiert da.)
  */
 const tiltSignOf = (id: string, index: number) => (jitterOf(id, `stamp-dir${index}`, 1) < 0 ? -1 : 1)
 
 /** Eine Lage des Abdruckstapels, von unten (Grundabdruck) nach oben. */
 interface StampLayer {
-  /** Index in der Rampe: 0 Grundabdruck, 1 WICHTIG, 2 DRINGEND. */
+  /**
+   * Index in der Rampe: 0 Grundabdruck, 1 und 2 die überstempelten Lagen.
+   *
+   * An einem gewöhnlichen Zettel stehen auf 1 und 2 `WICHTIG` und `DRINGEND`,
+   * an einem **Projekt** zwei weitere Projektsprüche (seit 05.09.2026,
+   * → `stampLayers`). Die ZAHL bedeutet in beiden Fällen dasselbe — deshalb
+   * heißt das Feld nach der Stufe und nicht nach dem Wort.
+   */
   level: 0 | 1 | 2
   text: string
   /** Die zurzeit oberste, gültige Lage — voll deckend. */
@@ -880,7 +913,8 @@ interface StampLayer {
  * scheitert an einer Arithmetik, die nichts mit der Optik zu tun hat: die
  * Breite eines Zettels wird aus dem GRUNDABDRUCK plus den 88 px für Stift und
  * Eselsohr gerechnet. Auf einem schmalen Zettel (`NEU`, 38,8 px, Zettel 156 px)
- * beginnt der Stift damit unmittelbar rechts vom Grundabdruck — für die 79 px
+ * beginnt der Stift damit unmittelbar rechts vom Grundabdruck — für die 77,87 px
+ * (nachgemessen am 05.09.2026; hier stand bis dahin „79 px")
  * von `DRINGEND` ist dort kein Platz, egal wie man die Lage verankert. Nach
  * links geht es nicht, dort sind nur 9 px bis zur Papierkante. Gemessen: der
  * Kasten der obersten Lage lief auf **86 von 93** Zetteln in den Stift (bis
@@ -1745,11 +1779,28 @@ const handlePostponeConfirm = async (targetDate: string) => {
      Bis zum 05.09.2026 stand diese Zeile am `.stamp-layer--top`-Block. Eine
      Lage sprang damit in dem Moment nach links, in dem sie überstempelt wurde:
      der Kasten blieb stehen (seit `min-width: 100%`), das WORT darin nicht.
-     Gemessen an 94 Zetteln über alle drei Stufen: `getComputedStyle` lieferte
-     `center` für die oberste und `left` für die unteren, **182 Lagen**
-     verschoben ihren Text, im schlimmsten Fall um **24,70 px**. Vom Maintainer
-     am Gerät gesehen — „der Stempel fällt nicht mehr zusammen, aber der Text
-     bewegt sich noch".
+     Gemessen an 94 Zetteln über alle drei Stufen (282 Lagen): **98 Lagen**
+     verschoben ihren Text tatsächlich, im schlimmsten Fall um **24,96 px**.
+
+     Hier stand bis zum 05.09.2026 „**182 Lagen**, im schlimmsten Fall
+     **24,70 px**" — und der Fehler darin ist lehrreicher als der Wert. Gezählt
+     wurde `getComputedStyle().textAlign`: `center` an der obersten Lage, `left`
+     an den unteren. Das misst eine EIGENSCHAFT, keine Bewegung, und liefert
+     deshalb im Kern die Zahl ALLER Nicht-Oberlagen — bei 94 Zetteln also 188.
+     Bei der jeweils BREITESTEN Lage füllt der Text die Zelle aus; sie steht mit
+     `left` an derselben Stelle wie mit `center` und verschiebt sich nicht. Wer
+     „hat sich der Text bewegt" fragen will, muss die Position des Textes vorher
+     und nachher vergleichen, nicht seine CSS-Eigenschaft lesen.
+
+     **Die 182 bleibt damit UNERKLÄRT, und das steht hier absichtlich.** Sie
+     liegt sechs unter den 188, die dieselbe Methode heute ergäbe; woher die
+     sechs Lagen Differenz kommen, ist nicht nachvollzogen — der damalige Lauf
+     ist nicht wiederholbar (anderer Wandbestand, siehe die 93/94-Notiz weiter
+     oben). Gesichert ist die Größenordnung und die Ursache, nicht die Zahl.
+     Eine halbe Erklärung, die wie eine ganze aussieht, wäre hier derselbe
+     Fehler noch einmal.
+     Vom Maintainer am Gerät gesehen — „der Stempel fällt nicht mehr zusammen,
+     aber der Text bewegt sich noch".
 
      An einem PROJEKT fällt es am meisten auf: dort stehen drei verschieden
      breite Sprüche in einem Kasten. Ein Abdruck, der einmal auf dem Papier
@@ -1817,8 +1868,14 @@ const handlePostponeConfirm = async (targetDate: string) => {
 
    Deshalb bemisst sich der Halo an der **Zelle**, nicht an seinem eigenen
    Wort: alle drei Lagen liegen in derselben Grid-Zelle, die Zelle ist also so
-   breit wie die BREITESTE Lage. `min-width: 100%` zieht die oberste Lage auf
-   genau diese Breite.
+   breit wie die BREITESTE Lage. `min-width: 100%` zieht sie auf genau diese
+   Breite.
+
+   **Diese Zeile steht seit dem 05.09.2026 nicht mehr hier, sondern an
+   `.stamp-layer`** — sie gilt also für JEDE Lage, nicht nur für die oberste;
+   die Begründung steht dort. Für den Halo ändert das nichts: die oberste Lage
+   bekommt die Zellbreite nach wie vor, nur eben über dieselbe Regel wie alle
+   anderen.
 
    **Einen seitlichen Zuschlag über die Zelle hinaus gibt es NICHT mehr.** Bis
    zum 05.09.2026 trug die oberste Lage einen gerechneten Überstand
@@ -1853,8 +1910,13 @@ const handlePostponeConfirm = async (targetDate: string) => {
 
 
 /* Die unteren Lagen bleiben durchsichtig und lugen an den Rändern hervor —
-   dort, und nur dort, steckt die sichtbare Stapelhöhe. 40 % für den
-   Grundabdruck, 60 % für WICHTIG; nach oben also immer prominenter. */
+   dort, und nur dort, steckt die sichtbare Stapelhöhe. 40 % für Lage 0
+   (Grundabdruck), 60 % für Lage 1; nach oben also immer prominenter.
+
+   Die Regel hängt an der STUFE, nicht am Wort: an einem gewöhnlichen Zettel ist
+   Lage 1 `WICHTIG`, an einem Projekt ein zweiter Projektspruch (seit
+   05.09.2026, → `stampLayers`). Bis dahin stand hier „60 % für WICHTIG" — das
+   las sich, als gälte die Deckung nur dort. */
 .stamp-layer--under.stamp-layer--l0 {
   opacity: 0.4;
 }

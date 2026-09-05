@@ -573,9 +573,15 @@ export const useTaskStore = defineStore('tasks', () => {
                 // (→ CONTEXT.md, „Projektspruch"; Ticket `04`).
                 //
                 // Genau dieser eine Übergang, und nur an einem PROJEKT: solange der
-                // Stapel wächst (0 → 1 → 2), bleibt der Untergrund liegen — WICHTIG und
-                // DRINGEND legen sich darüber, und ein Grundabdruck, der dabei das Wort
-                // wechselte, sähe aus wie ein zweiter, unverstandener Vorgang.
+                // Stapel wächst (0 → 1 → 2), bleibt der Untergrund liegen — die beiden
+                // oberen Lagen legen sich darüber, und ein Grundabdruck, der dabei das
+                // Wort wechselte, sähe aus wie ein zweiter, unverstandener Vorgang.
+                //
+                // Diese beiden Lagen tragen an einem Projekt seit dem 05.09.2026 ZWEI
+                // WEITERE PROJEKTSPRÜCHE, nicht WICHTIG und DRINGEND (hier stand bis
+                // dahin das Gegenteil). Sie werden nicht gespeichert, sondern aus dem
+                // Grundplatz abgeleitet (`projectPhraseStackOf`) — deshalb wechselt der
+                // eine Schreibvorgang unten den GANZEN Stapel auf einmal.
                 //
                 // Der neue Platz wird GEZOGEN und GESPEICHERT, nicht aus der
                 // Aufgaben-Kennung gerechnet: eine Ableitung wäre je Gerät gleich, aber
