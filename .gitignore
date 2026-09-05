@@ -14,7 +14,6 @@ node_modules/
 
 # Claude Code / agent skill artifacts (local tooling, not app code)
 .agents/
-.claude/skills/
 skills-lock.json
 
 # Playwright MCP screenshots and test artifacts

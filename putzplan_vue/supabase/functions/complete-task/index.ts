@@ -240,23 +240,22 @@ Deno.serve(async (req) => {
       updateData.assigned_to = null
     }
 
-    // Nachdruck (emphasis_level) gilt für EINEN Durchlauf, siehe CONTEXT.md
-    // "Nachdruck". Reset beim Erledigen — ABER NICHT für:
-    // - 'daily': wird nie completed=true (bleibt dauerhaft in "Alltagsaufgaben"
-    //   sichtbar) und kann mehrmals am Tag erledigt werden; ihr Nachdruck-Reset
-    //   passiert stattdessen nächtlich im Cron (reset_recurring_tasks), sonst
-    //   würde ein Stempel mitten am Tag durch den nächsten Handgriff verschwinden.
-    // - 'project': wird nie fertig, ihr Nachdruck bleibt stehen. (In der Praxis
-    //   ist taskId hier ohnehin nie ein Projekt selbst — Projekt-Arbeit läuft
-    //   über den "Am Projekt arbeiten"-Subtask — aber die Ausnahme steht
-    //   trotzdem explizit da, statt sich auf diesen Nebeneffekt zu verlassen.)
+    // Überstempeln gilt für EINEN Durchlauf (→ CONTEXT.md, "Überstempeln").
+    // Zurückgesetzt wird beim Erledigen, sonst nie — auch bei täglichen Aufgaben.
+    // Der bewusst gezahlte Preis: wer eine tägliche Aufgabe morgens auf DRINGEND
+    // stempelt und sie mittags erledigt, verliert den Stapel sofort. Kein Fehler.
     //
-    // Die Regel steht an DREI Stellen: hier, im Store (optimistischer Pfad) und im
-    // nächtlichen Cron (reset_recurring_tasks). Sie greift bewusst nach dem EIGENEN
-    // task_type, nicht nach dem Elternknoten — entschieden am 26.08.2026,
+    // Ausgenommen ist allein 'project': ein Projekt wird nie fertig, sein Stapel
+    // bleibt stehen. (In der Praxis ist taskId hier ohnehin nie ein Projekt selbst
+    // — Projekt-Arbeit läuft über den "Am Projekt arbeiten"-Subtask — aber die
+    // Ausnahme steht trotzdem explizit da, statt sich auf diesen Nebeneffekt zu
+    // verlassen.)
+    //
+    // Die Regel steht an ZWEI Stellen: hier und im Store (optimistischer Pfad).
+    // Sie greift bewusst nach dem EIGENEN task_type, nicht nach dem Elternknoten.
     // Begründung im Glossar (CONTEXT.md, "Überstempeln"). Wer eine ändert, ändert
-    // alle drei.
-    if (taskDetails.task_type !== 'daily' && taskDetails.task_type !== 'project') {
+    // beide.
+    if (taskDetails.task_type !== 'project') {
       updateData.emphasis_level = 0
     }
 

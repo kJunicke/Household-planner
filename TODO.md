@@ -29,12 +29,7 @@ danach hier gelöscht.
 - Rückgängig schließt optionsmenu nicht
 - Rückgängig geste generell überall richtig konfigurieren
 - Manche Putzaufgaben sind im Erledigt Raster durchgestrichen? was bedeuted das?
+- Die überstempelten Stempel werden kleiner ? *(erledigt in `c894c82`, 05.09.2026 — jede Lage steht jetzt auf Zellbreite.)*
+- Alle stempel sind nach links gekippt und keine nach rechts? *(erledigt in `c894c82`, 05.09.2026 — das Kippvorzeichen hängt jetzt an der Lage statt am Zettel.)*
 
 ---
-
-**Einsortiert am 01.09.2026** → `.scratch/pinnwand-politur/` (Gebiet A: Halten,
-Umschalten, Klebestreifen). Die vertikale Überlappung der Zettel ist ersatzlos
-gestrichen — am 01.09. nicht mehr reproduzierbar.
-
-Die übrigen Punkte sind in fünf Themengebiete geschnitten und vertagt →
-`.scratch/pinnwand-politur/HANDOFF-restliche-gebiete.md`.

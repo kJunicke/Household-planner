@@ -31,21 +31,34 @@ Architekturentscheidungen: [docs/adr/](docs/adr/).
 - Einzige Stelle auf der Pinnwand, die den Stand einer Aufgabe zeigt.
 - Unterster Abdruck ist **berechnet** aus Kadenz und letzter Erledigung:
   - **NEU**, solange nie erledigt, sonst **FÄLLIG**.
-  - Tägliche Aufgaben: **ROUTINE**. Projekte: eigener Spruch. Beide sagen nichts über Dringlichkeit — sie geraten nie in Verzug.
+  - Tägliche Aufgaben: **BEDARF** — sie werden nicht fällig, sie fallen an. Projekte: ein **Projektspruch**. Beide sagen nichts über Dringlichkeit — sie geraten nie in Verzug.
+  - **Der Typ schlägt NEU:** eine nagelneue tägliche Aufgabe zeigt BEDARF, ein nagelneues Projekt seinen Spruch. Sonst stünde auf beiden dauerhaft NEU, weil beide nie abgeschlossen werden.
   - Darüber legt der Haushalt von Hand nach → **Überstempeln**.
 - **Der Stempel ordnet nicht.** Auf der Wand sind alle fälligen Aufgaben gleich dringend; innerhalb einer Gruppe entscheidet der Platz. Eine DRINGEND-Aufgabe darf unter einer ungestempelten hängen → [ADR-0002](docs/adr/0002-stempel-ordnet-nicht.md).
 - In **Listen** ordnet derselbe berechnete Vergleichswert sehr wohl — dort gibt es keine Stempel, die Reihenfolge ist die Aussage.
 
+### Projektspruch
+- Der Grundabdruck eines **Projekts**: ein Wort aus einer festen Sammlung von hundert, das nichts über Verzug sagt — ein Projekt kann nicht in Verzug geraten.
+- Wird bei der Anlage eines Projekts **zufällig gezogen** und gehört dann diesem Projekt; er bleibt stehen, während der Stapel darüber wächst.
+- **An einem Projekt trägt jede Stufe einen Spruch** — `WICHTIG` und `DRINGEND` kommen dort nicht vor. Wie dringend ein Projekt ist, liest man allein an der **Farbe** der obersten Lage ab (blau → orange → rot), nicht am Wort. Vom Maintainer am 05.09.2026 am Gerät entschieden; die Gegenposition steht in [ADR-0002](docs/adr/0002-stempel-ordnet-nicht.md) samt Nachtrag.
+- Gespeichert ist **ein** Listenplatz je Projekt. Die beiden oberen Sprüche werden daraus abgeleitet, nicht zusätzlich gespeichert; alle drei sind garantiert verschieden.
+- Beim **Abräumen** des Stapels wird ein neuer Grundplatz gezogen, nie derselbe zweimal hintereinander — und weil die oberen beiden an ihm hängen, wechselt der **ganze** Stapel. So arbeitet sich ein Haushalt nach und nach durch die Sammlung.
+- Er gehört dem Haushalt, nicht dem Gerät: alle sehen dasselbe Wort, und nach dem Neuladen steht es noch da.
+
 ### Überstempeln
 - Von Hand gesetzte Aussage eines Haushaltsmitglieds: „diesmal ist es wichtig" — so handelt der Haushalt untereinander aus, was zuerst zählt.
 - Tipp auf den Stempel legt den nächsten Abdruck obenauf: **WICHTIG** → **DRINGEND** → wieder sauber (nur noch Grundabdruck).
+- **Am Projekt sind es drei Projektsprüche statt WICHTIG und DRINGEND** (→ *Projektspruch*). Die Stufe ist dieselbe, nur das Wort ist ein anderes — und die Farbe ist dort der einzige Hinweis auf sie.
 - **Träger sind Zettel und Projekte — Zettelchen nicht.** Was zuerst zählt, handelt der Haushalt über ganze Aufgaben aus, nicht über einzelne Häkchen einer Checkliste.
-- Vorherige Abdrücke bleiben sichtbar liegen; der oberste gilt, die Stapelhöhe ist selbst eine Aussage.
+- Vorherige Abdrücke bleiben sichtbar liegen — der **Abdruckstapel**. Der oberste gilt und ist am besten lesbar; die Stapelhöhe ist selbst eine Aussage. Man sieht einem Zettel an, ob einmal oder mehrfach nachgedrückt wurde, ohne ein Wort zu lesen. Ein einmal gesetzter Abdruck **verrutscht nicht mehr**, wenn ein weiterer daraufkommt.
+- Jeder Zettel hält den Platz für den ganzen Stapel frei, auch der ungestempelte — sonst schöbe sich die Wand beim Stempeln unter dem Finger weg. Das macht die Wand spürbar länger und ist bewusst so → [ADR-0003](docs/adr/0003-der-stapel-haelt-seinen-platz-frei.md).
 - Gilt für **einen Durchlauf**: mit dem Erledigen fällt es weg (sonst wäre nach Wochen alles dringend).
-- **Der Verfall folgt dem eigenen `task_type`, nicht dem Elternknoten:** wiederkehrende Aufgaben verlieren den Nachdruck beim **Erledigen**; **tägliche** erst **nächtlich** im Cron, weil sie nie erledigt werden und der Stempel sonst mitten am Tag durch den nächsten Handgriff verschwände; **Projekte gar nicht** — sie werden nie fertig, ihr Nachdruck bleibt stehen.
-- Getragen von `tasks.emphasis_level`: **0** nur Grundabdruck, **1** WICHTIG, **2** DRINGEND. Die Verfallsregel steht im Code an **drei** Stellen — nächtlicher Cron, Edge Function `complete-task`, optimistischer Pfad im Store. Alle drei verweisen hierher; wer eine ändert, ändert alle drei.
+- **Zurückgesetzt wird beim Erledigen, sonst nie** — auch bei **täglichen** Aufgaben. Ein nächtliches Zurücksetzen gibt es nicht. Der bewusst gezahlte Preis: wer eine tägliche Aufgabe morgens auf DRINGEND stempelt und sie mittags abhakt, verliert den Stapel sofort, obwohl der Tag noch läuft.
+- **Projekte verlieren ihn gar nicht** — sie werden nie fertig, ihr Stapel bleibt stehen. Räumt jemand den Stapel von Hand ab, wechselt ihr **Projektspruch**.
+- **Der Verfall folgt dem eigenen `task_type`, nicht dem Elternknoten.**
+- Getragen von `tasks.emphasis_level`: **0** nur Grundabdruck, **1** WICHTIG, **2** DRINGEND (am Projekt: **1** und **2** tragen ebenfalls Sprüche, die Zahl bedeutet dasselbe). Die Verfallsregel steht im Code an **zwei** Stellen — Edge Function `complete-task` und optimistischer Pfad im Store. Beide verweisen hierher; wer eine ändert, ändert beide.
 - Der **Grundabdruck** verfällt nicht — er wird berechnet und kommt von selbst wieder.
-- **Noch nicht bedienbar:** die Spalte, der Cron und `taskStore.cycleEmphasisLevel` stehen, aber kein Component ruft sie auf — heute lässt sich nichts stempeln → `.scratch/ueberstempeln-bedienung/`.
+- **Der Stempel ist zugleich Bedienelement und Anzeige.** Ein Tipp stempelt, Gedrückthalten öffnet weiterhin den **Kranz** — der Zettel bleibt auf ganzer Fläche Griff, gerade unten, wo der Daumen liegt.
 
 ### Kranz
 - Vier beschriftete Richtungen, die beim Gedrückthalten eines **Zettels** erscheinen; sie erklären, was das Ziehen in die jeweilige Richtung tut.
