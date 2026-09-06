@@ -6,10 +6,7 @@ import { useHouseholdStore } from '../stores/householdStore'
 import { MEMBER_COLORS, DEFAULT_MEMBER_COLOR } from '../lib/memberColors'
 import { useDesignStore } from '../stores/designStore'
 import type { DesignMode } from '../lib/design'
-import {
-  MIN_WEEKLY_GOAL_POINTS,
-  MAX_WEEKLY_GOAL_POINTS
-} from '../stores/householdStore'
+import { MIN_WEEKLY_GOAL_POINTS, MAX_WEEKLY_GOAL_POINTS } from '../stores/householdStore'
 import { WEEK_DAY_LABELS } from '../lib/weekWindow'
 import WeeklyGoalConfirmModal from './WeeklyGoalConfirmModal.vue'
 
@@ -49,7 +46,9 @@ const copyInviteCode = async () => {
   try {
     await navigator.clipboard.writeText(code)
     codeCopied.value = true
-    setTimeout(() => { codeCopied.value = false }, 2000)
+    setTimeout(() => {
+      codeCopied.value = false
+    }, 2000)
   } catch {
     // Clipboard API not available (e.g. insecure context) — silently ignore
   }
@@ -63,7 +62,9 @@ const handleLogout = async () => {
 
 const startEditingName = () => {
   newDisplayName.value = householdStore.getCurrentMemberDisplayName()
-  const currentMember = householdStore.householdMembers.find(m => m.user_id === authStore.user?.id)
+  const currentMember = householdStore.householdMembers.find(
+    (m) => m.user_id === authStore.user?.id,
+  )
   newUserColor.value = currentMember?.user_color || DEFAULT_MEMBER_COLOR
   isEditingName.value = true
 }
@@ -75,7 +76,7 @@ const saveDisplayName = async () => {
 
   const result = await householdStore.updateMemberProfile(
     newDisplayName.value.trim(),
-    newUserColor.value
+    newUserColor.value,
   )
   if (result.success) {
     isEditingName.value = false
@@ -92,7 +93,7 @@ const currentMemberName = computed(() => {
 })
 
 const currentMemberColor = computed(() => {
-  const member = householdStore.householdMembers.find(m => m.user_id === authStore.user?.id)
+  const member = householdStore.householdMembers.find((m) => m.user_id === authStore.user?.id)
   return member?.user_color || DEFAULT_MEMBER_COLOR
 })
 
@@ -127,16 +128,17 @@ const goalError = computed(() => {
   return null
 })
 
-const goalDirty = computed(() =>
-  goalInput.value !== householdStore.weeklyGoalPoints ||
-  weekStartInput.value !== householdStore.selectedWeekStartDay
+const goalDirty = computed(
+  () =>
+    goalInput.value !== householdStore.weeklyGoalPoints ||
+    weekStartInput.value !== householdStore.selectedWeekStartDay,
 )
 
 const canSaveGoal = computed(() => !goalError.value && goalDirty.value && !savingGoal.value)
 
 /** Tag, ab dem ein geänderter Wochenstart greift — Text der Bestätigung. */
 const goalEffectiveFrom = computed(() =>
-  householdStore.weekStartEffectiveFrom(weekStartInput.value)
+  householdStore.weekStartEffectiveFrom(weekStartInput.value),
 )
 
 const openGoalConfirm = () => {
@@ -149,7 +151,7 @@ const confirmGoalChange = async () => {
   savingGoal.value = true
   const result = await householdStore.updateWeeklyGoalSettings(
     goalInput.value,
-    weekStartInput.value
+    weekStartInput.value,
   )
   savingGoal.value = false
   showGoalConfirm.value = false
@@ -159,15 +161,19 @@ const confirmGoalChange = async () => {
 // Beim Öffnen den Stand frisch übernehmen — ein anderes Mitglied kann
 // zwischenzeitlich geändert haben. `refreshHousehold()` ist der Rückfallweg,
 // falls der Broadcast der Gegenseite verpasst wurde.
-watch(() => props.open, async (isOpen) => {
-  if (!isOpen) {
-    showGoalConfirm.value = false
-    return
-  }
-  resetGoalForm()
-  await householdStore.refreshHousehold()
-  resetGoalForm()
-}, { immediate: true })
+watch(
+  () => props.open,
+  async (isOpen) => {
+    if (!isOpen) {
+      showGoalConfirm.value = false
+      return
+    }
+    resetGoalForm()
+    await householdStore.refreshHousehold()
+    resetGoalForm()
+  },
+  { immediate: true },
+)
 
 // Ändert ein anderes Mitglied den Wert, während die Sidebar offen ist und
 // nichts Eigenes angefangen wurde, zieht das Formular nach.
@@ -180,21 +186,24 @@ watch(
       goalInput.value = newGoal
       weekStartInput.value = newDay
     }
-  }
+  },
 )
 
 // Close on ESC key
-watch(() => props.open, (isOpen) => {
-  if (isOpen) {
-    const handleEsc = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        closeSidebar()
+watch(
+  () => props.open,
+  (isOpen) => {
+    if (isOpen) {
+      const handleEsc = (e: KeyboardEvent) => {
+        if (e.key === 'Escape') {
+          closeSidebar()
+        }
       }
+      document.addEventListener('keydown', handleEsc)
+      return () => document.removeEventListener('keydown', handleEsc)
     }
-    document.addEventListener('keydown', handleEsc)
-    return () => document.removeEventListener('keydown', handleEsc)
-  }
-})
+  },
+)
 
 // --- Der ausgelieferte Stand ------------------------------------------------
 //
@@ -204,239 +213,233 @@ watch(() => props.open, (isOpen) => {
 // Bauen nichts mehr aendert.
 const buildCommit = __BUILD_COMMIT__
 const buildDate = __BUILD_DATE__
-
 </script>
 
 <template>
   <!-- Teleport to body so the sidebar escapes the sticky header's stacking
        context; otherwise root-level fixed elements (FABs) paint over it. -->
   <Teleport to="body">
-  <!-- Backdrop Overlay -->
-  <Transition name="backdrop">
-    <div
-      v-if="open"
-      class="sidebar-backdrop"
-      @click="closeSidebar"
-    />
-  </Transition>
+    <!-- Backdrop Overlay -->
+    <Transition name="backdrop">
+      <div v-if="open" class="sidebar-backdrop" @click="closeSidebar" />
+    </Transition>
 
-  <!-- Sidebar -->
-  <Transition name="slide">
-    <aside v-if="open" class="settings-sidebar">
-      <!-- Header -->
-      <div class="sidebar-header">
-        <h2>Einstellungen</h2>
-        <button @click="closeSidebar" class="close-btn" aria-label="Schließen">
-          <i class="bi bi-x-lg"></i>
-        </button>
-      </div>
-
-      <!-- Content -->
-      <div class="sidebar-content">
-        <!-- Haushalt Info Section -->
-        <section class="sidebar-section">
-          <h3>Haushalt</h3>
-          <div class="info-item">
-            <span class="info-label">Name:</span>
-            <span class="info-value">{{ householdStore.currentHousehold?.name }}</span>
-          </div>
-          <div class="info-item">
-            <span class="info-label">Einladungs-Code:</span>
-            <span class="info-value-row">
-              <span class="info-value mono">{{ householdStore.currentHousehold?.invite_code }}</span>
-              <button
-                class="copy-btn"
-                @click="copyInviteCode"
-                :title="codeCopied ? 'Kopiert!' : 'Code kopieren'"
-              >
-                <i :class="codeCopied ? 'bi bi-check-lg' : 'bi bi-clipboard'"></i>
-              </button>
-            </span>
-          </div>
-        </section>
-
-        <!-- Mitglieder Section -->
-        <section class="sidebar-section">
-          <h3>Mitglieder</h3>
-          <div v-if="householdStore.householdMembers.length > 0" class="members-list">
-            <div
-              v-for="member in householdStore.householdMembers"
-              :key="member.user_id"
-              class="member-item"
-            >
-              <div
-                class="member-color"
-                :style="{ backgroundColor: member.user_color || DEFAULT_MEMBER_COLOR }"
-              />
-              <span class="member-name">{{ member.display_name || 'Unbekannt' }}</span>
-            </div>
-          </div>
-          <div v-else class="text-muted">Keine Mitglieder</div>
-        </section>
-
-        <!-- Profil Section -->
-        <section class="sidebar-section">
-          <h3>Dein Profil</h3>
-
-          <div v-if="!isEditingName" class="profile-view">
-            <div class="profile-info">
-              <div
-                class="profile-color-large"
-                :style="{ backgroundColor: currentMemberColor }"
-              />
-              <div class="profile-details">
-                <div class="profile-name">{{ currentMemberName }}</div>
-                <div class="profile-email">{{ authStore.user?.email }}</div>
-              </div>
-            </div>
-            <button @click="startEditingName" class="btn btn-outline-primary btn-sm w-100">
-              <i class="bi bi-pencil"></i> Profil bearbeiten
-            </button>
-          </div>
-
-          <div v-else class="profile-edit">
-            <input
-              v-model="newDisplayName"
-              type="text"
-              class="form-control mb-3"
-              placeholder="Dein Name"
-              @keyup.enter="saveDisplayName"
-              @keyup.escape="cancelEditingName"
-            />
-
-            <div class="color-picker-section mb-3">
-              <label class="color-label">Deine Farbe:</label>
-              <div class="color-grid">
-                <button
-                  v-for="color in predefinedColors"
-                  :key="color"
-                  type="button"
-                  class="color-option"
-                  :class="{ selected: newUserColor === color }"
-                  :style="{ backgroundColor: color }"
-                  @click="newUserColor = color"
-                  :title="color"
-                />
-              </div>
-            </div>
-
-            <div class="d-flex gap-2">
-              <button @click="saveDisplayName" class="btn btn-primary btn-sm flex-1">
-                <i class="bi bi-check-lg"></i> Speichern
-              </button>
-              <button @click="cancelEditingName" class="btn btn-secondary btn-sm flex-1">
-                <i class="bi bi-x-lg"></i> Abbrechen
-              </button>
-            </div>
-          </div>
-        </section>
-
-        <!-- Wochenziel Section -->
-        <section v-if="householdStore.currentHousehold" class="sidebar-section">
-          <h3>Wochenziel</h3>
-
-          <div class="goal-field">
-            <label for="weekly-goal-points" class="goal-label">Punkte pro Woche</label>
-            <input
-              id="weekly-goal-points"
-              v-model.number="goalInput"
-              type="number"
-              inputmode="numeric"
-              class="form-control goal-input"
-              :min="MIN_WEEKLY_GOAL_POINTS"
-              :max="MAX_WEEKLY_GOAL_POINTS"
-              step="1"
-            />
-            <p v-if="goalError" class="goal-error">{{ goalError }}</p>
-            <p v-else class="goal-hint">
-              Aktuell {{ householdStore.weeklyTotalPoints }} von
-              {{ householdStore.weeklyGoalPoints }} Punkten in dieser Woche.
-            </p>
-          </div>
-
-          <div class="goal-field">
-            <label for="week-start-day" class="goal-label">Woche beginnt am</label>
-            <select
-              id="week-start-day"
-              v-model.number="weekStartInput"
-              class="form-select goal-input"
-            >
-              <option v-for="day in weekDayOptions" :key="day.value" :value="day.value">
-                {{ day.label }}
-              </option>
-            </select>
-            <p class="goal-hint">Ein neuer Wochenstart greift erst ab der nächsten Woche.</p>
-          </div>
-
-          <button
-            type="button"
-            class="btn btn-primary w-100 goal-save"
-            :disabled="!canSaveGoal"
-            @click="openGoalConfirm"
-          >
-            <i class="bi bi-check-lg"></i> Wochenziel speichern
+    <!-- Sidebar -->
+    <Transition name="slide">
+      <aside v-if="open" class="settings-sidebar">
+        <!-- Header -->
+        <div class="sidebar-header">
+          <h2>Einstellungen</h2>
+          <button @click="closeSidebar" class="close-btn" aria-label="Schließen">
+            <i class="bi bi-x-lg"></i>
           </button>
-        </section>
+        </div>
 
-        <!-- Aussehen Section -->
-        <section class="sidebar-section">
-          <h3>Aussehen</h3>
-          <div class="design-options">
-            <button
-              v-for="option in designOptions"
-              :key="option.value"
-              type="button"
-              class="design-option"
-              :class="{ selected: designStore.design === option.value }"
-              @click="designStore.setDesign(option.value)"
-            >
-              <span class="design-swatch" :class="`swatch-${option.value}`" />
-              <span class="design-text">
-                <span class="design-label">{{ option.label }}</span>
-                <span class="design-hint">{{ option.hint }}</span>
+        <!-- Content -->
+        <div class="sidebar-content">
+          <!-- Haushalt Info Section -->
+          <section class="sidebar-section">
+            <h3>Haushalt</h3>
+            <div class="info-item">
+              <span class="info-label">Name:</span>
+              <span class="info-value">{{ householdStore.currentHousehold?.name }}</span>
+            </div>
+            <div class="info-item">
+              <span class="info-label">Einladungs-Code:</span>
+              <span class="info-value-row">
+                <span class="info-value mono">{{
+                  householdStore.currentHousehold?.invite_code
+                }}</span>
+                <button
+                  class="copy-btn"
+                  @click="copyInviteCode"
+                  :title="codeCopied ? 'Kopiert!' : 'Code kopieren'"
+                >
+                  <i :class="codeCopied ? 'bi bi-check-lg' : 'bi bi-clipboard'"></i>
+                </button>
               </span>
-              <i
-                v-if="designStore.design === option.value"
-                class="bi bi-check-lg design-check"
-              ></i>
+            </div>
+          </section>
+
+          <!-- Mitglieder Section -->
+          <section class="sidebar-section">
+            <h3>Mitglieder</h3>
+            <div v-if="householdStore.householdMembers.length > 0" class="members-list">
+              <div
+                v-for="member in householdStore.householdMembers"
+                :key="member.user_id"
+                class="member-item"
+              >
+                <div
+                  class="member-color"
+                  :style="{ backgroundColor: member.user_color || DEFAULT_MEMBER_COLOR }"
+                />
+                <span class="member-name">{{ member.display_name || 'Unbekannt' }}</span>
+              </div>
+            </div>
+            <div v-else class="text-muted">Keine Mitglieder</div>
+          </section>
+
+          <!-- Profil Section -->
+          <section class="sidebar-section">
+            <h3>Dein Profil</h3>
+
+            <div v-if="!isEditingName" class="profile-view">
+              <div class="profile-info">
+                <div class="profile-color-large" :style="{ backgroundColor: currentMemberColor }" />
+                <div class="profile-details">
+                  <div class="profile-name">{{ currentMemberName }}</div>
+                  <div class="profile-email">{{ authStore.user?.email }}</div>
+                </div>
+              </div>
+              <button @click="startEditingName" class="btn btn-outline-primary btn-sm w-100">
+                <i class="bi bi-pencil"></i> Profil bearbeiten
+              </button>
+            </div>
+
+            <div v-else class="profile-edit">
+              <input
+                v-model="newDisplayName"
+                type="text"
+                class="form-control mb-3"
+                placeholder="Dein Name"
+                @keyup.enter="saveDisplayName"
+                @keyup.escape="cancelEditingName"
+              />
+
+              <div class="color-picker-section mb-3">
+                <label class="color-label">Deine Farbe:</label>
+                <div class="color-grid">
+                  <button
+                    v-for="color in predefinedColors"
+                    :key="color"
+                    type="button"
+                    class="color-option"
+                    :class="{ selected: newUserColor === color }"
+                    :style="{ backgroundColor: color }"
+                    @click="newUserColor = color"
+                    :title="color"
+                  />
+                </div>
+              </div>
+
+              <div class="d-flex gap-2">
+                <button @click="saveDisplayName" class="btn btn-primary btn-sm flex-1">
+                  <i class="bi bi-check-lg"></i> Speichern
+                </button>
+                <button @click="cancelEditingName" class="btn btn-secondary btn-sm flex-1">
+                  <i class="bi bi-x-lg"></i> Abbrechen
+                </button>
+              </div>
+            </div>
+          </section>
+
+          <!-- Wochenziel Section -->
+          <section v-if="householdStore.currentHousehold" class="sidebar-section">
+            <h3>Wochenziel</h3>
+
+            <div class="goal-field">
+              <label for="weekly-goal-points" class="goal-label">Punkte pro Woche</label>
+              <input
+                id="weekly-goal-points"
+                v-model.number="goalInput"
+                type="number"
+                inputmode="numeric"
+                class="form-control goal-input"
+                :min="MIN_WEEKLY_GOAL_POINTS"
+                :max="MAX_WEEKLY_GOAL_POINTS"
+                step="1"
+              />
+              <p v-if="goalError" class="goal-error">{{ goalError }}</p>
+              <p v-else class="goal-hint">
+                Aktuell {{ householdStore.weeklyTotalPoints }} von
+                {{ householdStore.weeklyGoalPoints }} Punkten in dieser Woche.
+              </p>
+            </div>
+
+            <div class="goal-field">
+              <label for="week-start-day" class="goal-label">Woche beginnt am</label>
+              <select
+                id="week-start-day"
+                v-model.number="weekStartInput"
+                class="form-select goal-input"
+              >
+                <option v-for="day in weekDayOptions" :key="day.value" :value="day.value">
+                  {{ day.label }}
+                </option>
+              </select>
+              <p class="goal-hint">Ein neuer Wochenstart greift erst ab der nächsten Woche.</p>
+            </div>
+
+            <button
+              type="button"
+              class="btn btn-primary w-100 goal-save"
+              :disabled="!canSaveGoal"
+              @click="openGoalConfirm"
+            >
+              <i class="bi bi-check-lg"></i> Wochenziel speichern
             </button>
-          </div>
-          <p class="design-note">Gilt nur für dieses Gerät.</p>
-        </section>
-      </div>
+          </section>
 
-      <!-- Footer with Logout -->
-      <div class="sidebar-footer">
-        <button @click="handleLogout" class="btn btn-danger w-100">
-          <i class="bi bi-box-arrow-right"></i> Logout
-        </button>
+          <!-- Aussehen Section -->
+          <section class="sidebar-section">
+            <h3>Aussehen</h3>
+            <div class="design-options">
+              <button
+                v-for="option in designOptions"
+                :key="option.value"
+                type="button"
+                class="design-option"
+                :class="{ selected: designStore.design === option.value }"
+                @click="designStore.setDesign(option.value)"
+              >
+                <span class="design-swatch" :class="`swatch-${option.value}`" />
+                <span class="design-text">
+                  <span class="design-label">{{ option.label }}</span>
+                  <span class="design-hint">{{ option.hint }}</span>
+                </span>
+                <i
+                  v-if="designStore.design === option.value"
+                  class="bi bi-check-lg design-check"
+                ></i>
+              </button>
+            </div>
+            <p class="design-note">Gilt nur für dieses Gerät.</p>
+          </section>
+        </div>
 
-        <!-- Der ausgelieferte Stand. Beantwortet genau eine Frage: laeuft hier
+        <!-- Footer with Logout -->
+        <div class="sidebar-footer">
+          <button @click="handleLogout" class="btn btn-danger w-100">
+            <i class="bi bi-box-arrow-right"></i> Logout
+          </button>
+
+          <!-- Der ausgelieferte Stand. Beantwortet genau eine Frage: laeuft hier
              der Code, den ich gerade teste? Auf dem Homescreen liefert der
              Service Worker sonst unbemerkt die alte Fassung aus.
 
              `user-select: text`, damit die Kennung beim Melden eines Fehlers
              kopiert werden kann — ueberall sonst in der App ist die Auswahl
              fuer die Gesten abgeschaltet. -->
-        <p class="build-stamp" :title="`Stand ${buildDate}, Commit ${buildCommit}`">
-          Version {{ buildCommit }} · {{ buildDate }}
-        </p>
-      </div>
-    </aside>
-  </Transition>
+          <p class="build-stamp" :title="`Stand ${buildDate}, Commit ${buildCommit}`">
+            Version {{ buildCommit }} · {{ buildDate }}
+          </p>
+        </div>
+      </aside>
+    </Transition>
 
-  <WeeklyGoalConfirmModal
-    v-if="showGoalConfirm && goalInput !== null"
-    :current-goal-points="householdStore.weeklyGoalPoints"
-    :current-week-start-day="householdStore.selectedWeekStartDay"
-    :current-week-start="householdStore.currentWeekStart()"
-    :new-goal-points="goalInput"
-    :new-week-start-day="weekStartInput"
-    :current-points="householdStore.weeklyTotalPoints"
-    :effective-from="goalEffectiveFrom"
-    @close="showGoalConfirm = false"
-    @confirm="confirmGoalChange"
-  />
+    <WeeklyGoalConfirmModal
+      v-if="showGoalConfirm && goalInput !== null"
+      :current-goal-points="householdStore.weeklyGoalPoints"
+      :current-week-start-day="householdStore.selectedWeekStartDay"
+      :current-week-start="householdStore.currentWeekStart()"
+      :new-goal-points="goalInput"
+      :new-week-start-day="weekStartInput"
+      :current-points="householdStore.weeklyTotalPoints"
+      :effective-from="goalEffectiveFrom"
+      @close="showGoalConfirm = false"
+      @confirm="confirmGoalChange"
+    />
   </Teleport>
 </template>
 
@@ -721,7 +724,9 @@ const buildDate = __BUILD_DATE__
 
 .color-option.selected {
   border: 3px solid var(--color-text-primary);
-  box-shadow: 0 0 0 2px var(--color-background-elevated), 0 0 0 4px var(--color-primary);
+  box-shadow:
+    0 0 0 2px var(--color-background-elevated),
+    0 0 0 4px var(--color-primary);
   transform: scale(1.1);
 }
 

@@ -6,6 +6,12 @@ import type { ShoppingCategory } from '@/types/ShoppingCategory'
 import type { PendingMutation } from '@/types/PendingMutation'
 import type { CategoryOption } from '@/types/CategoryOption'
 import { supabase } from '@/lib/supabase'
+import {
+  normalizeCategoryName,
+  categoryKey,
+  compareCategoryGroups,
+  buildCategoryOptions,
+} from '@/lib/categoryOrder'
 import { useHouseholdStore } from './householdStore'
 import { useAuthStore } from './authStore'
 import { useToastStore } from './toastStore'
@@ -17,8 +23,15 @@ const STORAGE_KEY_ITEMS = 'shopping_items_cache'
 const STORAGE_KEY_QUEUE = 'shopping_mutation_queue'
 const MAX_RETRIES = 5
 
-/** Sentinel key for the "Unkategorisiert" bucket (items with category === null). */
-export const UNCATEGORIZED = '__uncategorized__'
+// Schlüssel, Normalisierung und Reihenfolge liegen seit Etappe 2 in
+// `@/lib/categoryOrder` — geteilt mit Packliste und To-do. Der Einkauf reicht sie
+// unverändert weiter, damit `ShoppingView.vue` weiter aus dem Store importiert.
+export {
+  UNCATEGORIZED,
+  normalizeCategoryName,
+  categoryKey,
+  compareCategoryGroups,
+} from '@/lib/categoryOrder'
 
 export interface ShoppingCategoryGroup {
   /** Real category label, or null for the Unkategorisiert bucket. */
@@ -32,32 +45,6 @@ export interface ShoppingCategoryGroup {
   isUncategorized: boolean
   /** Position aus der Kategorientabelle; Altdaten ohne Zeile landen hinten. */
   sortOrder: number
-}
-
-/** Namensvergleich wie der eindeutige Index aus der Migration: getrimmt, case-insensitiv. */
-export const normalizeCategoryName = (name: string) => name.trim().toLowerCase()
-
-/**
- * Schlüssel einer Sektion. Muss überall gleich gebildet werden, sonst laufen
- * Gruppierung und Ansicht auseinander und dieselbe Kategorie erscheint doppelt.
- */
-export const categoryKey = (label: string | null) =>
-  label === null ? UNCATEGORIZED : normalizeCategoryName(label)
-
-/**
- * Reihenfolge der Sektionen: gefüllte benannte Kategorien nach sort_order →
- * gefülltes „Unkategorisiert" → leere benannte Kategorien → leeres
- * „Unkategorisiert". Leer heißt: gerade keine sichtbaren Produkte — deshalb
- * muss die Ansicht *nach* dem Einblenden der Produkte im Rückgängig-Fenster
- * erneut hiermit sortieren, statt die Regel nachzubauen.
- */
-export const compareCategoryGroups = (a: ShoppingCategoryGroup, b: ShoppingCategoryGroup) => {
-  const rank = (g: ShoppingCategoryGroup) =>
-    (g.items.length > 0 ? 0 : 2) + (g.isUncategorized ? 1 : 0)
-  const byRank = rank(a) - rank(b)
-  if (byRank !== 0) return byRank
-  if (a.sortOrder !== b.sortOrder) return a.sortOrder - b.sortOrder
-  return a.label.localeCompare(b.label)
 }
 
 export const useShoppingStore = defineStore('shopping', () => {
@@ -139,12 +126,12 @@ export const useShoppingStore = defineStore('shopping', () => {
 
   const currentListItems = computed(() => {
     if (!currentListId.value) return []
-    return items.value.filter(item => item.list_id === currentListId.value)
+    return items.value.filter((item) => item.list_id === currentListId.value)
   })
 
   const unpurchasedItems = computed(() => {
     return currentListItems.value
-      .filter(item => !item.purchased)
+      .filter((item) => !item.purchased)
       .sort((a, b) => {
         if (a.is_priority && !b.is_priority) return -1
         if (!a.is_priority && b.is_priority) return 1
@@ -154,7 +141,7 @@ export const useShoppingStore = defineStore('shopping', () => {
 
   const purchasedItems = computed(() => {
     return currentListItems.value
-      .filter(item => item.purchased)
+      .filter((item) => item.purchased)
       .sort((a, b) => b.times_purchased - a.times_purchased)
   })
 
@@ -162,7 +149,7 @@ export const useShoppingStore = defineStore('shopping', () => {
   const currentListCategories = computed(() => {
     if (!currentListId.value) return []
     return categories.value
-      .filter(c => c.list_id === currentListId.value)
+      .filter((c) => c.list_id === currentListId.value)
       .sort((a, b) => a.sort_order - b.sort_order || a.name.localeCompare(b.name))
   })
 
@@ -175,7 +162,7 @@ export const useShoppingStore = defineStore('shopping', () => {
    * is a visual highlight only — it does not re-sort items to the top.
    */
   const itemsByCategory = computed<ShoppingCategoryGroup[]>(() => {
-    const list = currentListItems.value.filter(i => !i.purchased)
+    const list = currentListItems.value.filter((i) => !i.purchased)
     const groups = new Map<string, ShoppingCategoryGroup>()
 
     const bucket = (label: string | null, sortOrder: number) => {
@@ -199,7 +186,7 @@ export const useShoppingStore = defineStore('shopping', () => {
 
     // Unkategorisiert ist immer vorhanden; die Rangfolge kommt aus dem Vergleicher.
     bucket(null, 0)
-    currentListCategories.value.forEach(c => bucket(c.name, c.sort_order))
+    currentListCategories.value.forEach((c) => bucket(c.name, c.sort_order))
 
     // Altdaten hinten anstellen, damit sie bekannte Kategorien nicht verdrängen.
     const ORPHAN_BASE = Number.MAX_SAFE_INTEGER - list.length
@@ -210,7 +197,7 @@ export const useShoppingStore = defineStore('shopping', () => {
     })
 
     const result = [...groups.values()]
-    result.forEach(g => g.items.sort((a, b) => a.name.localeCompare(b.name)))
+    result.forEach((g) => g.items.sort((a, b) => a.name.localeCompare(b.name)))
     result.sort(compareCategoryGroups)
     return result
   })
@@ -236,31 +223,13 @@ export const useShoppingStore = defineStore('shopping', () => {
    * gleichnamigen Treffer aus einer fremden Liste — sonst stünde derselbe Name
    * zweimal in der Liste und die Herkunftsangabe wäre irreführend.
    */
-  const categorySuggestions = computed<CategoryOption[]>(() => {
-    const listNames = new Map(lists.value.map(l => [l.list_id, l.name]))
-    const seen = new Set<string>()
-    const own: CategoryOption[] = []
-    const foreign: CategoryOption[] = []
-
-    for (const c of currentListCategories.value) {
-      const key = normalizeCategoryName(c.name)
-      if (seen.has(key)) continue
-      seen.add(key)
-      own.push({ name: c.name })
-    }
-
-    const rest = categories.value
-      .filter(c => c.list_id !== currentListId.value)
-      .sort((a, b) => a.name.localeCompare(b.name))
-    for (const c of rest) {
-      const key = normalizeCategoryName(c.name)
-      if (seen.has(key)) continue
-      seen.add(key)
-      foreign.push({ name: c.name, sourceListName: listNames.get(c.list_id) })
-    }
-
-    return [...own, ...foreign]
-  })
+  const categorySuggestions = computed<CategoryOption[]>(() =>
+    buildCategoryOptions(
+      categories.value,
+      currentListId.value,
+      new Map(lists.value.map((l) => [l.list_id, l.name])),
+    ),
+  )
 
   const hasPendingMutations = computed(() => mutationQueue.value.length > 0)
 
@@ -278,14 +247,14 @@ export const useShoppingStore = defineStore('shopping', () => {
       ...mutation,
       queueId: `${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
       timestamp: Date.now(),
-      retries: 0
+      retries: 0,
     }
     mutationQueue.value.push(queueItem)
     console.log('📝 Added to queue:', queueItem)
   }
 
   const removeFromQueue = (queueId: string) => {
-    mutationQueue.value = mutationQueue.value.filter(m => m.queueId !== queueId)
+    mutationQueue.value = mutationQueue.value.filter((m) => m.queueId !== queueId)
   }
 
   // ============================================================================
@@ -296,7 +265,7 @@ export const useShoppingStore = defineStore('shopping', () => {
     name: string,
     listId: string,
     category: string | null,
-    quantity: number
+    quantity: number,
   ): ShoppingItem => {
     const householdStore = useHouseholdStore()
     const tempId = `temp_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
@@ -313,7 +282,7 @@ export const useShoppingStore = defineStore('shopping', () => {
       times_purchased: 0,
       last_purchased_at: null,
       last_purchased_by: null,
-      created_at: new Date().toISOString()
+      created_at: new Date().toISOString(),
     }
 
     items.value.push(newItem)
@@ -321,14 +290,14 @@ export const useShoppingStore = defineStore('shopping', () => {
   }
 
   const updateItemOptimistic = (itemId: string, updates: Partial<ShoppingItem>) => {
-    const index = items.value.findIndex(i => i.shopping_item_id === itemId)
+    const index = items.value.findIndex((i) => i.shopping_item_id === itemId)
     if (index !== -1) {
       items.value[index] = { ...items.value[index], ...updates }
     }
   }
 
   const deleteItemOptimistic = (itemId: string) => {
-    items.value = items.value.filter(i => i.shopping_item_id !== itemId)
+    items.value = items.value.filter((i) => i.shopping_item_id !== itemId)
   }
 
   /**
@@ -337,8 +306,8 @@ export const useShoppingStore = defineStore('shopping', () => {
    * If realtime already inserted the real row, just drop the temp duplicate.
    */
   const reconcileTempId = (tempId: string, realItem: ShoppingItem) => {
-    const realExists = items.value.some(i => i.shopping_item_id === realItem.shopping_item_id)
-    const tempIdx = items.value.findIndex(i => i.shopping_item_id === tempId)
+    const realExists = items.value.some((i) => i.shopping_item_id === realItem.shopping_item_id)
+    const tempIdx = items.value.findIndex((i) => i.shopping_item_id === tempId)
     if (tempIdx !== -1) {
       if (realExists) {
         // Keep whatever optimistic edits sit on the temp row, drop the temp id.
@@ -352,7 +321,7 @@ export const useShoppingStore = defineStore('shopping', () => {
           is_priority: local.is_priority,
           name: local.name,
           category: local.category,
-          quantity: local.quantity
+          quantity: local.quantity,
         }
       }
     }
@@ -371,9 +340,9 @@ export const useShoppingStore = defineStore('shopping', () => {
    * alle noch wartenden Mutationen auf die neue ID umbiegen.
    */
   const reconcileTempCategory = (tempId: string, real: ShoppingCategory) => {
-    const realExists = categories.value.some(c => c.category_id === real.category_id)
+    const realExists = categories.value.some((c) => c.category_id === real.category_id)
     categories.value = categories.value.filter(
-      c => c.category_id !== tempId && (!realExists || c.category_id !== real.category_id)
+      (c) => c.category_id !== tempId && (!realExists || c.category_id !== real.category_id),
     )
     categories.value.push(real)
 
@@ -460,7 +429,7 @@ export const useShoppingStore = defineStore('shopping', () => {
             household_id: householdStore.currentHousehold!.household_id,
             list_id: mutation.payload.listId!,
             category: mutation.payload.category ?? null,
-            quantity: mutation.payload.quantity ?? 1
+            quantity: mutation.payload.quantity ?? 1,
           })
           .select()
           .single()
@@ -472,7 +441,6 @@ export const useShoppingStore = defineStore('shopping', () => {
         // an item created while offline) to the freshly-minted real id.
         const tempId = mutation.payload.tempId
         if (tempId && data) reconcileTempId(tempId, data as ShoppingItem)
-
       } else if (mutation.operation === 'update') {
         const { error } = await supabase
           .from('shopping_items')
@@ -480,7 +448,6 @@ export const useShoppingStore = defineStore('shopping', () => {
           .eq('shopping_item_id', mutation.payload.itemId!)
 
         if (error) throw error
-
       } else if (mutation.operation === 'delete') {
         const { error } = await supabase
           .from('shopping_items')
@@ -492,7 +459,6 @@ export const useShoppingStore = defineStore('shopping', () => {
 
       console.log('✅ Synced mutation:', mutation.operation, mutation.payload)
       return true
-
     } catch (error) {
       console.error('❌ Failed to sync mutation:', mutation, error)
       mutation.lastError = error instanceof Error ? error.message : String(error)
@@ -530,7 +496,11 @@ export const useShoppingStore = defineStore('shopping', () => {
 
     if (failedMutations.length > 0) {
       console.warn('⚠️ Some mutations failed to sync:', failedMutations.length)
-      toastStore.showToast(`${failedMutations.length} Änderung(en) konnten nicht synchronisiert werden`, 'error', 3000)
+      toastStore.showToast(
+        `${failedMutations.length} Änderung(en) konnten nicht synchronisiert werden`,
+        'error',
+        3000,
+      )
     } else if (mutationQueue.value.length === 0) {
       console.log('✅ All mutations synced successfully')
       toastStore.showToast('Einkaufsliste synchronisiert', 'success', 2000)
@@ -566,14 +536,14 @@ export const useShoppingStore = defineStore('shopping', () => {
 
       // Select first list by default if none selected or current doesn't exist
       if (lists.value.length > 0) {
-        const currentExists = currentListId.value && lists.value.some(l => l.list_id === currentListId.value)
+        const currentExists =
+          currentListId.value && lists.value.some((l) => l.list_id === currentListId.value)
         if (!currentExists) {
           currentListId.value = lists.value[0].list_id
         }
       } else {
         currentListId.value = null
       }
-
     } catch (error) {
       console.error('Error loading shopping lists:', error)
       toastStore.showToast('Fehler beim Laden der Listen', 'error')
@@ -597,7 +567,7 @@ export const useShoppingStore = defineStore('shopping', () => {
           household_id: householdStore.currentHousehold.household_id,
           name: trimmedName,
           sort_order: lists.value.length,
-          created_by: authStore.user.id
+          created_by: authStore.user.id,
         })
         .select()
         .single()
@@ -607,7 +577,6 @@ export const useShoppingStore = defineStore('shopping', () => {
       lists.value.push(data)
       currentListId.value = data.list_id
       return data
-
     } catch (error) {
       console.error('Error creating shopping list:', error)
       toastStore.showToast('Fehler beim Erstellen der Liste', 'error')
@@ -628,11 +597,10 @@ export const useShoppingStore = defineStore('shopping', () => {
 
       if (error) throw error
 
-      const idx = lists.value.findIndex(l => l.list_id === listId)
+      const idx = lists.value.findIndex((l) => l.list_id === listId)
       if (idx !== -1) lists.value[idx] = { ...lists.value[idx], name: trimmedName }
 
       return true
-
     } catch (error) {
       console.error('Error renaming shopping list:', error)
       toastStore.showToast('Fehler beim Umbenennen der Liste', 'error')
@@ -649,15 +617,12 @@ export const useShoppingStore = defineStore('shopping', () => {
     }
 
     try {
-      const { error } = await supabase
-        .from('shopping_lists')
-        .delete()
-        .eq('list_id', listId)
+      const { error } = await supabase.from('shopping_lists').delete().eq('list_id', listId)
 
       if (error) throw error
 
-      lists.value = lists.value.filter(l => l.list_id !== listId)
-      items.value = items.value.filter(i => i.list_id !== listId)
+      lists.value = lists.value.filter((l) => l.list_id !== listId)
+      items.value = items.value.filter((i) => i.list_id !== listId)
 
       // Switch to first remaining list
       if (currentListId.value === listId) {
@@ -665,7 +630,6 @@ export const useShoppingStore = defineStore('shopping', () => {
       }
 
       return true
-
     } catch (error) {
       console.error('Error deleting shopping list:', error)
       toastStore.showToast('Fehler beim Löschen der Liste', 'error')
@@ -712,14 +676,14 @@ export const useShoppingStore = defineStore('shopping', () => {
       // that hasn't reached the DB yet.
       const rows = data || []
       const pendingIds = new Set(
-        mutationQueue.value.map(m => m.payload.itemId).filter(Boolean) as string[]
+        mutationQueue.value.map((m) => m.payload.itemId).filter(Boolean) as string[],
       )
-      const merged = rows.map(row =>
+      const merged = rows.map((row) =>
         pendingIds.has(row.shopping_item_id)
-          ? items.value.find(i => i.shopping_item_id === row.shopping_item_id) ?? row
-          : row
+          ? (items.value.find((i) => i.shopping_item_id === row.shopping_item_id) ?? row)
+          : row,
       )
-      const tempRows = items.value.filter(i => i.shopping_item_id.startsWith('temp_'))
+      const tempRows = items.value.filter((i) => i.shopping_item_id.startsWith('temp_'))
       items.value = [...merged, ...tempRows]
       console.log('Loaded shopping items:', items.value.length)
 
@@ -728,7 +692,6 @@ export const useShoppingStore = defineStore('shopping', () => {
       if (mutationQueue.value.length > 0) {
         await syncMutations()
       }
-
     } catch (error) {
       console.error('Error loading shopping items:', error)
       if (items.value.length === 0) {
@@ -769,8 +732,8 @@ export const useShoppingStore = defineStore('shopping', () => {
         listId: currentListId.value,
         category: cat,
         quantity: qty,
-        tempId: tempItem.shopping_item_id
-      }
+        tempId: tempItem.shopping_item_id,
+      },
     })
 
     if (navigator.onLine) {
@@ -785,15 +748,16 @@ export const useShoppingStore = defineStore('shopping', () => {
   /** Edit-modal save: name / category / quantity. Fully offline-capable. */
   const updateItem = async (
     itemId: string,
-    patch: { name?: string; category?: string | null; quantity?: number }
+    patch: { name?: string; category?: string | null; quantity?: number },
   ) => {
-    const item = items.value.find(i => i.shopping_item_id === itemId)
+    const item = items.value.find((i) => i.shopping_item_id === itemId)
     if (!item) return false
 
     const updates: Partial<ShoppingItem> = {}
     if (patch.name !== undefined) updates.name = patch.name.trim()
     if (patch.category !== undefined) updates.category = patch.category?.trim() || null
-    if (patch.quantity !== undefined) updates.quantity = Math.max(1, Math.floor(patch.quantity) || 1)
+    if (patch.quantity !== undefined)
+      updates.quantity = Math.max(1, Math.floor(patch.quantity) || 1)
     if (Object.keys(updates).length === 0) return false
 
     updateItemOptimistic(itemId, updates)
@@ -806,7 +770,7 @@ export const useShoppingStore = defineStore('shopping', () => {
   const togglePriority = async (itemId: string) => {
     const toastStore = useToastStore()
 
-    const item = items.value.find(i => i.shopping_item_id === itemId)
+    const item = items.value.find((i) => i.shopping_item_id === itemId)
     if (!item) {
       toastStore.showToast('Artikel nicht gefunden', 'error')
       return false
@@ -817,7 +781,7 @@ export const useShoppingStore = defineStore('shopping', () => {
 
     addToQueue({
       operation: 'update',
-      payload: { itemId, updates: { is_priority: newPriority } }
+      payload: { itemId, updates: { is_priority: newPriority } },
     })
 
     if (navigator.onLine) await syncMutations()
@@ -834,7 +798,7 @@ export const useShoppingStore = defineStore('shopping', () => {
       return false
     }
 
-    const item = items.value.find(i => i.shopping_item_id === itemId)
+    const item = items.value.find((i) => i.shopping_item_id === itemId)
     if (!item) {
       toastStore.showToast('Artikel nicht gefunden', 'error')
       return false
@@ -846,7 +810,7 @@ export const useShoppingStore = defineStore('shopping', () => {
       is_priority: false,
       times_purchased: item.times_purchased + 1,
       last_purchased_at: now,
-      last_purchased_by: authStore.user.id
+      last_purchased_by: authStore.user.id,
     })
 
     addToQueue({
@@ -858,9 +822,9 @@ export const useShoppingStore = defineStore('shopping', () => {
           is_priority: false,
           times_purchased: item.times_purchased + 1,
           last_purchased_at: now,
-          last_purchased_by: authStore.user.id
-        }
-      }
+          last_purchased_by: authStore.user.id,
+        },
+      },
     })
 
     if (navigator.onLine) await syncMutations()
@@ -873,7 +837,7 @@ export const useShoppingStore = defineStore('shopping', () => {
 
     addToQueue({
       operation: 'update',
-      payload: { itemId, updates: { purchased: false } }
+      payload: { itemId, updates: { purchased: false } },
     })
 
     if (navigator.onLine) await syncMutations()
@@ -888,7 +852,7 @@ export const useShoppingStore = defineStore('shopping', () => {
 
     addToQueue({
       operation: 'delete',
-      payload: { itemId }
+      payload: { itemId },
     })
 
     if (navigator.onLine) {
@@ -921,9 +885,8 @@ export const useShoppingStore = defineStore('shopping', () => {
       if (error) throw error
 
       // Noch nicht synchronisierte Zeilen überleben den Neuabgleich.
-      const pending = categories.value.filter(c => c.category_id.startsWith('temp_'))
+      const pending = categories.value.filter((c) => c.category_id.startsWith('temp_'))
       categories.value = [...(data ?? []), ...pending]
-
     } catch (error) {
       console.error('Error loading shopping categories:', error)
     }
@@ -931,7 +894,7 @@ export const useShoppingStore = defineStore('shopping', () => {
 
   const findCategoryRow = (name: string) => {
     const key = normalizeCategoryName(name)
-    return currentListCategories.value.find(c => normalizeCategoryName(c.name) === key) ?? null
+    return currentListCategories.value.find((c) => normalizeCategoryName(c.name) === key) ?? null
   }
 
   /**
@@ -984,7 +947,7 @@ export const useShoppingStore = defineStore('shopping', () => {
   const itemsInCategory = (category: string) => {
     const key = normalizeCategoryName(category)
     return items.value.filter(
-      i => i.list_id === currentListId.value && normalizeCategoryName(i.category ?? '') === key
+      (i) => i.list_id === currentListId.value && normalizeCategoryName(i.category ?? '') === key,
     )
   }
 
@@ -1001,7 +964,7 @@ export const useShoppingStore = defineStore('shopping', () => {
 
     const row = findCategoryRow(oldName)
     if (row) {
-      const idx = categories.value.findIndex(c => c.category_id === row.category_id)
+      const idx = categories.value.findIndex((c) => c.category_id === row.category_id)
       if (idx !== -1) categories.value[idx] = { ...categories.value[idx], name: trimmed }
       addToQueue({
         operation: 'update',
@@ -1011,7 +974,10 @@ export const useShoppingStore = defineStore('shopping', () => {
 
     for (const item of itemsInCategory(oldName)) {
       updateItemOptimistic(item.shopping_item_id, { category: trimmed })
-      addToQueue({ operation: 'update', payload: { itemId: item.shopping_item_id, updates: { category: trimmed } } })
+      addToQueue({
+        operation: 'update',
+        payload: { itemId: item.shopping_item_id, updates: { category: trimmed } },
+      })
     }
 
     if (navigator.onLine) await syncMutations()
@@ -1030,7 +996,7 @@ export const useShoppingStore = defineStore('shopping', () => {
 
     const row = findCategoryRow(category)
     if (row) {
-      categories.value = categories.value.filter(c => c.category_id !== row.category_id)
+      categories.value = categories.value.filter((c) => c.category_id !== row.category_id)
       addToQueue({
         operation: 'delete',
         payload: { entity: 'category', categoryId: row.category_id },
@@ -1043,7 +1009,10 @@ export const useShoppingStore = defineStore('shopping', () => {
         addToQueue({ operation: 'delete', payload: { itemId: item.shopping_item_id } })
       } else {
         updateItemOptimistic(item.shopping_item_id, { category: null })
-        addToQueue({ operation: 'update', payload: { itemId: item.shopping_item_id, updates: { category: null } } })
+        addToQueue({
+          operation: 'update',
+          payload: { itemId: item.shopping_item_id, updates: { category: null } },
+        })
       }
     }
 
@@ -1064,10 +1033,10 @@ export const useShoppingStore = defineStore('shopping', () => {
       (b.last_purchased_at ?? b.created_at).localeCompare(a.last_purchased_at ?? a.created_at)
 
     const matches = items.value
-      .filter(i => normalizeCategoryName(i.name) === key && i.category)
+      .filter((i) => normalizeCategoryName(i.name) === key && i.category)
       .sort(byRecency)
 
-    const inCurrentList = matches.find(i => i.list_id === currentListId.value)
+    const inCurrentList = matches.find((i) => i.list_id === currentListId.value)
     return (inCurrentList ?? matches[0])?.category ?? null
   }
 
@@ -1093,28 +1062,33 @@ export const useShoppingStore = defineStore('shopping', () => {
       .channel(`shopping-categories-changes-${Date.now()}`)
       .on(
         'postgres_changes',
-        { event: '*', schema: 'public', table: 'shopping_categories', filter: `household_id=eq.${hhId}` },
+        {
+          event: '*',
+          schema: 'public',
+          table: 'shopping_categories',
+          filter: `household_id=eq.${hhId}`,
+        },
         (payload) => {
           console.log('📡 Realtime shopping categories event:', payload)
 
           if (payload.eventType === 'INSERT') {
             const row = payload.new as ShoppingCategory
-            if (!categories.value.some(c => c.category_id === row.category_id)) {
+            if (!categories.value.some((c) => c.category_id === row.category_id)) {
               categories.value.push(row)
             }
           }
 
           if (payload.eventType === 'UPDATE') {
             const row = payload.new as ShoppingCategory
-            const index = categories.value.findIndex(c => c.category_id === row.category_id)
+            const index = categories.value.findIndex((c) => c.category_id === row.category_id)
             if (index !== -1) categories.value[index] = row
           }
 
           if (payload.eventType === 'DELETE') {
             const row = payload.old as ShoppingCategory
-            categories.value = categories.value.filter(c => c.category_id !== row.category_id)
+            categories.value = categories.value.filter((c) => c.category_id !== row.category_id)
           }
-        }
+        },
       )
       .subscribe()
 
@@ -1122,28 +1096,37 @@ export const useShoppingStore = defineStore('shopping', () => {
       .channel(`shopping-items-changes-${Date.now()}`)
       .on(
         'postgres_changes',
-        { event: '*', schema: 'public', table: 'shopping_items', filter: `household_id=eq.${hhId}` },
+        {
+          event: '*',
+          schema: 'public',
+          table: 'shopping_items',
+          filter: `household_id=eq.${hhId}`,
+        },
         (payload) => {
           console.log('📡 Realtime shopping items event:', payload)
 
           if (payload.eventType === 'INSERT') {
             const newItem = payload.new as ShoppingItem
-            if (!items.value.find(i => i.shopping_item_id === newItem.shopping_item_id)) {
+            if (!items.value.find((i) => i.shopping_item_id === newItem.shopping_item_id)) {
               items.value.push(newItem)
             }
           }
 
           if (payload.eventType === 'UPDATE') {
             const updatedItem = payload.new as ShoppingItem
-            const index = items.value.findIndex(i => i.shopping_item_id === updatedItem.shopping_item_id)
+            const index = items.value.findIndex(
+              (i) => i.shopping_item_id === updatedItem.shopping_item_id,
+            )
             if (index !== -1) items.value[index] = updatedItem
           }
 
           if (payload.eventType === 'DELETE') {
             const deletedItem = payload.old as ShoppingItem
-            items.value = items.value.filter(i => i.shopping_item_id !== deletedItem.shopping_item_id)
+            items.value = items.value.filter(
+              (i) => i.shopping_item_id !== deletedItem.shopping_item_id,
+            )
           }
-        }
+        },
       )
       .subscribe()
 
@@ -1151,32 +1134,37 @@ export const useShoppingStore = defineStore('shopping', () => {
       .channel(`shopping-lists-changes-${Date.now()}`)
       .on(
         'postgres_changes',
-        { event: '*', schema: 'public', table: 'shopping_lists', filter: `household_id=eq.${hhId}` },
+        {
+          event: '*',
+          schema: 'public',
+          table: 'shopping_lists',
+          filter: `household_id=eq.${hhId}`,
+        },
         (payload) => {
           console.log('📡 Realtime shopping lists event:', payload)
 
           if (payload.eventType === 'INSERT') {
             const newList = payload.new as ShoppingList
-            if (!lists.value.find(l => l.list_id === newList.list_id)) {
+            if (!lists.value.find((l) => l.list_id === newList.list_id)) {
               lists.value.push(newList)
             }
           }
 
           if (payload.eventType === 'UPDATE') {
             const updatedList = payload.new as ShoppingList
-            const index = lists.value.findIndex(l => l.list_id === updatedList.list_id)
+            const index = lists.value.findIndex((l) => l.list_id === updatedList.list_id)
             if (index !== -1) lists.value[index] = updatedList
           }
 
           if (payload.eventType === 'DELETE') {
             const deletedList = payload.old as ShoppingList
-            lists.value = lists.value.filter(l => l.list_id !== deletedList.list_id)
-            items.value = items.value.filter(i => i.list_id !== deletedList.list_id)
+            lists.value = lists.value.filter((l) => l.list_id !== deletedList.list_id)
+            items.value = items.value.filter((i) => i.list_id !== deletedList.list_id)
             if (currentListId.value === deletedList.list_id) {
               currentListId.value = lists.value[0]?.list_id ?? null
             }
           }
-        }
+        },
       )
       .subscribe()
   }
@@ -1233,6 +1221,6 @@ export const useShoppingStore = defineStore('shopping', () => {
     suggestCategoryFor,
     subscribeToItems,
     unsubscribeFromItems,
-    syncMutations
+    syncMutations,
   }
 })

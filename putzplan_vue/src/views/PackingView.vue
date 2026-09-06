@@ -12,10 +12,14 @@ const labels: ChecklistLabels = {
   emptyIcon: 'bi-bag-x',
   emptyText: 'Noch keine Packliste vorhanden',
   progressVerb: 'gepackt',
+  addPlaceholder: 'Gegenstand hinzufügen…',
+  itemNoun: { one: 'Gegenstand', many: 'Gegenstände' },
+  doneMany: 'gepackte',
+  doneOne: 'gepackter',
   notesIcon: 'bi-journal-text',
   notesTitle: 'Reise-Notizen',
   notesPlaceholder: 'z.B. Wird warm (25°C), 5 Tage, Wanderschuhe nicht vergessen…',
-  resetConfirmBody: 'Alle Items werden als ungepackt markiert (inkl. Zähler).',
+  resetConfirmBody: 'Alle Gegenstände werden als ungepackt markiert (inkl. Zähler).',
 }
 </script>
 

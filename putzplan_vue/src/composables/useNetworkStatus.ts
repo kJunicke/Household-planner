@@ -39,6 +39,6 @@ export function useNetworkStatus() {
   })
 
   return {
-    isOnline
+    isOnline,
   }
 }

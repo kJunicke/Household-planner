@@ -7,6 +7,16 @@
  * Column names are deliberately identical across all checklist table pairs
  * (`*_lists` / `*_items`), so the store factory can talk to any of them without
  * a field mapping. A new checklist type MUST copy the packing columns 1:1.
+ *
+ * Kategorien (seit Etappe 2) sind eigenständige Zeilen in einer dritten Tabelle
+ * je Typ: `packing_categories` / `todo_categories` (Einkauf: `shopping_categories`),
+ * PK `category_id`, Spalten wie in `types/CategoryRow.ts`. Die Kopplung zwischen
+ * Kategorie und Eintrag läuft **über den Namen**, nicht über eine Fremdschlüssel-
+ * Spalte: `*_items.category` trägt den Text, `NULL` heißt „Unkategorisiert".
+ * `lower(name)` ist je Liste eindeutig — Vergleiche laufen deshalb immer über
+ * `normalizeCategoryName` aus `@/lib/categoryOrder`. Eine Kategorie ohne Einträge
+ * bleibt dadurch bestehen, und Einträge mit einem Namen ohne Zeile (Altdaten)
+ * bekommen trotzdem eine Sektion.
  */
 
 /** A checklist (one row of a `*_lists` table). */
@@ -38,28 +48,29 @@ export interface ChecklistItem {
   created_by: string | null
 }
 
-/** Sentinel key for the "Unkategorisiert" bucket (items with category === null). */
-export const UNCATEGORIZED = '__uncategorized__'
+// Der Sentinel lebt in der geteilten Bibliothek (Einkauf und Checkliste bilden
+// Sektionsschlüssel gleich); hier nur weitergereicht, damit `packingStore` ihn
+// wie bisher exportieren kann.
+export { UNCATEGORIZED } from '@/lib/categoryOrder'
 
+/**
+ * Eine Sektion der Checkliste. Erfüllt `OrderableCategoryGroup` aus
+ * `@/lib/categoryOrder` ohne Adapter — deshalb `doneCount` (nicht `packedCount`)
+ * und `sortOrder`.
+ */
 export interface CategoryGroup {
   /** Real category label, or null for the Unkategorisiert bucket. */
   category: string | null
-  /** Stable key for v-for (label or UNCATEGORIZED sentinel). */
+  /** Stable key for v-for: normalisierter Name bzw. UNCATEGORIZED-Sentinel. */
   key: string
   label: string
+  /** Offene Einträge zuerst, dann erledigte, je nach `created_at`. */
   items: ChecklistItem[]
-  /** Count of items whose `packed` flag is true. */
-  packedCount: number
+  /** Einträge unter `items` mit gesetztem `packed`-Flag. */
+  doneCount: number
   total: number
   isComplete: boolean
   isUncategorized: boolean
-}
-
-export interface ImportCandidate {
-  sourceListId: string
-  sourceListName: string
-  category: string
-  itemCount: number
-  /** created_at of the source list — newest first in the picker. */
-  sourceCreatedAt: string
+  /** Position aus der Kategorientabelle; Altdaten ohne Zeile landen hinten. */
+  sortOrder: number
 }

@@ -122,5 +122,5 @@ export const undoScrap = async (): Promise<void> => {
  */
 export const tornScrapState = {
   scrap: readonly(scrap),
-  busy: readonly(busy)
+  busy: readonly(busy),
 }

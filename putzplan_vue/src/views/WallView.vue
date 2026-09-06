@@ -56,7 +56,7 @@ import {
   rememberWallHeight,
   rememberedWallHeight,
   rotationOf,
-  type WallNoteShape
+  type WallNoteShape,
 } from '@/lib/wallLayout'
 import type { Task } from '@/types/Task'
 
@@ -72,7 +72,7 @@ const board = useTaskBoard(() => taskStore.tasks)
 const wallTasks = computed((): Task[] => [
   ...board.pendingTasks.value,
   ...board.dailyTasks.value,
-  ...board.projectTasks.value
+  ...board.projectTasks.value,
 ])
 
 /**
@@ -446,9 +446,9 @@ const relayout = (animate: boolean, tappedId?: string): boolean => {
   // wird nur zurück auf die `task_id` gemappt, weil `packWall` keine Task-
   // Objekte kennt.
   const taskGroups = new Map<string, number>()
-  board.pendingTasks.value.forEach(task => taskGroups.set(task.task_id, 0))
-  board.dailyTasks.value.forEach(task => taskGroups.set(task.task_id, 1))
-  board.projectTasks.value.forEach(task => taskGroups.set(task.task_id, 2))
+  board.pendingTasks.value.forEach((task) => taskGroups.set(task.task_id, 0))
+  board.dailyTasks.value.forEach((task) => taskGroups.set(task.task_id, 1))
+  board.projectTasks.value.forEach((task) => taskGroups.set(task.task_id, 2))
 
   // Schritt 1 — messen, was jeder Zettel an Breite braucht.
   //
@@ -660,7 +660,7 @@ const relayout = (animate: boolean, tappedId?: string): boolean => {
         '[WallView] Kein `.due-stamp` als direktes Kind von `.foot` — die ' +
           'Breitenmessung rechnet mit einem Flex-`gap`, den es dann nicht ' +
           'gibt. Wurde der Stempel in `WallNote.vue` umbenannt oder verschoben? ' +
-          '(Dieser Hinweis erscheint einmal je Packlauf, nicht einmal je Zettel.)'
+          '(Dieser Hinweis erscheint einmal je Packlauf, nicht einmal je Zettel.)',
       )
     }
     const footGap = 6
@@ -781,12 +781,12 @@ const relayout = (animate: boolean, tappedId?: string): boolean => {
         MEASURE_SAFETY,
       minimum:
         Math.ceil(Math.max(titleMinimum + cornerExtra, footWidthWithoutPoints) + chromeWidth) +
-        MEASURE_SAFETY
+        MEASURE_SAFETY,
     }
     const shapeWithMetaFoot: WallNoteShape = {
       id: task.task_id,
       natural: Math.ceil(Math.max(titleWidth, footWidthFull) + chromeWidth) + MEASURE_SAFETY,
-      minimum: Math.ceil(Math.max(titleMinimum, footWidthFull) + chromeWidth) + MEASURE_SAFETY
+      minimum: Math.ceil(Math.max(titleMinimum, footWidthFull) + chromeWidth) + MEASURE_SAFETY,
     }
 
     // Entschieden wird gegen die Breite, die TATSÄCHLICH herauskommt — nicht
@@ -1005,7 +1005,7 @@ const relayout = (animate: boolean, tappedId?: string): boolean => {
       // solange eine Vorgabe im Spiel ist: wer vorher unter oder neben dem
       // vorgegebenen Zettel lag, darf danach nicht darüber stehen. Beim ersten
       // Lauf ist die Karte leer — dann gibt es auch keine Vorgabe.
-      previousTop: before.get(shape.id)?.y
+      previousTop: before.get(shape.id)?.y,
     })
   }
 
@@ -1013,10 +1013,8 @@ const relayout = (animate: boolean, tappedId?: string): boolean => {
   // Gefiltert auf das, was gerade wirklich an der Wand hängt — eine Vorgabe für
   // einen Zettel, den `packWall` gar nicht bekommt, wäre nur ein stiller
   // Konfliktpartner für die übrigen.
-  const onWall = new Set(metrics.map(note => note.id))
-  const pins = [...pinnedTops]
-    .filter(([id]) => onWall.has(id))
-    .map(([id, top]) => ({ id, top }))
+  const onWall = new Set(metrics.map((note) => note.id))
+  const pins = [...pinnedTops].filter(([id]) => onWall.has(id)).map(([id, top]) => ({ id, top }))
 
   const packed = packWall(metrics, usableWidth, pins)
   wallHeight.value = packed.height
@@ -1152,7 +1150,7 @@ const toggleNote = (taskId: string) => {
  * Platz sich wirklich geändert hat, bewegen sich — der Rest bleibt still.
  */
 const animateMoves = (
-  moved: Array<{ el: HTMLElement; id: string; dx: number; dy: number; z: number }>
+  moved: Array<{ el: HTMLElement; id: string; dx: number; dy: number; z: number }>,
 ) => {
   moved.forEach(({ el, id, dx, dy, z }, index) => {
     const rot = rotationOf(id)
@@ -1174,31 +1172,31 @@ const animateMoves = (
         {
           transform: `translate(${dx}px, ${dy}px) rotate(${rot}deg) scale(1)`,
           boxShadow: 'var(--pw-shadow)',
-          offset: 0
+          offset: 0,
         },
         { transform: lift, boxShadow: 'var(--pw-shadow-lift)', offset: 0.3 },
         {
           transform: `translate(0, 0) rotate(${rot * 0.6}deg) scale(1.035)`,
           boxShadow: 'var(--pw-shadow-lift)',
-          offset: 0.74
+          offset: 0.74,
         },
         {
           transform: `translate(0, 0) rotate(${rot + 1.4}deg) scale(.985)`,
           boxShadow: 'var(--pw-shadow)',
-          offset: 0.88
+          offset: 0.88,
         },
         {
           transform: `translate(0, 0) rotate(${rot}deg) scale(1)`,
           boxShadow: 'var(--pw-shadow)',
-          offset: 1
-        }
+          offset: 1,
+        },
       ],
       {
         duration: 430 + Math.min(160, Math.hypot(dx, dy)),
         delay: Math.min(120, index * 7),
         easing: 'cubic-bezier(.28,.9,.32,1)',
-        fill: 'backwards'
-      }
+        fill: 'backwards',
+      },
     )
     animation.onfinish = () => {
       el.style.zIndex = String(z)
@@ -1307,16 +1305,16 @@ const scheduleRelayout = (animate: boolean) => {
  * geänderte Zuweisung färbt nur um und darf die Wand nicht durchschütteln.
  */
 const layoutSignature = computed(() =>
-  wallTasks.value.map(task => `${task.task_id}:${task.task_type}:${task.title}`).join('|')
+  wallTasks.value.map((task) => `${task.task_id}:${task.task_type}:${task.title}`).join('|'),
 )
 
 watch(layoutSignature, () => {
   // Ein Zettel, der von der Wand verschwindet (erledigt, gelöscht), nimmt
   // seinen Aufklapp-Zustand mit. Ohne das stünde er beim Wiederauftauchen —
   // etwa nach „wieder dreckig" — unvermittelt offen da.
-  const onWall = new Set(wallTasks.value.map(task => task.task_id))
-  if ([...expandedIds.value].some(id => !onWall.has(id))) {
-    expandedIds.value = new Set([...expandedIds.value].filter(id => onWall.has(id)))
+  const onWall = new Set(wallTasks.value.map((task) => task.task_id))
+  if ([...expandedIds.value].some((id) => !onWall.has(id))) {
+    expandedIds.value = new Set([...expandedIds.value].filter((id) => onWall.has(id)))
   }
   // Mit dem Aufklapp-Zustand geht auch die gemerkte Oberkante (Ticket 13).
   // Bliebe sie hängen, käme der Zettel nach einem „wieder dreckig" mit einer
@@ -1340,10 +1338,10 @@ watch(layoutSignature, () => {
 watch(
   () =>
     wallTasks.value
-      .filter(task => task.task_type === 'project')
-      .map(task => `${task.task_id}:${taskStore.getProjectEffortTotal(task.task_id)}`)
+      .filter((task) => task.task_type === 'project')
+      .map((task) => `${task.task_id}:${taskStore.getProjectEffortTotal(task.task_id)}`)
       .join('|'),
-  () => scheduleRelayout(true)
+  () => scheduleRelayout(true),
 )
 
 let resizeObserver: ResizeObserver | null = null
@@ -1503,7 +1501,7 @@ const handleCreateQuickTask = async (data: {
       :class="{ 'wall--unpacked': !hasPacked }"
       :style="{
         height: `${wallHeight}px`,
-        minHeight: hasPacked ? undefined : placeholderMinHeight
+        minHeight: hasPacked ? undefined : placeholderMinHeight,
       }"
     >
       <!-- Platzhalter, solange noch kein Packlauf durchgehalten hat (Ticket 02).
@@ -1522,7 +1520,7 @@ const handleCreateQuickTask = async (data: {
         <WallNote
           v-for="task in wallTasks"
           :key="task.task_id"
-          :ref="instance => setNoteEl(task.task_id, instance)"
+          :ref="(instance) => setNoteEl(task.task_id, instance)"
           :task="task"
           :expanded="expandedIds.has(task.task_id)"
           :meta-top="metaTopIds.has(task.task_id)"
@@ -1585,7 +1583,11 @@ const handleCreateQuickTask = async (data: {
               <i class="bi bi-x-lg"></i>
             </button>
           </div>
-          <button class="search-overlay-close" aria-label="Suche schließen" @click="closeSearchOverlay()">
+          <button
+            class="search-overlay-close"
+            aria-label="Suche schließen"
+            @click="closeSearchOverlay()"
+          >
             <i class="bi bi-x-lg"></i>
           </button>
         </div>
@@ -1611,7 +1613,10 @@ const handleCreateQuickTask = async (data: {
             </div>
           </template>
 
-          <div v-else-if="searchResults && searchResults.length === 0" class="search-overlay-initial">
+          <div
+            v-else-if="searchResults && searchResults.length === 0"
+            class="search-overlay-initial"
+          >
             <i class="bi bi-search"></i>
             <p>Keine Aufgaben gefunden für "{{ searchQuery }}"</p>
           </div>

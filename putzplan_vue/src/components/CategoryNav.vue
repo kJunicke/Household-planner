@@ -8,7 +8,7 @@ const categories: { value: TaskCategory; icon: string; label: string }[] = [
   { value: 'daily', icon: 'bi-lightning-fill', label: 'Alltag' },
   { value: 'recurring', icon: 'bi-arrow-repeat', label: 'Putzen' },
   { value: 'project', icon: 'bi-kanban', label: 'Projekte' },
-  { value: 'completed', icon: 'bi-check-circle', label: 'Erledigt' }
+  { value: 'completed', icon: 'bi-check-circle', label: 'Erledigt' },
 ]
 
 // Reihenfolge der "alle anzeigen"-Ansicht (kein Filter aktiv)
@@ -18,7 +18,7 @@ const ALL_CATEGORIES: TaskCategory[] = ['daily', 'recurring', 'project', 'comple
 // Ein Chip filtert exklusiv; erneuter Klick auf den aktiven Chip setzt zurück.
 const loadActive = (): TaskCategory | null => {
   const stored = localStorage.getItem(STORAGE_KEY)
-  if (stored && categories.some(c => c.value === stored)) {
+  if (stored && categories.some((c) => c.value === stored)) {
     return stored as TaskCategory
   }
   return null

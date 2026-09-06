@@ -22,6 +22,9 @@ export function useCategoryDrag(options: {
   onMove: (itemId: string, category: string | null) => void
 }) {
   const instances = new Map<string, Sortable>()
+  /** Ursprung der gerade gezogenen Zeile — in `onStart` gemerkt, in `onEnd` benutzt. */
+  let originParent: HTMLElement | null = null
+  let originNext: Node | null = null
 
   const destroy = (key: string) => {
     instances.get(key)?.destroy()
@@ -61,25 +64,43 @@ export function useCategoryDrag(options: {
         scrollSensitivity: 80,
         ghostClass: 'drag-ghost',
         chosenClass: 'drag-chosen',
+        // Der Nachbar VOR dem Ziehen ist die Marke zum Zurückrollen — nicht der
+        // Index. `from.children[oldIndex]` zählt nur Elemente; Vue schiebt aber
+        // Textknoten als Fragment-Marken zwischen die Zeilen (eine Komponente
+        // mit Kommentar über der Wurzel rendert ein Fragment). Der Index landet
+        // dann außerhalb des eigenen Fragments, und Vues `removeFragment` läuft
+        // beim Ausbauen nur von Marke zu Marke — die Zeile bleibt als Waise
+        // stehen (Befund F5: Eintrag in zwei Sektionen zugleich). Ein echter
+        // Nachbarknoten trifft die Stelle unabhängig von Knotentypen.
+        onStart: (evt) => {
+          originParent = evt.from as HTMLElement
+          originNext = (evt.item as HTMLElement).nextSibling
+        },
         onEnd: (evt) => {
           const from = evt.from as HTMLElement
           const to = evt.to as HTMLElement
           const itemId = (evt.item as HTMLElement).dataset.itemId
-          if (from === to || !itemId) return
 
           // Zurückrollen, bevor Vue neu rendert: sonst steht die Zeile doppelt
           // im Baum — einmal von der Bibliothek verschoben, einmal gerendert.
-          const anchor = from.children[evt.oldIndex ?? 0] ?? null
-          from.insertBefore(evt.item, anchor)
+          // Auch innerhalb einer Sektion: die Reihenfolge dort gehört dem Store,
+          // nicht der Bibliothek.
+          if (originParent === from) {
+            const anchor = originNext && originNext.parentNode === from ? originNext : null
+            from.insertBefore(evt.item, anchor)
+          }
+          originParent = null
+          originNext = null
 
+          if (from === to || !itemId) return
           options.onMove(itemId, options.categoryOf(to))
         },
-      })
+      }),
     )
   }
 
   onBeforeUnmount(() => {
-    instances.forEach(s => s.destroy())
+    instances.forEach((s) => s.destroy())
     instances.clear()
   })
 

@@ -20,7 +20,7 @@ const writers = new Map<string, number>()
 
 export function useElementHeightVar(
   target: Ref<HTMLElement | null | undefined>,
-  cssVarName: string
+  cssVarName: string,
 ) {
   let observer: ResizeObserver | null = null
   writers.set(cssVarName, (writers.get(cssVarName) ?? 0) + 1)
@@ -40,7 +40,7 @@ export function useElementHeightVar(
   }
 
   onMounted(() => observe(target.value))
-  watch(target, el => observe(el))
+  watch(target, (el) => observe(el))
 
   onUnmounted(() => {
     observer?.disconnect()

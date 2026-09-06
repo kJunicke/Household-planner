@@ -61,7 +61,10 @@ export function useCategoryRail(opts: {
   }
 
   // Recompute when the category set changes (list switch, add/delete).
-  watch(() => opts.keys().join('|'), () => nextTick(refreshActive))
+  watch(
+    () => opts.keys().join('|'),
+    () => nextTick(refreshActive),
+  )
 
   onMounted(() => {
     window.addEventListener('scroll', onScroll, { passive: true })
@@ -73,5 +76,13 @@ export function useCategoryRail(opts: {
     if (scrollRaf) cancelAnimationFrame(scrollRaf)
   })
 
-  return { activeKey, showRail, railCollapsed, setRailCollapsed, setSectionEl, scrollToKey, refreshActive }
+  return {
+    activeKey,
+    showRail,
+    railCollapsed,
+    setRailCollapsed,
+    setSectionEl,
+    scrollToKey,
+    refreshActive,
+  }
 }

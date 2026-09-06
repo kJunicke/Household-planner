@@ -112,7 +112,7 @@ const isProject = computed(() => props.task.task_type === 'project')
 const subtasks = computed(() => {
   const all = taskStore.getSubtasks(props.task.task_id)
   // "Am Projekt arbeiten" ist Buchhaltung, kein Zettel — wie in der alten Karte.
-  return isProject.value ? all.filter(s => s.title !== 'Am Projekt arbeiten') : all
+  return isProject.value ? all.filter((s) => s.title !== 'Am Projekt arbeiten') : all
 })
 
 /** Nur ein Zettel MIT Unteraufgaben klappt auf. */
@@ -140,10 +140,10 @@ const hasSubtasks = computed(() => subtasks.value.length > 0)
  */
 const tracksProgress = computed(() => props.task.task_type !== 'daily')
 
-const doneSubtasks = computed(() => subtasks.value.filter(s => s.completed).length)
+const doneSubtasks = computed(() => subtasks.value.filter((s) => s.completed).length)
 
 /** Drei Spalten nur bei durchweg kurzen Titeln, sonst zwei. */
-const columns = computed(() => subtaskColumns(subtasks.value.map(s => s.title)))
+const columns = computed(() => subtaskColumns(subtasks.value.map((s) => s.title)))
 
 /**
  * Antippen der Fläche. Der Zettel entscheidet hier nur, **ob** überhaupt etwas
@@ -190,7 +190,7 @@ const NOTE_HANDLE = '#note'
 const effectivePoints = computed(() => {
   const deductSum = taskStore
     .getSubtasks(props.task.task_id)
-    .filter(s => s.completed && s.subtask_points_mode === 'deduct')
+    .filter((s) => s.completed && s.subtask_points_mode === 'deduct')
     .reduce((sum, s) => sum + s.effort, 0)
   return Math.max(0, props.task.effort - deductSum)
 })
@@ -213,7 +213,7 @@ const effectivePoints = computed(() => {
  * `WallView.relayout` genau danach misst.
  */
 const displayPoints = computed(() =>
-  isProject.value ? taskStore.getProjectEffortTotal(props.task.task_id) : effectivePoints.value
+  isProject.value ? taskStore.getProjectEffortTotal(props.task.task_id) : effectivePoints.value,
 )
 
 /**
@@ -227,7 +227,7 @@ const displayPoints = computed(() =>
  * 1500 Punkten auf die Stufe von 999.
  */
 const pointsLabel = computed(() =>
-  isProject.value && displayPoints.value > 999 ? '999+' : String(displayPoints.value)
+  isProject.value && displayPoints.value > 999 ? '999+' : String(displayPoints.value),
 )
 
 /**
@@ -276,7 +276,7 @@ const pointsShapeClass = computed(() => {
 const pointsTitle = computed(() =>
   isProject.value && displayPoints.value > 999
     ? `Bisher verschlungene Punkte: ${displayPoints.value}`
-    : undefined
+    : undefined,
 )
 
 /**
@@ -319,7 +319,7 @@ const projectWorkSubtaskId = computed(() => {
   if (!isProject.value) return null
   const work = taskStore
     .getSubtasks(props.task.task_id)
-    .find(s => s.title === 'Am Projekt arbeiten')
+    .find((s) => s.title === 'Am Projekt arbeiten')
   return work?.task_id ?? null
 })
 
@@ -391,7 +391,7 @@ const handleProjectWork = async (effort: number, note: string) => {
  * Fortschritt kommt der Durchstrich dazu.
  */
 const tearSubtask = async (subtaskId: string, handle: HTMLElement) => {
-  const subtask = subtasks.value.find(s => s.task_id === subtaskId)
+  const subtask = subtasks.value.find((s) => s.task_id === subtaskId)
   const origin = centerOf(handle)
   markTorn(subtaskId)
   const applied = await taskStore.completeTask(subtaskId)
@@ -449,7 +449,7 @@ const tear = useTearGesture({
       if (isProject.value) openProjectWork()
       else void tearNote(handle)
     } else void tearSubtask(id, handle)
-  }
+  },
 })
 
 // Einzeln herausgezogen, weil verschachtelte Refs im Template NICHT ausgepackt
@@ -465,7 +465,7 @@ const {
   onPointerCancel: onTearCancel,
   onTouchStart: onTearTouchStart,
   onTouchMove: onTearTouchMove,
-  swallowClick: swallowTearClick
+  swallowClick: swallowTearClick,
 } = tear
 
 /** Wird gerade am Eselsohr DIESES Zettels gezogen (nicht an einem Zettelchen)? */
@@ -481,10 +481,10 @@ const isNoteTearing = computed(() => tearActiveId.value === NOTE_HANDLE)
  * nur die Ankündigung des Abrisses entfällt.
  */
 const isTearReady = computed(
-  () => !isProject.value && isNoteTearing.value && tearPull.value >= tearDistance
+  () => !isProject.value && isNoteTearing.value && tearPull.value >= tearDistance,
 )
 
-watch(isNoteTearing, active => {
+watch(isNoteTearing, (active) => {
   if (active) emit('gesture-start', props.task.task_id)
   else emit('gesture-end', props.task.task_id)
 })
@@ -499,7 +499,7 @@ const miniStyle = (subtaskId: string): Record<string, string> | undefined => {
   return {
     transform: `translate(${(pull * 0.1).toFixed(1)}px, ${pull.toFixed(1)}px) rotate(${Math.min(9, pull * 0.11).toFixed(2)}deg)`,
     zIndex: '3',
-    boxShadow: '4px 6px 0 rgba(36, 31, 26, 0.34)'
+    boxShadow: '4px 6px 0 rgba(36, 31, 26, 0.34)',
   }
 }
 
@@ -610,7 +610,7 @@ const onPressDirection = (direction: PressDirection) => {
 
 const press = useDirectionPress({
   onDirection: onPressDirection,
-  isControl: isPressControl
+  isControl: isPressControl,
 })
 
 // Einzeln herausgezogen — verschachtelte Refs werden im Template nicht
@@ -625,7 +625,7 @@ const {
   onPointerUp: onPressUp,
   onPointerCancel: onPressCancel,
   onTouchStart: onPressTouchStart,
-  onTouchMove: onPressTouchMove
+  onTouchMove: onPressTouchMove,
 } = press
 
 /**
@@ -639,7 +639,7 @@ const {
  * sich gegenseitig ausschließen: der Long-Press startet nicht auf dem Eselsohr
  * (→ `isPressControl`), und ein zweiter Finger kommt in keiner der beiden durch.
  */
-watch(pressOpen, open => {
+watch(pressOpen, (open) => {
   if (open) emit('gesture-start', props.task.task_id)
   else emit('gesture-end', props.task.task_id)
 })
@@ -664,7 +664,7 @@ const rotation = computed(() => rotationOf(props.task.task_id))
  */
 const ownerColor = computed(() => {
   if (!props.task.assigned_to) return null
-  const member = householdStore.householdMembers.find(m => m.user_id === props.task.assigned_to)
+  const member = householdStore.householdMembers.find((m) => m.user_id === props.task.assigned_to)
   return member?.user_color || null
 })
 
@@ -870,7 +870,8 @@ const STAMP_OFFSET = 5.5
  * Werte aus verschiedenen Blöcken vergleicht, vergleicht zwei Wände.
  * (Nachgetragen am 05.09.2026; vorher stand die Vermischung undatiert da.)
  */
-const tiltSignOf = (id: string, index: number) => (jitterOf(id, `stamp-dir${index}`, 1) < 0 ? -1 : 1)
+const tiltSignOf = (id: string, index: number) =>
+  jitterOf(id, `stamp-dir${index}`, 1) < 0 ? -1 : 1
 
 /** Eine Lage des Abdruckstapels, von unten (Grundabdruck) nach oben. */
 interface StampLayer {
@@ -963,7 +964,8 @@ const stampLayers = computed((): StampLayer[] => {
 
   return texts.map((text, index) => {
     const top = index === level
-    const tilt = tiltSignOf(id, index) * (STAMP_TILT + jitterOf(id, `stamp-rot${index}`, STAMP_TILT_JITTER))
+    const tilt =
+      tiltSignOf(id, index) * (STAMP_TILT + jitterOf(id, `stamp-rot${index}`, STAMP_TILT_JITTER))
     const dx = offsets[index]
     const dy = jitterOf(id, `stamp-dy${index}`, STAMP_OFFSET)
 
@@ -972,7 +974,7 @@ const stampLayers = computed((): StampLayer[] => {
       text,
       top,
       reserved: index > level,
-      transform: `translate(${dx}px, ${dy}px) rotate(${tilt}deg)`
+      transform: `translate(${dx}px, ${dy}px) rotate(${tilt}deg)`,
     }
   })
 })
@@ -1087,13 +1089,13 @@ const handleCreateSubtask = async (subtaskData: {
     recurrence_days: props.task.recurrence_days, // erbt vom Elternteil
     task_type: props.task.task_type,
     parent_task_id: props.task.task_id,
-    order_index: maxOrderIndex + 1
+    order_index: maxOrderIndex + 1,
   })
 }
 
 const handleUpdateSubtaskPointsMode = async (
   subtaskId: string,
-  mode: 'checklist' | 'deduct' | 'bonus'
+  mode: 'checklist' | 'deduct' | 'bonus',
 ) => {
   await taskStore.updateTask(subtaskId, { subtask_points_mode: mode })
 }
@@ -1117,8 +1119,8 @@ const handlePostponeConfirm = async (targetDate: string) => {
        `navigator.vibrate`) und nimmt uns danach den Zeiger per `pointercancel`
        weg. `user-select: none` unterdrückt nur die SICHTBARE Auswahl — Marker
        und Lupe bleiben deshalb aus, die Geste läuft trotzdem. Erst das
-       Abbestellen des Kontextmenüs bricht sie ab; genau das tut auch das
-       ältere `useLongPress` der Listen, das seit jeher `@contextmenu` bindet.
+       Abbestellen des Kontextmenüs bricht sie ab; genau das tat auch das
+       frühere Langdrücken der Listen, das seit jeher `@contextmenu` band.
        Am Zettel geht dabei nichts verloren: er ist ein Knopf, kein Fließtext,
        und ein Kontextmenü hat dort keine Aufgabe. -->
   <div
@@ -1132,8 +1134,8 @@ const handlePostponeConfirm = async (targetDate: string) => {
         'zettel--tearing': isNoteTearing,
         'zettel--tear-ready': isTearReady,
         'zettel--pressed': pressOpen,
-        'zettel--assigned': isAssigned
-      }
+        'zettel--assigned': isAssigned,
+      },
     ]"
     :style="noteStyle"
     @click="onSurfaceTap"
@@ -1303,7 +1305,7 @@ const handlePostponeConfirm = async (targetDate: string) => {
           :class="[
             `stamp-layer--l${layer.level}`,
             layer.top ? 'stamp-layer--top' : 'stamp-layer--under',
-            { 'stamp-layer--reserved': layer.reserved }
+            { 'stamp-layer--reserved': layer.reserved },
           ]"
           :style="{ transform: layer.transform }"
           :aria-hidden="layer.top ? undefined : 'true'"
@@ -1323,7 +1325,7 @@ const handlePostponeConfirm = async (targetDate: string) => {
         :class="{
           'mini--done': tracksProgress && subtask.completed,
           'mini--torn': recentlyTorn.has(subtask.task_id),
-          'mini--tearing': tearActiveId === subtask.task_id
+          'mini--tearing': tearActiveId === subtask.task_id,
         }"
         :style="miniStyle(subtask.task_id)"
         @click.stop
@@ -1581,7 +1583,6 @@ const handlePostponeConfirm = async (targetDate: string) => {
   -webkit-user-select: none;
   -webkit-touch-callout: none;
 }
-
 
 .title {
   margin: 0;
@@ -1907,7 +1908,6 @@ const handlePostponeConfirm = async (targetDate: string) => {
 .stamp-layer--top {
   background: var(--note-paper);
 }
-
 
 /* Die unteren Lagen bleiben durchsichtig und lugen an den Rändern hervor —
    dort, und nur dort, steckt die sichtbare Stapelhöhe. 40 % für Lage 0

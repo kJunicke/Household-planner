@@ -488,7 +488,12 @@
     radial-gradient(circle at 34% 71%, rgba(138, 127, 109, 0.2) 0 1.5px, transparent 2px),
     radial-gradient(circle at 86% 54%, rgba(138, 127, 109, 0.16) 0 2px, transparent 2.5px),
     radial-gradient(circle at 48% 41%, rgba(216, 201, 173, 0.55) 0 3px, transparent 4px);
-  background-size: 47px 43px, 71px 67px, 59px 53px, 83px 79px, 37px 41px;
+  background-size:
+    47px 43px,
+    71px 67px,
+    59px 53px,
+    83px 79px,
+    37px 41px;
 }
 
 /* Zettel: das Grundelement der Wand. */

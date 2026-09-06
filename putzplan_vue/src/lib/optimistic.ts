@@ -36,21 +36,21 @@ const inFlight = shallowRef(new Map<string, number>())
  * solche Zeilen nicht überschreiben, sonst blinkt der optimistische Zustand weg.
  */
 export function isInFlight(id: string): boolean {
-    return inFlight.value.has(id)
+  return inFlight.value.has(id)
 }
 
 function markInFlight(id: string) {
-    const map = inFlight.value
-    map.set(id, (map.get(id) ?? 0) + 1)
-    triggerRef(inFlight)
+  const map = inFlight.value
+  map.set(id, (map.get(id) ?? 0) + 1)
+  triggerRef(inFlight)
 }
 
 function clearInFlight(id: string) {
-    const map = inFlight.value
-    const next = (map.get(id) ?? 1) - 1
-    if (next <= 0) map.delete(id)
-    else map.set(id, next)
-    triggerRef(inFlight)
+  const map = inFlight.value
+  const next = (map.get(id) ?? 1) - 1
+  if (next <= 0) map.delete(id)
+  else map.set(id, next)
+  triggerRef(inFlight)
 }
 
 // ---------------------------------------------------------------------------
@@ -66,29 +66,29 @@ const syncingVisible = ref(false)
 let syncTimer: ReturnType<typeof setTimeout> | null = null
 
 function refreshSyncIndicator() {
-    if (pendingCount.value > 0) {
-        if (syncingVisible.value || syncTimer !== null) return
-        syncTimer = setTimeout(() => {
-            syncTimer = null
-            // Zwischenzeitlich fertig geworden? Dann nichts anzeigen.
-            if (pendingCount.value > 0) syncingVisible.value = true
-        }, SYNC_DELAY_MS)
-        return
-    }
+  if (pendingCount.value > 0) {
+    if (syncingVisible.value || syncTimer !== null) return
+    syncTimer = setTimeout(() => {
+      syncTimer = null
+      // Zwischenzeitlich fertig geworden? Dann nichts anzeigen.
+      if (pendingCount.value > 0) syncingVisible.value = true
+    }, SYNC_DELAY_MS)
+    return
+  }
 
-    if (syncTimer !== null) {
-        clearTimeout(syncTimer)
-        syncTimer = null
-    }
-    syncingVisible.value = false
+  if (syncTimer !== null) {
+    clearTimeout(syncTimer)
+    syncTimer = null
+  }
+  syncingVisible.value = false
 }
 
 // `hasPending` bleibt dem Einkauf vorbehalten (persistente Queue). Hier gibt es
 // nur „läuft gerade" — nach einem Fehlschlag ist die Änderung zurückgenommen,
 // nicht ausstehend.
 registerSyncSource('mutations', {
-    hasPending: computed(() => false),
-    isSyncing: computed(() => syncingVisible.value)
+  hasPending: computed(() => false),
+  isSyncing: computed(() => syncingVisible.value),
 })
 
 // ---------------------------------------------------------------------------
@@ -100,16 +100,18 @@ registerSyncSource('mutations', {
 const chains = new Map<string, Promise<unknown>>()
 
 function enqueue<T>(entityId: string, run: () => Promise<T>): Promise<T> {
-    const previous = chains.get(entityId) ?? Promise.resolve()
-    const next = previous.then(run, run)
-    // Kette am Ende aufräumen, damit die Map nicht wächst.
-    chains.set(
-        entityId,
-        next.catch(() => undefined).then(() => {
-            if (chains.get(entityId) === next) chains.delete(entityId)
-        })
-    )
-    return next
+  const previous = chains.get(entityId) ?? Promise.resolve()
+  const next = previous.then(run, run)
+  // Kette am Ende aufräumen, damit die Map nicht wächst.
+  chains.set(
+    entityId,
+    next
+      .catch(() => undefined)
+      .then(() => {
+        if (chains.get(entityId) === next) chains.delete(entityId)
+      }),
+  )
+  return next
 }
 
 /**
@@ -118,7 +120,7 @@ function enqueue<T>(entityId: string, run: () => Promise<T>): Promise<T> {
  * NACH der noch laufenden Mutation derselben Zeile passieren muss.
  */
 export function serializeMutation<T>(entityId: string, run: () => Promise<T>): Promise<T> {
-    return enqueue(entityId, run)
+  return enqueue(entityId, run)
 }
 
 // ---------------------------------------------------------------------------
@@ -126,21 +128,21 @@ export function serializeMutation<T>(entityId: string, run: () => Promise<T>): P
 // ---------------------------------------------------------------------------
 
 export interface OptimisticMutation<S> {
-    /** Entity-ID, an der serialisiert und „in Flug" gebucht wird. */
-    entityId: string
-    /**
-     * Lokale Änderung, sofort. Rückgabe ist der Schnappschuss, den `revert`
-     * bekommt — oder `null`, um die Mutation abzubrechen (kein Serveraufruf).
-     */
-    apply: () => S | null
-    /** Serveraufruf. Wirft bei Fehlschlag. */
-    commit: () => Promise<void>
-    /** Rücknahme mit dem Schnappschuss aus `apply` und dem Fehler des Commits. */
-    revert: (snapshot: S, error: unknown) => void | Promise<void>
-    /** Läuft nach erfolgreichem Commit, noch innerhalb der Buchführung. */
-    onSuccess?: () => void | Promise<void>
-    /** Fehlerbehandlung (z.B. Toast). Läuft nach `revert`. */
-    onError?: (error: unknown) => void
+  /** Entity-ID, an der serialisiert und „in Flug" gebucht wird. */
+  entityId: string
+  /**
+   * Lokale Änderung, sofort. Rückgabe ist der Schnappschuss, den `revert`
+   * bekommt — oder `null`, um die Mutation abzubrechen (kein Serveraufruf).
+   */
+  apply: () => S | null
+  /** Serveraufruf. Wirft bei Fehlschlag. */
+  commit: () => Promise<void>
+  /** Rücknahme mit dem Schnappschuss aus `apply` und dem Fehler des Commits. */
+  revert: (snapshot: S, error: unknown) => void | Promise<void>
+  /** Läuft nach erfolgreichem Commit, noch innerhalb der Buchführung. */
+  onSuccess?: () => void | Promise<void>
+  /** Fehlerbehandlung (z.B. Toast). Läuft nach `revert`. */
+  onError?: (error: unknown) => void
 }
 
 /**
@@ -153,53 +155,53 @@ export interface OptimisticMutation<S> {
  * wirklich auf die Bestätigung gewartet werden muss.
  */
 export function runOptimistic<S>(mutation: OptimisticMutation<S>): {
-    applied: boolean
-    settled: Promise<boolean>
+  applied: boolean
+  settled: Promise<boolean>
 } {
-    const snapshot = mutation.apply()
-    if (snapshot === null) {
-        return { applied: false, settled: Promise.resolve(false) }
-    }
+  const snapshot = mutation.apply()
+  if (snapshot === null) {
+    return { applied: false, settled: Promise.resolve(false) }
+  }
 
-    pendingCount.value++
-    markInFlight(mutation.entityId)
+  pendingCount.value++
+  markInFlight(mutation.entityId)
+  refreshSyncIndicator()
+
+  // Buchführung freigeben. Idempotent, und bewusst ERST NACH `onSuccess` bzw.
+  // nach dem Revert: gibt man den Echo-Schutz vorher frei, kann ein spät
+  // eintreffendes Realtime-Echo (Zwischenstand des DB-Triggers) die Zeile nach
+  // dem Reload wieder auf einen veralteten Stand ziehen. Der Hintergrund-Reload
+  // in `onSuccess` umgeht den Schutz stattdessen gezielt für seine eigenen IDs.
+  let released = false
+  const release = () => {
+    if (released) return
+    released = true
+    pendingCount.value--
+    clearInFlight(mutation.entityId)
     refreshSyncIndicator()
+  }
 
-    // Buchführung freigeben. Idempotent, und bewusst ERST NACH `onSuccess` bzw.
-    // nach dem Revert: gibt man den Echo-Schutz vorher frei, kann ein spät
-    // eintreffendes Realtime-Echo (Zwischenstand des DB-Triggers) die Zeile nach
-    // dem Reload wieder auf einen veralteten Stand ziehen. Der Hintergrund-Reload
-    // in `onSuccess` umgeht den Schutz stattdessen gezielt für seine eigenen IDs.
-    let released = false
-    const release = () => {
-        if (released) return
-        released = true
-        pendingCount.value--
-        clearInFlight(mutation.entityId)
-        refreshSyncIndicator()
+  const settled = enqueue(mutation.entityId, async () => {
+    try {
+      await mutation.commit()
+      await mutation.onSuccess?.()
+      return true
+    } catch (error) {
+      console.error('Optimistic mutation failed:', error)
+      try {
+        await mutation.revert(snapshot, error)
+      } catch (revertError) {
+        console.error('Optimistic revert failed:', revertError)
+      }
+      mutation.onError?.(error)
+      return false
+    } finally {
+      // Sicherheitsnetz: sonst hängt der Header dauerhaft auf „synchronisiert".
+      release()
     }
+  })
 
-    const settled = enqueue(mutation.entityId, async () => {
-        try {
-            await mutation.commit()
-            await mutation.onSuccess?.()
-            return true
-        } catch (error) {
-            console.error('Optimistic mutation failed:', error)
-            try {
-                await mutation.revert(snapshot, error)
-            } catch (revertError) {
-                console.error('Optimistic revert failed:', revertError)
-            }
-            mutation.onError?.(error)
-            return false
-        } finally {
-            // Sicherheitsnetz: sonst hängt der Header dauerhaft auf „synchronisiert".
-            release()
-        }
-    })
-
-    return { applied: true, settled }
+  return { applied: true, settled }
 }
 
 /**
@@ -209,20 +211,20 @@ export function runOptimistic<S>(mutation: OptimisticMutation<S>): {
  * „Failed to fetch"; zusätzlich zählt ein offline gemeldeter Browser.
  */
 export function isNetworkError(error: unknown): boolean {
-    if (typeof navigator !== 'undefined' && navigator.onLine === false) return true
-    if (!error) return false
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) return true
+  if (!error) return false
 
-    const name = (error as { name?: string }).name ?? ''
-    if (name === 'FunctionsFetchError' || name === 'AbortError' || name === 'TypeError') return true
+  const name = (error as { name?: string }).name ?? ''
+  if (name === 'FunctionsFetchError' || name === 'AbortError' || name === 'TypeError') return true
 
-    const message = String((error as { message?: string }).message ?? error).toLowerCase()
-    return (
-        message.includes('failed to fetch') ||
-        message.includes('networkerror') ||
-        message.includes('network error') ||
-        message.includes('load failed') ||
-        message.includes('fetch failed')
-    )
+  const message = String((error as { message?: string }).message ?? error).toLowerCase()
+  return (
+    message.includes('failed to fetch') ||
+    message.includes('networkerror') ||
+    message.includes('network error') ||
+    message.includes('load failed') ||
+    message.includes('fetch failed')
+  )
 }
 
 /**
@@ -233,44 +235,47 @@ export function isNetworkError(error: unknown): boolean {
  *
  * `list` wird an Ort und Stelle korrigiert; Zeilen werden über `pkColumn` gefunden.
  */
-export async function revertRows<T extends Record<string, unknown>, S extends Record<string, unknown>>(options: {
-    table: string
-    pkColumn: string
-    snapshots: S[]
-    list: { value: T[] }
-    /**
-     * Kein Nachladen — für den Fall, dass der Commit an einem Netzfehler
-     * gescheitert ist. Dann gilt sofort der Schnappschuss: lieber eine
-     * unmittelbar stimmige Oberfläche als eine, die zwölf Sekunden lang
-     * halb zurückgenommen dasteht.
-     */
-    skipReload?: boolean
+export async function revertRows<
+  T extends Record<string, unknown>,
+  S extends Record<string, unknown>,
+>(options: {
+  table: string
+  pkColumn: string
+  snapshots: S[]
+  list: { value: T[] }
+  /**
+   * Kein Nachladen — für den Fall, dass der Commit an einem Netzfehler
+   * gescheitert ist. Dann gilt sofort der Schnappschuss: lieber eine
+   * unmittelbar stimmige Oberfläche als eine, die zwölf Sekunden lang
+   * halb zurückgenommen dasteht.
+   */
+  skipReload?: boolean
 }): Promise<void> {
-    const { table, pkColumn, snapshots, list, skipReload } = options
-    const ids = snapshots.map(s => s[pkColumn] as string)
-    if (ids.length === 0) return
+  const { table, pkColumn, snapshots, list, skipReload } = options
+  const ids = snapshots.map((s) => s[pkColumn] as string)
+  if (ids.length === 0) return
 
-    let fresh: T[] = []
-    if (!skipReload) {
-        try {
-            const { data } = await supabase.from(table).select('*').in(pkColumn, ids)
-            fresh = (data as T[] | null) || []
-        } catch (error) {
-            console.error(`Error reloading ${table} rows for revert:`, error)
-        }
+  let fresh: T[] = []
+  if (!skipReload) {
+    try {
+      const { data } = await supabase.from(table).select('*').in(pkColumn, ids)
+      fresh = (data as T[] | null) || []
+    } catch (error) {
+      console.error(`Error reloading ${table} rows for revert:`, error)
     }
+  }
 
-    for (const snapshot of snapshots) {
-        const id = snapshot[pkColumn] as string
-        const index = list.value.findIndex(row => row[pkColumn] === id)
-        if (index === -1) continue
-        const row = fresh.find(r => r[pkColumn] === id)
-        list.value[index] = row ? row : { ...list.value[index], ...snapshot }
-    }
+  for (const snapshot of snapshots) {
+    const id = snapshot[pkColumn] as string
+    const index = list.value.findIndex((row) => row[pkColumn] === id)
+    if (index === -1) continue
+    const row = fresh.find((r) => r[pkColumn] === id)
+    list.value[index] = row ? row : { ...list.value[index], ...snapshot }
+  }
 }
 
 /** Nur für Diagnose/Tests im Browser. */
 export const optimisticDebug = {
-    pendingCount,
-    inFlight
+  pendingCount,
+  inFlight,
 }

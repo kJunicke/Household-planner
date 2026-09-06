@@ -42,10 +42,10 @@ const scrolling = useScrollQuiet()
  * heraus.
  */
 watch(
-  () => Boolean(scrap.value) && !taskStore.tasks.some(t => t.task_id === scrap.value?.taskId),
-  gone => {
+  () => Boolean(scrap.value) && !taskStore.tasks.some((t) => t.task_id === scrap.value?.taskId),
+  (gone) => {
     if (gone && scrap.value) dropScrap(scrap.value.taskId)
-  }
+  },
 )
 
 /**

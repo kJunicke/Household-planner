@@ -25,15 +25,15 @@ const { offset, revealed, hide, onPointerDown, onPointerMove, onPointerUp, onCli
   useSwipeAction({
     onTap: () => props.completion.completion_note && emit('toggleNote'),
     onSwipeStart: () => emit('swipeStart'),
-    onHide: () => emit('swipeEnd')
+    onHide: () => emit('swipeEnd'),
   })
 
 // Wischt woanders eine Zeile auf, schließt sich diese hier.
 watch(
   () => props.swipeOpenId,
-  id => {
+  (id) => {
     if (revealed.value && id !== props.completion.completion_id) hide()
-  }
+  },
 )
 
 const formatTime = (dateString: string) =>
@@ -47,7 +47,7 @@ const ariaLabel = computed(
   () =>
     `${props.completion.tasks?.title || 'Unbekannte Aufgabe'}, ` +
     `${props.completion.household_members.display_name}, ` +
-    `${formatTime(props.completion.completed_at)}, ${props.completion.points} Punkte`
+    `${formatTime(props.completion.completed_at)}, ${props.completion.points} Punkte`,
 )
 
 const onKeydown = (e: KeyboardEvent) => {
@@ -168,7 +168,6 @@ const onKeydown = (e: KeyboardEvent) => {
   outline: 2px solid var(--color-primary);
   outline-offset: -2px;
 }
-
 
 .row-time {
   flex-shrink: 0;

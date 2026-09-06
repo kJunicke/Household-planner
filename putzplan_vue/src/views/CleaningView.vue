@@ -1,14 +1,14 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted, ref, computed, watch } from "vue";
-import TaskCard from '../components/TaskCard.vue';
-import CategoryNav, { type TaskCategory } from '../components/CategoryNav.vue';
-import TaskCreateModal from '../components/TaskCreateModal.vue';
-import QuickTaskModal from '../components/QuickTaskModal.vue';
-import { useTaskStore } from "../stores/taskStore";
-import { useHouseholdStore } from "../stores/householdStore";
-import type { Task } from '@/types/Task';
-import { useTaskBoard, countOverdue } from '@/composables/useTaskBoard';
-import { useOverlayHistoryEntry } from '@/composables/useOverlayHistoryEntry';
+import { onMounted, onUnmounted, ref, computed, watch } from 'vue'
+import TaskCard from '../components/TaskCard.vue'
+import CategoryNav, { type TaskCategory } from '../components/CategoryNav.vue'
+import TaskCreateModal from '../components/TaskCreateModal.vue'
+import QuickTaskModal from '../components/QuickTaskModal.vue'
+import { useTaskStore } from '../stores/taskStore'
+import { useHouseholdStore } from '../stores/householdStore'
+import type { Task } from '@/types/Task'
+import { useTaskBoard, countOverdue } from '@/composables/useTaskBoard'
+import { useOverlayHistoryEntry } from '@/composables/useOverlayHistoryEntry'
 
 const taskStore = useTaskStore()
 
@@ -73,9 +73,12 @@ const crossTabSearchResults = computed(() => {
   }
 
   // Get category for task
-  const getCategory = (task: Task): { category: 'daily' | 'recurring' | 'project' | 'completed', label: string } => {
+  const getCategory = (
+    task: Task,
+  ): { category: 'daily' | 'recurring' | 'project' | 'completed'; label: string } => {
     if (task.completed) return { category: 'completed', label: 'Erledigt' }
-    if (task.task_type === 'daily' || task.task_type === 'one-time') return { category: 'daily', label: 'Alltag' }
+    if (task.task_type === 'daily' || task.task_type === 'one-time')
+      return { category: 'daily', label: 'Alltag' }
     if (task.task_type === 'recurring') return { category: 'recurring', label: 'Putzen' }
     if (task.task_type === 'project') return { category: 'project', label: 'Projekte' }
     return { category: 'daily', label: 'Alltag' }
@@ -111,7 +114,7 @@ const categoryConfig: Record<TaskCategory, { label: string; icon: string }> = {
   daily: { label: 'Tägliche Aufgaben', icon: 'bi-lightning-fill' },
   recurring: { label: 'Putzaufgaben', icon: 'bi-arrow-repeat' },
   project: { label: 'Projekte', icon: 'bi-kanban' },
-  completed: { label: 'Erledigt', icon: 'bi-check-circle' }
+  completed: { label: 'Erledigt', icon: 'bi-check-circle' },
 }
 
 // Get tasks for a specific category.
@@ -162,7 +165,7 @@ const groupedTasks = computed((): TaskGroup[] => {
         groups.push({
           category: cat,
           ...categoryConfig[cat],
-          tasks
+          tasks,
         })
       }
     }
@@ -247,7 +250,6 @@ onUnmounted(() => {
   // Cleanup: Beendet Realtime Subscriptions
   taskStore.unsubscribeFromTasks()
 })
-
 </script>
 
 <template>
@@ -291,18 +293,18 @@ onUnmounted(() => {
              Warnfarbe und Warndreieck nur, wenn wirklich etwas überfällig ist —
              sonst verliert Rot seine Bedeutung, weil die Sektion inzwischen
              jede offene Putzaufgabe enthält. -->
-        <section v-if="pendingTasks.length" class="task-section" :class="{ 'section-overdue': overdueCount }">
+        <section
+          v-if="pendingTasks.length"
+          class="task-section"
+          :class="{ 'section-overdue': overdueCount }"
+        >
           <div class="category-header" :class="{ 'category-header-overdue': overdueCount }">
             <i :class="overdueCount ? 'bi bi-exclamation-triangle-fill' : 'bi bi-arrow-repeat'"></i>
             <span class="category-label">Jetzt dran</span>
             <span class="task-count">{{ pendingTasks.length }}</span>
           </div>
           <div class="task-list">
-            <TaskCard
-              v-for="task in pendingTasks"
-              :key="task.task_id"
-              :task="task"
-            />
+            <TaskCard v-for="task in pendingTasks" :key="task.task_id" :task="task" />
           </div>
         </section>
 
@@ -313,22 +315,14 @@ onUnmounted(() => {
         </div>
 
         <!-- Grouped Task Sections -->
-        <section
-          v-for="group in groupedTasks"
-          :key="group.category"
-          class="task-section"
-        >
+        <section v-for="group in groupedTasks" :key="group.category" class="task-section">
           <div class="category-header">
             <i :class="group.icon"></i>
             <span class="category-label">{{ group.label }}</span>
             <span class="task-count">{{ group.tasks.length }}</span>
           </div>
           <div class="task-list">
-            <TaskCard
-              v-for="task in group.tasks"
-              :key="task.task_id"
-              :task="task"
-            />
+            <TaskCard v-for="task in group.tasks" :key="task.task_id" :task="task" />
           </div>
         </section>
       </template>
@@ -408,7 +402,10 @@ onUnmounted(() => {
           </template>
 
           <!-- Empty Search State -->
-          <div v-else-if="crossTabSearchResults && crossTabSearchResults.length === 0" class="empty-state">
+          <div
+            v-else-if="crossTabSearchResults && crossTabSearchResults.length === 0"
+            class="empty-state"
+          >
             <i class="bi bi-search"></i>
             <p>Keine Tasks gefunden für "{{ searchQuery }}"</p>
           </div>
@@ -574,7 +571,9 @@ onUnmounted(() => {
   align-items: center;
   gap: 12px;
   z-index: 1000;
-  transition: bottom 0.2s ease, right 0.3s ease;
+  transition:
+    bottom 0.2s ease,
+    right 0.3s ease;
 }
 
 .fab {

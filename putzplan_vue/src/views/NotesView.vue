@@ -57,7 +57,7 @@ const confirmDelete = async () => {
 }
 
 const getMemberName = (userId: string) => {
-  const member = householdStore.householdMembers.find(m => m.user_id === userId)
+  const member = householdStore.householdMembers.find((m) => m.user_id === userId)
   return member?.display_name || 'Unbekannt'
 }
 
@@ -68,7 +68,7 @@ const formatDate = (dateString: string) => {
     month: '2-digit',
     year: 'numeric',
     hour: '2-digit',
-    minute: '2-digit'
+    minute: '2-digit',
   })
 }
 
@@ -85,9 +85,7 @@ onUnmounted(() => {
 <template>
   <div class="page-container">
     <div class="container-fluid">
-      <h2 class="page-title">
-        <i class="bi bi-sticky"></i> Notizen
-      </h2>
+      <h2 class="page-title"><i class="bi bi-sticky"></i> Notizen</h2>
 
       <!-- Create Note Form.
            Bewusste Ausnahme zum FAB/Modal-Pattern der übrigen App: Notizen
@@ -115,8 +113,8 @@ onUnmounted(() => {
 
       <!-- Loading State -->
       <div v-if="notesStore.isLoading && notesStore.notes.length === 0" class="skeleton-loading">
-        <div class="skeleton-card" style="height: 100px;"></div>
-        <div class="skeleton-card" style="height: 100px;"></div>
+        <div class="skeleton-card" style="height: 100px"></div>
+        <div class="skeleton-card" style="height: 100px"></div>
       </div>
 
       <!-- Empty State -->
@@ -127,11 +125,7 @@ onUnmounted(() => {
 
       <!-- Notes List -->
       <div v-else class="notes-list">
-        <div
-          v-for="note in notesStore.sortedNotes"
-          :key="note.note_id"
-          class="note-item"
-        >
+        <div v-for="note in notesStore.sortedNotes" :key="note.note_id" class="note-item">
           <!-- View Mode -->
           <template v-if="editingNote?.note_id !== note.note_id">
             <div class="note-content">
@@ -171,15 +165,9 @@ onUnmounted(() => {
           <!-- Edit Mode -->
           <template v-else>
             <div class="note-edit">
-              <textarea
-                v-model="editContent"
-                class="form-control"
-                rows="3"
-              ></textarea>
+              <textarea v-model="editContent" class="form-control" rows="3"></textarea>
               <div class="edit-actions mt-2">
-                <button class="btn btn-sm btn-secondary" @click="cancelEditing">
-                  Abbrechen
-                </button>
+                <button class="btn btn-sm btn-secondary" @click="cancelEditing">Abbrechen</button>
                 <button
                   class="btn btn-sm btn-primary"
                   @click="saveEdit"
@@ -207,13 +195,12 @@ onUnmounted(() => {
           <div class="modal-body">
             <p>Möchtest du diese Notiz wirklich löschen?</p>
             <p class="text-muted note-preview">
-              "{{ noteToDelete?.content?.substring(0, 100) }}{{ (noteToDelete?.content?.length || 0) > 100 ? '...' : '' }}"
+              "{{ noteToDelete?.content?.substring(0, 100)
+              }}{{ (noteToDelete?.content?.length || 0) > 100 ? '...' : '' }}"
             </p>
           </div>
           <div class="modal-footer">
-            <button @click="closeDeleteModal" class="btn btn-secondary">
-              Abbrechen
-            </button>
+            <button @click="closeDeleteModal" class="btn btn-secondary">Abbrechen</button>
             <button @click="confirmDelete" class="btn btn-danger">
               <i class="bi bi-trash"></i> Löschen
             </button>

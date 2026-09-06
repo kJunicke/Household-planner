@@ -54,19 +54,19 @@ const overflowPoints = computed(() => Math.max(0, total.value - goal.value))
  * Bildschirmbreite und braucht nie eine zweite Bahn.
  */
 const fillPercent = computed(() => {
-    if (goal.value <= 0) return total.value > 0 ? 100 : 0
-    return Math.min(100, (total.value / goal.value) * 100)
+  if (goal.value <= 0) return total.value > 0 ? 100 : 0
+  return Math.min(100, (total.value / goal.value) * 100)
 })
 
 interface Segment {
-    key: string
-    color: string
-    /** Anteil an der **gefüllten** Strecke, in Prozent. */
-    percent: number
-    /** Anteil links davon, in Prozent — absolute Position statt Flex-Fluss. */
-    offset: number
-    points: number
-    name: string
+  key: string
+  color: string
+  /** Anteil an der **gefüllten** Strecke, in Prozent. */
+  percent: number
+  /** Anteil links davon, in Prozent — absolute Position statt Flex-Fluss. */
+  offset: number
+  points: number
+  name: string
 }
 
 /**
@@ -89,21 +89,21 @@ interface Segment {
  * Ein Mitglied ohne Punkte behält sein Segment mit Breite 0.
  */
 const segments = computed<Segment[]>(() => {
-    const sum = total.value
-    let offset = 0
-    return contributions.value.map(entry => {
-        const percent = sum > 0 ? (entry.points / sum) * 100 : 0
-        const segment: Segment = {
-            key: entry.userId,
-            color: entry.color,
-            percent,
-            offset,
-            points: entry.points,
-            name: entry.name
-        }
-        offset += percent
-        return segment
-    })
+  const sum = total.value
+  let offset = 0
+  return contributions.value.map((entry) => {
+    const percent = sum > 0 ? (entry.points / sum) * 100 : 0
+    const segment: Segment = {
+      key: entry.userId,
+      color: entry.color,
+      percent,
+      offset,
+      points: entry.points,
+      name: entry.name,
+    }
+    offset += percent
+    return segment
+  })
 })
 
 /**
@@ -125,8 +125,8 @@ const segments = computed<Segment[]>(() => {
  *   102 Pkt → P = log2(3,4)   = 1,766
  */
 const pressure = computed(() => {
-    if (!isOverflowing.value) return 0
-    return Math.log2(total.value / goal.value)
+  if (!isOverflowing.value) return 0
+  return Math.log2(total.value / goal.value)
 })
 
 /**
@@ -176,50 +176,50 @@ const MAX_JETS = 9
  * Animiert werden nur `transform` und `opacity`. Kein `requestAnimationFrame`.
  */
 const burstStyle = computed(() => {
-    const p = pressure.value
-    // Das Aufleuchten des gefüllten Balkens.
-    //
-    // **Die Helligkeit trägt das Ausmaß**, nicht das Tempo: schneller hieße
-    // aufdringlicher, und genau das soll es nicht sein.
-    //
-    // Der Basisterm ist 0,08, nicht 0,05: mit 0,05 lag der Hub knapp über dem
-    // Ziel auf einer **hellen** Mitgliederfarbe (gemessen an rgb(226,164,74))
-    // bei nur 4,9 von 255 Stufen und war im Screenshot nicht auszumachen. Die
-    // Steigung ist im Gegenzug von 0,085 auf 0,075 gesenkt, damit der Deckel
-    // bei 0,30 ungefähr an seiner Stelle bleibt: er rückt dadurch von r = 7,684
-    // auf r = 7,639 vor, also um 0,6 % — mit 0,08 bei unveränderter Steigung
-    // wäre er auf r = 6,01 gewandert. (Vom QC nachgerechnet; eine frühere
-    // Fassung dieses Kommentars behauptete „nicht früher", das war falsch.)
-    // Der Deckel bei 0,30
-    // ist echt und wird nicht kaschiert — er hält die Segmentfarben lesbar und
-    // ist ab P = 2,93 (r ≈ 7,6) erreicht. Oberhalb trägt die exakte
-    // `+N`-Zahl das Ausmaß; das sichtbare Signal trägt dann die Tatsache
-    // „wir sind drüber", plus die feine Abstufung über die Spritzer.
-    const glowPeak = Math.min(0.3, 0.08 + 0.075 * p)
-    // Ein voller Atemzug (Auf **und** Ab, wegen `alternate` zwei Halbwellen)
-    // dauert 5,2 s und geht nur sanft auf 3 s herunter — ruhig bleibt ruhig.
-    const glowCycle = Math.max(3, 5.2 - 0.6 * p)
-    return {
-        '--pw-travel': `${Math.min(MAX_TRAVEL_PX, 6 + 4 * p).toFixed(2)}px`,
-        '--pw-jet-len': `${Math.min(MAX_LINE_PX, 3 + 2 * p).toFixed(2)}px`,
-        '--pw-burst-dur': `${(1.45 / (1 + 0.5 * p)).toFixed(3)}s`,
-        '--pw-burst-strength': `${Math.min(1, 0.35 + 0.3 * p).toFixed(3)}`,
-        // Auch die Spritzer werden kräftiger, nicht nur länger. Sie liegen
-        // absolut in der Spur — ohne Beitrag zur Höhe.
-        '--pw-jet-h': `${Math.min(4, 1.5 + 0.6 * p).toFixed(2)}px`,
-        // Das Aufleuchten: Spitzenhelligkeit und Dauer **einer Halbwelle**.
-        '--pw-glow-peak': `${glowPeak.toFixed(3)}`,
-        '--pw-glow-half': `${(glowCycle / 2).toFixed(3)}s`
-    } as Record<string, string>
+  const p = pressure.value
+  // Das Aufleuchten des gefüllten Balkens.
+  //
+  // **Die Helligkeit trägt das Ausmaß**, nicht das Tempo: schneller hieße
+  // aufdringlicher, und genau das soll es nicht sein.
+  //
+  // Der Basisterm ist 0,08, nicht 0,05: mit 0,05 lag der Hub knapp über dem
+  // Ziel auf einer **hellen** Mitgliederfarbe (gemessen an rgb(226,164,74))
+  // bei nur 4,9 von 255 Stufen und war im Screenshot nicht auszumachen. Die
+  // Steigung ist im Gegenzug von 0,085 auf 0,075 gesenkt, damit der Deckel
+  // bei 0,30 ungefähr an seiner Stelle bleibt: er rückt dadurch von r = 7,684
+  // auf r = 7,639 vor, also um 0,6 % — mit 0,08 bei unveränderter Steigung
+  // wäre er auf r = 6,01 gewandert. (Vom QC nachgerechnet; eine frühere
+  // Fassung dieses Kommentars behauptete „nicht früher", das war falsch.)
+  // Der Deckel bei 0,30
+  // ist echt und wird nicht kaschiert — er hält die Segmentfarben lesbar und
+  // ist ab P = 2,93 (r ≈ 7,6) erreicht. Oberhalb trägt die exakte
+  // `+N`-Zahl das Ausmaß; das sichtbare Signal trägt dann die Tatsache
+  // „wir sind drüber", plus die feine Abstufung über die Spritzer.
+  const glowPeak = Math.min(0.3, 0.08 + 0.075 * p)
+  // Ein voller Atemzug (Auf **und** Ab, wegen `alternate` zwei Halbwellen)
+  // dauert 5,2 s und geht nur sanft auf 3 s herunter — ruhig bleibt ruhig.
+  const glowCycle = Math.max(3, 5.2 - 0.6 * p)
+  return {
+    '--pw-travel': `${Math.min(MAX_TRAVEL_PX, 6 + 4 * p).toFixed(2)}px`,
+    '--pw-jet-len': `${Math.min(MAX_LINE_PX, 3 + 2 * p).toFixed(2)}px`,
+    '--pw-burst-dur': `${(1.45 / (1 + 0.5 * p)).toFixed(3)}s`,
+    '--pw-burst-strength': `${Math.min(1, 0.35 + 0.3 * p).toFixed(3)}`,
+    // Auch die Spritzer werden kräftiger, nicht nur länger. Sie liegen
+    // absolut in der Spur — ohne Beitrag zur Höhe.
+    '--pw-jet-h': `${Math.min(4, 1.5 + 0.6 * p).toFixed(2)}px`,
+    // Das Aufleuchten: Spitzenhelligkeit und Dauer **einer Halbwelle**.
+    '--pw-glow-peak': `${glowPeak.toFixed(3)}`,
+    '--pw-glow-half': `${(glowCycle / 2).toFixed(3)}s`,
+  } as Record<string, string>
 })
 
 interface Jet {
-    key: string
-    color: string
-    /** Senkrechte Lage im Balken, in Prozent — deterministisch gestreut. */
-    top: number
-    /** Negative Phase in Vielfachen der Taktdauer; ersetzt jeden Zufall. */
-    phase: number
+  key: string
+  color: string
+  /** Senkrechte Lage im Balken, in Prozent — deterministisch gestreut. */
+  top: number
+  /** Negative Phase in Vielfachen der Taktdauer; ersetzt jeden Zufall. */
+  phase: number
 }
 
 /**
@@ -236,20 +236,20 @@ interface Jet {
  * ohne Zufallszahl aus — auch nicht je Frame.
  */
 const jets = computed<Jet[]>(() => {
-    if (!isOverflowing.value) return []
-    const colors = contributions.value.map(entry => entry.color)
-    const palette = colors.length > 0 ? colors : ['var(--pw-accent)']
-    const count = Math.min(MAX_JETS, 3 + Math.round(pressure.value * 1.2))
-    const result: Jet[] = []
-    for (let i = 0; i < count; i += 1) {
-        result.push({
-            key: `jet-${i}`,
-            color: palette[i % palette.length],
-            top: 12 + ((i * 37) % 76),
-            phase: -((i * 0.37) % 1)
-        })
-    }
-    return result
+  if (!isOverflowing.value) return []
+  const colors = contributions.value.map((entry) => entry.color)
+  const palette = colors.length > 0 ? colors : ['var(--pw-accent)']
+  const count = Math.min(MAX_JETS, 3 + Math.round(pressure.value * 1.2))
+  const result: Jet[] = []
+  for (let i = 0; i < count; i += 1) {
+    result.push({
+      key: `jet-${i}`,
+      color: palette[i % palette.length],
+      top: 12 + ((i * 37) % 76),
+      phase: -((i * 0.37) % 1),
+    })
+  }
+  return result
 })
 
 /**
@@ -263,7 +263,7 @@ const jets = computed<Jet[]>(() => {
  */
 const isScrolled = ref(false)
 const onScroll = () => {
-    isScrolled.value = window.scrollY > 4
+  isScrolled.value = window.scrollY > 4
 }
 
 /**
@@ -286,12 +286,12 @@ const onScroll = () => {
  * dort an `.wall-page`.
  */
 onMounted(() => {
-    onScroll()
-    window.addEventListener('scroll', onScroll, { passive: true })
+  onScroll()
+  window.addEventListener('scroll', onScroll, { passive: true })
 })
 
 onUnmounted(() => {
-    window.removeEventListener('scroll', onScroll)
+  window.removeEventListener('scroll', onScroll)
 })
 </script>
 
@@ -319,11 +319,7 @@ onUnmounted(() => {
 
       <!-- Genau eine Bahn über die volle Papierbreite. Über dem Ziel platzt sie
            an der rechten Kante auf, statt umzulaufen. -->
-      <div
-        class="status-bars"
-        :class="{ 'status-bars--burst': isOverflowing }"
-        :style="burstStyle"
-      >
+      <div class="status-bars" :class="{ 'status-bars--burst': isOverflowing }" :style="burstStyle">
         <!-- `data-points-target` ist das Ziel des Punkteflugs aus Ticket 09.
              Ein Attribut und keine Klasse, weil `lib/pointsFlight.ts` von
              ausserhalb dieser Komponente sucht: Klassennamen in scoped Styles
@@ -339,7 +335,7 @@ onUnmounted(() => {
               :style="{
                 left: `${segment.offset}%`,
                 width: `${segment.percent}%`,
-                backgroundColor: segment.color
+                backgroundColor: segment.color,
               }"
               :title="`${segment.name}: ${segment.points} Pkt`"
             ></div>
@@ -367,13 +363,12 @@ onUnmounted(() => {
               :style="{
                 top: `${jet.top}%`,
                 background: jet.color,
-                '--jet-phase': `${jet.phase}`
+                '--jet-phase': `${jet.phase}`,
               }"
             ></span>
           </div>
         </div>
       </div>
-
     </div>
   </div>
 </template>

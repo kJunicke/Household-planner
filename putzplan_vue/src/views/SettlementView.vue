@@ -17,21 +17,23 @@ const filterUserId = ref<string | null>(null)
 
 const getMemberName = (userId: string | null) => {
   if (!userId) return 'Unbekannt'
-  return householdStore.householdMembers.find(m => m.user_id === userId)?.display_name ?? 'Unbekannt'
+  return (
+    householdStore.householdMembers.find((m) => m.user_id === userId)?.display_name ?? 'Unbekannt'
+  )
 }
 
 const methodLabel: Record<SettlementMethod, string> = {
   activity: 'Aktivität',
   money: 'Geld',
   surprise: 'Überraschung',
-  other: 'Sonstiges'
+  other: 'Sonstiges',
 }
 
 const methodIcon: Record<SettlementMethod, string> = {
   activity: 'bi-bullseye',
   money: 'bi-cash-coin',
   surprise: 'bi-gift',
-  other: 'bi-three-dots'
+  other: 'bi-three-dots',
 }
 
 const formatDate = (iso: string) =>
@@ -40,7 +42,7 @@ const formatDate = (iso: string) =>
 const filteredSettlements = computed(() => {
   if (!filterUserId.value) return settlementStore.sortedSettlements
   return settlementStore.sortedSettlements.filter(
-    s => s.from_user_id === filterUserId.value || s.to_user_id === filterUserId.value
+    (s) => s.from_user_id === filterUserId.value || s.to_user_id === filterUserId.value,
   )
 })
 
@@ -119,10 +121,12 @@ onUnmounted(() => {
               <div class="balance-amount">{{ Math.abs(pair.balance) }} Pkt.</div>
               <button
                 class="btn btn-sm btn-outline-primary"
-                @click="openCreateModal(
-                  pair.balance > 0 ? pair.userBId : pair.userAId,
-                  pair.balance > 0 ? pair.userAId : pair.userBId
-                )"
+                @click="
+                  openCreateModal(
+                    pair.balance > 0 ? pair.userBId : pair.userAId,
+                    pair.balance > 0 ? pair.userAId : pair.userBId,
+                  )
+                "
               >
                 Ausgleichen
               </button>
@@ -156,7 +160,9 @@ onUnmounted(() => {
               <button
                 :class="['filter-chip', filterUserId === null && 'active']"
                 @click="filterUserId = null"
-              >Alle</button>
+              >
+                Alle
+              </button>
               <button
                 v-for="member in householdStore.householdMembers"
                 :key="member.user_id"
@@ -174,11 +180,7 @@ onUnmounted(() => {
           </div>
 
           <div v-else class="settlement-list">
-            <div
-              v-for="s in filteredSettlements"
-              :key="s.settlement_id"
-              class="settlement-item"
-            >
+            <div v-for="s in filteredSettlements" :key="s.settlement_id" class="settlement-item">
               <div class="settlement-main">
                 <div class="settlement-info">
                   <i :class="['bi', methodIcon[s.method as SettlementMethod], 'method-icon']"></i>

@@ -25,14 +25,17 @@ export const useToastStore = defineStore('toast', () => {
       id,
       message,
       type,
-      timestamp: Date.now()
+      timestamp: Date.now(),
     }
 
     toasts.value.push(toast)
 
     // Auto-dismiss nach duration (default 5s)
     if (duration > 0) {
-      timers.set(id, setTimeout(() => removeToast(id), duration))
+      timers.set(
+        id,
+        setTimeout(() => removeToast(id), duration),
+      )
     }
 
     return id
@@ -44,13 +47,13 @@ export const useToastStore = defineStore('toast', () => {
       clearTimeout(timer)
       timers.delete(id)
     }
-    toasts.value = toasts.value.filter(t => t.id !== id)
+    toasts.value = toasts.value.filter((t) => t.id !== id)
   }
 
   // Return - Public API
   return {
     toasts,
     showToast,
-    removeToast
+    removeToast,
   }
 })

@@ -16,7 +16,7 @@ const emit = defineEmits<{ toggle: [] }>()
 
 const { onPointerDown, onPointerMove, onPointerUp, onClick } = useSwipeAction({
   actionWidth: 0,
-  onTap: () => emit('toggle')
+  onTap: () => emit('toggle'),
 })
 
 // Farbe allein darf die Beteiligten nicht tragen — Screenreader bekommen sie im Label nach.
@@ -24,7 +24,7 @@ const ariaLabel = computed(() => {
   const count = props.row.children.length
   return (
     `${props.row.parentTitle}, ${count} ${count === 1 ? 'Subtask' : 'Subtasks'} von ` +
-    `${props.row.people.map(p => p.display_name).join(', ')}, ${props.row.points} Punkte`
+    `${props.row.people.map((p) => p.display_name).join(', ')}, ${props.row.points} Punkte`
   )
 })
 

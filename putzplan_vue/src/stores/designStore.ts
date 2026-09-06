@@ -1,11 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
-import {
-    applyDesign,
-    readStoredDesign,
-    storeDesign,
-    type DesignMode,
-} from '../lib/design'
+import { applyDesign, readStoredDesign, storeDesign, type DesignMode } from '../lib/design'
 
 /**
  * Aussehen-Umschalter. Reine Geräte-Einstellung — kein Netzwerk, kein Supabase.
@@ -13,14 +8,14 @@ import {
  * reaktiv für die UI und schreibt ihn bei jeder Änderung sofort durch.
  */
 export const useDesignStore = defineStore('design', () => {
-    const design = ref<DesignMode>(readStoredDesign())
+  const design = ref<DesignMode>(readStoredDesign())
 
-    function setDesign(mode: DesignMode) {
-        if (design.value === mode) return
-        design.value = mode
-        applyDesign(mode)
-        storeDesign(mode)
-    }
+  function setDesign(mode: DesignMode) {
+    if (design.value === mode) return
+    design.value = mode
+    applyDesign(mode)
+    storeDesign(mode)
+  }
 
-    return { design, setDesign }
+  return { design, setDesign }
 })

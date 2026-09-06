@@ -1,11 +1,13 @@
 <script setup lang="ts">
 import { ref } from 'vue'
+import CategoryCombobox from '@/components/CategoryCombobox.vue'
 import type { ChecklistItem } from '@/types/Checklist'
+import type { CategoryOption } from '@/types/CategoryOption'
 
 const props = defineProps<{
   item: ChecklistItem
-  /** Category labels already used in the current list (for the datalist). */
-  existingCategories: string[]
+  /** Kategorien des Haushalts für die Combobox; die der aktuellen Liste zuerst. */
+  categoryOptions: CategoryOption[]
 }>()
 
 const emit = defineEmits<{
@@ -25,7 +27,7 @@ const handleSave = () => {
   emit('save', props.item.item_id, {
     name: name.value.trim(),
     category: category.value.trim() || null,
-    quantity: qty
+    quantity: qty,
   })
 }
 
@@ -39,7 +41,7 @@ const stepQty = (delta: number) => {
     <div class="modal-overlay" @click.self="emit('close')">
       <div class="modal-content" @click.stop>
         <div class="modal-header">
-          <h5 class="modal-title">Item bearbeiten</h5>
+          <h5 class="modal-title">Eintrag bearbeiten</h5>
           <button class="btn-close" @click="emit('close')"></button>
         </div>
 
@@ -58,23 +60,23 @@ const stepQty = (delta: number) => {
 
           <div class="form-group">
             <label class="form-label">Kategorie</label>
-            <input
+            <CategoryCombobox
               v-model="category"
-              type="text"
-              class="form-control"
-              list="edit-category-options"
-              maxlength="100"
+              :options="categoryOptions"
               placeholder="Leer = Unkategorisiert"
+              @submit="handleSave"
             />
-            <datalist id="edit-category-options">
-              <option v-for="cat in existingCategories" :key="cat" :value="cat" />
-            </datalist>
           </div>
 
           <div class="form-group">
             <label class="form-label">Menge</label>
             <div class="qty-edit">
-              <button class="btn btn-outline-secondary qty-edit-btn" type="button" @click="stepQty(-1)" :disabled="quantity <= 1">
+              <button
+                class="btn btn-outline-secondary qty-edit-btn"
+                type="button"
+                @click="stepQty(-1)"
+                :disabled="quantity <= 1"
+              >
                 <i class="bi bi-dash-lg"></i>
               </button>
               <input
@@ -84,7 +86,11 @@ const stepQty = (delta: number) => {
                 min="1"
                 max="999"
               />
-              <button class="btn btn-outline-secondary qty-edit-btn" type="button" @click="stepQty(1)">
+              <button
+                class="btn btn-outline-secondary qty-edit-btn"
+                type="button"
+                @click="stepQty(1)"
+              >
                 <i class="bi bi-plus-lg"></i>
               </button>
             </div>
@@ -102,8 +108,12 @@ const stepQty = (delta: number) => {
 
           <div v-if="showDeleteConfirm" class="delete-confirm me-auto">
             <span class="text-danger me-2">Wirklich löschen?</span>
-            <button class="btn btn-sm btn-danger me-1" @click="emit('delete', item.item_id)">Ja</button>
-            <button class="btn btn-sm btn-secondary" @click="showDeleteConfirm = false">Abbrechen</button>
+            <button class="btn btn-sm btn-danger me-1" @click="emit('delete', item.item_id)">
+              Ja
+            </button>
+            <button class="btn btn-sm btn-secondary" @click="showDeleteConfirm = false">
+              Abbrechen
+            </button>
           </div>
 
           <button class="btn btn-secondary" @click="emit('close')">Abbrechen</button>

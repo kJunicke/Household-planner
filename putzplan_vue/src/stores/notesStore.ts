@@ -21,8 +21,8 @@ export const useNotesStore = defineStore('notes', () => {
 
   // Notes sorted by most recent first
   const sortedNotes = computed(() => {
-    return [...notes.value].sort((a, b) =>
-      new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+    return [...notes.value].sort(
+      (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
     )
   })
 
@@ -58,7 +58,6 @@ export const useNotesStore = defineStore('notes', () => {
 
       notes.value = data || []
       console.log('Loaded notes:', notes.value.length)
-
     } catch (error) {
       console.error('Error loading notes:', error)
       toastStore.showToast('Fehler beim Laden der Notizen', 'error')
@@ -93,7 +92,7 @@ export const useNotesStore = defineStore('notes', () => {
         .insert({
           content: content.trim(),
           household_id: householdStore.currentHousehold.household_id,
-          created_by: authStore.user.id
+          created_by: authStore.user.id,
         })
         .select()
         .single()
@@ -104,7 +103,6 @@ export const useNotesStore = defineStore('notes', () => {
       notes.value.unshift(data)
       toastStore.showToast('Notiz erstellt', 'success', 2000)
       return data
-
     } catch (error) {
       console.error('Error creating note:', error)
       toastStore.showToast('Fehler beim Erstellen der Notiz', 'error')
@@ -129,18 +127,17 @@ export const useNotesStore = defineStore('notes', () => {
       if (error) throw error
 
       // Update local state (Realtime will also update, but immediate feedback is better)
-      const index = notes.value.findIndex(n => n.note_id === noteId)
+      const index = notes.value.findIndex((n) => n.note_id === noteId)
       if (index !== -1) {
         notes.value[index] = {
           ...notes.value[index],
           content: content.trim(),
-          updated_at: new Date().toISOString()
+          updated_at: new Date().toISOString(),
         }
       }
 
       toastStore.showToast('Notiz aktualisiert', 'success', 2000)
       return true
-
     } catch (error) {
       console.error('Error updating note:', error)
       toastStore.showToast('Fehler beim Aktualisieren der Notiz', 'error')
@@ -152,18 +149,14 @@ export const useNotesStore = defineStore('notes', () => {
     const toastStore = useToastStore()
 
     try {
-      const { error } = await supabase
-        .from('notes')
-        .delete()
-        .eq('note_id', noteId)
+      const { error } = await supabase.from('notes').delete().eq('note_id', noteId)
 
       if (error) throw error
 
       // Remove from local state
-      notes.value = notes.value.filter(n => n.note_id !== noteId)
+      notes.value = notes.value.filter((n) => n.note_id !== noteId)
       toastStore.showToast('Notiz geloescht', 'success', 2000)
       return true
-
     } catch (error) {
       console.error('Error deleting note:', error)
       toastStore.showToast('Fehler beim Löschen der Notiz', 'error')
@@ -198,21 +191,21 @@ export const useNotesStore = defineStore('notes', () => {
           event: '*',
           schema: 'public',
           table: 'notes',
-          filter: `household_id=eq.${householdStore.currentHousehold.household_id}`
+          filter: `household_id=eq.${householdStore.currentHousehold.household_id}`,
         },
         (payload) => {
           console.log('Realtime notes event:', payload)
 
           if (payload.eventType === 'INSERT') {
             const newNote = payload.new as Note
-            if (!notes.value.find(n => n.note_id === newNote.note_id)) {
+            if (!notes.value.find((n) => n.note_id === newNote.note_id)) {
               notes.value.unshift(newNote)
             }
           }
 
           if (payload.eventType === 'UPDATE') {
             const updatedNote = payload.new as Note
-            const index = notes.value.findIndex(n => n.note_id === updatedNote.note_id)
+            const index = notes.value.findIndex((n) => n.note_id === updatedNote.note_id)
             if (index !== -1) {
               notes.value[index] = updatedNote
             }
@@ -220,9 +213,9 @@ export const useNotesStore = defineStore('notes', () => {
 
           if (payload.eventType === 'DELETE') {
             const deletedNote = payload.old as Note
-            notes.value = notes.value.filter(n => n.note_id !== deletedNote.note_id)
+            notes.value = notes.value.filter((n) => n.note_id !== deletedNote.note_id)
           }
-        }
+        },
       )
       .subscribe((status) => {
         console.log('Notes realtime subscription status:', status)
@@ -250,6 +243,6 @@ export const useNotesStore = defineStore('notes', () => {
     updateNote,
     deleteNote,
     subscribeToNotes,
-    unsubscribeFromNotes
+    unsubscribeFromNotes,
   }
 })

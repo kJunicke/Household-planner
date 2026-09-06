@@ -142,6 +142,11 @@ defineProps<{
     linear-gradient(-135deg, var(--pw-line) 50%, transparent 50%) 7px 2px / 14px 10px repeat-x;
   pointer-events: none;
 }
-:root[data-design='pinnwand'] .sheet::before { top: -10px; transform: scaleY(-1); }
-:root[data-design='pinnwand'] .sheet::after { bottom: -10px; }
+:root[data-design='pinnwand'] .sheet::before {
+  top: -10px;
+  transform: scaleY(-1);
+}
+:root[data-design='pinnwand'] .sheet::after {
+  bottom: -10px;
+}
 </style>

@@ -70,7 +70,7 @@ const emit = defineEmits<Emits>()
 // Zustände oben — dieser zweite Teil der Bedingung ist deshalb Pflicht,
 // nicht optional.
 const showPostpone = computed(
-  () => canPostpone(props.task) && (!props.task.completed || props.task.postponed_until !== null)
+  () => canPostpone(props.task) && (!props.task.completed || props.task.postponed_until !== null),
 )
 
 // Der Typ „Projekt" steht in der Liste, ist aber KEIN Wechselziel — in keine
@@ -97,7 +97,7 @@ const editForm = ref({
   title: props.task.title,
   effort: props.task.effort,
   task_type: props.task.task_type,
-  recurrence_days: props.task.recurrence_days
+  recurrence_days: props.task.recurrence_days,
 })
 
 const canConfirm = computed(() => {
@@ -145,12 +145,7 @@ const handleClose = () => {
 
             <div class="mb-3">
               <label for="task-type" class="form-label">Typ</label>
-              <select
-                class="form-select"
-                id="task-type"
-                v-model="editForm.task_type"
-                required
-              >
+              <select class="form-select" id="task-type" v-model="editForm.task_type" required>
                 <option value="recurring" :disabled="isProject">Zeitbasiert</option>
                 <option value="daily" :disabled="isProject">Täglich</option>
                 <option value="one-time" :disabled="isProject">Einmalig</option>
@@ -195,7 +190,11 @@ const handleClose = () => {
             >
               <i class="bi bi-calendar-plus"></i>
             </button>
-            <button class="btn btn-outline-secondary btn-compact" @click="emit('assign')" title="Aufgabe zuweisen">
+            <button
+              class="btn btn-outline-secondary btn-compact"
+              @click="emit('assign')"
+              title="Aufgabe zuweisen"
+            >
               <i class="bi bi-person"></i>
             </button>
             <button
@@ -206,21 +205,19 @@ const handleClose = () => {
             >
               <i class="bi bi-list-nested"></i>
             </button>
-            <button class="btn btn-outline-danger btn-compact" @click="emit('delete')" title="Aufgabe löschen">
+            <button
+              class="btn btn-outline-danger btn-compact"
+              @click="emit('delete')"
+              title="Aufgabe löschen"
+            >
               <i class="bi bi-trash"></i>
             </button>
           </div>
 
           <!-- Primary Actions rechts -->
           <div class="footer-actions-right">
-            <button class="btn btn-secondary" @click="handleClose">
-              Abbrechen
-            </button>
-            <button
-              class="btn btn-primary"
-              :disabled="!canConfirm"
-              @click="handleConfirm"
-            >
+            <button class="btn btn-secondary" @click="handleClose">Abbrechen</button>
+            <button class="btn btn-primary" :disabled="!canConfirm" @click="handleConfirm">
               Speichern
             </button>
           </div>

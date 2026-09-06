@@ -1,9 +1,5 @@
 import { onUnmounted, readonly, ref } from 'vue'
-import {
-  releaseScrollWatch,
-  retainScrollWatch,
-  scrollQuietState
-} from './useScrollQuiet'
+import { releaseScrollWatch, retainScrollWatch, scrollQuietState } from './useScrollQuiet'
 
 /**
  * Abreißen am Eselsohr (Pinnwand-Redesign, Etappe 4).
@@ -313,6 +309,6 @@ export function useTearGesture(options: {
     onPointerCancel,
     onTouchStart,
     onTouchMove,
-    swallowClick
+    swallowClick,
   }
 }

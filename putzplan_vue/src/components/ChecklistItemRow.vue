@@ -13,11 +13,11 @@ const emit = defineEmits<{
 </script>
 
 <template>
-  <!-- Packing keeps long-press-to-edit until stage 2 replaces it with dragging. -->
+  <!-- Bearbeitet wird über den ✎-Knopf der Zeile; das lange Drücken gehört dem
+       Ziehen zwischen Kategorien. -->
   <ListItemRow
     :checked="item.packed"
     :name="item.name"
-    edit-on-long-press
     @toggle="emit('toggle')"
     @edit="emit('edit')"
   >
@@ -74,8 +74,14 @@ const emit = defineEmits<{
   position: absolute;
   inset: -4px;
 }
-.step-btn:hover:not(:disabled) { border-color: var(--color-primary); color: var(--color-primary); }
-.step-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+.step-btn:hover:not(:disabled) {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+}
+.step-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
 .step-count {
   min-width: 32px;
   text-align: center;

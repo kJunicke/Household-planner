@@ -77,8 +77,12 @@ export interface HistoryDayGroup {
  * Filter vollständig und wird nicht zur leeren Hülle.
  */
 const matchesTerm = (entry: HistoryEntry, needle: string, parentTitle?: string): boolean =>
-  [entry.tasks?.title, entry.household_members.display_name, entry.completion_note, parentTitle]
-    .some(field => field?.toLowerCase().includes(needle))
+  [
+    entry.tasks?.title,
+    entry.household_members.display_name,
+    entry.completion_note,
+    parentTitle,
+  ].some((field) => field?.toLowerCase().includes(needle))
 
 const FALLBACK_NAME = 'Unbekannt'
 const FALLBACK_COLOR = '#6c757d'
@@ -100,7 +104,7 @@ const dayLabel = (date: Date, now: Date): string => {
     weekday: 'short',
     day: '2-digit',
     month: '2-digit',
-    year: 'numeric'
+    year: 'numeric',
   })
 }
 
@@ -118,12 +122,12 @@ const summarizePeople = (items: HistoryEntry[]): HistoryDayPerson[] => {
       user_id: item.user_id,
       display_name: item.household_members.display_name,
       user_color: item.household_members.user_color,
-      points: item.points
+      points: item.points,
     })
   }
 
   return [...byUser.values()].sort(
-    (a, b) => b.points - a.points || a.display_name.localeCompare(b.display_name, 'de')
+    (a, b) => b.points - a.points || a.display_name.localeCompare(b.display_name, 'de'),
   )
 }
 
@@ -133,7 +137,7 @@ const summarizePeople = (items: HistoryEntry[]): HistoryDayPerson[] => {
  * nicht mehr auflösbar — sie bleiben bewusst Einzelzeilen.
  */
 const foldRows = (items: HistoryEntry[], tasks: Task[]): HistoryRow[] => {
-  const byTaskId = new Map(tasks.map(task => [task.task_id, task]))
+  const byTaskId = new Map(tasks.map((task) => [task.task_id, task]))
   const singles: HistoryRow[] = []
   const folds = new Map<string, HistoryFoldRow>()
 
@@ -162,13 +166,13 @@ const foldRows = (items: HistoryEntry[], tasks: Task[]): HistoryRow[] => {
       parentTitle: byTaskId.get(parentId)?.title || FALLBACK_TITLE,
       children: [entry],
       points: entry.points,
-      people: []
+      people: [],
     })
   }
 
   for (const fold of folds.values()) {
     fold.children.sort(
-      (a, b) => new Date(b.completed_at).getTime() - new Date(a.completed_at).getTime()
+      (a, b) => new Date(b.completed_at).getTime() - new Date(a.completed_at).getTime(),
     )
     fold.people = summarizePeople(fold.children)
   }
@@ -182,16 +186,16 @@ export function useHistoryGroups(
   referenceDate: MaybeRefOrGetter<Date>,
   tasks: MaybeRefOrGetter<Task[]>,
   /** Live-Suchbegriff; leer bedeutet „nicht filtern". */
-  searchTerm: MaybeRefOrGetter<string> = ''
+  searchTerm: MaybeRefOrGetter<string> = '',
 ) {
   // Completions aus Realtime sind evtl. nicht angereichert — daher überall Fallbacks.
   const entries = computed((): HistoryEntry[] => {
     const memberList = toValue(members)
 
     return toValue(completions)
-      .map(completion => {
+      .map((completion) => {
         const enriched = completion as EnrichedCompletion
-        const member = memberList.find(m => m.user_id === completion.user_id)
+        const member = memberList.find((m) => m.user_id === completion.user_id)
 
         return {
           ...enriched,
@@ -201,9 +205,9 @@ export function useHistoryGroups(
           household_members: {
             display_name:
               enriched.household_members?.display_name || member?.display_name || FALLBACK_NAME,
-            user_color: member?.user_color || FALLBACK_COLOR
+            user_color: member?.user_color || FALLBACK_COLOR,
           },
-          points: completion.effort_override
+          points: completion.effort_override,
         }
       })
       .sort((a, b) => new Date(b.completed_at).getTime() - new Date(a.completed_at).getTime())
@@ -223,14 +227,14 @@ export function useHistoryGroups(
 
     // Parent-Titel je Task — dieselbe Auflösung, die `foldRows` für die Überschrift
     // der Faltgruppe benutzt, damit Sichtbares und Durchsuchbares übereinstimmen.
-    const byTaskId = new Map(toValue(tasks).map(task => [task.task_id, task]))
+    const byTaskId = new Map(toValue(tasks).map((task) => [task.task_id, task]))
     const parentTitleOf = (entry: HistoryEntry): string | undefined => {
       if (entry.isDeleted) return undefined
       const parentId = byTaskId.get(entry.task_id)?.parent_task_id
       return parentId ? byTaskId.get(parentId)?.title : undefined
     }
 
-    return entries.value.filter(entry => matchesTerm(entry, needle, parentTitleOf(entry)))
+    return entries.value.filter((entry) => matchesTerm(entry, needle, parentTitleOf(entry)))
   })
 
   const dayGroups = computed((): HistoryDayGroup[] => {
@@ -252,11 +256,11 @@ export function useHistoryGroups(
     // Die Tagessummen zählen alle Completions, die der Tag hier tatsächlich enthält —
     // auch die, die anschließend in eine Faltgruppe wandern. Bei aktivem Filter sind
     // das die Treffer des Tages, passend zu den Zeilen darunter.
-    return days.map(day => ({
+    return days.map((day) => ({
       key: day.key,
       label: day.label,
       rows: foldRows(day.items, taskList),
-      people: summarizePeople(day.items)
+      people: summarizePeople(day.items),
     }))
   })
 

@@ -342,7 +342,7 @@ export function defaultNoteWidth(shape: WallNoteShape, wallWidth: number): numbe
  */
 export function planNoteWidths(
   shapes: readonly WallNoteShape[],
-  wallWidth: number
+  wallWidth: number,
 ): Map<string, number> {
   const defaultOf = (s: WallNoteShape) => defaultNoteWidth(s, wallWidth)
   /**
@@ -502,7 +502,16 @@ const FASTENERS: ReadonlyArray<{
   rotation: number
 }> = [
   /** Reißzwecke — fällige (wiederkehrende, einmalige) Aufgaben. */
-  { css: '.pin', group: 0, anchor: 'center', inset: 0, top: -7, width: 14, height: 14, rotation: 0 },
+  {
+    css: '.pin',
+    group: 0,
+    anchor: 'center',
+    inset: 0,
+    top: -7,
+    width: 14,
+    height: 14,
+    rotation: 0,
+  },
   /** Klebestreifen — tägliche Aufgaben. Der breiteste, deshalb der drehempfindlichste. */
   {
     css: '.tape',
@@ -512,7 +521,7 @@ const FASTENERS: ReadonlyArray<{
     top: -9,
     width: 46,
     height: 16,
-    rotation: -4
+    rotation: -4,
   },
   // Doppelte Büroklammer — Projekte. `inset` = `left: 12px` plus halbe Breite
   // (7,5) = 19,5 px von der Padding-Box-Kante bis zur Mitte der Klammer.
@@ -525,7 +534,7 @@ const FASTENERS: ReadonlyArray<{
     top: -8,
     width: 15,
     height: 20,
-    rotation: -7
+    rotation: -7,
   },
   /** Rechte Hälfte der doppelten Büroklammer (`.clip` + `.clip--r`). */
   {
@@ -536,8 +545,8 @@ const FASTENERS: ReadonlyArray<{
     top: -8,
     width: 15,
     height: 20,
-    rotation: 6
-  }
+    rotation: 6,
+  },
 ]
 
 /**
@@ -566,7 +575,7 @@ const FASTENERS: ReadonlyArray<{
  * und machte dieses Netz wirkungslos.
  */
 const fastenersOfGroup = (group: number): typeof FASTENERS => {
-  const own = FASTENERS.filter(f => f.group === group)
+  const own = FASTENERS.filter((f) => f.group === group)
   return own.length > 0 ? own : FASTENERS
 }
 
@@ -613,15 +622,13 @@ const RAD = Math.PI / 180
 const overhangOf = (
   fastener: (typeof FASTENERS)[number],
   noteWidth: number,
-  tiltDeg: number
+  tiltDeg: number,
 ): number => {
   const tilt = tiltDeg * RAD
   const total = (tiltDeg + fastener.rotation) * RAD
   // Halbe Höhe der umschließenden Kiste der GEDREHTEN Befestigung.
   const halfExtent =
-    (fastener.width * Math.abs(Math.sin(total)) +
-      fastener.height * Math.abs(Math.cos(total))) /
-    2
+    (fastener.width * Math.abs(Math.sin(total)) + fastener.height * Math.abs(Math.cos(total))) / 2
   // Mitte der Befestigung, gegen die Border-Box des ungeneigten Zettels.
   const centerY = ZETTEL_BORDER + fastener.top + fastener.height / 2
   const centerX =
@@ -741,7 +748,7 @@ const JITTER_DOWN_MAX = 1.5
  */
 function resolvePins(
   pins: readonly WallPin[],
-  heightOf: (id: string) => number | undefined
+  heightOf: (id: string) => number | undefined,
 ): Map<string, number> {
   const resolved = new Map<string, number>()
   const claimed: Array<{ top: number; bottom: number }> = []
@@ -754,7 +761,7 @@ function resolvePins(
     let top = pin.top
     for (;;) {
       const clash = claimed.find(
-        window => top < window.bottom - 0.001 && top + height + EXPANDED_GAP > window.top + 0.001
+        (window) => top < window.bottom - 0.001 && top + height + EXPANDED_GAP > window.top + 0.001,
       )
       if (!clash) break
       top = clash.bottom
@@ -872,7 +879,7 @@ function resolvePins(
 export function packWall(
   notes: readonly WallNoteMetrics[],
   wallWidth: number,
-  pins: readonly WallPin[] = []
+  pins: readonly WallPin[] = [],
 ): PackedWall {
   const columns = Math.max(1, Math.ceil(wallWidth / SKYLINE_RESOLUTION))
   /**
@@ -932,9 +939,9 @@ export function packWall(
   }
   const groupKeys = [...byGroup.keys()].sort((a, b) => a - b)
 
-  const heights = new Map<string, number>(notes.map(note => [note.id, note.height]))
+  const heights = new Map<string, number>(notes.map((note) => [note.id, note.height]))
   /** Vorgegebene Oberkanten, Konflikte bereits aufgelöst (siehe `resolvePins`). */
-  const pinnedTops = resolvePins(pins, id => heights.get(id))
+  const pinnedTops = resolvePins(pins, (id) => heights.get(id))
 
   /**
    * Weiche Untergrenze für die aktuell gepackte Gruppe, siehe Funktionskommentar.
@@ -1012,22 +1019,20 @@ export function packWall(
     const colStart = Math.max(0, Math.floor(x / SKYLINE_RESOLUTION))
     const colEnd = Math.min(
       columns,
-      Math.max(colStart + 1, Math.ceil((x + width) / SKYLINE_RESOLUTION))
+      Math.max(colStart + 1, Math.ceil((x + width) / SKYLINE_RESOLUTION)),
     )
     return { x, width, colStart, colEnd }
   }
 
   for (const groupKey of groupKeys) {
     const members = byGroup.get(groupKey)!
-    const pool = members.filter(note => !pinnedTops.has(note.id))
+    const pool = members.filter((note) => !pinnedTops.has(note.id))
     // Vorgaben dieser Gruppe von oben nach unten abarbeiten. Bei exakt gleicher
     // Oberkante entscheidet der Hash, nicht die Eingabereihenfolge — dieselbe
     // Begründung wie beim Tiebreak des freien Packens.
     const pinnedHere = members
-      .filter(note => pinnedTops.has(note.id))
-      .sort(
-        (a, b) => pinnedTops.get(a.id)! - pinnedTops.get(b.id)! || fnv1a(a.id) - fnv1a(b.id)
-      )
+      .filter((note) => pinnedTops.has(note.id))
+      .sort((a, b) => pinnedTops.get(a.id)! - pinnedTops.get(b.id)! || fnv1a(a.id) - fnv1a(b.id))
     let groupFloor = floor
 
     /**
@@ -1174,7 +1179,7 @@ export function packWall(
         // Skyline kennt nur ganze Spalten.
         const marginEnd = Math.min(
           columns,
-          Math.ceil((x + width + rowGapOf(note.id)) / SKYLINE_RESOLUTION)
+          Math.ceil((x + width + rowGapOf(note.id)) / SKYLINE_RESOLUTION),
         )
         for (let k = colEnd; k < marginEnd; k++) {
           if (skyline[k] < bottom) skyline[k] = bottom

@@ -10,52 +10,52 @@ const router = createRouter({
       name: 'home',
       // HomeView entscheidet anhand der Aussehen-Einstellung zwischen dem
       // bestehenden Putzen-Screen und der Pinnwand — sofort, ohne Neuladen.
-      component: () => import('../views/HomeView.vue')
+      component: () => import('../views/HomeView.vue'),
     },
     {
       path: '/history',
       name: 'history',
-      component: () => import('../views/HistoryView.vue')
+      component: () => import('../views/HistoryView.vue'),
     },
     {
       path: '/uebersicht',
       name: 'uebersicht',
-      component: () => import('../views/UebersichtView.vue')
+      component: () => import('../views/UebersichtView.vue'),
     },
     {
       path: '/stats',
-      redirect: '/uebersicht'
+      redirect: '/uebersicht',
     },
     {
       path: '/listen',
       name: 'listen',
-      component: () => import('../views/ListsView.vue')
+      component: () => import('../views/ListsView.vue'),
     },
     {
       path: '/shopping',
-      redirect: '/listen'
+      redirect: '/listen',
     },
     {
       path: '/notes',
       name: 'notes',
-      component: () => import('../views/NotesView.vue')
+      component: () => import('../views/NotesView.vue'),
     },
     {
       path: '/login',
       name: 'login',
-      component: () => import('../views/LoginView.vue')
+      component: () => import('../views/LoginView.vue'),
     },
     {
       path: '/register',
       name: 'register',
-      component: () => import('../views/RegisterView.vue')
+      component: () => import('../views/RegisterView.vue'),
     },
     {
       path: '/household-setup',
       name: 'household-setup',
-      component: () => import('../views/HouseholdSetupView.vue')
-    }
-  ]
+      component: () => import('../views/HouseholdSetupView.vue'),
+    },
+  ],
 })
 
 // Route Guards - Damit User nur auf Seiten kommen die Sinn machen
@@ -84,6 +84,5 @@ router.beforeEach((to) => {
     return '/'
   }
 })
-
 
 export default router

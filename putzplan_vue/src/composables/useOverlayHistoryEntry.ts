@@ -42,97 +42,97 @@ import { onMounted, onUnmounted, ref, type Ref } from 'vue'
 const STATE_KEY = '__putzplanOverlay'
 
 export function useOverlayHistoryEntry<R = string>(
-    name: string,
-    onClosed?: (reason?: R) => void,
+  name: string,
+  onClosed?: (reason?: R) => void,
 ): {
-    isOpen: Ref<boolean>
-    open: () => void
-    close: (reason?: R) => void
+  isOpen: Ref<boolean>
+  open: () => void
+  close: (reason?: R) => void
 } {
-    const isMarked = () =>
-        (window.history.state as Record<string, unknown> | null)?.[STATE_KEY] === name
+  const isMarked = () =>
+    (window.history.state as Record<string, unknown> | null)?.[STATE_KEY] === name
 
-    // Beim Aufbau der View gilt, was im Verlauf steht — die View kann auch auf
-    // einem markierten Eintrag montiert werden (Rückkehr aus einer fremden
-    // Seite, Neuladen, Sprung über die Verlaufsliste).
-    const isOpen = ref(isMarked())
+  // Beim Aufbau der View gilt, was im Verlauf steht — die View kann auch auf
+  // einem markierten Eintrag montiert werden (Rückkehr aus einer fremden
+  // Seite, Neuladen, Sprung über die Verlaufsliste).
+  const isOpen = ref(isMarked())
 
-    /**
-     * Der Grund des Schließens muss den Verlaufssprung überleben — `back()` ist
-     * asynchron, gemeldet wird erst im `popstate`.
-     */
-    let pendingReason: R | undefined
+  /**
+   * Der Grund des Schließens muss den Verlaufssprung überleben — `back()` ist
+   * asynchron, gemeldet wird erst im `popstate`.
+   */
+  let pendingReason: R | undefined
 
-    /**
-     * Synchroner Riegel gegen zwei `close()`-Aufrufe im **selben** JS-Task:
-     * `window.history.state` zieht erst im `popstate`-Task nach, beide Aufrufe
-     * sähen sonst einen markierten Eintrag und stellten zwei `back()` in die
-     * Schlange — der zweite verließe die Ansicht.
-     */
-    let closing = false
+  /**
+   * Synchroner Riegel gegen zwei `close()`-Aufrufe im **selben** JS-Task:
+   * `window.history.state` zieht erst im `popstate`-Task nach, beide Aufrufe
+   * sähen sonst einen markierten Eintrag und stellten zwei `back()` in die
+   * Schlange — der zweite verließe die Ansicht.
+   */
+  let closing = false
 
-    const finishClose = (reason?: R) => {
-        pendingReason = undefined
-        closing = false
-        isOpen.value = false
-        onClosed?.(reason)
+  const finishClose = (reason?: R) => {
+    pendingReason = undefined
+    closing = false
+    isOpen.value = false
+    onClosed?.(reason)
+  }
+
+  const open = () => {
+    if (isOpen.value || closing) return
+    // Zustand von vue-router mitnehmen (`position`, `scroll`, …) und nur
+    // die Markierung ergänzen — die Adresse bleibt dieselbe.
+    window.history.pushState({ ...window.history.state, [STATE_KEY]: name }, '')
+    isOpen.value = true
+  }
+
+  const close = (reason?: R) => {
+    if (!isOpen.value || closing) return
+    if (isMarked()) {
+      closing = true
+      pendingReason = reason
+      window.history.back()
+      return
     }
+    // Kein markierter Eintrag mehr da (z. B. schon weggesprungen): nur noch
+    // lokal schließen, sonst nähme `back()` einen fremden Schritt mit.
+    finishClose(reason)
+  }
 
-    const open = () => {
-        if (isOpen.value || closing) return
-        // Zustand von vue-router mitnehmen (`position`, `scroll`, …) und nur
-        // die Markierung ergänzen — die Adresse bleibt dieselbe.
-        window.history.pushState({ ...window.history.state, [STATE_KEY]: name }, '')
-        isOpen.value = true
+  /**
+   * **Voraussetzung: die Marke ist eindeutig** — im Verlauf steht nie zweimal
+   * `name` hintereinander. Nur dann bedeutet ein Sprung von einem markierten
+   * auf einen unmarkierten Eintrag „Overlay zu", und nur dann ist der
+   * Vergleich unten vollständig: landete ein `back()` auf einem **ebenfalls**
+   * markierten Eintrag, wäre `marked === isOpen.value` erfüllt, `finishClose()`
+   * liefe nie, ein Verlaufsschritt wäre verbraucht und sichtbar passierte
+   * nichts — stumm.
+   *
+   * Getragen wird die Eindeutigkeit heute davon, dass es **genau eine**
+   * Instanz je `name` gibt: `HomeView` rendert `WallView` **oder**
+   * `CleaningView` (`v-if`/`v-else`, kein `keep-alive`), und `open()` steigt
+   * aus, solange `isOpen` schon gilt. Wer daran rührt — zweites Overlay mit
+   * demselben `name`, `keep-alive`, ein Umschalter, der beide Views kurz
+   * gleichzeitig hält — nimmt diese Voraussetzung weg.
+   */
+  const onPopState = () => {
+    closing = false
+    const marked = isMarked()
+    if (marked === isOpen.value) return
+    if (marked) {
+      isOpen.value = true
+      return
     }
+    finishClose(pendingReason)
+  }
 
-    const close = (reason?: R) => {
-        if (!isOpen.value || closing) return
-        if (isMarked()) {
-            closing = true
-            pendingReason = reason
-            window.history.back()
-            return
-        }
-        // Kein markierter Eintrag mehr da (z. B. schon weggesprungen): nur noch
-        // lokal schließen, sonst nähme `back()` einen fremden Schritt mit.
-        finishClose(reason)
-    }
+  onMounted(() => {
+    window.addEventListener('popstate', onPopState)
+  })
 
-    /**
-     * **Voraussetzung: die Marke ist eindeutig** — im Verlauf steht nie zweimal
-     * `name` hintereinander. Nur dann bedeutet ein Sprung von einem markierten
-     * auf einen unmarkierten Eintrag „Overlay zu", und nur dann ist der
-     * Vergleich unten vollständig: landete ein `back()` auf einem **ebenfalls**
-     * markierten Eintrag, wäre `marked === isOpen.value` erfüllt, `finishClose()`
-     * liefe nie, ein Verlaufsschritt wäre verbraucht und sichtbar passierte
-     * nichts — stumm.
-     *
-     * Getragen wird die Eindeutigkeit heute davon, dass es **genau eine**
-     * Instanz je `name` gibt: `HomeView` rendert `WallView` **oder**
-     * `CleaningView` (`v-if`/`v-else`, kein `keep-alive`), und `open()` steigt
-     * aus, solange `isOpen` schon gilt. Wer daran rührt — zweites Overlay mit
-     * demselben `name`, `keep-alive`, ein Umschalter, der beide Views kurz
-     * gleichzeitig hält — nimmt diese Voraussetzung weg.
-     */
-    const onPopState = () => {
-        closing = false
-        const marked = isMarked()
-        if (marked === isOpen.value) return
-        if (marked) {
-            isOpen.value = true
-            return
-        }
-        finishClose(pendingReason)
-    }
+  onUnmounted(() => {
+    window.removeEventListener('popstate', onPopState)
+  })
 
-    onMounted(() => {
-        window.addEventListener('popstate', onPopState)
-    })
-
-    onUnmounted(() => {
-        window.removeEventListener('popstate', onPopState)
-    })
-
-    return { isOpen, open, close }
+  return { isOpen, open, close }
 }

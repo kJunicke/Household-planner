@@ -62,9 +62,7 @@ const handleClose = () => {
           </div>
 
           <div class="note-input">
-            <label for="note" class="form-label">
-              Was hast du gemacht? *
-            </label>
+            <label for="note" class="form-label"> Was hast du gemacht? * </label>
             <textarea
               id="note"
               v-model="note"

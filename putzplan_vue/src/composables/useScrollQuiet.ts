@@ -52,10 +52,7 @@ const SCROLL_QUIET_MS = 300
 
 /** Liegt diese Position im gueltigen Bereich, oder ist sie Gummiband? */
 const inScrollRange = (y: number): boolean => {
-  const max = Math.max(
-    0,
-    document.documentElement.scrollHeight - window.innerHeight
-  )
+  const max = Math.max(0, document.documentElement.scrollHeight - window.innerHeight)
   // Eine Toleranz von 1 px gegen Rundung zwischen Layout- und Scroll-Metrik.
   return y >= -1 && y <= max + 1
 }
