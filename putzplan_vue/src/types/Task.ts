@@ -17,7 +17,7 @@ export interface Task {
   recurrence_days: number
   completed: boolean
   last_completed_at: string | null // ISO timestamp, auto-updated via DB trigger from task_completions
-                                   // For projects: Timestamp when project was marked as completed
+  // For projects: Timestamp when project was marked as completed
 
   // Verschieben: Datum (YYYY-MM-DD), an dem die Aufgabe wieder dran sein soll.
   // NULL = nicht verschoben. KEINE zweite Quelle für "dran" — das bleibt allein
@@ -59,7 +59,7 @@ export interface Task {
   // bedeutungslosen Wert. Deshalb steht sie hier ohne `| null` — wer sie an einer
   // Nicht-Projekt-Zeile liest, hat kein fehlendes Feld, sondern die falsche Frage.
   project_saying_index: number
-  }
+}
 
 export interface TaskCompletion {
   completion_id: string

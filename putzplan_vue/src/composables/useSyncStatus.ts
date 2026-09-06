@@ -33,12 +33,8 @@ export function registerSyncSource(key: string, source: SyncSource) {
 export function useSyncStatus() {
   const { isOnline } = useNetworkStatus()
 
-  const hasPending = computed(() =>
-    Object.values(sources).some(s => unref(s.hasPending))
-  )
-  const isSyncing = computed(() =>
-    Object.values(sources).some(s => unref(s.isSyncing))
-  )
+  const hasPending = computed(() => Object.values(sources).some((s) => unref(s.hasPending)))
+  const isSyncing = computed(() => Object.values(sources).some((s) => unref(s.isSyncing)))
 
   const state = computed<SyncState>(() => {
     if (!isOnline.value) return 'offline'

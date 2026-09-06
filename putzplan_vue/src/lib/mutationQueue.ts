@@ -96,7 +96,7 @@ export function createMutationQueue(opts: MutationQueueOptions): MutationQueue {
   }
 
   const pendingItemIds = () =>
-    new Set(queue.value.map(m => m.payload.itemId).filter(Boolean) as string[])
+    new Set(queue.value.map((m) => m.payload.itemId).filter(Boolean) as string[])
 
   /**
    * Eine Mutation ausführen und den Fehlerfall in den Queue-Eintrag schreiben.
@@ -134,7 +134,7 @@ export function createMutationQueue(opts: MutationQueueOptions): MutationQueue {
       const success = await runOne(mutation)
 
       if (success) {
-        queue.value = queue.value.filter(m => m.queueId !== mutation.queueId)
+        queue.value = queue.value.filter((m) => m.queueId !== mutation.queueId)
       } else {
         failed.push(mutation)
       }

@@ -35,7 +35,8 @@ const handleClose = () => {
         <div class="modal-body">
           <p class="project-name">{{ projectTitle }}</p>
           <p class="confirmation-text">
-            Projekt wirklich abschließen? Es wird unter "Erledigt" archiviert und kann nicht mehr bearbeitet werden.
+            Projekt wirklich abschließen? Es wird unter "Erledigt" archiviert und kann nicht mehr
+            bearbeitet werden.
           </p>
         </div>
 

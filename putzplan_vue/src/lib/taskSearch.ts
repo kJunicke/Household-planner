@@ -52,7 +52,7 @@ export function searchTasks(tasks: readonly Task[], query: string): TaskSearchRe
     if (title.startsWith(needle)) return 80
     if (title.includes(needle)) return 60
     const subtasks = subtasksByParent.get(task.task_id) || []
-    if (subtasks.some(sub => sub.title.toLowerCase().includes(needle))) return 40
+    if (subtasks.some((sub) => sub.title.toLowerCase().includes(needle))) return 40
     return 0
   }
 

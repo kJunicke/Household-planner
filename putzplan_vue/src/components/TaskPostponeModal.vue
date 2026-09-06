@@ -5,7 +5,7 @@ import {
   postponeTargetDate,
   earliestPostponeDate,
   formatPostponeDate,
-  type PostponeOption
+  type PostponeOption,
 } from '@/lib/taskSchedule'
 
 interface Props {
@@ -23,7 +23,7 @@ const emit = defineEmits<Emits>()
 // Das Intervall gibt es nur bei wiederkehrenden Aufgaben mit Kadenz. Einmalige
 // Aufgaben haben keins — dort fehlt die Option ganz statt leer dazustehen.
 const hasIntervalOption = computed(
-  () => props.task.task_type === 'recurring' && props.task.recurrence_days > 0
+  () => props.task.task_type === 'recurring' && props.task.recurrence_days > 0,
 )
 
 // Vorauswahl "nach Intervall": ein Bestätigen-Klick genügt im Normalfall.
@@ -40,13 +40,11 @@ const minDate = computed(() => earliestPostponeDate())
 const targetDate = computed(() =>
   postponeTargetDate(props.task, selectedOption.value, {
     customDate: customDate.value || null,
-    customDays: customDays.value
-  })
+    customDays: customDays.value,
+  }),
 )
 
-const targetLabel = computed(() =>
-  targetDate.value ? formatPostponeDate(targetDate.value) : null
-)
+const targetLabel = computed(() => (targetDate.value ? formatPostponeDate(targetDate.value) : null))
 
 const selectOption = (option: PostponeOption) => {
   selectedOption.value = option
@@ -80,9 +78,7 @@ const handleClose = () => {
         </div>
 
         <div class="modal-body">
-          <p class="postpone-intro">
-            Wann soll „{{ props.task.title }}" wieder dran sein?
-          </p>
+          <p class="postpone-intro">Wann soll „{{ props.task.title }}" wieder dran sein?</p>
 
           <div v-if="hasIntervalOption" class="option-list">
             <button
@@ -138,8 +134,11 @@ const handleClose = () => {
           </p>
 
           <p class="postpone-note">
-            Verschieben vergibt keine Punkte und erzeugt keinen Verlaufseintrag.<template v-if="hasIntervalOption">
-            Das Intervall der Aufgabe bleibt unverändert.</template>
+            Verschieben vergibt keine Punkte und erzeugt keinen Verlaufseintrag.<template
+              v-if="hasIntervalOption"
+            >
+              Das Intervall der Aufgabe bleibt unverändert.</template
+            >
           </p>
         </div>
 

@@ -67,7 +67,7 @@ const lastCompletionByTask = computed(() => {
 
 const colorOfUser = (userId: string | null | undefined): string | null => {
   if (!userId) return null
-  return householdStore.householdMembers.find(m => m.user_id === userId)?.user_color || null
+  return householdStore.householdMembers.find((m) => m.user_id === userId)?.user_color || null
 }
 
 const startOfToday = () => {
@@ -200,7 +200,7 @@ const rows = computed((): DoneRow[] =>
         task,
         color: null,
         stamp: formatPostponeStamp(schedule.postponedUntil),
-        postponed: true
+        postponed: true,
       }
     }
 
@@ -209,9 +209,9 @@ const rows = computed((): DoneRow[] =>
       task,
       color: colorOfUser(completion?.userId),
       stamp: iso ? formatStamp(iso) : '',
-      postponed: false
+      postponed: false,
     }
-  })
+  }),
 )
 
 /**
@@ -256,10 +256,10 @@ const markDirty = async (taskId: string) => {
 // sich der Titel, sieht auch ein noch offenes Folge-Modal den neuen Stand.
 const targetTaskId = ref<string | null>(null)
 const targetTask = computed<Task | null>(
-  () => props.tasks.find(t => t.task_id === targetTaskId.value) ?? null
+  () => props.tasks.find((t) => t.task_id === targetTaskId.value) ?? null,
 )
 const targetSubtasks = computed(() =>
-  targetTaskId.value ? taskStore.getSubtasks(targetTaskId.value) : []
+  targetTaskId.value ? taskStore.getSubtasks(targetTaskId.value) : [],
 )
 
 const showEditModal = ref(false)
@@ -313,13 +313,13 @@ const handleCreateSubtask = async (subtaskData: {
     recurrence_days: parent.recurrence_days, // erbt vom Elternteil
     task_type: parent.task_type,
     parent_task_id: parent.task_id,
-    order_index: maxOrderIndex + 1
+    order_index: maxOrderIndex + 1,
   })
 }
 
 const handleUpdateSubtaskPointsMode = async (
   subtaskId: string,
-  mode: 'checklist' | 'deduct' | 'bonus'
+  mode: 'checklist' | 'deduct' | 'bonus',
 ) => {
   await taskStore.updateTask(subtaskId, { subtask_points_mode: mode })
 }

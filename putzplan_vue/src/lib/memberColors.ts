@@ -26,10 +26,8 @@ export const DEFAULT_MEMBER_COLOR = MEMBER_COLORS[0]
  * color is taken, so colors stay as distinct as possible.
  */
 export function pickMemberColor(usedColors: Array<string | null | undefined>): string {
-  const used = new Set(
-    usedColors.filter(Boolean).map(c => (c as string).toUpperCase())
-  )
-  const free = MEMBER_COLORS.find(c => !used.has(c.toUpperCase()))
+  const used = new Set(usedColors.filter(Boolean).map((c) => (c as string).toUpperCase()))
+  const free = MEMBER_COLORS.find((c) => !used.has(c.toUpperCase()))
   if (free) return free
   // All colors used: cycle deterministically by member count.
   return MEMBER_COLORS[used.size % MEMBER_COLORS.length]

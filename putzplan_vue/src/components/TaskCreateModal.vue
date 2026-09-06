@@ -8,12 +8,15 @@ interface Props {
 
 interface Emits {
   (e: 'close'): void
-  (e: 'create', taskData: {
-    title: string
-    effort: 1 | 2 | 3 | 4 | 5
-    recurrence_days: number
-    task_type: 'recurring' | 'daily' | 'one-time' | 'project'
-  }): void
+  (
+    e: 'create',
+    taskData: {
+      title: string
+      effort: 1 | 2 | 3 | 4 | 5
+      recurrence_days: number
+      task_type: 'recurring' | 'daily' | 'one-time' | 'project'
+    },
+  ): void
 }
 
 const props = defineProps<Props>()
@@ -23,15 +26,19 @@ const formData = ref({
   title: props.initialTitle || '',
   effort: 1 as 1 | 2 | 3 | 4 | 5,
   recurrence_days: 0,
-  task_type: 'recurring' as 'recurring' | 'daily' | 'one-time' | 'project'
+  task_type: 'recurring' as 'recurring' | 'daily' | 'one-time' | 'project',
 })
 
 // Watch for initialTitle changes (when modal opens with search query)
-watch(() => props.initialTitle, (newVal) => {
-  if (newVal) {
-    formData.value.title = newVal
-  }
-}, { immediate: true })
+watch(
+  () => props.initialTitle,
+  (newVal) => {
+    if (newVal) {
+      formData.value.title = newVal
+    }
+  },
+  { immediate: true },
+)
 
 const canConfirm = computed(() => {
   return formData.value.title.trim().length > 0
@@ -44,7 +51,7 @@ const handleConfirm = () => {
     title: formData.value.title.trim(),
     effort: formData.value.effort,
     recurrence_days: formData.value.recurrence_days,
-    task_type: formData.value.task_type
+    task_type: formData.value.task_type,
   })
 }
 
@@ -77,11 +84,7 @@ const handleClose = () => {
 
             <div class="mb-3">
               <label class="form-label">Aufwand (1-5)</label>
-              <select
-                v-model="formData.effort"
-                class="form-select"
-                :disabled="isLoading"
-              >
+              <select v-model="formData.effort" class="form-select" :disabled="isLoading">
                 <option :value="1">1 - Sehr leicht</option>
                 <option :value="2">2 - Leicht</option>
                 <option :value="3">3 - Normal</option>
@@ -92,11 +95,7 @@ const handleClose = () => {
 
             <div class="mb-3">
               <label class="form-label">Task-Typ</label>
-              <select
-                v-model="formData.task_type"
-                class="form-select"
-                :disabled="isLoading"
-              >
+              <select v-model="formData.task_type" class="form-select" :disabled="isLoading">
                 <option value="daily">Täglich / Allgemein (immer sichtbar)</option>
                 <option value="recurring">Wiederkehrend (zeitbasiert)</option>
                 <option value="one-time">Einmalig</option>
@@ -118,7 +117,8 @@ const handleClose = () => {
             <div v-if="formData.task_type === 'project'" class="project-info">
               <i class="bi bi-info-circle"></i>
               <span>
-                Projekte sind langfristige Aufgaben ohne Wiederholung. Es wird automatisch ein "Am Projekt arbeiten" Subtask erstellt.
+                Projekte sind langfristige Aufgaben ohne Wiederholung. Es wird automatisch ein "Am
+                Projekt arbeiten" Subtask erstellt.
               </span>
             </div>
           </form>

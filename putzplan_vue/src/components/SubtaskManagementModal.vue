@@ -9,7 +9,14 @@ interface Props {
 
 interface Emits {
   (e: 'close'): void
-  (e: 'createSubtask', subtaskData: { title: string; effort: 1 | 2 | 3 | 4 | 5; subtask_points_mode: 'checklist' | 'deduct' | 'bonus' }): void
+  (
+    e: 'createSubtask',
+    subtaskData: {
+      title: string
+      effort: 1 | 2 | 3 | 4 | 5
+      subtask_points_mode: 'checklist' | 'deduct' | 'bonus'
+    },
+  ): void
   (e: 'updateSubtaskPointsMode', subtaskId: string, mode: 'checklist' | 'deduct' | 'bonus'): void
   (e: 'deleteSubtask', subtaskId: string): void
 }
@@ -53,14 +60,14 @@ const modeDescriptions = {
   bonus: {
     title: '+ Bonus',
     description: 'Gibt zusätzliche Bonuspunkte',
-  }
+  },
 }
 
 // DEDUCT OVERFLOW VALIDATION
 // Calculate current total deduct effort from existing subtasks
 const currentDeductSum = computed(() => {
   return props.existingSubtasks
-    .filter(s => s.subtask_points_mode === 'deduct')
+    .filter((s) => s.subtask_points_mode === 'deduct')
     .reduce((sum, s) => sum + s.effort, 0)
 })
 
@@ -77,7 +84,7 @@ const isDeductOverflow = computed(() => {
 // Check if adding this new subtask as deduct would cause overflow
 const wouldCauseDeductOverflow = computed(() => {
   if (newSubtaskPointsMode.value !== 'deduct') return false
-  return (currentDeductSum.value + newSubtaskEffort.value) > props.parentTask.effort
+  return currentDeductSum.value + newSubtaskEffort.value > props.parentTask.effort
 })
 
 const canAddSubtask = computed(() => {
@@ -90,7 +97,7 @@ const handleAddSubtask = () => {
   emit('createSubtask', {
     title: newSubtaskTitle.value.trim(),
     effort: newSubtaskEffort.value,
-    subtask_points_mode: newSubtaskPointsMode.value
+    subtask_points_mode: newSubtaskPointsMode.value,
   })
 
   // Reset form
@@ -125,18 +132,30 @@ const handleDeleteSubtask = (subtaskId: string) => {
         <div class="modal-body">
           <!-- INFO BANNER (für Projekte + Daily Tasks) -->
           <div v-if="isProject" class="info-banner">
-            <span>💡 Projekt-Unteraufgaben: Nur <strong>Checkliste</strong> und <strong>Bonus</strong> verfügbar</span>
+            <span
+              >💡 Projekt-Unteraufgaben: Nur <strong>Checkliste</strong> und
+              <strong>Bonus</strong> verfügbar</span
+            >
           </div>
           <div v-else-if="isDailyTask" class="info-banner daily-banner">
-            <span>💡 Unteraufgaben für <strong>Alltagsaufgaben</strong> geben sofort <strong>Bonus-Punkte</strong> beim Abhaken</span>
+            <span
+              >💡 Unteraufgaben für <strong>Alltagsaufgaben</strong> geben sofort
+              <strong>Bonus-Punkte</strong> beim Abhaken</span
+            >
           </div>
 
           <!-- DEDUCT OVERFLOW WARNING -->
           <div v-if="isDeductOverflow" class="warning-banner">
-            <span>⚠️ <strong>Deduct-Überlauf!</strong> Abzieh-Unteraufgaben ({{ currentDeductSum }}) übersteigen Hauptaufwand ({{ parentTask.effort }}). Parent-Task gibt 0 Punkte!</span>
+            <span
+              >⚠️ <strong>Deduct-Überlauf!</strong> Abzieh-Unteraufgaben ({{ currentDeductSum }})
+              übersteigen Hauptaufwand ({{ parentTask.effort }}). Parent-Task gibt 0 Punkte!</span
+            >
           </div>
           <div v-else-if="wouldCauseDeductOverflow" class="warning-banner">
-            <span>⚠️ Diese Unteraufgabe würde das Deduct-Budget überschreiten. Verbleibend: <strong>{{ remainingDeductBudget }}</strong> Punkte</span>
+            <span
+              >⚠️ Diese Unteraufgabe würde das Deduct-Budget überschreiten. Verbleibend:
+              <strong>{{ remainingDeductBudget }}</strong> Punkte</span
+            >
           </div>
 
           <!-- SECTION 1: Add New Subtask -->
@@ -166,7 +185,9 @@ const handleDeleteSubtask = (subtaskId: string) => {
                       v-model="newSubtaskPointsMode"
                       name="newSubtaskPointsMode"
                     />
-                    <span class="mode-icon">{{ modeDescriptions[mode].title.substring(0, 1) }}</span>
+                    <span class="mode-icon">{{
+                      modeDescriptions[mode].title.substring(0, 1)
+                    }}</span>
                     <span class="mode-text">{{ modeDescriptions[mode].title.substring(2) }}</span>
                   </label>
                 </div>
@@ -243,9 +264,7 @@ const handleDeleteSubtask = (subtaskId: string) => {
         </div>
 
         <div class="modal-footer">
-          <button class="btn btn-secondary" @click="handleClose">
-            Schließen
-          </button>
+          <button class="btn btn-secondary" @click="handleClose">Schließen</button>
         </div>
       </div>
     </div>
@@ -350,7 +369,7 @@ const handleDeleteSubtask = (subtaskId: string) => {
   border-left-color: white;
 }
 
-.mode-option input[type="radio"] {
+.mode-option input[type='radio'] {
   margin-top: 0.125rem;
   cursor: pointer;
   flex-shrink: 0;
@@ -510,7 +529,7 @@ const handleDeleteSubtask = (subtaskId: string) => {
   color: white;
 }
 
-.effort-option input[type="radio"] {
+.effort-option input[type='radio'] {
   display: none;
 }
 
@@ -548,7 +567,7 @@ const handleDeleteSubtask = (subtaskId: string) => {
   color: white;
 }
 
-.mode-option-compact input[type="radio"] {
+.mode-option-compact input[type='radio'] {
   display: none;
 }
 

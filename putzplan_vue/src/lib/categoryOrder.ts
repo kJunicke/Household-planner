@@ -75,7 +75,7 @@ export function buildCategoryOptions(
   const foreign: CategoryOption[] = []
 
   const mine = rows
-    .filter(c => currentListId !== null && c.list_id === currentListId)
+    .filter((c) => currentListId !== null && c.list_id === currentListId)
     .sort((a, b) => a.sort_order - b.sort_order || a.name.localeCompare(b.name))
 
   for (const c of mine) {
@@ -86,7 +86,7 @@ export function buildCategoryOptions(
   }
 
   const rest = rows
-    .filter(c => c.list_id !== currentListId)
+    .filter((c) => c.list_id !== currentListId)
     .sort((a, b) => a.name.localeCompare(b.name))
   for (const c of rest) {
     const key = normalizeCategoryName(c.name)

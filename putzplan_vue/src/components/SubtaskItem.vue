@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { Task } from '@/types/Task'
 import { useTaskStore } from '@/stores/taskStore'
-import { ref, computed } from "vue";
+import { ref, computed } from 'vue'
 import TaskCompletionModal from './TaskCompletionModal.vue'
 import ProjectWorkModal from './ProjectWorkModal.vue'
 import confetti from 'canvas-confetti'
@@ -19,13 +19,13 @@ const isQuickCompleting = ref(false)
 
 const editForm = ref({
   title: props.task.title,
-  effort: props.task.effort
+  effort: props.task.effort,
 })
 
 const startEdit = () => {
   editForm.value = {
     title: props.task.title,
-    effort: props.task.effort
+    effort: props.task.effort,
   }
   isEditing.value = true
 }
@@ -33,7 +33,7 @@ const startEdit = () => {
 const saveEdit = async () => {
   await taskStore.updateTask(props.task.task_id, {
     title: editForm.value.title,
-    effort: editForm.value.effort
+    effort: editForm.value.effort,
   })
   isEditing.value = false
 }
@@ -50,7 +50,7 @@ const handleCompleteTask = async () => {
     confetti({
       particleCount: 50,
       spread: 50,
-      origin: { y: 0.7 }
+      origin: { y: 0.7 },
     })
   }
 }
@@ -70,11 +70,10 @@ const handleCustomCompletion = async (effortOverride: number, reason: string) =>
     confetti({
       particleCount: 50,
       spread: 50,
-      origin: { y: 0.7 }
+      origin: { y: 0.7 },
     })
   }
 }
-
 
 // Check if this is the "Am Projekt arbeiten" default subtask
 const isProjectWorkSubtask = computed(() => props.task.title === 'Am Projekt arbeiten')
@@ -82,7 +81,7 @@ const isProjectWorkSubtask = computed(() => props.task.title === 'Am Projekt arb
 // Get parent task (project) info
 const parentTask = computed(() => {
   if (!props.task.parent_task_id) return null
-  return taskStore.tasks.find(t => t.task_id === props.task.parent_task_id)
+  return taskStore.tasks.find((t) => t.task_id === props.task.parent_task_id)
 })
 
 const openProjectWorkModal = () => {
@@ -101,7 +100,7 @@ const handleProjectWork = async (effort: number, note: string) => {
     confetti({
       particleCount: 50,
       spread: 50,
-      origin: { y: 0.7 }
+      origin: { y: 0.7 },
     })
     // Immediately reset the subtask so it's always available — nach dem Konfetti.
     await taskStore.markAsDirty(props.task.task_id)

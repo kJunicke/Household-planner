@@ -12,7 +12,7 @@ const props = withDefaults(
     /** Schmale einzeilige Variante für die obere Leiste. */
     compact?: boolean
   }>(),
-  { placeholder: 'Kategorie…', compact: false }
+  { placeholder: 'Kategorie…', compact: false },
 )
 
 const emit = defineEmits<{
@@ -30,7 +30,7 @@ const query = computed(() => props.modelValue.trim())
 
 const matches = computed(() => {
   const q = norm(props.modelValue)
-  const hits = q ? props.options.filter(o => norm(o.name).includes(q)) : props.options
+  const hits = q ? props.options.filter((o) => norm(o.name).includes(q)) : props.options
   return hits.slice(0, 8)
 })
 
@@ -42,7 +42,7 @@ const matches = computed(() => {
 const newEntry = computed(() => {
   const q = norm(props.modelValue)
   if (!q) return null
-  const inThisList = props.options.some(o => !o.sourceListName && norm(o.name) === q)
+  const inThisList = props.options.some((o) => !o.sourceListName && norm(o.name) === q)
   return inThisList ? null : query.value
 })
 
@@ -50,7 +50,9 @@ const rowCount = computed(() => matches.value.length + (newEntry.value ? 1 : 0))
 
 // Eine gewanderte Auswahl darf nicht auf einer Zeile stehen bleiben, die es nach
 // dem nächsten Tastendruck nicht mehr gibt.
-watch(rowCount, () => { highlight.value = -1 })
+watch(rowCount, () => {
+  highlight.value = -1
+})
 
 const setValue = (value: string) => emit('update:modelValue', value)
 
@@ -148,7 +150,10 @@ const onEnter = () => {
 </template>
 
 <style scoped>
-.cat-combo { position: relative; min-width: 0; }
+.cat-combo {
+  position: relative;
+  min-width: 0;
+}
 
 .combo-field {
   display: flex;
@@ -160,7 +165,9 @@ const onEnter = () => {
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
 }
-.combo-field:focus-within { border-color: var(--color-primary); }
+.combo-field:focus-within {
+  border-color: var(--color-primary);
+}
 
 /* Kompakt heisst: das Beiwerk gibt Platz ab, nicht das Eingabefeld. In der
    oberen Leiste bleiben von 96px Aussenbreite sonst nur rund 28px zum Lesen
@@ -170,8 +177,13 @@ const onEnter = () => {
   padding: 0 4px;
   gap: 3px;
 }
-.compact .combo-dot { width: 8px; height: 8px; }
-.compact .combo-clear { padding: 4px; }
+.compact .combo-dot {
+  width: 8px;
+  height: 8px;
+}
+.compact .combo-clear {
+  padding: 4px;
+}
 
 .combo-dot {
   display: inline-block;
@@ -190,8 +202,13 @@ const onEnter = () => {
   font-size: var(--font-base);
   padding: 8px 0;
 }
-.combo-input:focus { outline: none; }
-.compact .combo-input { font-size: var(--font-sm); padding: 4px 0; }
+.combo-input:focus {
+  outline: none;
+}
+.compact .combo-input {
+  font-size: var(--font-sm);
+  padding: 4px 0;
+}
 
 .combo-clear {
   position: relative;
@@ -212,7 +229,9 @@ const onEnter = () => {
   position: absolute;
   inset: -10px -8px;
 }
-.combo-clear:hover { color: var(--color-text-primary); }
+.combo-clear:hover {
+  color: var(--color-text-primary);
+}
 
 .combo-list {
   position: absolute;
@@ -251,7 +270,10 @@ const onEnter = () => {
   text-align: left;
   cursor: pointer;
 }
-.combo-row:hover, .combo-row.active { background: var(--color-background); }
+.combo-row:hover,
+.combo-row.active {
+  background: var(--color-background);
+}
 
 .combo-label {
   flex: 1;
@@ -285,5 +307,8 @@ const onEnter = () => {
   background: var(--color-border);
 }
 
-.combo-new-icon { color: var(--color-primary); flex-shrink: 0; }
+.combo-new-icon {
+  color: var(--color-primary);
+  flex-shrink: 0;
+}
 </style>

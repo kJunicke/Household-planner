@@ -57,7 +57,7 @@ const handleClose = () => {
                 class="effort-btn"
                 :class="{
                   active: selectedEffort === effort,
-                  default: effort === defaultEffort
+                  default: effort === defaultEffort,
                 }"
                 @click="selectedEffort = effort"
               >
@@ -67,9 +67,7 @@ const handleClose = () => {
           </div>
 
           <div class="note-input">
-            <label for="note" class="form-label">
-              Notiz (optional)
-            </label>
+            <label for="note" class="form-label"> Notiz (optional) </label>
             <textarea
               id="note"
               v-model="note"

@@ -2,10 +2,7 @@
 import { ref, onMounted, onUnmounted } from 'vue'
 import { useTaskStore } from '../stores/taskStore'
 import { useHouseholdStore } from '../stores/householdStore'
-import {
-  useHistoryGroups,
-  type HistoryEntry
-} from '@/composables/useHistoryGroups'
+import { useHistoryGroups, type HistoryEntry } from '@/composables/useHistoryGroups'
 import HistoryRow from '@/components/HistoryRow.vue'
 import HistoryFoldRow from '@/components/HistoryFoldRow.vue'
 
@@ -22,12 +19,16 @@ const searchTerm = ref('')
 const now = ref(new Date())
 
 // Anreicherung, Tagesgruppierung, Labels und Sortierung liegen im Composable.
-const { entries: completions, dayGroups: groupedCompletions, isFiltering } = useHistoryGroups(
+const {
+  entries: completions,
+  dayGroups: groupedCompletions,
+  isFiltering,
+} = useHistoryGroups(
   () => taskStore.completions,
   () => householdStore.householdMembers,
   now,
   () => taskStore.tasks,
-  searchTerm
+  searchTerm,
 )
 
 // Keine Rückfrage: der Wisch legt das Löschen erst frei, das ist die Absicht.
@@ -72,10 +73,7 @@ onMounted(async () => {
 
   // Load tasks and completions on mount (needed when navigating directly to /history or on page reload)
   try {
-    await Promise.all([
-      taskStore.loadTasks(),
-      taskStore.fetchCompletions()
-    ])
+    await Promise.all([taskStore.loadTasks(), taskStore.fetchCompletions()])
   } finally {
     isLoading.value = false
   }
@@ -135,20 +133,12 @@ onUnmounted(() => {
       </div>
 
       <div v-else class="completions-list">
-        <div
-          v-for="group in groupedCompletions"
-          :key="group.key"
-          class="completion-group"
-        >
+        <div v-for="group in groupedCompletions" :key="group.key" class="completion-group">
           <!-- Tages-Header: Überblick und zugleich Legende für die Farbpunkte der Zeilen -->
           <div class="date-header">
             <span class="date-label">{{ group.label }}</span>
             <span class="day-summary">
-              <span
-                v-for="person in group.people"
-                :key="person.user_id"
-                class="day-person"
-              >
+              <span v-for="person in group.people" :key="person.user_id" class="day-person">
                 <span class="user-dot" :style="{ background: person.user_color }"></span>
                 {{ person.display_name }}
                 <strong>{{ person.points }}</strong>
@@ -191,7 +181,6 @@ onUnmounted(() => {
         </div>
       </div>
     </div>
-
   </main>
 </template>
 

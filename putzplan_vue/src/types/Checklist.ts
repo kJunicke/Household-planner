@@ -74,4 +74,3 @@ export interface CategoryGroup {
   /** Position aus der Kategorientabelle; Altdaten ohne Zeile landen hinten. */
   sortOrder: number
 }
-

@@ -17,20 +17,26 @@ export function useGraceWindow(graceMs = 6000) {
     graceIds.value.add(id)
     const existing = timers.get(id)
     if (existing) clearTimeout(existing)
-    timers.set(id, window.setTimeout(() => {
-      graceIds.value.delete(id)
-      timers.delete(id)
-    }, graceMs))
+    timers.set(
+      id,
+      window.setTimeout(() => {
+        graceIds.value.delete(id)
+        timers.delete(id)
+      }, graceMs),
+    )
   }
 
   const clearGrace = (id: string) => {
     graceIds.value.delete(id)
     const existing = timers.get(id)
-    if (existing) { clearTimeout(existing); timers.delete(id) }
+    if (existing) {
+      clearTimeout(existing)
+      timers.delete(id)
+    }
   }
 
   const clearAllGrace = () => {
-    timers.forEach(t => clearTimeout(t))
+    timers.forEach((t) => clearTimeout(t))
     timers.clear()
     graceIds.value = new Set()
   }

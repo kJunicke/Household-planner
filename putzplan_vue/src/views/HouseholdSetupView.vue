@@ -83,11 +83,13 @@ const joinHousehold = async () => {
 
 <template>
   <div class="auth-container">
-    <div class="auth-wrapper" style="max-width: 540px;">
+    <div class="auth-wrapper" style="max-width: 540px">
       <div class="auth-card">
         <div class="card-body">
           <h1 class="auth-title">Haushalt einrichten</h1>
-          <p class="auth-subtitle">Erstelle einen neuen Haushalt oder trete einem bestehenden bei.</p>
+          <p class="auth-subtitle">
+            Erstelle einen neuen Haushalt oder trete einem bestehenden bei.
+          </p>
 
           <!-- Create Household Form -->
           <section class="setup-section">

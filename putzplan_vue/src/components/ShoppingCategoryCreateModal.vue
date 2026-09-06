@@ -29,7 +29,7 @@ const rows = computed(() =>
   [...props.items].sort((a, b) => {
     if (a.purchased !== b.purchased) return a.purchased ? 1 : -1
     return a.name.localeCompare(b.name)
-  })
+  }),
 )
 
 const toggle = (itemId: string) => {
@@ -142,7 +142,9 @@ const submit = () => {
   flex-shrink: 0;
   color: var(--color-text-muted);
 }
-.pick-row.picked .pick-box { color: var(--color-primary); }
+.pick-row.picked .pick-box {
+  color: var(--color-primary);
+}
 
 .pick-name {
   flex: 1;

@@ -57,11 +57,7 @@ const handleClose = () => {
             </div>
 
             <!-- Household Members -->
-            <div
-              v-for="member in householdMembers"
-              :key="member.user_id"
-              class="member-option"
-            >
+            <div v-for="member in householdMembers" :key="member.user_id" class="member-option">
               <input
                 type="radio"
                 :id="`member-${member.user_id}`"
@@ -71,7 +67,14 @@ const handleClose = () => {
               />
               <label :for="`member-${member.user_id}`" class="member-label">
                 <div class="member-avatar" :style="{ backgroundColor: member.user_color }">
-                  {{ member.display_name.split(' ').map((n: string) => n[0]).join('').substring(0, 2).toUpperCase() }}
+                  {{
+                    member.display_name
+                      .split(' ')
+                      .map((n: string) => n[0])
+                      .join('')
+                      .substring(0, 2)
+                      .toUpperCase()
+                  }}
                 </div>
                 <span class="member-name">{{ member.display_name }}</span>
               </label>
@@ -97,15 +100,8 @@ const handleClose = () => {
         </div>
 
         <div class="modal-footer">
-          <button class="btn btn-secondary" @click="handleClose">
-            Abbrechen
-          </button>
-          <button
-            class="btn btn-primary"
-            @click="handleConfirm"
-          >
-            Speichern
-          </button>
+          <button class="btn btn-secondary" @click="handleClose">Abbrechen</button>
+          <button class="btn btn-primary" @click="handleConfirm">Speichern</button>
         </div>
       </div>
     </div>

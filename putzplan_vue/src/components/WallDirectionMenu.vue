@@ -69,7 +69,7 @@ const LINES: Record<PressDirection, string[]> = {
   down: ['erledigen'],
   up: ['verschieben'],
   left: ['zuweisen'],
-  right: ['Aufwand', 'anpassen']
+  right: ['Aufwand', 'anpassen'],
 }
 const DIRS: PressDirection[] = ['down', 'up', 'left', 'right']
 const LINE_H = 17
@@ -203,8 +203,7 @@ const labelPoint = (d: PressDirection) => {
 }
 
 /** Erste Grundlinie: mehrzeilige Beschriftungen sitzen um den Randpunkt zentriert. */
-const firstLineY = (d: PressDirection) =>
-  labelPoint(d).y - ((LINES[d].length - 1) * LINE_H) / 2
+const firstLineY = (d: PressDirection) => labelPoint(d).y - ((LINES[d].length - 1) * LINE_H) / 2
 
 onMounted(() => {
   // Noch einmal: zwischen Setup und Einhängen kann sich die Leiste geändert
@@ -270,7 +269,7 @@ const arrow = computed(() => {
   const wingB = { x: bx - px * ARROW_HEAD * 0.62, y: by - py * ARROW_HEAD * 0.62 }
   return {
     line: `M ${x1} ${y1} L ${bx} ${by}`,
-    head: `M ${t.x} ${t.y} L ${wingA.x} ${wingA.y} L ${wingB.x} ${wingB.y} Z`
+    head: `M ${t.x} ${t.y} L ${wingA.x} ${wingA.y} L ${wingB.x} ${wingB.y} Z`,
   }
 })
 </script>
@@ -321,12 +320,16 @@ const arrow = computed(() => {
           :y="firstLineY(d)"
           text-anchor="middle"
           dominant-baseline="middle"
-        ><tspan
-          v-for="(line, i) in LINES[d]"
-          :key="line"
-          :x="labelPoint(d).x"
-          :dy="i === 0 ? 0 : LINE_H"
-        >{{ line }}</tspan></text>
+        >
+          <tspan
+            v-for="(line, i) in LINES[d]"
+            :key="line"
+            :x="labelPoint(d).x"
+            :dy="i === 0 ? 0 : LINE_H"
+          >
+            {{ line }}
+          </tspan>
+        </text>
       </template>
 
       <!-- Unsichtbare Zwillinge, nur zum Messen der Breite (→ `labelPoint`).
@@ -337,11 +340,13 @@ const arrow = computed(() => {
           <text
             v-for="line in LINES[d]"
             :key="line"
-            :ref="el => setMeasureEl(measureKey(d, line), el)"
+            :ref="(el) => setMeasureEl(measureKey(d, line), el)"
             class="dir-lab dir-lab--on"
             x="0"
             y="0"
-          >{{ line }}</text>
+          >
+            {{ line }}
+          </text>
         </template>
       </g>
 

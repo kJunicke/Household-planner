@@ -59,7 +59,9 @@ const handleDelete = () => {
           <div v-if="showDeleteConfirm" class="delete-confirm me-auto">
             <span class="text-danger me-2">Liste wirklich löschen?</span>
             <button class="btn btn-sm btn-danger me-1" @click="handleDelete">Ja, löschen</button>
-            <button class="btn btn-sm btn-secondary" @click="showDeleteConfirm = false">Abbrechen</button>
+            <button class="btn btn-sm btn-secondary" @click="showDeleteConfirm = false">
+              Abbrechen
+            </button>
           </div>
 
           <button class="btn btn-secondary" @click="emit('close')">Abbrechen</button>

@@ -64,12 +64,12 @@
   --transition-slow: 300ms cubic-bezier(0.4, 0, 0.2, 1);
 
   /* Font Sizes */
-  --font-xs: 0.625rem;    /* 10px */
-  --font-sm: 0.75rem;     /* 12px */
-  --font-md: 0.875rem;    /* 14px */
+  --font-xs: 0.625rem; /* 10px */
+  --font-sm: 0.75rem; /* 12px */
+  --font-md: 0.875rem; /* 14px */
   --font-base: 0.9375rem; /* 15px */
-  --font-lg: 1rem;        /* 16px */
-  --font-xl: 1.125rem;    /* 18px */
+  --font-lg: 1rem; /* 16px */
+  --font-xl: 1.125rem; /* 18px */
 
   /* Touch Targets - Android Standard (48px) für freistehende Buttons,
      40px für dichte Listenzeilen, die über die volle Breite treffbar sind */
@@ -98,8 +98,8 @@
   --pw-cork: #e7dcc8;
   --pw-cork-deep: #d8c9ad;
   --pw-paper: #fffdf6;
-  --pw-paper-day: #fdf1c9;   /* tägliche Aufgaben: gelber Notizblock */
-  --pw-paper-proj: #dcc39c;  /* Projekte: Packpapier */
+  --pw-paper-day: #fdf1c9; /* tägliche Aufgaben: gelber Notizblock */
+  --pw-paper-proj: #dcc39c; /* Projekte: Packpapier */
   --pw-ink: #241f1a;
   --pw-ink-soft: #544a3e;
   --pw-free: #8a7f6d;
@@ -162,7 +162,7 @@
   /* Schatten — harte Versätze statt weicher Verläufe */
   --shadow-sm: 1px 1px 0 rgba(36, 31, 26, 0.35);
   --shadow-md: var(--pw-shadow);
-  --shadow-lg: 5px 6px 0 rgba(36, 31, 26, 0.30);
+  --shadow-lg: 5px 6px 0 rgba(36, 31, 26, 0.3);
   --shadow-xl: var(--pw-shadow-lift);
 
   /* Radien — Papier wird geschnitten, nicht gerundet */
@@ -365,10 +365,10 @@ body {
 
 /* Modern Form Controls */
 .form-control,
-input[type="text"],
-input[type="email"],
-input[type="password"],
-input[type="number"],
+input[type='text'],
+input[type='email'],
+input[type='password'],
+input[type='number'],
 select {
   border: 1.5px solid var(--color-border);
   border-radius: var(--radius-md);
@@ -489,7 +489,9 @@ h3 {
   line-height: 1.4;
 }
 
-h4, h5, h6 {
+h4,
+h5,
+h6 {
   font-size: 1rem;
   font-weight: 600;
   color: var(--color-text-primary);

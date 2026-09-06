@@ -111,6 +111,6 @@ export function useSwipeAction(options: {
     onPointerDown,
     onPointerMove,
     onPointerUp,
-    onClick
+    onClick,
   }
 }

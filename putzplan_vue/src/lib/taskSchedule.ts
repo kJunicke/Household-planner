@@ -75,7 +75,7 @@ export function scheduleOf(task: Task, today: Date = new Date()): TaskSchedule {
       // Wie eine erledigte Aufgabe: negativ, also unten in der Dringlichkeit,
       // und innerhalb der Erledigt-Sektion nach nächstem Termin sortiert.
       urgency: -daysUntilDue,
-      postponedUntil: task.postponed_until.slice(0, 10)
+      postponedUntil: task.postponed_until.slice(0, 10),
     }
   }
 
@@ -89,7 +89,7 @@ export function scheduleOf(task: Task, today: Date = new Date()): TaskSchedule {
       daysOverdue: null,
       daysUntilDue: null,
       urgency: -Infinity,
-      postponedUntil: null
+      postponedUntil: null,
     }
   }
 
@@ -102,7 +102,7 @@ export function scheduleOf(task: Task, today: Date = new Date()): TaskSchedule {
       daysOverdue: null,
       daysUntilDue: null,
       urgency: Infinity,
-      postponedUntil: null
+      postponedUntil: null,
     }
   }
 
@@ -121,7 +121,7 @@ export function scheduleOf(task: Task, today: Date = new Date()): TaskSchedule {
     daysOverdue,
     daysUntilDue: -daysOverdue,
     urgency: daysOverdue,
-    postponedUntil: null
+    postponedUntil: null,
   }
 }
 
@@ -146,7 +146,7 @@ export function postponeTargetDate(
   task: Task,
   option: PostponeOption,
   input: PostponeInput = {},
-  today: Date = new Date()
+  today: Date = new Date(),
 ): string | null {
   if (option === 'custom') {
     const customDate = input.customDate
@@ -182,7 +182,7 @@ export function formatPostponeDate(isoDate: string): string {
   return parseIsoDate(isoDate).toLocaleDateString('de-DE', {
     weekday: 'long',
     day: '2-digit',
-    month: '2-digit'
+    month: '2-digit',
   })
 }
 

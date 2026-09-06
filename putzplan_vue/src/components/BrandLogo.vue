@@ -7,7 +7,7 @@ withDefaults(
     size?: 'sm' | 'lg'
     wordmark?: boolean
   }>(),
-  { size: 'sm', wordmark: true }
+  { size: 'sm', wordmark: true },
 )
 </script>
 

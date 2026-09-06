@@ -45,7 +45,7 @@ export const isPending = (task: Task): boolean =>
  * Ansicht ihre Menge sichtbar benennen.
  */
 export const countOverdue = (tasks: readonly Task[]): number =>
-  tasks.filter(task => isOverdue(scheduleOf(task))).length
+  tasks.filter((task) => isOverdue(scheduleOf(task))).length
 
 /**
  * Alle Listen sind `readonly`: Konsumenten teilen sich dieselbe Array-Instanz aus dem
@@ -56,27 +56,27 @@ export const countOverdue = (tasks: readonly Task[]): number =>
  */
 export function useTaskBoard(tasks: MaybeRefOrGetter<Task[]>) {
   /** Offene Putzaufgaben, dringendste zuerst. */
-  const pendingTasks = computed(
-    (): readonly Task[] => toValue(tasks).filter(isPending).sort(byUrgency)
+  const pendingTasks = computed((): readonly Task[] =>
+    toValue(tasks).filter(isPending).sort(byUrgency),
   )
 
   /** Offene tägliche und einmalige Aufgaben, alphabetisch (stabile Reihenfolge). */
   const dailyTasks = computed((): readonly Task[] =>
     toValue(tasks)
       .filter(
-        task =>
+        (task) =>
           !task.completed &&
           task.parent_task_id === null &&
-          (task.task_type === 'daily' || task.task_type === 'one-time')
+          (task.task_type === 'daily' || task.task_type === 'one-time'),
       )
-      .sort((a, b) => a.title.localeCompare(b.title, 'de'))
+      .sort((a, b) => a.title.localeCompare(b.title, 'de')),
   )
 
   /** Offene Projekte — unsortiert, in Store-Reihenfolge. */
   const projectTasks = computed((): readonly Task[] =>
     toValue(tasks).filter(
-      task => !task.completed && task.parent_task_id === null && task.task_type === 'project'
-    )
+      (task) => !task.completed && task.parent_task_id === null && task.task_type === 'project',
+    ),
   )
 
   /**
@@ -90,11 +90,15 @@ export function useTaskBoard(tasks: MaybeRefOrGetter<Task[]>) {
     const all = toValue(tasks)
 
     const nonProjects = all
-      .filter(task => task.completed && task.parent_task_id === null && task.task_type !== 'project')
+      .filter(
+        (task) => task.completed && task.parent_task_id === null && task.task_type !== 'project',
+      )
       .sort(byUrgency)
 
     const projects = all
-      .filter(task => task.completed && task.parent_task_id === null && task.task_type === 'project')
+      .filter(
+        (task) => task.completed && task.parent_task_id === null && task.task_type === 'project',
+      )
       .sort((a, b) => {
         if (!a.last_completed_at || !b.last_completed_at) return 0
         return new Date(b.last_completed_at).getTime() - new Date(a.last_completed_at).getTime()
@@ -107,13 +111,14 @@ export function useTaskBoard(tasks: MaybeRefOrGetter<Task[]>) {
    * Offener Rückstand für die Status-Zeile. Daily-Aufgaben sind immer sichtbar und
    * setzen sich täglich zurück → sie zählen hier nicht mit.
    */
-  const openTasksCount = computed((): number =>
-    toValue(tasks).filter(
-      task =>
-        !task.completed &&
-        task.parent_task_id === null &&
-        (task.task_type === 'recurring' || task.task_type === 'one-time')
-    ).length
+  const openTasksCount = computed(
+    (): number =>
+      toValue(tasks).filter(
+        (task) =>
+          !task.completed &&
+          task.parent_task_id === null &&
+          (task.task_type === 'recurring' || task.task_type === 'one-time'),
+      ).length,
   )
 
   return {
@@ -121,6 +126,6 @@ export function useTaskBoard(tasks: MaybeRefOrGetter<Task[]>) {
     dailyTasks,
     projectTasks,
     completedTasks,
-    openTasksCount
+    openTasksCount,
   }
 }

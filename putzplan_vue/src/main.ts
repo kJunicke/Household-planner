@@ -34,8 +34,8 @@ await authStore.initializeAuth()
 
 // Load household after auth is initialized
 if (authStore.user) {
-    const householdStore = useHouseholdStore()
-    await householdStore.loadUserHousehold()
+  const householdStore = useHouseholdStore()
+  await householdStore.loadUserHousehold()
 }
 
 // Einkaufs-Store einmalig instanziieren, damit er sich beim Sync-Indikator

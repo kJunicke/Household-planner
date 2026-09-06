@@ -67,12 +67,24 @@ const onClick = (e: MouseEvent) => {
   user-select: none;
   -webkit-tap-highlight-color: transparent;
   min-height: 40px;
-  transition: background 0.15s, opacity 0.15s;
+  transition:
+    background 0.15s,
+    opacity 0.15s;
 }
-.list-row:hover { border-color: var(--color-border-hover); }
-.list-row:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 2px; }
-.list-row.checked { opacity: 0.55; }
-.list-row.checked .list-name { text-decoration: line-through; color: var(--color-text-muted); }
+.list-row:hover {
+  border-color: var(--color-border-hover);
+}
+.list-row:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+.list-row.checked {
+  opacity: 0.55;
+}
+.list-row.checked .list-name {
+  text-decoration: line-through;
+  color: var(--color-text-muted);
+}
 
 .list-check {
   flex-shrink: 0;
@@ -86,7 +98,10 @@ const onClick = (e: MouseEvent) => {
   color: white;
   font-size: 14px;
 }
-.list-check.on { background: var(--color-success); border-color: var(--color-success); }
+.list-check.on {
+  background: var(--color-success);
+  border-color: var(--color-success);
+}
 
 .list-name {
   flex: 1;
@@ -126,5 +141,7 @@ const onClick = (e: MouseEvent) => {
   position: absolute;
   inset: -1px -5px;
 }
-.row-edit-btn:hover { color: var(--color-primary); }
+.row-edit-btn:hover {
+  color: var(--color-primary);
+}
 </style>

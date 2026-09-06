@@ -1,7 +1,18 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { Pie, Bar, Line } from 'vue-chartjs'
-import { Chart as ChartJS, Title, Tooltip, Legend, ArcElement, BarElement, LineElement, PointElement, CategoryScale, LinearScale } from 'chart.js'
+import {
+  Chart as ChartJS,
+  Title,
+  Tooltip,
+  Legend,
+  ArcElement,
+  BarElement,
+  LineElement,
+  PointElement,
+  CategoryScale,
+  LinearScale,
+} from 'chart.js'
 import { useHouseholdStore } from '../stores/householdStore'
 import { useTaskStore } from '../stores/taskStore'
 import { useSettlementStore } from '../stores/settlementStore'
@@ -11,7 +22,17 @@ import { MEMBER_COLORS } from '../lib/memberColors'
 // Member-Farben der Aufgaben-Punkte.
 const SETTLED_COLOR = '#f59e0b'
 
-ChartJS.register(Title, Tooltip, Legend, ArcElement, BarElement, LineElement, PointElement, CategoryScale, LinearScale)
+ChartJS.register(
+  Title,
+  Tooltip,
+  Legend,
+  ArcElement,
+  BarElement,
+  LineElement,
+  PointElement,
+  CategoryScale,
+  LinearScale,
+)
 
 const householdStore = useHouseholdStore()
 const taskStore = useTaskStore()
@@ -74,7 +95,7 @@ const periodCutoff = computed<Date | null>(() => {
 const filteredCompletions = computed(() => {
   const cutoff = periodCutoff.value
   if (!cutoff) return allCompletions.value
-  return allCompletions.value.filter(c => new Date(c.completed_at) >= cutoff)
+  return allCompletions.value.filter((c) => new Date(c.completed_at) >= cutoff)
 })
 
 // Ausgeglichene Punkte pro Member (die ein Member kompensiert hat, also als
@@ -106,8 +127,9 @@ const memberChartColors = computed<Map<string, string>>(() => {
   householdStore.householdMembers.forEach((member, index) => {
     let color = member.user_color
     if (!color || used.has(color.toUpperCase())) {
-      color = MEMBER_COLORS.find(c => !used.has(c.toUpperCase()))
-        || MEMBER_COLORS[index % MEMBER_COLORS.length]
+      color =
+        MEMBER_COLORS.find((c) => !used.has(c.toUpperCase())) ||
+        MEMBER_COLORS[index % MEMBER_COLORS.length]
     }
     used.add(color.toUpperCase())
     map.set(member.user_id, color)
@@ -115,8 +137,7 @@ const memberChartColors = computed<Map<string, string>>(() => {
   return map
 })
 
-const colorFor = (userId: string): string =>
-  memberChartColors.value.get(userId) || MEMBER_COLORS[0]
+const colorFor = (userId: string): string => memberChartColors.value.get(userId) || MEMBER_COLORS[0]
 
 // ISO 8601 Wochennummer berechnen
 const getISOWeekAndYear = (date: Date): { week: number; year: number } => {
@@ -124,7 +145,7 @@ const getISOWeekAndYear = (date: Date): { week: number; year: number } => {
   const dayNum = d.getUTCDay() || 7
   d.setUTCDate(d.getUTCDate() + 4 - dayNum)
   const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1))
-  const week = Math.ceil((((d.getTime() - yearStart.getTime()) / 86400000) + 1) / 7)
+  const week = Math.ceil(((d.getTime() - yearStart.getTime()) / 86400000 + 1) / 7)
   return { week, year: d.getUTCFullYear() }
 }
 
@@ -151,7 +172,7 @@ const effortByUser = computed(() => {
   // Mappe user_id zu effort_total
   const effortMap = new Map<string, number>()
 
-  completions.forEach(completion => {
+  completions.forEach((completion) => {
     // UNIFIED SOLUTION: Always use effort_override (Single Source of Truth)
     // effort_override is ALWAYS set (even for standard completions) to preserve historical data
     const effort = completion.effort_override
@@ -200,14 +221,16 @@ const pieChartData = computed(() => {
 
   return {
     labels,
-    datasets: [{
-      label: 'Aufwand (gewichtet)',
-      data,
-      backgroundColor: backgroundColors,
-      borderColor: borderColors,
-      borderWidth: 2,
-      hoverOffset: 8
-    }]
+    datasets: [
+      {
+        label: 'Aufwand (gewichtet)',
+        data,
+        backgroundColor: backgroundColors,
+        borderColor: borderColors,
+        borderWidth: 2,
+        hoverOffset: 8,
+      },
+    ],
   }
 })
 
@@ -236,7 +259,7 @@ const barChartData = computed(() => {
     borderColors.push(colorFor(member.user_id))
   })
 
-  const hasSettled = settledData.some(v => v > 0)
+  const hasSettled = settledData.some((v) => v > 0)
 
   return {
     labels,
@@ -248,19 +271,23 @@ const barChartData = computed(() => {
         borderColor: borderColors,
         borderWidth: 2,
         borderRadius: 6,
-        stack: 'punkte'
+        stack: 'punkte',
       },
       // Ausgleich-Punkte gestapelt obendrauf, in eigener Farbe.
-      ...(hasSettled ? [{
-        label: 'Ausgleich',
-        data: settledData,
-        backgroundColor: hexToRgba(SETTLED_COLOR, 0.85),
-        borderColor: SETTLED_COLOR,
-        borderWidth: 2,
-        borderRadius: 6,
-        stack: 'punkte'
-      }] : [])
-    ]
+      ...(hasSettled
+        ? [
+            {
+              label: 'Ausgleich',
+              data: settledData,
+              backgroundColor: hexToRgba(SETTLED_COLOR, 0.85),
+              borderColor: SETTLED_COLOR,
+              borderWidth: 2,
+              borderRadius: 6,
+              stack: 'punkte',
+            },
+          ]
+        : []),
+    ],
   }
 })
 
@@ -291,15 +318,27 @@ const lineChartData = computed(() => {
       return `KW ${week}`
     } else {
       const [year, month] = key.split('-')
-      const monthNames = ['Jan', 'Feb', 'Mär', 'Apr', 'Mai', 'Jun',
-                           'Jul', 'Aug', 'Sep', 'Okt', 'Nov', 'Dez']
+      const monthNames = [
+        'Jan',
+        'Feb',
+        'Mär',
+        'Apr',
+        'Mai',
+        'Jun',
+        'Jul',
+        'Aug',
+        'Sep',
+        'Okt',
+        'Nov',
+        'Dez',
+      ]
       return `${monthNames[parseInt(month, 10) - 1]} ${year}`
     }
   }
 
   // Punkte pro User pro Bucket aggregieren
   const bucketMap = new Map<string, Map<string, number>>()
-  completions.forEach(completion => {
+  completions.forEach((completion) => {
     const key = getBucketKey(completion.completed_at)
     if (!bucketMap.has(key)) {
       bucketMap.set(key, new Map())
@@ -341,7 +380,10 @@ const lineChartData = computed(() => {
       while (y < lastYear || (y === lastYear && m <= lastMonth)) {
         allKeys.push(`${y}-${String(m).padStart(2, '0')}`)
         m++
-        if (m > 12) { m = 1; y++ }
+        if (m > 12) {
+          m = 1
+          y++
+        }
       }
     }
   }
@@ -361,9 +403,9 @@ const lineChartData = computed(() => {
     tension: number
     fill: boolean
     borderDash?: number[]
-  }> = members.map(member => ({
+  }> = members.map((member) => ({
     label: member.display_name || 'Unbekannt',
-    data: allKeys.map(key => {
+    data: allKeys.map((key) => {
       const userMap = bucketMap.get(key)
       return userMap?.get(member.user_id) || 0
     }),
@@ -374,15 +416,17 @@ const lineChartData = computed(() => {
     pointHoverRadius: 6,
     pointBackgroundColor: colorFor(member.user_id),
     tension: 0.3,
-    fill: false
+    fill: false,
   }))
 
   // Gesamt-Linie (gestrichelt)
-  const gesamtData = allKeys.map(key => {
+  const gesamtData = allKeys.map((key) => {
     const userMap = bucketMap.get(key)
     if (!userMap) return 0
     let total = 0
-    userMap.forEach(val => { total += val })
+    userMap.forEach((val) => {
+      total += val
+    })
     return total
   })
 
@@ -397,7 +441,7 @@ const lineChartData = computed(() => {
     pointBackgroundColor: '#1e293b',
     tension: 0.3,
     fill: false,
-    borderDash: [6, 3]
+    borderDash: [6, 3],
   })
 
   return { labels, datasets }
@@ -414,12 +458,12 @@ const pieChartOptions = {
         font: {
           family: 'Inter, system-ui, sans-serif',
           size: 13,
-          weight: 500 as const
+          weight: 500 as const,
         },
         color: '#1e293b',
         usePointStyle: true,
-        pointStyle: 'circle'
-      }
+        pointStyle: 'circle',
+      },
     },
     title: {
       display: true,
@@ -427,12 +471,12 @@ const pieChartOptions = {
       font: {
         family: 'Inter, system-ui, sans-serif',
         size: 16,
-        weight: 600 as const
+        weight: 600 as const,
       },
       color: '#1e293b',
       padding: {
-        bottom: 20
-      }
+        bottom: 20,
+      },
     },
     tooltip: {
       backgroundColor: '#1e293b',
@@ -441,24 +485,24 @@ const pieChartOptions = {
       titleFont: {
         family: 'Inter, system-ui, sans-serif',
         size: 13,
-        weight: 600 as const
+        weight: 600 as const,
       },
       bodyFont: {
         family: 'Inter, system-ui, sans-serif',
-        size: 13
+        size: 13,
       },
       callbacks: {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        label: function(context: any) {
+        label: function (context: any) {
           const label = context.label || ''
           const value = context.parsed || 0
           const total = context.dataset.data.reduce((a: number, b: number) => a + b, 0)
           const percentage = total > 0 ? ((value / total) * 100).toFixed(1) : '0.0'
           return ` ${label}: ${value} Punkte (${percentage}%)`
-        }
-      }
-    }
-  }
+        },
+      },
+    },
+  },
 }
 
 const barChartOptions = {
@@ -472,8 +516,8 @@ const barChartOptions = {
         font: { family: 'Inter, system-ui, sans-serif', size: 12 },
         color: '#64748b',
         usePointStyle: true,
-        boxWidth: 8
-      }
+        boxWidth: 8,
+      },
     },
     title: {
       display: true,
@@ -481,12 +525,12 @@ const barChartOptions = {
       font: {
         family: 'Inter, system-ui, sans-serif',
         size: 16,
-        weight: 600 as const
+        weight: 600 as const,
       },
       color: '#1e293b',
       padding: {
-        bottom: 20
-      }
+        bottom: 20,
+      },
     },
     tooltip: {
       backgroundColor: '#1e293b',
@@ -495,58 +539,58 @@ const barChartOptions = {
       titleFont: {
         family: 'Inter, system-ui, sans-serif',
         size: 13,
-        weight: 600 as const
+        weight: 600 as const,
       },
       bodyFont: {
         family: 'Inter, system-ui, sans-serif',
-        size: 13
+        size: 13,
       },
       callbacks: {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        label: function(context: any) {
+        label: function (context: any) {
           const dataset = context.dataset.label || ''
           const value = context.parsed.y || 0
           return ` ${dataset}: ${value} Punkte`
-        }
-      }
-    }
+        },
+      },
+    },
   },
   scales: {
     x: {
       stacked: true,
       grid: {
-        display: false
+        display: false,
       },
       ticks: {
         font: {
           family: 'Inter, system-ui, sans-serif',
           size: 13,
-          weight: 500 as const
+          weight: 500 as const,
         },
-        color: '#64748b'
-      }
+        color: '#64748b',
+      },
     },
     y: {
       stacked: true,
       beginAtZero: true,
       grid: {
         color: '#e2e8f0',
-        lineWidth: 1
+        lineWidth: 1,
       },
       border: {
-        display: false
+        display: false,
       },
       ticks: {
         stepSize: 1,
         font: {
           family: 'Inter, system-ui, sans-serif',
-          size: 12
+          size: 12,
         },
         color: '#64748b',
-        padding: 8
-      }
-    }
-  }
+        padding: 8,
+      },
+    },
+  },
 }
 
 const lineChartOptions = computed(() => ({
@@ -554,7 +598,7 @@ const lineChartOptions = computed(() => ({
   maintainAspectRatio: false,
   interaction: {
     mode: 'index' as const,
-    intersect: false
+    intersect: false,
   },
   plugins: {
     legend: {
@@ -564,25 +608,26 @@ const lineChartOptions = computed(() => ({
         font: {
           family: 'Inter, system-ui, sans-serif',
           size: 12,
-          weight: 500 as const
+          weight: 500 as const,
         },
         color: '#1e293b',
         usePointStyle: true,
-        pointStyle: 'circle'
-      }
+        pointStyle: 'circle',
+      },
     },
     title: {
       display: true,
-      text: trendAggregation.value === 'weekly' ? 'Punkteverlauf (Wochen)' : 'Punkteverlauf (Monate)',
+      text:
+        trendAggregation.value === 'weekly' ? 'Punkteverlauf (Wochen)' : 'Punkteverlauf (Monate)',
       font: {
         family: 'Inter, system-ui, sans-serif',
         size: 16,
-        weight: 600 as const
+        weight: 600 as const,
       },
       color: '#1e293b',
       padding: {
-        bottom: 16
-      }
+        bottom: 16,
+      },
     },
     tooltip: {
       backgroundColor: '#1e293b',
@@ -591,58 +636,58 @@ const lineChartOptions = computed(() => ({
       titleFont: {
         family: 'Inter, system-ui, sans-serif',
         size: 13,
-        weight: 600 as const
+        weight: 600 as const,
       },
       bodyFont: {
         family: 'Inter, system-ui, sans-serif',
-        size: 13
+        size: 13,
       },
       callbacks: {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        label: function(context: any) {
+        label: function (context: any) {
           const label = context.dataset.label || ''
           const value = context.parsed.y || 0
           return ` ${label}: ${value} Punkte`
-        }
-      }
-    }
+        },
+      },
+    },
   },
   scales: {
     x: {
       grid: {
-        display: false
+        display: false,
       },
       ticks: {
         font: {
           family: 'Inter, system-ui, sans-serif',
-          size: 11
+          size: 11,
         },
         color: '#64748b',
         maxRotation: 45,
         autoSkip: true,
-        maxTicksLimit: 12
-      }
+        maxTicksLimit: 12,
+      },
     },
     y: {
       beginAtZero: true,
       grid: {
         color: '#e2e8f0',
-        lineWidth: 1
+        lineWidth: 1,
       },
       border: {
-        display: false
+        display: false,
       },
       ticks: {
         stepSize: 1,
         font: {
           family: 'Inter, system-ui, sans-serif',
-          size: 12
+          size: 12,
         },
         color: '#64748b',
-        padding: 8
-      }
-    }
-  }
+        padding: 8,
+      },
+    },
+  },
 }))
 </script>
 
@@ -660,94 +705,102 @@ const lineChartOptions = computed(() => ({
       </div>
 
       <template v-else>
-      <!-- Zeitraum-Filter (Segmented Control) -->
-      <div class="segmented-control mb-4">
-        <button
-          @click="selectedPeriod = 'all'"
-          :class="['segment', selectedPeriod === 'all' && 'active']"
-        >
-          Gesamt
-        </button>
-        <button
-          @click="selectedPeriod = 'week'"
-          :class="['segment', selectedPeriod === 'week' && 'active']"
-        >
-          Woche
-        </button>
-        <button
-          @click="selectedPeriod = 'month'"
-          :class="['segment', selectedPeriod === 'month' && 'active']"
-        >
-          Monat
-        </button>
-        <button
-          @click="selectedPeriod = 'year'"
-          :class="['segment', selectedPeriod === 'year' && 'active']"
-        >
-          Jahr
-        </button>
-      </div>
+        <!-- Zeitraum-Filter (Segmented Control) -->
+        <div class="segmented-control mb-4">
+          <button
+            @click="selectedPeriod = 'all'"
+            :class="['segment', selectedPeriod === 'all' && 'active']"
+          >
+            Gesamt
+          </button>
+          <button
+            @click="selectedPeriod = 'week'"
+            :class="['segment', selectedPeriod === 'week' && 'active']"
+          >
+            Woche
+          </button>
+          <button
+            @click="selectedPeriod = 'month'"
+            :class="['segment', selectedPeriod === 'month' && 'active']"
+          >
+            Monat
+          </button>
+          <button
+            @click="selectedPeriod = 'year'"
+            :class="['segment', selectedPeriod === 'year' && 'active']"
+          >
+            Jahr
+          </button>
+        </div>
 
-      <div class="row g-4">
-        <!-- Bar Chart - Punkteverteilung -->
-        <div class="col-12 col-lg-6">
-          <div class="card shadow-sm">
-            <div class="card-body p-4">
-              <div v-if="barChartData" class="chart-container">
-                <Bar :data="barChartData" :options="barChartOptions" />
+        <div class="row g-4">
+          <!-- Bar Chart - Punkteverteilung -->
+          <div class="col-12 col-lg-6">
+            <div class="card shadow-sm">
+              <div class="card-body p-4">
+                <div v-if="barChartData" class="chart-container">
+                  <Bar :data="barChartData" :options="barChartOptions" />
+                </div>
+                <div v-else class="text-center text-muted py-5">
+                  <i class="bi bi-bar-chart fs-1 d-block mb-3"></i>
+                  <p>Noch keine Daten verfügbar</p>
+                </div>
               </div>
-              <div v-else class="text-center text-muted py-5">
-                <i class="bi bi-bar-chart fs-1 d-block mb-3"></i>
-                <p>Noch keine Daten verfügbar</p>
+            </div>
+          </div>
+
+          <!-- Pie Chart - Aufgabenverteilung -->
+          <div class="col-12 col-lg-6">
+            <div class="card shadow-sm">
+              <div class="card-body p-4">
+                <div v-if="pieChartData" class="chart-container">
+                  <Pie :data="pieChartData" :options="pieChartOptions" />
+                </div>
+                <div v-else class="text-center text-muted py-5">
+                  <i class="bi bi-pie-chart fs-1 d-block mb-3"></i>
+                  <p>Noch keine Daten verfügbar</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Line Chart - Verlaufsgrafik -->
+          <div class="col-12">
+            <div class="card shadow-sm">
+              <div class="card-body p-4">
+                <div class="trend-toggle mb-3">
+                  <button
+                    @click="trendAggregation = 'weekly'"
+                    :class="[
+                      'btn',
+                      'btn-sm',
+                      trendAggregation === 'weekly' ? 'btn-primary' : 'btn-outline-primary',
+                    ]"
+                  >
+                    Pro Woche
+                  </button>
+                  <button
+                    @click="trendAggregation = 'monthly'"
+                    :class="[
+                      'btn',
+                      'btn-sm',
+                      trendAggregation === 'monthly' ? 'btn-primary' : 'btn-outline-primary',
+                    ]"
+                  >
+                    Pro Monat
+                  </button>
+                </div>
+                <div v-if="lineChartData" class="chart-container chart-container--trend">
+                  <Line :data="lineChartData" :options="lineChartOptions" />
+                </div>
+                <div v-else class="text-center text-muted py-5">
+                  <i class="bi bi-graph-up fs-1 d-block mb-3"></i>
+                  <p>Noch keine Verlaufsdaten verfügbar</p>
+                </div>
               </div>
             </div>
           </div>
         </div>
-
-        <!-- Pie Chart - Aufgabenverteilung -->
-        <div class="col-12 col-lg-6">
-          <div class="card shadow-sm">
-            <div class="card-body p-4">
-              <div v-if="pieChartData" class="chart-container">
-                <Pie :data="pieChartData" :options="pieChartOptions" />
-              </div>
-              <div v-else class="text-center text-muted py-5">
-                <i class="bi bi-pie-chart fs-1 d-block mb-3"></i>
-                <p>Noch keine Daten verfügbar</p>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <!-- Line Chart - Verlaufsgrafik -->
-        <div class="col-12">
-          <div class="card shadow-sm">
-            <div class="card-body p-4">
-              <div class="trend-toggle mb-3">
-                <button
-                  @click="trendAggregation = 'weekly'"
-                  :class="['btn', 'btn-sm', trendAggregation === 'weekly' ? 'btn-primary' : 'btn-outline-primary']"
-                >
-                  Pro Woche
-                </button>
-                <button
-                  @click="trendAggregation = 'monthly'"
-                  :class="['btn', 'btn-sm', trendAggregation === 'monthly' ? 'btn-primary' : 'btn-outline-primary']"
-                >
-                  Pro Monat
-                </button>
-              </div>
-              <div v-if="lineChartData" class="chart-container chart-container--trend">
-                <Line :data="lineChartData" :options="lineChartOptions" />
-              </div>
-              <div v-else class="text-center text-muted py-5">
-                <i class="bi bi-graph-up fs-1 d-block mb-3"></i>
-                <p>Noch keine Verlaufsdaten verfügbar</p>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
       </template>
     </div>
   </div>

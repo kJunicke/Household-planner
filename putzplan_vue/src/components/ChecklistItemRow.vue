@@ -74,8 +74,14 @@ const emit = defineEmits<{
   position: absolute;
   inset: -4px;
 }
-.step-btn:hover:not(:disabled) { border-color: var(--color-primary); color: var(--color-primary); }
-.step-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+.step-btn:hover:not(:disabled) {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+}
+.step-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
 .step-count {
   min-width: 32px;
   text-align: center;

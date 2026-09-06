@@ -96,13 +96,13 @@ export function createChecklistStore(config: ChecklistStoreConfig) {
     // Getters
     // ==========================================================================
 
-    const currentList = computed(() =>
-      lists.value.find(l => l.list_id === currentListId.value) ?? null
+    const currentList = computed(
+      () => lists.value.find((l) => l.list_id === currentListId.value) ?? null,
     )
 
     const currentListItems = computed(() => {
       if (!currentListId.value) return []
-      return items.value.filter(i => i.list_id === currentListId.value)
+      return items.value.filter((i) => i.list_id === currentListId.value)
     })
 
     /**
@@ -115,7 +115,7 @@ export function createChecklistStore(config: ChecklistStoreConfig) {
     const currentListCategories = computed<CategoryRow[]>(() => {
       if (!currentListId.value) return []
       const sorted = categories.value
-        .filter(c => c.list_id === currentListId.value)
+        .filter((c) => c.list_id === currentListId.value)
         .sort((a, b) => a.sort_order - b.sort_order || a.name.localeCompare(b.name))
 
       const byKey = new Map<string, CategoryRow>()
@@ -130,7 +130,7 @@ export function createChecklistStore(config: ChecklistStoreConfig) {
           byKey.set(key, row)
         }
       }
-      return sorted.filter(row => byKey.get(normalizeCategoryName(row.name)) === row)
+      return sorted.filter((row) => byKey.get(normalizeCategoryName(row.name)) === row)
     })
 
     /** Vorschläge für die Kategorie-Combobox: eigene Liste zuerst, fremde mit Herkunft. */
@@ -138,8 +138,8 @@ export function createChecklistStore(config: ChecklistStoreConfig) {
       buildCategoryOptions(
         categories.value,
         currentListId.value,
-        new Map(lists.value.map(l => [l.list_id, l.name]))
-      )
+        new Map(lists.value.map((l) => [l.list_id, l.name])),
+      ),
     )
 
     /**
@@ -176,15 +176,15 @@ export function createChecklistStore(config: ChecklistStoreConfig) {
       // Unkategorisiert ist immer vorhanden; die Rangfolge kommt aus dem Vergleicher.
       bucket(null, 0)
       const rows = currentListCategories.value
-      rows.forEach(c => bucket(c.name, c.sort_order))
+      rows.forEach((c) => bucket(c.name, c.sort_order))
 
       // Der kanonische Name kommt aus der Zeile — sonst bestimmt der erste
       // Eintrag die Schreibweise der Überschrift („bad" statt „Bad").
-      const labelByKey = new Map(rows.map(c => [normalizeCategoryName(c.name), c.name]))
+      const labelByKey = new Map(rows.map((c) => [normalizeCategoryName(c.name), c.name]))
 
       list.forEach((it, idx) => {
         const raw = it.category ?? null
-        const label = raw === null ? null : labelByKey.get(normalizeCategoryName(raw)) ?? raw
+        const label = raw === null ? null : (labelByKey.get(normalizeCategoryName(raw)) ?? raw)
         const group = bucket(label, orphanSortOrder(idx, list.length))
         group.items.push(it)
         group.total++
@@ -192,7 +192,7 @@ export function createChecklistStore(config: ChecklistStoreConfig) {
       })
 
       const result = [...groups.values()]
-      result.forEach(g => {
+      result.forEach((g) => {
         g.items.sort((a, b) => {
           if (a.packed !== b.packed) return a.packed ? 1 : -1
           return a.created_at.localeCompare(b.created_at)
@@ -207,7 +207,7 @@ export function createChecklistStore(config: ChecklistStoreConfig) {
     const overallProgress = computed(() => {
       const list = currentListItems.value
       const total = list.length
-      const packed = list.filter(i => i.packed).length
+      const packed = list.filter((i) => i.packed).length
       return { packed, total, percent: total ? Math.round((packed / total) * 100) : 0 }
     })
 
@@ -216,12 +216,12 @@ export function createChecklistStore(config: ChecklistStoreConfig) {
     // ==========================================================================
 
     const updateItemOptimistic = (itemId: string, updates: Partial<ChecklistItem>) => {
-      const idx = items.value.findIndex(i => i.item_id === itemId)
+      const idx = items.value.findIndex((i) => i.item_id === itemId)
       if (idx !== -1) items.value[idx] = { ...items.value[idx], ...updates }
     }
 
     const deleteItemOptimistic = (itemId: string) => {
-      items.value = items.value.filter(i => i.item_id !== itemId)
+      items.value = items.value.filter((i) => i.item_id !== itemId)
     }
 
     /**
@@ -244,18 +244,18 @@ export function createChecklistStore(config: ChecklistStoreConfig) {
      * umgebogen, damit das wartende `delete` die echte ID statt der temp-ID trifft.
      */
     const reconcileTempCategory = (temp: string, real: CategoryRow) => {
-      const localRow = categories.value.find(c => c.category_id === temp)
+      const localRow = categories.value.find((c) => c.category_id === temp)
 
       if (localRow) {
         const merged = { ...real, name: localRow.name ?? real.name }
-        const realExists = categories.value.some(c => c.category_id === real.category_id)
+        const realExists = categories.value.some((c) => c.category_id === real.category_id)
         categories.value = categories.value.filter(
-          c => c.category_id !== temp && (!realExists || c.category_id !== real.category_id)
+          (c) => c.category_id !== temp && (!realExists || c.category_id !== real.category_id),
         )
         categories.value.push(merged)
       }
 
-      queue.rewrite(m => {
+      queue.rewrite((m) => {
         if (m.payload.categoryId === temp) m.payload.categoryId = real.category_id
       })
     }
@@ -312,10 +312,7 @@ export function createChecklistStore(config: ChecklistStoreConfig) {
         return true
       }
 
-      const { error } = await supabase
-        .from(categoriesTable)
-        .delete()
-        .eq('category_id', categoryId!)
+      const { error } = await supabase.from(categoriesTable).delete().eq('category_id', categoryId!)
       if (error) throw error
       return true
     }
@@ -346,10 +343,7 @@ export function createChecklistStore(config: ChecklistStoreConfig) {
       }
 
       if (m.operation === 'delete') {
-        const { error } = await supabase
-          .from(itemsTable)
-          .delete()
-          .eq('item_id', m.payload.itemId!)
+        const { error } = await supabase.from(itemsTable).delete().eq('item_id', m.payload.itemId!)
         if (error) throw error
         return true
       }
@@ -387,7 +381,8 @@ export function createChecklistStore(config: ChecklistStoreConfig) {
         lists.value = data || []
 
         if (lists.value.length > 0) {
-          const currentExists = currentListId.value && lists.value.some(l => l.list_id === currentListId.value)
+          const currentExists =
+            currentListId.value && lists.value.some((l) => l.list_id === currentListId.value)
           if (!currentExists) {
             currentListId.value = lists.value[0].list_id
           }
@@ -415,7 +410,7 @@ export function createChecklistStore(config: ChecklistStoreConfig) {
           .insert({
             household_id: householdStore.currentHousehold.household_id,
             name: name.trim(),
-            created_by: authStore.user.id
+            created_by: authStore.user.id,
           })
           .select()
           .single()
@@ -457,16 +452,16 @@ export function createChecklistStore(config: ChecklistStoreConfig) {
           .insert({
             household_id: householdStore.currentHousehold.household_id,
             name: newName.trim(),
-            created_by: authStore.user.id
+            created_by: authStore.user.id,
           })
           .select()
           .single()
 
         if (listError) throw listError
 
-        const sourceCategories = categories.value.filter(c => c.list_id === sourceListId)
+        const sourceCategories = categories.value.filter((c) => c.list_id === sourceListId)
         if (sourceCategories.length > 0) {
-          const catRows = sourceCategories.map(c => ({
+          const catRows = sourceCategories.map((c) => ({
             household_id: householdStore.currentHousehold!.household_id,
             list_id: newList.list_id,
             name: c.name,
@@ -481,16 +476,16 @@ export function createChecklistStore(config: ChecklistStoreConfig) {
           if (insertedCats) categories.value.push(...insertedCats)
         }
 
-        const sourceItems = items.value.filter(i => i.list_id === sourceListId)
+        const sourceItems = items.value.filter((i) => i.list_id === sourceListId)
         if (sourceItems.length > 0) {
-          const rows = sourceItems.map(i => ({
+          const rows = sourceItems.map((i) => ({
             list_id: newList.list_id,
             name: i.name,
             category: i.category,
             quantity: i.quantity,
             packed_count: 0,
             packed: false,
-            created_by: authStore.user!.id
+            created_by: authStore.user!.id,
           }))
           const { data: inserted, error: itemsError } = await supabase
             .from(itemsTable)
@@ -523,7 +518,7 @@ export function createChecklistStore(config: ChecklistStoreConfig) {
 
         if (error) throw error
 
-        const idx = lists.value.findIndex(l => l.list_id === listId)
+        const idx = lists.value.findIndex((l) => l.list_id === listId)
         if (idx !== -1) lists.value[idx] = { ...lists.value[idx], name: name.trim() }
         toastStore.showToast('Liste umbenannt', 'success', 2000)
       } catch (error) {
@@ -538,7 +533,7 @@ export function createChecklistStore(config: ChecklistStoreConfig) {
       const value = trimmed.length > 0 ? trimmed : null
 
       // Optimistic
-      const idx = lists.value.findIndex(l => l.list_id === listId)
+      const idx = lists.value.findIndex((l) => l.list_id === listId)
       const prev = idx !== -1 ? lists.value[idx] : null
       if (idx !== -1) lists.value[idx] = { ...lists.value[idx], notes: value }
 
@@ -565,16 +560,13 @@ export function createChecklistStore(config: ChecklistStoreConfig) {
       }
 
       try {
-        const { error } = await supabase
-          .from(listsTable)
-          .delete()
-          .eq('list_id', listId)
+        const { error } = await supabase.from(listsTable).delete().eq('list_id', listId)
 
         if (error) throw error
 
-        lists.value = lists.value.filter(l => l.list_id !== listId)
-        items.value = items.value.filter(i => i.list_id !== listId)
-        categories.value = categories.value.filter(c => c.list_id !== listId)
+        lists.value = lists.value.filter((l) => l.list_id !== listId)
+        items.value = items.value.filter((i) => i.list_id !== listId)
+        categories.value = categories.value.filter((c) => c.list_id !== listId)
 
         if (currentListId.value === listId) {
           currentListId.value = lists.value[0]?.list_id ?? null
@@ -607,7 +599,7 @@ export function createChecklistStore(config: ChecklistStoreConfig) {
         if (error) throw error
 
         // Noch nicht synchronisierte Zeilen überleben den Neuabgleich.
-        const pending = categories.value.filter(c => c.category_id.startsWith('temp_'))
+        const pending = categories.value.filter((c) => c.category_id.startsWith('temp_'))
         categories.value = [...(data ?? []), ...pending]
       } catch (error) {
         console.error(`Error loading ${categoriesTable}:`, error)
@@ -618,7 +610,7 @@ export function createChecklistStore(config: ChecklistStoreConfig) {
     const findCategoryRow = (name: string): CategoryRow | null => {
       const key = normalizeCategoryName(name)
       if (!key) return null
-      return currentListCategories.value.find(c => normalizeCategoryName(c.name) === key) ?? null
+      return currentListCategories.value.find((c) => normalizeCategoryName(c.name) === key) ?? null
     }
 
     /**
@@ -636,7 +628,7 @@ export function createChecklistStore(config: ChecklistStoreConfig) {
     const itemsInCategory = (category: string) => {
       const key = normalizeCategoryName(category)
       return items.value.filter(
-        i => i.list_id === currentListId.value && normalizeCategoryName(i.category ?? '') === key
+        (i) => i.list_id === currentListId.value && normalizeCategoryName(i.category ?? '') === key,
       )
     }
 
@@ -649,7 +641,7 @@ export function createChecklistStore(config: ChecklistStoreConfig) {
     const createCategory = async (
       name: string,
       itemIds: string[] = [],
-      opts: { importFrom?: ImportSource } = {}
+      opts: { importFrom?: ImportSource } = {},
     ): Promise<string | null> => {
       if (!currentListId.value) return null
       const householdStore = useHouseholdStore()
@@ -717,11 +709,11 @@ export function createChecklistStore(config: ChecklistStoreConfig) {
       const isCaseOnly = normalizeCategoryName(trimmed) === normalizeCategoryName(oldName)
       const conflict = isCaseOnly
         ? null
-        : currentListCategories.value.find(
-            c =>
+        : (currentListCategories.value.find(
+            (c) =>
               normalizeCategoryName(c.name) === normalizeCategoryName(trimmed) &&
-              c.category_id !== row?.category_id
-          ) ?? null
+              c.category_id !== row?.category_id,
+          ) ?? null)
 
       // Fall 2: verschmelzen — die bestehende Zeile bleibt, ihre Schreibweise gewinnt.
       const target = conflict ? conflict.name : trimmed
@@ -730,11 +722,14 @@ export function createChecklistStore(config: ChecklistStoreConfig) {
 
       if (conflict) {
         if (row) {
-          categories.value = categories.value.filter(c => c.category_id !== row.category_id)
-          queue.add({ operation: 'delete', payload: { entity: 'category', categoryId: row.category_id } })
+          categories.value = categories.value.filter((c) => c.category_id !== row.category_id)
+          queue.add({
+            operation: 'delete',
+            payload: { entity: 'category', categoryId: row.category_id },
+          })
         }
       } else if (row) {
-        const idx = categories.value.findIndex(c => c.category_id === row.category_id)
+        const idx = categories.value.findIndex((c) => c.category_id === row.category_id)
         if (idx !== -1) categories.value[idx] = { ...categories.value[idx], name: target }
         queue.add({
           operation: 'update',
@@ -744,14 +739,17 @@ export function createChecklistStore(config: ChecklistStoreConfig) {
 
       for (const item of affected) {
         updateItemOptimistic(item.item_id, { category: target })
-        queue.add({ operation: 'update', payload: { itemId: item.item_id, updates: { category: target } } })
+        queue.add({
+          operation: 'update',
+          payload: { itemId: item.item_id, updates: { category: target } },
+        })
       }
 
       if (navigator.onLine) await queue.sync()
       toastStore.showToast(
         conflict ? `Mit „${target}" zusammengeführt` : 'Kategorie umbenannt',
         'success',
-        2000
+        2000,
       )
     }
 
@@ -767,8 +765,11 @@ export function createChecklistStore(config: ChecklistStoreConfig) {
 
       const row = findCategoryRow(category)
       if (row) {
-        categories.value = categories.value.filter(c => c.category_id !== row.category_id)
-        queue.add({ operation: 'delete', payload: { entity: 'category', categoryId: row.category_id } })
+        categories.value = categories.value.filter((c) => c.category_id !== row.category_id)
+        queue.add({
+          operation: 'delete',
+          payload: { entity: 'category', categoryId: row.category_id },
+        })
       }
 
       for (const item of itemsInCategory(category)) {
@@ -777,7 +778,10 @@ export function createChecklistStore(config: ChecklistStoreConfig) {
           queue.add({ operation: 'delete', payload: { itemId: item.item_id } })
         } else {
           updateItemOptimistic(item.item_id, { category: null })
-          queue.add({ operation: 'update', payload: { itemId: item.item_id, updates: { category: null } } })
+          queue.add({
+            operation: 'update',
+            payload: { itemId: item.item_id, updates: { category: null } },
+          })
         }
       }
 
@@ -789,7 +793,7 @@ export function createChecklistStore(config: ChecklistStoreConfig) {
     const moveItemToCategory = async (itemId: string, category: string | null) => {
       const target = canonicalCategoryName(category)
 
-      const item = items.value.find(i => i.item_id === itemId)
+      const item = items.value.find((i) => i.item_id === itemId)
       if (!item || (item.category ?? null) === target) return
 
       updateItemOptimistic(itemId, { category: target })
@@ -808,10 +812,10 @@ export function createChecklistStore(config: ChecklistStoreConfig) {
       if (!key) return null
 
       const matches = items.value
-        .filter(i => normalizeCategoryName(i.name) === key && i.category)
+        .filter((i) => normalizeCategoryName(i.name) === key && i.category)
         .sort((a, b) => b.created_at.localeCompare(a.created_at))
 
-      const inCurrentList = matches.find(i => i.list_id === currentListId.value)
+      const inCurrentList = matches.find((i) => i.list_id === currentListId.value)
       return (inCurrentList ?? matches[0])?.category ?? null
     }
 
@@ -823,7 +827,7 @@ export function createChecklistStore(config: ChecklistStoreConfig) {
       const key = normalizeCategoryName(name)
       if (!key) return []
 
-      const listById = new Map(lists.value.map(l => [l.list_id, l]))
+      const listById = new Map(lists.value.map((l) => [l.list_id, l]))
       const counts = new Map<string, number>()
 
       for (const item of items.value) {
@@ -837,7 +841,7 @@ export function createChecklistStore(config: ChecklistStoreConfig) {
         .filter(([, count]) => count > 0)
         .map(([listId, count]) => ({ listId, listName: listById.get(listId)!.name, count }))
         .sort((a, b) =>
-          listById.get(b.listId)!.created_at.localeCompare(listById.get(a.listId)!.created_at)
+          listById.get(b.listId)!.created_at.localeCompare(listById.get(a.listId)!.created_at),
         )
     }
 
@@ -845,7 +849,7 @@ export function createChecklistStore(config: ChecklistStoreConfig) {
     const importPreview = (sourceListId: string, category: string): ChecklistItem[] => {
       const key = normalizeCategoryName(category)
       return items.value.filter(
-        i => i.list_id === sourceListId && normalizeCategoryName(i.category ?? '') === key
+        (i) => i.list_id === sourceListId && normalizeCategoryName(i.category ?? '') === key,
       )
     }
 
@@ -858,7 +862,7 @@ export function createChecklistStore(config: ChecklistStoreConfig) {
     const importCategory = async (
       sourceListId: string,
       category: string,
-      targetCategory: string = category
+      targetCategory: string = category,
     ) => {
       const authStore = useAuthStore()
       const toastStore = useToastStore()
@@ -873,26 +877,29 @@ export function createChecklistStore(config: ChecklistStoreConfig) {
       const existingLabel =
         findCategoryRow(requestedLabel)?.name ??
         currentListItems.value
-          .map(i => i.category)
-          .find(c => !!c && normalizeCategoryName(c) === normalizeCategoryName(requestedLabel))
+          .map((i) => i.category)
+          .find((c) => !!c && normalizeCategoryName(c) === normalizeCategoryName(requestedLabel))
       const finalLabel = existingLabel ?? canonicalCategoryName(requestedLabel)
 
       const existingNames = new Set(
         currentListItems.value
-          .filter(i => normalizeCategoryName(i.category ?? '') === normalizeCategoryName(requestedLabel))
-          .map(i => normalizeCategoryName(i.name))
+          .filter(
+            (i) =>
+              normalizeCategoryName(i.category ?? '') === normalizeCategoryName(requestedLabel),
+          )
+          .map((i) => normalizeCategoryName(i.name)),
       )
 
       const rows = source
-        .filter(i => !existingNames.has(normalizeCategoryName(i.name)))
-        .map(i => ({
+        .filter((i) => !existingNames.has(normalizeCategoryName(i.name)))
+        .map((i) => ({
           list_id: target,
           name: i.name,
           category: finalLabel,
           quantity: i.quantity,
           packed_count: 0,
           packed: false,
-          created_by: authStore.user!.id
+          created_by: authStore.user!.id,
         }))
 
       if (rows.length === 0) {
@@ -901,10 +908,7 @@ export function createChecklistStore(config: ChecklistStoreConfig) {
       }
 
       try {
-        const { data, error } = await supabase
-          .from(itemsTable)
-          .insert(rows)
-          .select()
+        const { data, error } = await supabase.from(itemsTable).insert(rows).select()
 
         if (error) throw error
         if (data) items.value.push(...data)
@@ -926,7 +930,7 @@ export function createChecklistStore(config: ChecklistStoreConfig) {
       if (!householdStore.currentHousehold) return
 
       try {
-        const listIds = lists.value.map(l => l.list_id)
+        const listIds = lists.value.map((l) => l.list_id)
         if (listIds.length === 0) {
           items.value = []
           return
@@ -945,10 +949,10 @@ export function createChecklistStore(config: ChecklistStoreConfig) {
         // nicht in der Datenbank angekommen ist.
         const rows = (data || []) as ChecklistItem[]
         const pendingIds = queue.pendingItemIds()
-        items.value = rows.map(row =>
+        items.value = rows.map((row) =>
           pendingIds.has(row.item_id)
-            ? items.value.find(i => i.item_id === row.item_id) ?? row
-            : row
+            ? (items.value.find((i) => i.item_id === row.item_id) ?? row)
+            : row,
         )
 
         if (queue.hasPending.value) await queue.sync()
@@ -977,7 +981,7 @@ export function createChecklistStore(config: ChecklistStoreConfig) {
             quantity: qty,
             packed_count: 0,
             packed: false,
-            created_by: authStore.user.id
+            created_by: authStore.user.id,
           })
           .select()
           .single()
@@ -995,12 +999,12 @@ export function createChecklistStore(config: ChecklistStoreConfig) {
 
     /** Body-tap: flip the done flag only. Never touches packed_count. */
     const togglePacked = async (itemId: string) => {
-      await patchItem(itemId, item => ({ packed: !item.packed }))
+      await patchItem(itemId, (item) => ({ packed: !item.packed }))
     }
 
     /** Stepper [＋]: +1 progress; hitting full auto-marks done (never demotes). */
     const incrementPacked = async (itemId: string) => {
-      await patchItem(itemId, item => {
+      await patchItem(itemId, (item) => {
         if (item.packed_count >= item.quantity) return null
         const packed_count = item.packed_count + 1
         const packed = packed_count >= item.quantity ? true : item.packed
@@ -1010,7 +1014,7 @@ export function createChecklistStore(config: ChecklistStoreConfig) {
 
     /** Stepper [–]: -1 progress; dropping below full takes "done" back. */
     const decrementPacked = async (itemId: string) => {
-      await patchItem(itemId, item => {
+      await patchItem(itemId, (item) => {
         if (item.packed_count <= 0) return null
         const packed_count = item.packed_count - 1
         // After a decrement the count is always below quantity → no longer done.
@@ -1026,9 +1030,9 @@ export function createChecklistStore(config: ChecklistStoreConfig) {
      */
     const updateItem = async (
       itemId: string,
-      patch: { name?: string; category?: string | null; quantity?: number }
+      patch: { name?: string; category?: string | null; quantity?: number },
     ) => {
-      await patchItem(itemId, item => {
+      await patchItem(itemId, (item) => {
         const next: Partial<ChecklistItem> = {}
         if (patch.name !== undefined) next.name = patch.name.trim()
         if (patch.category !== undefined) {
@@ -1049,10 +1053,10 @@ export function createChecklistStore(config: ChecklistStoreConfig) {
      */
     const patchItem = async (
       itemId: string,
-      mutate: (item: ChecklistItem) => Partial<ChecklistItem> | null
+      mutate: (item: ChecklistItem) => Partial<ChecklistItem> | null,
     ) => {
       const toastStore = useToastStore()
-      const idx = items.value.findIndex(i => i.item_id === itemId)
+      const idx = items.value.findIndex((i) => i.item_id === itemId)
       if (idx === -1) return
       const item = items.value[idx]
 
@@ -1063,10 +1067,7 @@ export function createChecklistStore(config: ChecklistStoreConfig) {
       items.value[idx] = { ...item, ...patch }
 
       try {
-        const { error } = await supabase
-          .from(itemsTable)
-          .update(patch)
-          .eq('item_id', itemId)
+        const { error } = await supabase.from(itemsTable).update(patch).eq('item_id', itemId)
 
         if (error) throw error
       } catch (error) {
@@ -1079,7 +1080,7 @@ export function createChecklistStore(config: ChecklistStoreConfig) {
           .select('*')
           .eq('item_id', itemId)
           .maybeSingle()
-        const revertIdx = items.value.findIndex(i => i.item_id === itemId)
+        const revertIdx = items.value.findIndex((i) => i.item_id === itemId)
         if (revertIdx !== -1) {
           if (data) items.value[revertIdx] = data as ChecklistItem
           else items.value[revertIdx] = prev
@@ -1092,14 +1093,11 @@ export function createChecklistStore(config: ChecklistStoreConfig) {
       const toastStore = useToastStore()
 
       try {
-        const { error } = await supabase
-          .from(itemsTable)
-          .delete()
-          .eq('item_id', itemId)
+        const { error } = await supabase.from(itemsTable).delete().eq('item_id', itemId)
 
         if (error) throw error
 
-        items.value = items.value.filter(i => i.item_id !== itemId)
+        items.value = items.value.filter((i) => i.item_id !== itemId)
       } catch (error) {
         console.error(`Error removing ${itemsTable} row:`, error)
         toastStore.showToast('Fehler beim Löschen', 'error')
@@ -1109,10 +1107,10 @@ export function createChecklistStore(config: ChecklistStoreConfig) {
     /** Reset a whole list: packed_count → 0 AND packed → false for every item. */
     const resetAllUnpacked = async (listId: string) => {
       const toastStore = useToastStore()
-      const prev = items.value.map(i => ({ ...i }))
+      const prev = items.value.map((i) => ({ ...i }))
 
-      items.value = items.value.map(i =>
-        i.list_id === listId ? { ...i, packed: false, packed_count: 0 } : i
+      items.value = items.value.map((i) =>
+        i.list_id === listId ? { ...i, packed: false, packed_count: 0 } : i,
       )
 
       try {
@@ -1148,29 +1146,34 @@ export function createChecklistStore(config: ChecklistStoreConfig) {
         .channel(`${channelPrefix}-lists-${Date.now()}`)
         .on(
           'postgres_changes',
-          { event: '*', schema: 'public', table: listsTable, filter: `household_id=eq.${householdId}` },
+          {
+            event: '*',
+            schema: 'public',
+            table: listsTable,
+            filter: `household_id=eq.${householdId}`,
+          },
           (payload) => {
             if (payload.eventType === 'INSERT') {
               const newList = payload.new as ChecklistList
-              if (!lists.value.find(l => l.list_id === newList.list_id)) {
+              if (!lists.value.find((l) => l.list_id === newList.list_id)) {
                 lists.value.push(newList)
               }
             }
             if (payload.eventType === 'UPDATE') {
               const updated = payload.new as ChecklistList
-              const idx = lists.value.findIndex(l => l.list_id === updated.list_id)
+              const idx = lists.value.findIndex((l) => l.list_id === updated.list_id)
               if (idx !== -1) lists.value[idx] = updated
             }
             if (payload.eventType === 'DELETE') {
               const deleted = payload.old as ChecklistList
-              lists.value = lists.value.filter(l => l.list_id !== deleted.list_id)
-              items.value = items.value.filter(i => i.list_id !== deleted.list_id)
-              categories.value = categories.value.filter(c => c.list_id !== deleted.list_id)
+              lists.value = lists.value.filter((l) => l.list_id !== deleted.list_id)
+              items.value = items.value.filter((i) => i.list_id !== deleted.list_id)
+              categories.value = categories.value.filter((c) => c.list_id !== deleted.list_id)
               if (currentListId.value === deleted.list_id) {
                 currentListId.value = lists.value[0]?.list_id ?? null
               }
             }
-          }
+          },
         )
         .subscribe()
 
@@ -1179,51 +1182,52 @@ export function createChecklistStore(config: ChecklistStoreConfig) {
       // — DELETE-Ereignisse kommen dort nur mit REPLICA IDENTITY FULL an.
       realtimeItemsChannel = supabase
         .channel(`${channelPrefix}-items-${Date.now()}`)
-        .on(
-          'postgres_changes',
-          { event: '*', schema: 'public', table: itemsTable },
-          (payload) => {
-            if (payload.eventType === 'INSERT') {
-              const newItem = payload.new as ChecklistItem
-              if (!items.value.find(i => i.item_id === newItem.item_id)) {
-                items.value.push(newItem)
-              }
-            }
-            if (payload.eventType === 'UPDATE') {
-              const updated = payload.new as ChecklistItem
-              const idx = items.value.findIndex(i => i.item_id === updated.item_id)
-              if (idx !== -1) items.value[idx] = updated
-            }
-            if (payload.eventType === 'DELETE') {
-              const deleted = payload.old as ChecklistItem
-              items.value = items.value.filter(i => i.item_id !== deleted.item_id)
+        .on('postgres_changes', { event: '*', schema: 'public', table: itemsTable }, (payload) => {
+          if (payload.eventType === 'INSERT') {
+            const newItem = payload.new as ChecklistItem
+            if (!items.value.find((i) => i.item_id === newItem.item_id)) {
+              items.value.push(newItem)
             }
           }
-        )
+          if (payload.eventType === 'UPDATE') {
+            const updated = payload.new as ChecklistItem
+            const idx = items.value.findIndex((i) => i.item_id === updated.item_id)
+            if (idx !== -1) items.value[idx] = updated
+          }
+          if (payload.eventType === 'DELETE') {
+            const deleted = payload.old as ChecklistItem
+            items.value = items.value.filter((i) => i.item_id !== deleted.item_id)
+          }
+        })
         .subscribe()
 
       realtimeCategoriesChannel = supabase
         .channel(`${channelPrefix}-categories-${Date.now()}`)
         .on(
           'postgres_changes',
-          { event: '*', schema: 'public', table: categoriesTable, filter: `household_id=eq.${householdId}` },
+          {
+            event: '*',
+            schema: 'public',
+            table: categoriesTable,
+            filter: `household_id=eq.${householdId}`,
+          },
           (payload) => {
             if (payload.eventType === 'INSERT') {
               const row = payload.new as CategoryRow
-              if (!categories.value.some(c => c.category_id === row.category_id)) {
+              if (!categories.value.some((c) => c.category_id === row.category_id)) {
                 categories.value.push(row)
               }
             }
             if (payload.eventType === 'UPDATE') {
               const row = payload.new as CategoryRow
-              const idx = categories.value.findIndex(c => c.category_id === row.category_id)
+              const idx = categories.value.findIndex((c) => c.category_id === row.category_id)
               if (idx !== -1) categories.value[idx] = row
             }
             if (payload.eventType === 'DELETE') {
               const row = payload.old as CategoryRow
-              categories.value = categories.value.filter(c => c.category_id !== row.category_id)
+              categories.value = categories.value.filter((c) => c.category_id !== row.category_id)
             }
-          }
+          },
         )
         .subscribe()
     }
@@ -1288,7 +1292,7 @@ export function createChecklistStore(config: ChecklistStoreConfig) {
       resetAllUnpacked,
       subscribe,
       unsubscribe,
-      syncMutations: queue.sync
+      syncMutations: queue.sync,
     }
   })
 }

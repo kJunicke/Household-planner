@@ -74,7 +74,9 @@ const dense = computed(() => props.groups.length > 8)
   overflow-y: auto;
   scrollbar-width: none;
 }
-.cat-rail::-webkit-scrollbar { display: none; }
+.cat-rail::-webkit-scrollbar {
+  display: none;
+}
 .cat-rail.rail-collapsed {
   width: auto;
   min-width: 0;
@@ -98,7 +100,10 @@ const dense = computed(() => props.groups.length > 8)
   -webkit-tap-highlight-color: transparent;
   margin-top: 2px;
 }
-.rail-toggle:hover { color: var(--color-primary); border-color: var(--color-primary); }
+.rail-toggle:hover {
+  color: var(--color-primary);
+  border-color: var(--color-primary);
+}
 
 /* Taller, color-tinted bubbles: readable label + strong category cue. */
 .rail-bubble {
@@ -125,7 +130,9 @@ const dense = computed(() => props.groups.length > 8)
   border-color: var(--bubble-color);
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--bubble-color) 30%, transparent);
 }
-.rail-bubble.uncat { opacity: 0.85; }
+.rail-bubble.uncat {
+  opacity: 0.85;
+}
 
 .bubble-label {
   font-size: var(--font-sm);
@@ -138,7 +145,14 @@ const dense = computed(() => props.groups.length > 8)
 }
 
 /* Dense mode: many categories → shorter bubbles so the rail still fits. */
-.cat-rail.dense { gap: 4px; }
-.cat-rail.dense .rail-bubble { min-height: 38px; border-radius: 11px; }
-.cat-rail.dense .bubble-label { font-size: var(--font-xs); }
+.cat-rail.dense {
+  gap: 4px;
+}
+.cat-rail.dense .rail-bubble {
+  min-height: 38px;
+  border-radius: 11px;
+}
+.cat-rail.dense .bubble-label {
+  font-size: var(--font-xs);
+}
 </style>

@@ -27,7 +27,7 @@ const handleSave = () => {
   emit('save', props.item.item_id, {
     name: name.value.trim(),
     category: category.value.trim() || null,
-    quantity: qty
+    quantity: qty,
   })
 }
 
@@ -71,7 +71,12 @@ const stepQty = (delta: number) => {
           <div class="form-group">
             <label class="form-label">Menge</label>
             <div class="qty-edit">
-              <button class="btn btn-outline-secondary qty-edit-btn" type="button" @click="stepQty(-1)" :disabled="quantity <= 1">
+              <button
+                class="btn btn-outline-secondary qty-edit-btn"
+                type="button"
+                @click="stepQty(-1)"
+                :disabled="quantity <= 1"
+              >
                 <i class="bi bi-dash-lg"></i>
               </button>
               <input
@@ -81,7 +86,11 @@ const stepQty = (delta: number) => {
                 min="1"
                 max="999"
               />
-              <button class="btn btn-outline-secondary qty-edit-btn" type="button" @click="stepQty(1)">
+              <button
+                class="btn btn-outline-secondary qty-edit-btn"
+                type="button"
+                @click="stepQty(1)"
+              >
                 <i class="bi bi-plus-lg"></i>
               </button>
             </div>
@@ -99,8 +108,12 @@ const stepQty = (delta: number) => {
 
           <div v-if="showDeleteConfirm" class="delete-confirm me-auto">
             <span class="text-danger me-2">Wirklich löschen?</span>
-            <button class="btn btn-sm btn-danger me-1" @click="emit('delete', item.item_id)">Ja</button>
-            <button class="btn btn-sm btn-secondary" @click="showDeleteConfirm = false">Abbrechen</button>
+            <button class="btn btn-sm btn-danger me-1" @click="emit('delete', item.item_id)">
+              Ja
+            </button>
+            <button class="btn btn-sm btn-secondary" @click="showDeleteConfirm = false">
+              Abbrechen
+            </button>
           </div>
 
           <button class="btn btn-secondary" @click="emit('close')">Abbrechen</button>

@@ -27,7 +27,7 @@ const props = withDefaults(
     placeholder: string
     disabled?: boolean
   }>(),
-  { disabled: false }
+  { disabled: false },
 )
 
 const emit = defineEmits<{
@@ -66,7 +66,9 @@ const onCategoryInput = (value: string) => {
   category.value = value
 }
 
-const openQty = () => { qtyOpen.value = true }
+const openQty = () => {
+  qtyOpen.value = true
+}
 const closeQty = () => {
   qty.value = Math.max(1, Math.floor(Number(qty.value) || 1))
   qtyOpen.value = false
@@ -99,10 +101,16 @@ const selectSuggestion = (suggestion: string) => {
   handleAdd()
 }
 
-const handleInputFocus = () => { showSuggestions.value = true }
+const handleInputFocus = () => {
+  showSuggestions.value = true
+}
 // Der Klick auf einen Vorschlag kommt nach dem Blur — deshalb erst verzögert
 // schließen (der Vorschlag selbst fängt zusätzlich per @mousedown.prevent ab).
-const handleInputBlur = () => { setTimeout(() => { showSuggestions.value = false }, 200) }
+const handleInputBlur = () => {
+  setTimeout(() => {
+    showSuggestions.value = false
+  }, 200)
+}
 </script>
 
 <template>
@@ -184,7 +192,10 @@ const handleInputBlur = () => { setTimeout(() => { showSuggestions.value = false
 </template>
 
 <style scoped>
-.search-container { position: relative; margin-bottom: 1rem; }
+.search-container {
+  position: relative;
+  margin-bottom: 1rem;
+}
 
 /* Einzeilig bis hinunter zu 360 px: die festen Knöpfe behalten ihre Trefferfläche,
    Namensfeld und Kategorie teilen sich den Rest — die Kategorie gibt zuerst nach. */
@@ -193,7 +204,11 @@ const handleInputBlur = () => { setTimeout(() => { showSuggestions.value = false
   align-items: center;
   gap: 4px;
 }
-.top-name-wrap { position: relative; flex: 1 1 40%; min-width: 0; }
+.top-name-wrap {
+  position: relative;
+  flex: 1 1 40%;
+  min-width: 0;
+}
 .top-name-input {
   width: 100%;
   height: 38px;
@@ -204,7 +219,10 @@ const handleInputBlur = () => { setTimeout(() => { showSuggestions.value = false
   color: var(--color-text-primary);
   font-size: var(--font-base);
 }
-.top-name-input:focus { outline: none; border-color: var(--color-primary); }
+.top-name-input:focus {
+  outline: none;
+  border-color: var(--color-primary);
+}
 /* 96px ist gemessen, nicht geraten: von der Aussenbreite gehen Rahmen (4),
    Polsterung (12), Farbpunkt samt Abstand (11) und der Leeren-Knopf (15) ab —
    bei den alten `min-width: 64px` blieben fuer das Eingabefeld selbst 28px, und
@@ -212,7 +230,10 @@ const handleInputBlur = () => { setTimeout(() => { showSuggestions.value = false
    Die Schranke greift ab rund 400px Leistenbreite; darueber teilen sich Name
    und Kategorie weiter nach Anteil. Der Name gibt jetzt zuerst nach — ein
    halber Eintragsname ist lesbar, ein halber Kategoriename verwechselbar. */
-.top-combo { flex: 1 1 30%; min-width: 96px; }
+.top-combo {
+  flex: 1 1 30%;
+  min-width: 96px;
+}
 
 .top-qty-toggle {
   flex-shrink: 0;
@@ -228,7 +249,10 @@ const handleInputBlur = () => { setTimeout(() => { showSuggestions.value = false
   cursor: pointer;
   font-variant-numeric: tabular-nums;
 }
-.top-qty-toggle.active { border-color: var(--color-primary); color: var(--color-primary); }
+.top-qty-toggle.active {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+}
 .top-qty-input {
   flex-shrink: 0;
   width: 48px;
@@ -240,7 +264,9 @@ const handleInputBlur = () => { setTimeout(() => { showSuggestions.value = false
   color: var(--color-text-primary);
   font-variant-numeric: tabular-nums;
 }
-.top-qty-input:focus { outline: none; }
+.top-qty-input:focus {
+  outline: none;
+}
 
 .top-btn {
   flex-shrink: 0;
@@ -252,14 +278,24 @@ const handleInputBlur = () => { setTimeout(() => { showSuggestions.value = false
   border-radius: var(--radius-md);
   cursor: pointer;
 }
-.top-add { border: none; background: var(--color-primary); color: #fff; }
-.top-add:disabled { opacity: 0.4; cursor: not-allowed; }
+.top-add {
+  border: none;
+  background: var(--color-primary);
+  color: #fff;
+}
+.top-add:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
 .top-new-cat {
   border: 1px solid var(--color-border);
   background: var(--color-background);
   color: var(--color-text-secondary);
 }
-.top-new-cat:hover { border-color: var(--color-primary); color: var(--color-primary); }
+.top-new-cat:hover {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+}
 
 .suggestions-dropdown {
   position: absolute;
@@ -290,8 +326,12 @@ const handleInputBlur = () => { setTimeout(() => { showSuggestions.value = false
   font-size: var(--font-base);
   color: var(--color-text-primary);
 }
-.suggestion-item:last-child { border-bottom: none; }
-.suggestion-item:hover { background-color: var(--color-background); }
+.suggestion-item:last-child {
+  border-bottom: none;
+}
+.suggestion-item:hover {
+  background-color: var(--color-background);
+}
 
 /* ==========================================================================
    Pinnwand-Aussehen — wörtlich aus `ShoppingView.vue` mitgenommen, damit die
@@ -302,7 +342,9 @@ const handleInputBlur = () => { setTimeout(() => { showSuggestions.value = false
   padding-bottom: 12px;
   border-bottom: 1px dashed rgba(36, 31, 26, 0.35);
 }
-:root[data-design='pinnwand'] .top-bar { gap: 6px; }
+:root[data-design='pinnwand'] .top-bar {
+  gap: 6px;
+}
 :root[data-design='pinnwand'] .top-name-input {
   height: 44px;
   border: 2px solid var(--pw-line);

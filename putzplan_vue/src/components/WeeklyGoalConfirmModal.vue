@@ -45,7 +45,7 @@ const effectiveFromLabel = computed(() => formatWeekStartDate(props.effectiveFro
  */
 const DAY_MS = 24 * 60 * 60 * 1000
 const transitionWeekDays = computed(() =>
-  Math.round((props.effectiveFrom.getTime() - props.currentWeekStart.getTime()) / DAY_MS)
+  Math.round((props.effectiveFrom.getTime() - props.currentWeekStart.getTime()) / DAY_MS),
 )
 </script>
 
@@ -63,21 +63,18 @@ const transitionWeekDays = computed(() =>
             <li v-if="goalChanged">
               <i class="bi bi-lightning-charge-fill consequence-icon now"></i>
               <span>
-                Das Ziel gilt <strong>sofort für diese Woche</strong>:
-                {{ currentPoints }} von {{ newGoalPoints }} Punkten statt
-                {{ currentPoints }} von {{ currentGoalPoints }}.
+                Das Ziel gilt <strong>sofort für diese Woche</strong>: {{ currentPoints }} von
+                {{ newGoalPoints }} Punkten statt {{ currentPoints }} von {{ currentGoalPoints }}.
               </span>
             </li>
             <li v-if="weekStartChanged">
               <i class="bi bi-calendar-event consequence-icon later"></i>
               <span>
                 Der neue Wochenstart ({{ newWeekStartLabel }}) greift
-                <strong>erst ab {{ effectiveFromLabel }}</strong>.
-                Die laufende Woche bleibt unangetastet — keine Punkte
-                verschwinden.
+                <strong>erst ab {{ effectiveFromLabel }}</strong
+                >. Die laufende Woche bleibt unangetastet — keine Punkte verschwinden.
                 <template v-if="transitionWeekDays > 7">
-                  Sie ist dafür einmalig {{ transitionWeekDays }} Tage lang
-                  statt sieben.
+                  Sie ist dafür einmalig {{ transitionWeekDays }} Tage lang statt sieben.
                 </template>
               </span>
             </li>
@@ -85,12 +82,8 @@ const transitionWeekDays = computed(() =>
         </div>
 
         <div class="modal-footer">
-          <button type="button" class="btn btn-secondary" @click="emit('close')">
-            Abbrechen
-          </button>
-          <button type="button" class="btn btn-primary" @click="emit('confirm')">
-            Speichern
-          </button>
+          <button type="button" class="btn btn-secondary" @click="emit('close')">Abbrechen</button>
+          <button type="button" class="btn btn-primary" @click="emit('confirm')">Speichern</button>
         </div>
       </div>
     </div>

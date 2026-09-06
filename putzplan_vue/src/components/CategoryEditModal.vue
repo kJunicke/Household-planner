@@ -46,7 +46,7 @@ const props = withDefaults(
     /** Fehlt → heutige Einkaufs-Texte. */
     wording?: Partial<CategoryEditWording>
   }>(),
-  { variants: false, purchasedCount: 0, wording: undefined }
+  { variants: false, purchasedCount: 0, wording: undefined },
 )
 
 const w = computed<CategoryEditWording>(() => ({
@@ -70,7 +70,7 @@ const doneWord = (n: number) => (n === 1 ? w.value.doneOne : w.value.doneMany)
  * nur die Zahl der offenen, und der Verbleib wird gesondert benannt.
  */
 const affectedCount = computed(() =>
-  w.value.deleteDoneToo ? props.itemCount + props.purchasedCount : props.itemCount
+  w.value.deleteDoneToo ? props.itemCount + props.purchasedCount : props.itemCount,
 )
 
 const emit = defineEmits<{
@@ -168,10 +168,18 @@ const onDeleteClick = () => {
 
           <div v-else class="delete-confirm me-auto">
             <span class="text-danger me-2">
-              {{ itemCount > 0 ? `Kategorie + ${itemCount} ${itemCount === 1 ? 'Item' : 'Items'} löschen?` : 'Kategorie löschen?' }}
+              {{
+                itemCount > 0
+                  ? `Kategorie + ${itemCount} ${itemCount === 1 ? 'Item' : 'Items'} löschen?`
+                  : 'Kategorie löschen?'
+              }}
             </span>
-            <button class="btn btn-sm btn-danger me-1" @click="emit('delete', category, true)">Ja</button>
-            <button class="btn btn-sm btn-secondary" @click="showDeleteConfirm = false">Abbrechen</button>
+            <button class="btn btn-sm btn-danger me-1" @click="emit('delete', category, true)">
+              Ja
+            </button>
+            <button class="btn btn-sm btn-secondary" @click="showDeleteConfirm = false">
+              Abbrechen
+            </button>
           </div>
 
           <!-- Während der Löschfrage keine zweite Entscheidung danebenstellen. -->

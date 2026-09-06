@@ -97,7 +97,9 @@ const undampedCategories = ref<Set<string>>(new Set())
 const isCategoryEmpty = (group: CategoryGroup): boolean => group.total === 0
 const isCategoryDamped = (group: CategoryGroup): boolean =>
   isCategoryEmpty(group) && !undampedCategories.value.has(group.key)
-const touchCategory = (key: string) => { undampedCategories.value.add(key) }
+const touchCategory = (key: string) => {
+  undampedCategories.value.add(key)
+}
 
 // Focus the number field the moment it appears.
 const vFocus = { mounted: (el: HTMLElement) => el.focus() }
@@ -121,7 +123,7 @@ watch(
     clearAllGrace()
     notesDraft.value = store.currentList?.notes ?? ''
     notesOpen.value = false
-  }
+  },
 )
 
 watch(
@@ -130,7 +132,7 @@ watch(
     // Don't stomp on the user's in-progress edit when a realtime update arrives.
     if (notesFocused.value) return
     notesDraft.value = notes ?? ''
-  }
+  },
 )
 
 // --- Grace window for freshly-checked items ---------------------------------
@@ -156,8 +158,8 @@ export interface DisplayCategoryGroup extends CategoryGroup {
 
 const displaySections = computed<DisplayCategoryGroup[]>(() =>
   store.itemsByCategory
-    .map(g => {
-      const doneCount = g.items.filter(i => i.packed && !graceIds.value.has(i.item_id)).length
+    .map((g) => {
+      const doneCount = g.items.filter((i) => i.packed && !graceIds.value.has(i.item_id)).length
       return {
         ...g,
         doneCount,
@@ -165,7 +167,7 @@ const displaySections = computed<DisplayCategoryGroup[]>(() =>
         isComplete: doneCount === g.total && g.total > 0,
       }
     })
-    .sort(compareCategoryGroups)
+    .sort(compareCategoryGroups),
 )
 
 /** Vollständig = keine sichtbar offenen Einträge mehr, aber auch nicht leer. */
@@ -228,7 +230,7 @@ const suggestFocusKey = ref<string | null>(null)
 const suggestionsFor = (group: CategoryGroup): string[] => {
   const q = normalizeCategoryName(addDraft.value[group.key] ?? '')
   if (!q) return []
-  const inSection = new Set(group.items.map(i => normalizeCategoryName(i.name)))
+  const inSection = new Set(group.items.map((i) => normalizeCategoryName(i.name)))
   const seen = new Set<string>()
   const out: string[] = []
   for (const it of store.items) {
@@ -242,8 +244,14 @@ const suggestionsFor = (group: CategoryGroup): string[] => {
   return out
 }
 
-const onAddFocus = (key: string) => { suggestFocusKey.value = key }
-const onAddBlur = () => { setTimeout(() => { suggestFocusKey.value = null }, 200) }
+const onAddFocus = (key: string) => {
+  suggestFocusKey.value = key
+}
+const onAddBlur = () => {
+  setTimeout(() => {
+    suggestFocusKey.value = null
+  }, 200)
+}
 
 const selectSuggestion = (group: CategoryGroup, name: string) => {
   addDraft.value[group.key] = name
@@ -312,7 +320,7 @@ const openItemEdit = (item: ChecklistItem) => {
 
 const handleItemSave = async (
   itemId: string,
-  patch: { name: string; category: string | null; quantity: number }
+  patch: { name: string; category: string | null; quantity: number },
 ) => {
   const category = await ensureCategory(patch.category)
   await store.updateItem(itemId, { ...patch, category })
@@ -356,20 +364,18 @@ const onItemDecrement = (item: ChecklistItem) => {
 // Zierde — in kopierten und eingespielten Listen tragen viele Einträge
 // DENSELBEN Zeitstempel; ohne ihn fällt die Sortierung auf die Reihenfolge von
 // `group.items` zurück, und die stellt die erledigten wieder hinten an.
-const itemOrder = computed(
-  () => new Map(store.currentListItems.map((i, idx) => [i.item_id, idx]))
-)
+const itemOrder = computed(() => new Map(store.currentListItems.map((i, idx) => [i.item_id, idx])))
 const openRows = (group: CategoryGroup): ChecklistItem[] =>
   group.items
-    .filter(i => !i.packed || graceIds.value.has(i.item_id))
+    .filter((i) => !i.packed || graceIds.value.has(i.item_id))
     .sort(
       (a, b) =>
         a.created_at.localeCompare(b.created_at) ||
-        (itemOrder.value.get(a.item_id) ?? 0) - (itemOrder.value.get(b.item_id) ?? 0)
+        (itemOrder.value.get(a.item_id) ?? 0) - (itemOrder.value.get(b.item_id) ?? 0),
     )
 // Packed items past their grace window → collapsed into the "erledigt" group.
 const doneRows = (group: CategoryGroup): ChecklistItem[] =>
-  group.items.filter(i => i.packed && !graceIds.value.has(i.item_id))
+  group.items.filter((i) => i.packed && !graceIds.value.has(i.item_id))
 
 const doneOpen = ref<Set<string>>(new Set())
 const isDoneOpen = (key: string) => doneOpen.value.has(key)
@@ -435,7 +441,7 @@ const handleReset = async () => {
 const handleCreateCategory = async (
   name: string,
   itemIds: string[],
-  importFrom: ImportSource | null
+  importFrom: ImportSource | null,
 ) => {
   await store.createCategory(name, itemIds, { importFrom: importFrom ?? undefined })
   showCategoryCreate.value = false
@@ -443,17 +449,17 @@ const handleCreateCategory = async (
 
 /** Einträge der aktuellen Liste in der Gestalt, die die Erstell-Maske braucht. */
 const pickableItems = computed(() =>
-  store.currentListItems.map(i => ({
+  store.currentListItems.map((i) => ({
     id: i.item_id,
     name: i.name,
     quantity: i.quantity,
     category: i.category,
     done: i.packed,
-  }))
+  })),
 )
 
 const importPreviewFor = (source: ImportSource, name: string) =>
-  store.importPreview(source.listId, name).map(i => ({
+  store.importPreview(source.listId, name).map((i) => ({
     id: i.item_id,
     name: i.name,
     quantity: i.quantity,
@@ -499,7 +505,9 @@ const { bind: bindDrag } = useCategoryDrag({
   onMove: (itemId, category) => {
     justMovedId.value = itemId
     if (moveHighlightTimer !== null) clearTimeout(moveHighlightTimer)
-    moveHighlightTimer = window.setTimeout(() => { justMovedId.value = null }, 600)
+    moveHighlightTimer = window.setTimeout(() => {
+      justMovedId.value = null
+    }, 600)
     store.moveItemToCategory(itemId, category)
   },
 })
@@ -518,9 +526,7 @@ const saveNotes = () => {
 
 // Reset is reachable whenever ANY progress exists — including partial stepper
 // counts on items that never reached "packed" (packed_count decoupled from packed).
-const hasPacked = computed(() =>
-  store.currentListItems.some(i => i.packed || i.packed_count > 0)
-)
+const hasPacked = computed(() => store.currentListItems.some((i) => i.packed || i.packed_count > 0))
 
 // --- Right-side category quick-nav rail --------------------------------------
 const {
@@ -531,7 +537,7 @@ const {
   setSectionEl,
   scrollToKey: scrollToCategory,
 } = useCategoryRail({
-  keys: () => displaySections.value.map(g => g.key),
+  keys: () => displaySections.value.map((g) => g.key),
   storageKey: props.railStorageKey,
 })
 
@@ -592,256 +598,268 @@ onUnmounted(() => {
         </template>
 
         <template v-if="store.currentListId">
-        <!-- Obere Leiste: Name · Menge · Zielkategorie · Hinzufügen · Kategorie anlegen -->
-        <ListAddBar
-          :list-id="store.currentListId"
-          :category-options="store.categorySuggestions"
-          :name-suggestions="topNameSuggestions"
-          :suggest-category="store.suggestCategoryFor"
-          :placeholder="labels.addPlaceholder"
-          :disabled="store.isLoading"
-          @add="onTopAdd"
-          @create-category="showCategoryCreate = true"
-        />
+          <!-- Obere Leiste: Name · Menge · Zielkategorie · Hinzufügen · Kategorie anlegen -->
+          <ListAddBar
+            :list-id="store.currentListId"
+            :category-options="store.categorySuggestions"
+            :name-suggestions="topNameSuggestions"
+            :suggest-category="store.suggestCategoryFor"
+            :placeholder="labels.addPlaceholder"
+            :disabled="store.isLoading"
+            @add="onTopAdd"
+            @create-category="showCategoryCreate = true"
+          />
 
-        <!-- Gesamt-Fortschritt -->
-        <div v-if="store.currentListItems.length > 0" class="progress-header">
-          <div class="progress-label">
-            <span class="progress-list-name">{{ store.currentList?.name }}</span>
-            <span class="progress-count">
-              {{ store.overallProgress.packed }}/{{ store.overallProgress.total }} {{ labels.progressVerb }}
-            </span>
-            <button
-              v-if="hasPacked"
-              class="reset-inline-btn"
-              @click="showResetConfirm = true"
-              title="Alle zurücksetzen"
-            >
-              <i class="bi bi-arrow-counterclockwise"></i>
+          <!-- Gesamt-Fortschritt -->
+          <div v-if="store.currentListItems.length > 0" class="progress-header">
+            <div class="progress-label">
+              <span class="progress-list-name">{{ store.currentList?.name }}</span>
+              <span class="progress-count">
+                {{ store.overallProgress.packed }}/{{ store.overallProgress.total }}
+                {{ labels.progressVerb }}
+              </span>
+              <button
+                v-if="hasPacked"
+                class="reset-inline-btn"
+                @click="showResetConfirm = true"
+                title="Alle zurücksetzen"
+              >
+                <i class="bi bi-arrow-counterclockwise"></i>
+              </button>
+            </div>
+            <div class="progress-track">
+              <div
+                class="progress-fill"
+                :style="{ width: store.overallProgress.percent + '%' }"
+              ></div>
+            </div>
+          </div>
+
+          <!-- Listen-Notiz -->
+          <div class="notes-block">
+            <button class="notes-toggle" @click="notesOpen = !notesOpen">
+              <i class="bi me-1" :class="labels.notesIcon"></i>
+              <span class="notes-title">{{ labels.notesTitle }}</span>
+              <span v-if="!notesOpen && notesDraft.trim()" class="notes-preview">
+                {{ notesDraft.trim() }}
+              </span>
+              <i class="bi ms-auto" :class="notesOpen ? 'bi-chevron-up' : 'bi-chevron-down'"></i>
             </button>
+            <div v-if="notesOpen" class="notes-body">
+              <textarea
+                v-model="notesDraft"
+                class="form-control"
+                rows="3"
+                maxlength="5000"
+                :placeholder="labels.notesPlaceholder"
+                @focus="notesFocused = true"
+                @blur="saveNotes"
+              ></textarea>
+            </div>
           </div>
-          <div class="progress-track">
-            <div class="progress-fill" :style="{ width: store.overallProgress.percent + '%' }"></div>
+
+          <!-- Loading Skeleton -->
+          <div v-if="store.isLoading && store.items.length === 0" class="skeleton-loading">
+            <div class="skeleton-card" style="height: 60px"></div>
+            <div class="skeleton-card" style="height: 60px"></div>
           </div>
-        </div>
 
-        <!-- Listen-Notiz -->
-        <div class="notes-block">
-          <button class="notes-toggle" @click="notesOpen = !notesOpen">
-            <i class="bi me-1" :class="labels.notesIcon"></i>
-            <span class="notes-title">{{ labels.notesTitle }}</span>
-            <span v-if="!notesOpen && notesDraft.trim()" class="notes-preview">
-              {{ notesDraft.trim() }}
-            </span>
-            <i class="bi ms-auto" :class="notesOpen ? 'bi-chevron-up' : 'bi-chevron-down'"></i>
-          </button>
-          <div v-if="notesOpen" class="notes-body">
-            <textarea
-              v-model="notesDraft"
-              class="form-control"
-              rows="3"
-              maxlength="5000"
-              :placeholder="labels.notesPlaceholder"
-              @focus="notesFocused = true"
-              @blur="saveNotes"
-            ></textarea>
-          </div>
-        </div>
-
-        <!-- Loading Skeleton -->
-        <div v-if="store.isLoading && store.items.length === 0" class="skeleton-loading">
-          <div class="skeleton-card" style="height: 60px;"></div>
-          <div class="skeleton-card" style="height: 60px;"></div>
-        </div>
-
-        <!-- Kategorie-Sektionen + rechte Schnellnav -->
-        <template v-else>
-        <div class="checklist-body" :class="{ 'rail-open': showRail && !railCollapsed }">
-          <div class="cat-column">
-          <div
-            v-for="group in displaySections"
-            :key="group.key"
-            :ref="(el) => setSectionEl(group.key, el)"
-            :data-cat-key="group.key"
-            class="cat-section"
-            :class="{
-              'cat-uncategorized': group.isUncategorized,
-              'cat-complete': isCategoryComplete(group),
-              'cat-damped': isCategoryDamped(group),
-            }"
-          >
-            <!-- Die Kopfzeile ist selbst Ablageziel: eine eingeklappte
+          <!-- Kategorie-Sektionen + rechte Schnellnav -->
+          <template v-else>
+            <div class="checklist-body" :class="{ 'rail-open': showRail && !railCollapsed }">
+              <div class="cat-column">
+                <div
+                  v-for="group in displaySections"
+                  :key="group.key"
+                  :ref="(el) => setSectionEl(group.key, el)"
+                  :data-cat-key="group.key"
+                  class="cat-section"
+                  :class="{
+                    'cat-uncategorized': group.isUncategorized,
+                    'cat-complete': isCategoryComplete(group),
+                    'cat-damped': isCategoryDamped(group),
+                  }"
+                >
+                  <!-- Die Kopfzeile ist selbst Ablageziel: eine eingeklappte
                  Kategorie hat sonst keine Fläche zum Hineinziehen. -->
-            <div
-              class="cat-header"
-              :ref="(el) => setDropEl(`${group.key}::head`, el)"
-              :data-cat-name="group.category ?? ''"
-              role="button"
-              tabindex="0"
-              @click="onCatHeaderClick(group)"
-              @keydown.enter.prevent="onCatHeaderClick(group)"
-              @keydown.space.prevent="onCatHeaderClick(group)"
-            >
-              <span class="cat-dot" :style="{ background: categoryColor(group.category) }"></span>
-              <span class="cat-name">{{ group.label }}</span>
-              <div class="cat-header-right">
-                <span class="cat-count" v-if="group.total > 0">
-                  <i v-if="isCategoryComplete(group)" class="bi bi-check-circle-fill cat-complete-icon"></i>
-                  {{ group.rawDoneCount }}/{{ group.total }}
-                </span>
-                <!-- Auch bei eingeklappter Sektion sichtbar: sonst hat eine
+                  <div
+                    class="cat-header"
+                    :ref="(el) => setDropEl(`${group.key}::head`, el)"
+                    :data-cat-name="group.category ?? ''"
+                    role="button"
+                    tabindex="0"
+                    @click="onCatHeaderClick(group)"
+                    @keydown.enter.prevent="onCatHeaderClick(group)"
+                    @keydown.space.prevent="onCatHeaderClick(group)"
+                  >
+                    <span
+                      class="cat-dot"
+                      :style="{ background: categoryColor(group.category) }"
+                    ></span>
+                    <span class="cat-name">{{ group.label }}</span>
+                    <div class="cat-header-right">
+                      <span class="cat-count" v-if="group.total > 0">
+                        <i
+                          v-if="isCategoryComplete(group)"
+                          class="bi bi-check-circle-fill cat-complete-icon"
+                        ></i>
+                        {{ group.rawDoneCount }}/{{ group.total }}
+                      </span>
+                      <!-- Auch bei eingeklappter Sektion sichtbar: sonst hat eine
                      leere, eingeklappte Kategorie keinen sichtbaren Weg,
                      etwas hineinzulegen (Befund F1). `openAddLine` klappt auf
                      und öffnet die Zeile in einem Zug. -->
-                <button
-                  v-if="!isAddOpen(group) || !isSectionOpen(group)"
-                  class="cat-icon-btn"
-                  @click.stop="openAddLine(group)"
-                  :title="`${labels.itemNoun.one} hinzufügen`"
-                >
-                  <i class="bi bi-plus-lg"></i>
-                </button>
-                <button
-                  v-if="!group.isUncategorized"
-                  class="cat-icon-btn"
-                  @click.stop="openCategoryEdit(group)"
-                  title="Kategorie bearbeiten"
-                >
-                  <i class="bi bi-pencil"></i>
-                </button>
-                <i
-                  class="bi cat-chevron"
-                  :class="isSectionOpen(group) ? 'bi-chevron-up' : 'bi-chevron-down'"
-                ></i>
-              </div>
-            </div>
+                      <button
+                        v-if="!isAddOpen(group) || !isSectionOpen(group)"
+                        class="cat-icon-btn"
+                        @click.stop="openAddLine(group)"
+                        :title="`${labels.itemNoun.one} hinzufügen`"
+                      >
+                        <i class="bi bi-plus-lg"></i>
+                      </button>
+                      <button
+                        v-if="!group.isUncategorized"
+                        class="cat-icon-btn"
+                        @click.stop="openCategoryEdit(group)"
+                        title="Kategorie bearbeiten"
+                      >
+                        <i class="bi bi-pencil"></i>
+                      </button>
+                      <i
+                        class="bi cat-chevron"
+                        :class="isSectionOpen(group) ? 'bi-chevron-up' : 'bi-chevron-down'"
+                      ></i>
+                    </div>
+                  </div>
 
-            <div
-              v-if="isSectionOpen(group)"
-              :ref="(el) => setDropEl(group.key, el)"
-              :data-cat-name="group.category ?? ''"
-              class="cat-body"
-            >
-              <!-- Offen: noch nicht erledigt + gerade abgehakt (Grace) -->
-              <!-- Gepackte Zeilen tragen keine `data-item-id` und sind damit
+                  <div
+                    v-if="isSectionOpen(group)"
+                    :ref="(el) => setDropEl(group.key, el)"
+                    :data-cat-name="group.category ?? ''"
+                    class="cat-body"
+                  >
+                    <!-- Offen: noch nicht erledigt + gerade abgehakt (Grace) -->
+                    <!-- Gepackte Zeilen tragen keine `data-item-id` und sind damit
                    nicht ziehbar — auch die im Rückgängig-Fenster. Ziehen in und
                    aus „erledigt" bleibt wie im Einkauf außerhalb. Sie stehen
                    dabei MITTEN zwischen den ziehbaren; `useCategoryDrag` merkt
                    sich zum Zurückrollen den Nachbarknoten, nicht den Index,
                    und kommt damit ohne eine Reihenfolge-Bedingung aus. -->
-              <ChecklistItemRow
-                v-for="item in openRows(group)"
-                :key="item.item_id"
-                :item="item"
-                :data-item-id="item.packed ? null : item.item_id"
-                :class="{ 'row-moved': item.item_id === justMovedId }"
-                @toggle="onItemToggle(item)"
-                @increment="onItemIncrement(item)"
-                @decrement="onItemDecrement(item)"
-                @edit="openItemEdit(item)"
-              />
+                    <ChecklistItemRow
+                      v-for="item in openRows(group)"
+                      :key="item.item_id"
+                      :item="item"
+                      :data-item-id="item.packed ? null : item.item_id"
+                      :class="{ 'row-moved': item.item_id === justMovedId }"
+                      @toggle="onItemToggle(item)"
+                      @increment="onItemIncrement(item)"
+                      @decrement="onItemDecrement(item)"
+                      @edit="openItemEdit(item)"
+                    />
 
-              <!-- Erledigt (einklappbar) -->
-              <template v-if="doneRows(group).length > 0">
-                <button class="done-toggle" @click="toggleDone(group.key)">
-                  <i class="bi bi-check2-circle done-check"></i>
-                  <span>{{ doneRows(group).length }} {{ labels.progressVerb }}</span>
-                  <i
-                    class="bi ms-auto"
-                    :class="isDoneOpen(group.key) ? 'bi-chevron-up' : 'bi-chevron-down'"
-                  ></i>
-                </button>
-                <template v-if="isDoneOpen(group.key)">
-                  <ChecklistItemRow
-                    v-for="item in doneRows(group)"
-                    :key="item.item_id"
-                    :item="item"
-                    @toggle="onItemToggle(item)"
-                    @increment="onItemIncrement(item)"
-                    @decrement="onItemDecrement(item)"
-                    @edit="openItemEdit(item)"
-                  />
-                </template>
-              </template>
+                    <!-- Erledigt (einklappbar) -->
+                    <template v-if="doneRows(group).length > 0">
+                      <button class="done-toggle" @click="toggleDone(group.key)">
+                        <i class="bi bi-check2-circle done-check"></i>
+                        <span>{{ doneRows(group).length }} {{ labels.progressVerb }}</span>
+                        <i
+                          class="bi ms-auto"
+                          :class="isDoneOpen(group.key) ? 'bi-chevron-up' : 'bi-chevron-down'"
+                        ></i>
+                      </button>
+                      <template v-if="isDoneOpen(group.key)">
+                        <ChecklistItemRow
+                          v-for="item in doneRows(group)"
+                          :key="item.item_id"
+                          :item="item"
+                          @toggle="onItemToggle(item)"
+                          @increment="onItemIncrement(item)"
+                          @decrement="onItemDecrement(item)"
+                          @edit="openItemEdit(item)"
+                        />
+                      </template>
+                    </template>
 
-              <!-- Kontextuelle Add-Zeile -->
-              <div v-if="isAddOpen(group)" class="add-line">
-                <!-- Leeres Kaestchen: haelt die Schreibzeile im Pinnwand-Aussehen
+                    <!-- Kontextuelle Add-Zeile -->
+                    <div v-if="isAddOpen(group)" class="add-line">
+                      <!-- Leeres Kaestchen: haelt die Schreibzeile im Pinnwand-Aussehen
                      in derselben Spur wie die Eintragsnamen darueber (wie im
                      Einkauf). Im klassischen Aussehen `display: none`. -->
-                <span class="add-ghost-box" aria-hidden="true"></span>
-                <div class="add-input-wrap">
-                  <input
-                    v-model="addDraft[group.key]"
-                    type="text"
-                    class="add-input"
-                    :placeholder="group.isUncategorized ? '+ hinzufügen…' : `+ zu ${group.label}…`"
-                    maxlength="200"
-                    @focus="onAddFocus(group.key)"
-                    @blur="onAddBlur"
-                    @keyup.enter="handleSectionAdd(group)"
-                  />
-                  <div
-                    v-if="suggestFocusKey === group.key && suggestionsFor(group).length > 0"
-                    class="suggestions-dropdown"
-                  >
-                    <button
-                      v-for="s in suggestionsFor(group)"
-                      :key="s"
-                      class="suggestion-item"
-                      @mousedown.prevent="selectSuggestion(group, s)"
-                    >
-                      {{ s }}
+                      <span class="add-ghost-box" aria-hidden="true"></span>
+                      <div class="add-input-wrap">
+                        <input
+                          v-model="addDraft[group.key]"
+                          type="text"
+                          class="add-input"
+                          :placeholder="
+                            group.isUncategorized ? '+ hinzufügen…' : `+ zu ${group.label}…`
+                          "
+                          maxlength="200"
+                          @focus="onAddFocus(group.key)"
+                          @blur="onAddBlur"
+                          @keyup.enter="handleSectionAdd(group)"
+                        />
+                        <div
+                          v-if="suggestFocusKey === group.key && suggestionsFor(group).length > 0"
+                          class="suggestions-dropdown"
+                        >
+                          <button
+                            v-for="s in suggestionsFor(group)"
+                            :key="s"
+                            class="suggestion-item"
+                            @mousedown.prevent="selectSuggestion(group, s)"
+                          >
+                            {{ s }}
+                          </button>
+                        </div>
+                      </div>
+                      <input
+                        v-if="qtyFieldOpen.has(group.key)"
+                        v-focus
+                        v-model.number="addQty[group.key]"
+                        type="number"
+                        class="add-qty-input"
+                        min="1"
+                        max="999"
+                        @keyup.enter="handleSectionAdd(group)"
+                        @blur="closeQtyField(group.key)"
+                      />
+                      <button
+                        v-else
+                        class="add-qty-toggle"
+                        :class="{ active: (addQty[group.key] || 1) > 1 }"
+                        @click="openQtyField(group.key)"
+                        title="Anzahl festlegen"
+                      >
+                        ×{{ addQty[group.key] || 1 }}
+                      </button>
+                      <button
+                        class="add-confirm"
+                        @click="handleSectionAdd(group)"
+                        :disabled="!(addDraft[group.key] || '').trim()"
+                        title="Hinzufügen"
+                      >
+                        <i class="bi bi-plus-lg"></i>
+                      </button>
+                    </div>
+                    <button v-else class="add-reopen" @click="openAddLine(group)">
+                      <i class="bi bi-plus-lg me-1"></i> hinzufügen
                     </button>
                   </div>
                 </div>
-                <input
-                  v-if="qtyFieldOpen.has(group.key)"
-                  v-focus
-                  v-model.number="addQty[group.key]"
-                  type="number"
-                  class="add-qty-input"
-                  min="1"
-                  max="999"
-                  @keyup.enter="handleSectionAdd(group)"
-                  @blur="closeQtyField(group.key)"
-                />
-                <button
-                  v-else
-                  class="add-qty-toggle"
-                  :class="{ active: (addQty[group.key] || 1) > 1 }"
-                  @click="openQtyField(group.key)"
-                  title="Anzahl festlegen"
-                >
-                  ×{{ addQty[group.key] || 1 }}
-                </button>
-                <button
-                  class="add-confirm"
-                  @click="handleSectionAdd(group)"
-                  :disabled="!(addDraft[group.key] || '').trim()"
-                  title="Hinzufügen"
-                >
-                  <i class="bi bi-plus-lg"></i>
-                </button>
               </div>
-              <button v-else class="add-reopen" @click="openAddLine(group)">
-                <i class="bi bi-plus-lg me-1"></i> hinzufügen
-              </button>
-            </div>
-          </div>
-          </div>
 
-          <!-- Rechte Kategorie-Schnellnav (einklappbar) -->
-          <CategoryRail
-            v-if="showRail"
-            :groups="displaySections"
-            :active-key="activeCatKey"
-            :collapsed="railCollapsed"
-            @select="scrollToCategory"
-            @update:collapsed="setRailCollapsed"
-          />
-        </div>
-        </template>
+              <!-- Rechte Kategorie-Schnellnav (einklappbar) -->
+              <CategoryRail
+                v-if="showRail"
+                :groups="displaySections"
+                :active-key="activeCatKey"
+                :collapsed="railCollapsed"
+                @select="scrollToCategory"
+                @update:collapsed="setRailCollapsed"
+              />
+            </div>
+          </template>
         </template>
       </LongSheet>
 
@@ -904,7 +922,10 @@ onUnmounted(() => {
     :can-delete="store.lists.length > 1"
     @rename="handleRenameList"
     @delete="handleDeleteList"
-    @close="showListEditModal = false; editingList = null"
+    @close="
+      showListEditModal = false
+      editingList = null
+    "
   />
 
   <!-- Neue Liste erstellen Modal -->
@@ -940,7 +961,11 @@ onUnmounted(() => {
         </div>
         <div class="modal-footer">
           <button class="btn btn-secondary" @click="showCreateListModal = false">Abbrechen</button>
-          <button class="btn btn-primary" @click="handleCreateList" :disabled="!newListName.trim() || isCreatingList">
+          <button
+            class="btn btn-primary"
+            @click="handleCreateList"
+            :disabled="!newListName.trim() || isCreatingList"
+          >
             <i class="bi bi-plus-lg me-1"></i> Erstellen
           </button>
         </div>
@@ -994,7 +1019,9 @@ onUnmounted(() => {
   padding: 2px;
 }
 
-.list-chip-container::-webkit-scrollbar { display: none; }
+.list-chip-container::-webkit-scrollbar {
+  display: none;
+}
 
 .list-chip {
   display: flex;
@@ -1015,20 +1042,47 @@ onUnmounted(() => {
   -webkit-tap-highlight-color: transparent;
 }
 
-.list-chip:hover { border-color: var(--color-primary); color: var(--color-text-primary); }
-.list-chip.active { background: var(--color-primary); border-color: var(--color-primary); color: white; font-weight: 600; }
-.list-chip.add-chip { color: var(--color-text-secondary); padding: 6px 12px; }
-.list-chip.add-chip:hover { background: var(--color-primary); border-color: var(--color-primary); color: white; }
+.list-chip:hover {
+  border-color: var(--color-primary);
+  color: var(--color-text-primary);
+}
+.list-chip.active {
+  background: var(--color-primary);
+  border-color: var(--color-primary);
+  color: white;
+  font-weight: 600;
+}
+.list-chip.add-chip {
+  color: var(--color-text-secondary);
+  padding: 6px 12px;
+}
+.list-chip.add-chip:hover {
+  background: var(--color-primary);
+  border-color: var(--color-primary);
+  color: white;
+}
 
 .chip-edit-btn {
-  background: none; border: none; padding: 0; margin-left: 2px;
-  cursor: pointer; color: inherit; opacity: 0.6; font-size: 0.75rem;
-  line-height: 1; display: flex; align-items: center;
+  background: none;
+  border: none;
+  padding: 0;
+  margin-left: 2px;
+  cursor: pointer;
+  color: inherit;
+  opacity: 0.6;
+  font-size: 0.75rem;
+  line-height: 1;
+  display: flex;
+  align-items: center;
 }
-.chip-edit-btn:hover { opacity: 1; }
+.chip-edit-btn:hover {
+  opacity: 1;
+}
 
 /* ---- Progress Header ---- */
-.progress-header { margin-bottom: var(--spacing-md); }
+.progress-header {
+  margin-bottom: var(--spacing-md);
+}
 
 .progress-label {
   display: flex;
@@ -1038,8 +1092,13 @@ onUnmounted(() => {
   font-size: var(--font-sm);
 }
 
-.progress-list-name { font-weight: 600; color: var(--color-text-primary); }
-.progress-count { color: var(--color-text-secondary); }
+.progress-list-name {
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+.progress-count {
+  color: var(--color-text-secondary);
+}
 
 .reset-inline-btn {
   margin-left: auto;
@@ -1051,7 +1110,10 @@ onUnmounted(() => {
   border-radius: var(--radius-sm);
   font-size: var(--font-base);
 }
-.reset-inline-btn:hover { color: var(--color-warning-dark); background: var(--color-warning-light); }
+.reset-inline-btn:hover {
+  color: var(--color-warning-dark);
+  background: var(--color-warning-light);
+}
 
 .progress-track {
   height: 6px;
@@ -1086,7 +1148,10 @@ onUnmounted(() => {
   cursor: pointer;
   text-align: left;
 }
-.notes-title { font-weight: 600; flex-shrink: 0; }
+.notes-title {
+  font-weight: 600;
+  flex-shrink: 0;
+}
 .notes-preview {
   color: var(--color-text-muted);
   white-space: nowrap;
@@ -1094,7 +1159,9 @@ onUnmounted(() => {
   text-overflow: ellipsis;
   min-width: 0;
 }
-.notes-body { padding: 0 var(--spacing-md) var(--spacing-md); }
+.notes-body {
+  padding: 0 var(--spacing-md) var(--spacing-md);
+}
 
 /* ---- Body + fixed bottom-right quick-nav rail ---- */
 .checklist-body {
@@ -1109,7 +1176,9 @@ onUnmounted(() => {
   max-width: 100%;
 }
 @media (min-width: 480px) {
-  .checklist-body.rail-open .cat-column { padding-right: 96px; }
+  .checklist-body.rail-open .cat-column {
+    padding-right: 96px;
+  }
 }
 
 /* ---- Seitenrand: 8px statt Bootstrap-Gutter (12px) ---- */
@@ -1125,8 +1194,12 @@ onUnmounted(() => {
   margin-bottom: 8px;
   scroll-margin-top: 72px;
 }
-.cat-uncategorized { opacity: 0.92; }
-.cat-complete .cat-header { opacity: 0.7; }
+.cat-uncategorized {
+  opacity: 0.92;
+}
+.cat-complete .cat-header {
+  opacity: 0.7;
+}
 
 .cat-header {
   display: flex;
@@ -1143,7 +1216,10 @@ onUnmounted(() => {
   user-select: none;
   -webkit-tap-highlight-color: transparent;
 }
-.cat-header:focus-visible { outline: 2px solid var(--color-primary); outline-offset: -2px; }
+.cat-header:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: -2px;
+}
 
 .cat-header-right {
   margin-left: auto;
@@ -1177,7 +1253,10 @@ onUnmounted(() => {
   position: absolute;
   inset: -6px -5px;
 }
-.cat-icon-btn:hover { opacity: 1; color: var(--color-primary); }
+.cat-icon-btn:hover {
+  opacity: 1;
+  color: var(--color-primary);
+}
 .cat-dot {
   display: inline-block;
   width: 8px;
@@ -1193,7 +1272,10 @@ onUnmounted(() => {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.cat-uncategorized .cat-name { color: var(--color-text-muted); font-weight: 500; }
+.cat-uncategorized .cat-name {
+  color: var(--color-text-muted);
+  font-weight: 500;
+}
 /* Fortschritt als dezentes Badge statt als zweite Überschrift — wie im Einkauf,
    dort steht nur eine Zahl, hier gepackt/gesamt. */
 .cat-count {
@@ -1210,19 +1292,34 @@ onUnmounted(() => {
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
-.cat-complete-icon { color: var(--color-success); }
-.cat-chevron { color: var(--color-text-muted); font-size: var(--font-sm); }
+.cat-complete-icon {
+  color: var(--color-success);
+}
+.cat-chevron {
+  color: var(--color-text-muted);
+  font-size: var(--font-sm);
+}
 
 /* Ziehen: die Vorschau bleibt blass an der alten Stelle, der aufgenommene
    Eintrag hebt sich ab. */
-.drag-ghost { opacity: 0.35; }
-.drag-chosen { border-color: var(--color-primary); }
+.drag-ghost {
+  opacity: 0.35;
+}
+.drag-chosen {
+  border-color: var(--color-primary);
+}
 /* Frisch verschobener Eintrag kurz hervorheben: er springt nach dem Loslassen
    an seinen Platz in der Zielsektion, der Sprung soll nachvollziehbar bleiben. */
-.row-moved { animation: row-moved 600ms ease-out; }
+.row-moved {
+  animation: row-moved 600ms ease-out;
+}
 @keyframes row-moved {
-  from { background: var(--color-primary-subtle, rgba(99, 102, 241, 0.18)); }
-  to { background: transparent; }
+  from {
+    background: var(--color-primary-subtle, rgba(99, 102, 241, 0.18));
+  }
+  to {
+    background: transparent;
+  }
 }
 
 /* ---- Gedämpfte (leere) Kategorien — Ticket 05 -----------------------------
@@ -1230,10 +1327,20 @@ onUnmounted(() => {
    <script setup> und gilt in beiden Aussehen. Hier nur die Optik; die
    Kopfzeile behält ihre Mindesthöhe/Trefferfläche unverändert (Touch-Target),
    nur Schriftgröße und Deckkraft gehen zurück. */
-.cat-section.cat-damped { margin-bottom: 4px; }
-.cat-section.cat-damped .cat-header { opacity: 0.5; }
-.cat-section.cat-damped .cat-name { font-size: var(--font-sm); font-weight: 500; }
-.cat-section.cat-damped .cat-dot { width: 6px; height: 6px; }
+.cat-section.cat-damped {
+  margin-bottom: 4px;
+}
+.cat-section.cat-damped .cat-header {
+  opacity: 0.5;
+}
+.cat-section.cat-damped .cat-name {
+  font-size: var(--font-sm);
+  font-weight: 500;
+}
+.cat-section.cat-damped .cat-dot {
+  width: 6px;
+  height: 6px;
+}
 
 .cat-body {
   padding: 0;
@@ -1258,8 +1365,12 @@ onUnmounted(() => {
   cursor: pointer;
   text-align: left;
 }
-.done-toggle:hover { color: var(--color-text-secondary); }
-.done-check { color: var(--color-success); }
+.done-toggle:hover {
+  color: var(--color-text-secondary);
+}
+.done-check {
+  color: var(--color-success);
+}
 
 /* ---- Add line ---- */
 .add-line {
@@ -1268,7 +1379,9 @@ onUnmounted(() => {
   gap: 4px;
   padding: 0;
 }
-.add-ghost-box { display: none; }
+.add-ghost-box {
+  display: none;
+}
 .add-input-wrap {
   position: relative;
   flex: 1;
@@ -1284,7 +1397,11 @@ onUnmounted(() => {
   font-size: var(--font-base);
   color: var(--color-text-primary);
 }
-.add-input:focus { outline: none; border-color: var(--color-primary); border-style: solid; }
+.add-input:focus {
+  outline: none;
+  border-color: var(--color-primary);
+  border-style: solid;
+}
 
 .suggestions-dropdown {
   position: absolute;
@@ -1313,8 +1430,12 @@ onUnmounted(() => {
   cursor: pointer;
   transition: background-color 0.15s;
 }
-.suggestion-item:last-child { border-bottom: none; }
-.suggestion-item:hover { background: var(--color-background); }
+.suggestion-item:last-child {
+  border-bottom: none;
+}
+.suggestion-item:hover {
+  background: var(--color-background);
+}
 .add-qty-toggle {
   flex-shrink: 0;
   min-width: 32px;
@@ -1329,7 +1450,10 @@ onUnmounted(() => {
   cursor: pointer;
   font-variant-numeric: tabular-nums;
 }
-.add-qty-toggle:hover { border-color: var(--color-primary); color: var(--color-primary); }
+.add-qty-toggle:hover {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+}
 .add-qty-toggle.active {
   border-style: solid;
   border-color: var(--color-primary);
@@ -1348,7 +1472,9 @@ onUnmounted(() => {
   font-size: var(--font-base);
   font-variant-numeric: tabular-nums;
 }
-.add-qty-input:focus { outline: none; }
+.add-qty-input:focus {
+  outline: none;
+}
 
 .add-confirm {
   flex-shrink: 0;
@@ -1360,7 +1486,10 @@ onUnmounted(() => {
   border-radius: var(--radius-sm);
   cursor: pointer;
 }
-.add-confirm:disabled { opacity: 0.4; cursor: not-allowed; }
+.add-confirm:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
 
 .add-reopen {
   align-self: flex-start;
@@ -1371,7 +1500,9 @@ onUnmounted(() => {
   cursor: pointer;
   padding: 6px 4px;
 }
-.add-reopen:hover { color: var(--color-primary); }
+.add-reopen:hover {
+  color: var(--color-primary);
+}
 
 /* ==========================================================================
    PINNWAND-AUSSEHEN — „Der lange Zettel" auf Packliste und To-do
@@ -1414,19 +1545,29 @@ onUnmounted(() => {
   border: 2px solid var(--pw-line);
   border-radius: 0;
 }
-:root[data-design='pinnwand'] .progress-fill { border-radius: 0; }
+:root[data-design='pinnwand'] .progress-fill {
+  border-radius: 0;
+}
 /* `--color-text-muted` ist unter Pinnwand auf `--pw-free` umgelegt — auf
    Papier nur ~3,3:1 (siehe `pinnwand.css`, Platzhalter-Regel). Derselbe
    Tausch wie dort: `--pw-ink-soft` erreicht ~8,9:1. */
-:root[data-design='pinnwand'] .notes-preview { color: var(--pw-ink-soft); }
+:root[data-design='pinnwand'] .notes-preview {
+  color: var(--pw-ink-soft);
+}
 /* Derselbe Tausch, derselbe Befund: `.reset-inline-btn` erbt sonst ebenfalls
    `--color-text-muted` (= `--pw-free`), auf Papier nur ~3,6:1. */
-:root[data-design='pinnwand'] .reset-inline-btn { color: var(--pw-ink-soft); }
+:root[data-design='pinnwand'] .reset-inline-btn {
+  color: var(--pw-ink-soft);
+}
 
 /* ---- Kategorie = Ueberschrift mit doppelter Tintenlinie, keine Box -------- */
-:root[data-design='pinnwand'] .cat-section { margin-bottom: 18px; }
+:root[data-design='pinnwand'] .cat-section {
+  margin-bottom: 18px;
+}
 /* Das klassische `opacity: 0.92` verduennt jeden Kontrast in der Sektion. */
-:root[data-design='pinnwand'] .cat-uncategorized { opacity: 1; }
+:root[data-design='pinnwand'] .cat-uncategorized {
+  opacity: 1;
+}
 :root[data-design='pinnwand'] .cat-header {
   min-height: 40px;
   margin-bottom: 4px;
@@ -1465,19 +1606,27 @@ onUnmounted(() => {
   font-weight: 800;
   font-variant-numeric: tabular-nums;
 }
-:root[data-design='pinnwand'] .cat-chevron { color: var(--pw-ink); }
+:root[data-design='pinnwand'] .cat-chevron {
+  color: var(--pw-ink);
+}
 /* Ein gefuelltes gruenes Rund neben einem ungefuellten Tinten-Kaestchen
    waeren zwei Sprachen fuer "erledigt". Dieselbe Tinte wie das Haekchen
    in `.list-check.on`. */
-:root[data-design='pinnwand'] .cat-complete-icon { color: var(--pw-ink); }
+:root[data-design='pinnwand'] .cat-complete-icon {
+  color: var(--pw-ink);
+}
 /* 18px Abstand + erweiterte Trefferflaeche = 48×48px, die sich beruehren
    statt zu ueberlappen — dieselbe Rechnung wie im Einkauf. */
-:root[data-design='pinnwand'] .cat-header-right { gap: 18px; }
+:root[data-design='pinnwand'] .cat-header-right {
+  gap: 18px;
+}
 :root[data-design='pinnwand'] .cat-icon-btn {
   color: var(--pw-ink);
   opacity: 1;
 }
-:root[data-design='pinnwand'] .cat-icon-btn::after { inset: -10px -9px; }
+:root[data-design='pinnwand'] .cat-icon-btn::after {
+  inset: -10px -9px;
+}
 
 /* ---- Gedämpfte (leere) Kategorien — eigene Optik fürs Pinnwand-Papier -----
    Höhere Spezifität als die Basisregeln oben (`:root[data-design] .cat-name`
@@ -1501,7 +1650,9 @@ onUnmounted(() => {
 /* ---- Zeile: kein Rahmen, kein Hintergrund — Schrift auf Papier -----------
    `ListItemRow` ist dieselbe Komponente wie im Einkauf (ueber
    `ChecklistItemRow`), deshalb identische Optik. */
-:root[data-design='pinnwand'] .cat-body { gap: 0; }
+:root[data-design='pinnwand'] .cat-body {
+  gap: 0;
+}
 :root[data-design='pinnwand'] .cat-column :deep(.list-row) {
   min-height: var(--touch-target-min);
   padding: 0 2px;
@@ -1516,7 +1667,9 @@ onUnmounted(() => {
 }
 /* Ein abgehakter Eintrag bleibt lesbar: durchgestrichen und eine Spur
    leiser, aber nicht auf 55 % heruntergeblendet. */
-:root[data-design='pinnwand'] .cat-column :deep(.list-row.checked) { opacity: 1; }
+:root[data-design='pinnwand'] .cat-column :deep(.list-row.checked) {
+  opacity: 1;
+}
 :root[data-design='pinnwand'] .cat-column :deep(.list-row.checked .list-name) {
   color: var(--pw-ink-soft);
   text-decoration: line-through 2px var(--pw-line);
@@ -1533,13 +1686,17 @@ onUnmounted(() => {
   border-color: var(--pw-line);
   color: var(--pw-ink);
 }
-:root[data-design='pinnwand'] .cat-column :deep(.row-trailing) { gap: 18px; }
+:root[data-design='pinnwand'] .cat-column :deep(.row-trailing) {
+  gap: 18px;
+}
 :root[data-design='pinnwand'] .cat-column :deep(.row-edit-btn) {
   width: 30px;
   height: 30px;
   color: var(--pw-ink);
 }
-:root[data-design='pinnwand'] .cat-column :deep(.row-edit-btn)::after { inset: -9px; }
+:root[data-design='pinnwand'] .cat-column :deep(.row-edit-btn)::after {
+  inset: -9px;
+}
 
 /* ---- Mengen-Stepper: die einzige Zeilen-Ergaenzung, die der Einkauf nicht
    hat (Packliste zaehlt gepackt/gesamt statt nur an-/abzuhaken). Dieselbe
@@ -1561,13 +1718,21 @@ onUnmounted(() => {
   border-color: rgba(36, 31, 26, 0.35);
   color: var(--pw-ink-soft);
 }
-:root[data-design='pinnwand'] .cat-column :deep(.step-count) { color: var(--pw-ink); }
+:root[data-design='pinnwand'] .cat-column :deep(.step-count) {
+  color: var(--pw-ink);
+}
 
 /* ---- „N erledigt" (einklappbar) — kennt nur die Checkliste, keine
    Entsprechung im Einkauf (dort gibt es den globalen Gekauft-Block). */
-:root[data-design='pinnwand'] .done-toggle { color: var(--pw-ink-soft); }
-:root[data-design='pinnwand'] .done-toggle:hover { color: var(--pw-ink); }
-:root[data-design='pinnwand'] .done-check { color: var(--pw-ink); }
+:root[data-design='pinnwand'] .done-toggle {
+  color: var(--pw-ink-soft);
+}
+:root[data-design='pinnwand'] .done-toggle:hover {
+  color: var(--pw-ink);
+}
+:root[data-design='pinnwand'] .done-check {
+  color: var(--pw-ink);
+}
 
 /* ---- Naechste freie Zeile statt Formularfeld ------------------------------
    Das leere Kaestchen (`.add-ghost-box`) fehlte hier zunaechst — ohne Papier
@@ -1654,7 +1819,10 @@ onUnmounted(() => {
 }
 /* Checklisten-eigen (kein Einkaufs-Gegenstueck): der Link, der eine wieder
    eingeklappte Eingabezeile zurueckholt. */
-:root[data-design='pinnwand'] .add-reopen { color: var(--pw-ink-soft); }
-:root[data-design='pinnwand'] .add-reopen:hover { color: var(--pw-ink); }
-
+:root[data-design='pinnwand'] .add-reopen {
+  color: var(--pw-ink-soft);
+}
+:root[data-design='pinnwand'] .add-reopen:hover {
+  color: var(--pw-ink);
+}
 </style>

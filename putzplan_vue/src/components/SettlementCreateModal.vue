@@ -10,14 +10,16 @@ const props = defineProps<{
 }>()
 
 const emit = defineEmits<{
-  submit: [payload: {
-    fromUserId: string
-    toUserId: string
-    pointsSettled: number
-    method: SettlementMethod
-    description?: string
-    settledAt?: string
-  }]
+  submit: [
+    payload: {
+      fromUserId: string
+      toUserId: string
+      pointsSettled: number
+      method: SettlementMethod
+      description?: string
+      settledAt?: string
+    },
+  ]
   close: []
 }>()
 
@@ -35,20 +37,19 @@ const methods: { value: SettlementMethod; label: string; icon: string }[] = [
   { value: 'activity', label: 'Aktivität', icon: 'bi-bullseye' },
   { value: 'money', label: 'Geld', icon: 'bi-cash-coin' },
   { value: 'surprise', label: 'Überraschung', icon: 'bi-gift' },
-  { value: 'other', label: 'Sonstiges', icon: 'bi-three-dots' }
+  { value: 'other', label: 'Sonstiges', icon: 'bi-three-dots' },
 ]
 
 const members = computed(() => householdStore.householdMembers)
 
-const otherMembers = computed(() =>
-  members.value.filter(m => m.user_id !== fromUserId.value)
-)
+const otherMembers = computed(() => members.value.filter((m) => m.user_id !== fromUserId.value))
 
-const isValid = computed(() =>
-  fromUserId.value &&
-  toUserId.value &&
-  fromUserId.value !== toUserId.value &&
-  pointsSettled.value > 0
+const isValid = computed(
+  () =>
+    fromUserId.value &&
+    toUserId.value &&
+    fromUserId.value !== toUserId.value &&
+    pointsSettled.value > 0,
 )
 
 const handleFromChange = () => {
@@ -65,12 +66,12 @@ const handleSubmit = () => {
     pointsSettled: pointsSettled.value,
     method: method.value,
     description: description.value.trim() || undefined,
-    settledAt: new Date(settledAt.value).toISOString()
+    settledAt: new Date(settledAt.value).toISOString(),
   })
 }
 
 const getMemberName = (userId: string) => {
-  const m = members.value.find(m => m.user_id === userId)
+  const m = members.value.find((m) => m.user_id === userId)
   return m?.display_name ?? 'Unbekannt'
 }
 </script>
@@ -140,7 +141,9 @@ const getMemberName = (userId: string) => {
 
           <!-- Beschreibung -->
           <div class="form-group">
-            <label class="form-label">Beschreibung <span class="text-muted">(optional)</span></label>
+            <label class="form-label"
+              >Beschreibung <span class="text-muted">(optional)</span></label
+            >
             <input
               v-model="description"
               type="text"
@@ -153,11 +156,7 @@ const getMemberName = (userId: string) => {
           <!-- Datum -->
           <div class="form-group">
             <label class="form-label">Datum</label>
-            <input
-              v-model="settledAt"
-              type="datetime-local"
-              class="form-control"
-            />
+            <input v-model="settledAt" type="datetime-local" class="form-control" />
           </div>
 
           <!-- Vorschau -->

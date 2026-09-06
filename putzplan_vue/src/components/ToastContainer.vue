@@ -10,7 +10,7 @@ const toastStore = useToastStore()
 const icons: Record<ToastType, string> = {
   success: 'bi-check-circle-fill',
   error: 'bi-exclamation-circle-fill',
-  info: 'bi-info-circle-fill'
+  info: 'bi-info-circle-fill',
 }
 </script>
 
@@ -99,7 +99,9 @@ const icons: Record<ToastType, string> = {
 
 .toast-enter-active,
 .toast-leave-active {
-  transition: opacity var(--transition-base), transform var(--transition-base);
+  transition:
+    opacity var(--transition-base),
+    transform var(--transition-base);
 }
 
 .toast-enter-from,

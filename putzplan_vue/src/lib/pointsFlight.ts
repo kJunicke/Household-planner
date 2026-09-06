@@ -100,20 +100,20 @@ export function flyPoints(label: string, origin: FlightOrigin, options: FlightOp
       {
         transform: `translate(calc(-50% + ${dx * 0.18}px), calc(-50% + ${dy * 0.1 + 10}px)) scale(1.18)`,
         opacity: 1,
-        offset: 0.18
+        offset: 0.18,
       },
       {
         transform: `translate(calc(-50% + ${dx * 0.6}px), calc(-50% + ${dy * 0.42}px)) scale(1.05)`,
         opacity: 1,
-        offset: 0.6
+        offset: 0.6,
       },
       {
         transform: `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px)) scale(0.5)`,
         opacity: 0,
-        offset: 1
-      }
+        offset: 1,
+      },
     ],
-    { duration: 620, easing: 'cubic-bezier(.32,.72,.3,1)', fill: 'forwards' }
+    { duration: 620, easing: 'cubic-bezier(.32,.72,.3,1)', fill: 'forwards' },
   )
 
   animation.onfinish = done

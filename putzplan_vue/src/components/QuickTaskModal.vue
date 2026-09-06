@@ -8,11 +8,14 @@ interface Props {
 
 interface Emits {
   (e: 'close'): void
-  (e: 'complete', data: {
-    title: string
-    effort: 1 | 2 | 3 | 4 | 5
-    note?: string
-  }): void
+  (
+    e: 'complete',
+    data: {
+      title: string
+      effort: 1 | 2 | 3 | 4 | 5
+      note?: string
+    },
+  ): void
 }
 
 const props = defineProps<Props>()
@@ -21,14 +24,18 @@ const emit = defineEmits<Emits>()
 const formData = ref({
   title: props.initialTitle || '',
   effort: 1 as 1 | 2 | 3 | 4 | 5,
-  note: ''
+  note: '',
 })
 
-watch(() => props.initialTitle, (newVal) => {
-  if (newVal) {
-    formData.value.title = newVal
-  }
-}, { immediate: true })
+watch(
+  () => props.initialTitle,
+  (newVal) => {
+    if (newVal) {
+      formData.value.title = newVal
+    }
+  },
+  { immediate: true },
+)
 
 const canConfirm = computed(() => formData.value.title.trim().length > 0)
 
@@ -38,7 +45,7 @@ const handleConfirm = () => {
   emit('complete', {
     title: formData.value.title.trim(),
     effort: formData.value.effort,
-    note: formData.value.note.trim() || undefined
+    note: formData.value.note.trim() || undefined,
   })
 }
 
@@ -52,9 +59,7 @@ const handleClose = () => {
     <div class="modal-backdrop" @click="handleClose">
       <div class="modal-content" @click.stop>
         <div class="modal-header">
-          <h3 class="modal-title">
-            <i class="bi bi-lightning-charge-fill"></i> Quick-Aufgabe
-          </h3>
+          <h3 class="modal-title"><i class="bi bi-lightning-charge-fill"></i> Quick-Aufgabe</h3>
           <button class="btn-close" @click="handleClose" aria-label="Schließen">×</button>
         </div>
 
@@ -77,11 +82,7 @@ const handleClose = () => {
 
             <div class="mb-3">
               <label class="form-label">Punkte (1-5)</label>
-              <select
-                v-model="formData.effort"
-                class="form-select"
-                :disabled="isLoading"
-              >
+              <select v-model="formData.effort" class="form-select" :disabled="isLoading">
                 <option :value="1">1 - Sehr leicht</option>
                 <option :value="2">2 - Leicht</option>
                 <option :value="3">3 - Normal</option>

@@ -86,8 +86,8 @@ export const useSettlementStore = defineStore('settlement', () => {
 
   const sortedSettlements = computed(() =>
     [...settlements.value].sort(
-      (a, b) => new Date(b.settled_at).getTime() - new Date(a.settled_at).getTime()
-    )
+      (a, b) => new Date(b.settled_at).getTime() - new Date(a.settled_at).getTime(),
+    ),
   )
 
   // ============================================================================
@@ -122,7 +122,7 @@ export const useSettlementStore = defineStore('settlement', () => {
     const taskStore = useTaskStore()
     const raw = await taskStore.fetchCompletions()
     completions.value = (raw as CompletionForBalance[]).filter(
-      c => typeof c.effort_override === 'number'
+      (c) => typeof c.effort_override === 'number',
     )
   }
 
@@ -151,7 +151,7 @@ export const useSettlementStore = defineStore('settlement', () => {
           method: payload.method,
           description: payload.description?.trim() || null,
           settled_at: payload.settledAt ?? new Date().toISOString(),
-          created_by: authStore.user.id
+          created_by: authStore.user.id,
         })
         .select()
         .single()
@@ -179,11 +179,14 @@ export const useSettlementStore = defineStore('settlement', () => {
 
       if (error) throw error
 
-      settlements.value = settlements.value.filter(s => s.settlement_id !== settlementId)
+      settlements.value = settlements.value.filter((s) => s.settlement_id !== settlementId)
       toastStore.showToast('Ausgleich gelöscht', 'success', 2000)
     } catch (error) {
       console.error('Error deleting settlement:', error)
-      toastStore.showToast('Fehler beim Löschen — nur eigene Einträge der letzten 5 Minuten können gelöscht werden', 'error')
+      toastStore.showToast(
+        'Fehler beim Löschen — nur eigene Einträge der letzten 5 Minuten können gelöscht werden',
+        'error',
+      )
     }
   }
 
@@ -205,25 +208,25 @@ export const useSettlementStore = defineStore('settlement', () => {
           event: '*',
           schema: 'public',
           table: 'settlements',
-          filter: `household_id=eq.${householdStore.currentHousehold.household_id}`
+          filter: `household_id=eq.${householdStore.currentHousehold.household_id}`,
         },
         (payload) => {
           if (payload.eventType === 'INSERT') {
             const s = payload.new as Settlement
-            if (!settlements.value.find(x => x.settlement_id === s.settlement_id)) {
+            if (!settlements.value.find((x) => x.settlement_id === s.settlement_id)) {
               settlements.value.unshift(s)
             }
           }
           if (payload.eventType === 'UPDATE') {
             const s = payload.new as Settlement
-            const idx = settlements.value.findIndex(x => x.settlement_id === s.settlement_id)
+            const idx = settlements.value.findIndex((x) => x.settlement_id === s.settlement_id)
             if (idx !== -1) settlements.value[idx] = s
           }
           if (payload.eventType === 'DELETE') {
             const s = payload.old as Settlement
-            settlements.value = settlements.value.filter(x => x.settlement_id !== s.settlement_id)
+            settlements.value = settlements.value.filter((x) => x.settlement_id !== s.settlement_id)
           }
-        }
+        },
       )
       .subscribe()
   }
@@ -250,6 +253,6 @@ export const useSettlementStore = defineStore('settlement', () => {
     createSettlement,
     deleteSettlement,
     subscribe,
-    unsubscribe
+    unsubscribe,
   }
 })

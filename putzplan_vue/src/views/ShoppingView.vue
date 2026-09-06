@@ -68,7 +68,9 @@ const undampedCategories = ref<Set<string>>(new Set())
 const isCategoryEmpty = (group: ShoppingCategoryGroup): boolean => group.items.length === 0
 const isCategoryDamped = (group: ShoppingCategoryGroup): boolean =>
   isCategoryEmpty(group) && !undampedCategories.value.has(group.key)
-const touchCategory = (key: string) => { undampedCategories.value.add(key) }
+const touchCategory = (key: string) => {
+  undampedCategories.value.add(key)
+}
 
 watch(
   () => shoppingStore.currentListId,
@@ -84,7 +86,7 @@ watch(
     // Auch die obere Leiste: eine stehengebliebene Zielkategorie gehört zur alten
     // Liste und würde hier sonst als neue Kategorie angelegt.
     resetTopBar()
-  }
+  },
 )
 
 // Trigger sync when coming back online
@@ -99,14 +101,14 @@ watch(isOnline, async (online) => {
 // in their section until their grace window elapses, then fall into the global
 // Gekauft block — so we overlay in-grace purchased items back onto their group.
 const displaySections = computed<ShoppingCategoryGroup[]>(() => {
-  const base: ShoppingCategoryGroup[] = shoppingStore.itemsByCategory.map(g => ({
+  const base: ShoppingCategoryGroup[] = shoppingStore.itemsByCategory.map((g) => ({
     ...g,
     items: [...g.items],
   }))
-  const byKey = new Map(base.map(g => [g.key, g]))
+  const byKey = new Map(base.map((g) => [g.key, g]))
 
   const inGrace = shoppingStore.currentListItems.filter(
-    i => i.purchased && graceIds.value.has(i.shopping_item_id)
+    (i) => i.purchased && graceIds.value.has(i.shopping_item_id),
   )
   for (const it of inGrace) {
     const key = categoryKey(it.category)
@@ -144,7 +146,7 @@ watch(displaySections, (groups) => {
 })
 
 const gekauftItems = computed(() =>
-  shoppingStore.purchasedItems.filter(i => !graceIds.value.has(i.shopping_item_id))
+  shoppingStore.purchasedItems.filter((i) => !graceIds.value.has(i.shopping_item_id)),
 )
 
 // --- Section collapse -------------------------------------------------------
@@ -219,8 +221,8 @@ const suggestions = computed(() => {
   if (!searchInput.value.trim()) return []
   const query = searchInput.value.toLowerCase()
   const matching = shoppingStore.items
-    .filter(item => item.name.toLowerCase().includes(query))
-    .map(item => item.name)
+    .filter((item) => item.name.toLowerCase().includes(query))
+    .map((item) => item.name)
   return [...new Set(matching)].slice(0, 5)
 })
 
@@ -236,7 +238,9 @@ const onTopCategoryInput = (value: string) => {
   topCategory.value = value
 }
 
-const openTopQty = () => { topQtyOpen.value = true }
+const openTopQty = () => {
+  topQtyOpen.value = true
+}
 const closeTopQty = () => {
   topQty.value = Math.max(1, Math.floor(Number(topQty.value) || 1))
   topQtyOpen.value = false
@@ -256,7 +260,7 @@ const handleAddItem = async () => {
   if (!value) return
 
   const existingUnpurchased = shoppingStore.currentListItems.find(
-    item => !item.purchased && item.name.toLowerCase() === value.toLowerCase()
+    (item) => !item.purchased && item.name.toLowerCase() === value.toLowerCase(),
   )
   if (existingUnpurchased) {
     resetTopBar()
@@ -264,7 +268,7 @@ const handleAddItem = async () => {
   }
 
   const existingPurchased = shoppingStore.currentListItems.find(
-    item => item.purchased && item.name.toLowerCase() === value.toLowerCase()
+    (item) => item.purchased && item.name.toLowerCase() === value.toLowerCase(),
   )
   if (existingPurchased) {
     resetTopBar()
@@ -285,14 +289,20 @@ const selectSuggestion = (suggestion: string) => {
   handleAddItem()
 }
 
-const handleInputFocus = () => { showSuggestions.value = true }
-const handleInputBlur = () => { setTimeout(() => { showSuggestions.value = false }, 200) }
+const handleInputFocus = () => {
+  showSuggestions.value = true
+}
+const handleInputBlur = () => {
+  setTimeout(() => {
+    showSuggestions.value = false
+  }, 200)
+}
 
 // --- Per-section add line ----------------------------------------------------
 const suggestionsFor = (group: ShoppingCategoryGroup): string[] => {
   const q = (addDraft.value[group.key] ?? '').trim().toLowerCase()
   if (!q) return []
-  const inSection = new Set(group.items.map(i => i.name.trim().toLowerCase()))
+  const inSection = new Set(group.items.map((i) => i.name.trim().toLowerCase()))
   const seen = new Set<string>()
   const out: string[] = []
   for (const it of shoppingStore.items) {
@@ -306,8 +316,14 @@ const suggestionsFor = (group: ShoppingCategoryGroup): string[] => {
   return out
 }
 
-const onSectionAddFocus = (key: string) => { suggestFocusKey.value = key }
-const onSectionAddBlur = () => { setTimeout(() => { suggestFocusKey.value = null }, 200) }
+const onSectionAddFocus = (key: string) => {
+  suggestFocusKey.value = key
+}
+const onSectionAddBlur = () => {
+  setTimeout(() => {
+    suggestFocusKey.value = null
+  }, 200)
+}
 
 const openQtyField = (key: string) => {
   if (!addQty.value[key]) addQty.value[key] = 1
@@ -352,7 +368,9 @@ const onGekauftToggle = (item: ShoppingItem) => {
   shoppingStore.markUnpurchased(item.shopping_item_id)
 }
 
-const openItemEdit = (item: ShoppingItem) => { editingItem.value = item }
+const openItemEdit = (item: ShoppingItem) => {
+  editingItem.value = item
+}
 
 /**
  * Ein getippter Kategoriename, den es noch nicht gibt, wird beim Speichern
@@ -366,7 +384,7 @@ const ensureCategory = async (name: string | null) => {
 
 const handleItemSave = async (
   itemId: string,
-  patch: { name: string; category: string | null; quantity: number }
+  patch: { name: string; category: string | null; quantity: number },
 ) => {
   const category = await ensureCategory(patch.category)
   await shoppingStore.updateItem(itemId, { ...patch, category })
@@ -421,7 +439,9 @@ const { bind: bindDrag } = useCategoryDrag({
   onMove: (itemId, category) => {
     justMovedId.value = itemId
     if (moveHighlightTimer !== null) clearTimeout(moveHighlightTimer)
-    moveHighlightTimer = window.setTimeout(() => { justMovedId.value = null }, 600)
+    moveHighlightTimer = window.setTimeout(() => {
+      justMovedId.value = null
+    }, 600)
     shoppingStore.updateItem(itemId, { category })
   },
 })
@@ -439,21 +459,25 @@ const {
   setSectionEl,
   scrollToKey,
 } = useCategoryRail({
-  keys: () => displaySections.value.map(g => g.key),
+  keys: () => displaySections.value.map((g) => g.key),
   storageKey: 'putzplan_shopping_rail_collapsed',
 })
 
 // --- Purchase-history helpers (Gekauft block) -------------------------------
 const getMemberName = (userId: string | null) => {
   if (!userId) return 'Unbekannt'
-  const member = householdStore.householdMembers.find(m => m.user_id === userId)
+  const member = householdStore.householdMembers.find((m) => m.user_id === userId)
   return member?.display_name || 'Unbekannt'
 }
 const formatDate = (dateString: string | null) => {
   if (!dateString) return ''
   const date = new Date(dateString)
   return date.toLocaleDateString('de-DE', {
-    day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit'
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
   })
 }
 /** Aufgeklappte Kauf-Historie im Gekauft-Block (eine zur Zeit). */
@@ -545,307 +569,321 @@ onUnmounted(() => {
         </template>
 
         <template v-if="shoppingStore.currentListId">
-        <!-- Obere Leiste: Produkt · Menge · Zielkategorie · Hinzufügen · Kategorie anlegen -->
-        <div class="search-container">
-          <div class="top-bar">
-            <div class="top-name-wrap">
-              <input
-                v-model="searchInput"
-                type="text"
-                class="top-name-input"
-                placeholder="Produkt hinzufügen…"
-                maxlength="200"
-                @keyup.enter="handleAddItem"
-                @focus="handleInputFocus"
-                @blur="handleInputBlur"
-                :disabled="shoppingStore.isLoading"
-              />
-              <div v-if="showSuggestions && suggestions.length > 0" class="suggestions-dropdown">
-                <div
-                  v-for="suggestion in suggestions"
-                  :key="suggestion"
-                  class="suggestion-item"
-                  @mousedown.prevent="selectSuggestion(suggestion)"
-                >
-                  <i class="bi bi-clock-history me-2"></i>
-                  {{ suggestion }}
-                </div>
-              </div>
-            </div>
-
-            <input
-              v-if="topQtyOpen"
-              v-focus
-              v-model.number="topQty"
-              type="number"
-              class="top-qty-input"
-              min="1"
-              max="999"
-              @keyup.enter="handleAddItem"
-              @blur="closeTopQty"
-            />
-            <button
-              v-else
-              class="top-qty-toggle"
-              :class="{ active: topQty > 1 }"
-              @click="openTopQty"
-              title="Anzahl festlegen"
-            >
-              ×{{ topQty }}
-            </button>
-
-            <CategoryCombobox
-              class="top-combo"
-              compact
-              :model-value="topCategory"
-              :options="shoppingStore.categorySuggestions"
-              placeholder="Kategorie"
-              @update:model-value="onTopCategoryInput"
-              @submit="handleAddItem"
-            />
-
-            <button
-              class="top-btn top-add"
-              @click="handleAddItem"
-              :disabled="!searchInput.trim() || shoppingStore.isLoading"
-              title="Hinzufügen"
-            >
-              <i class="bi bi-plus-lg"></i>
-            </button>
-            <button
-              class="top-btn top-new-cat"
-              @click="showCategoryCreate = true"
-              title="Kategorie anlegen"
-            >
-              <i class="bi bi-tag"></i>
-            </button>
-          </div>
-        </div>
-
-        <!-- Loading Skeleton -->
-        <div v-if="shoppingStore.isLoading && shoppingStore.items.length === 0" class="skeleton-loading">
-          <div class="skeleton-card" style="height: 60px;"></div>
-          <div class="skeleton-card" style="height: 60px;"></div>
-        </div>
-
-        <template v-else>
-          <div class="shopping-body" :class="{ 'rail-open': showRail && !railCollapsed }">
-            <div class="cat-column">
-              <!-- Zu kaufen: Kategorie-Sektionen -->
-              <div
-                v-for="group in displaySections"
-                :key="group.key"
-                :ref="(el) => setSectionEl(group.key, el)"
-                class="cat-section"
-                :class="{ 'cat-uncategorized': group.isUncategorized, 'cat-damped': isCategoryDamped(group) }"
-              >
-                <!-- Die Kopfzeile ist selbst Ablageziel: eine eingeklappte
-                     Kategorie hat sonst keine Fläche zum Hineinziehen. -->
-                <div
-                  class="cat-header"
-                  :ref="(el) => setDropEl(`${group.key}::head`, el)"
-                  :data-cat-name="group.category ?? ''"
-                  role="button"
-                  tabindex="0"
-                  @click="onCatHeaderClick(group)"
-                  @keydown.enter.prevent="onCatHeaderClick(group)"
-                  @keydown.space.prevent="onCatHeaderClick(group)"
-                >
-                  <span class="cat-dot" :style="{ background: categoryColor(group.category) }"></span>
-                  <span class="cat-name">{{ group.label }}</span>
-                  <div class="cat-header-right">
-                    <span class="cat-count" v-if="group.total > 0">{{ group.total }}</span>
-                    <button
-                      v-if="!isAddOpen(group)"
-                      class="cat-icon-btn"
-                      @click.stop="openAddLine(group)"
-                      title="Produkt hinzufügen"
-                    >
-                      <i class="bi bi-plus-lg"></i>
-                    </button>
-                    <button
-                      v-if="!group.isUncategorized"
-                      class="cat-icon-btn"
-                      @click.stop="openCategoryEdit(group)"
-                      title="Kategorie bearbeiten"
-                    >
-                      <i class="bi bi-pencil"></i>
-                    </button>
-                    <i
-                      class="bi cat-chevron"
-                      :class="isSectionOpen(group) ? 'bi-chevron-up' : 'bi-chevron-down'"
-                    ></i>
-                  </div>
-                </div>
-
-                <div
-                  v-if="isSectionOpen(group)"
-                  :ref="(el) => setDropEl(group.key, el)"
-                  :data-cat-name="group.category ?? ''"
-                  class="cat-body"
-                >
-                  <ListItemRow
-                    v-for="item in group.items"
-                    :key="item.shopping_item_id"
-                    :data-item-id="item.purchased ? null : item.shopping_item_id"
-                    :checked="item.purchased"
-                    :name="item.name"
-                    :class="{
-                      'row-priority': item.is_priority && !item.purchased,
-                      'row-moved': item.shopping_item_id === justMovedId,
-                    }"
-                    @toggle="onItemToggle(item)"
-                    @edit="openItemEdit(item)"
-                  >
-                    <template #trailing>
-                      <span v-if="item.quantity > 1" class="qty-badge">×{{ item.quantity }}</span>
-                      <button
-                        v-if="!item.purchased"
-                        class="star-btn"
-                        :class="{ active: item.is_priority }"
-                        @click="shoppingStore.togglePriority(item.shopping_item_id)"
-                        :title="item.is_priority ? 'Priorität entfernen' : 'Als prioritär markieren'"
-                      >
-                        <i :class="item.is_priority ? 'bi bi-star-fill' : 'bi bi-star'"></i>
-                      </button>
-                    </template>
-                  </ListItemRow>
-
-                  <!-- Per-Sektion Add-Zeile, kontextuell -->
-                  <div v-if="isAddOpen(group)" class="add-line">
-                    <!-- Leeres Kaestchen: haelt die Schreibzeile im Pinnwand-Aussehen
-                         in derselben Spur wie die Produktzeilen darueber. Im
-                         klassischen Aussehen `display: none`. -->
-                    <span class="add-ghost-box" aria-hidden="true"></span>
-                    <div class="add-input-wrap">
-                      <input
-                        v-model="addDraft[group.key]"
-                        type="text"
-                        class="add-input"
-                        :placeholder="group.isUncategorized ? '+ hinzufügen…' : `+ zu ${group.label}…`"
-                        maxlength="200"
-                        @focus="onSectionAddFocus(group.key)"
-                        @blur="onSectionAddBlur"
-                        @keyup.enter="handleSectionAdd(group)"
-                      />
-                      <div
-                        v-if="suggestFocusKey === group.key && suggestionsFor(group).length > 0"
-                        class="suggestions-dropdown"
-                      >
-                        <button
-                          v-for="s in suggestionsFor(group)"
-                          :key="s"
-                          class="suggestion-item"
-                          @mousedown.prevent="selectSectionSuggestion(group, s)"
-                        >
-                          {{ s }}
-                        </button>
-                      </div>
-                    </div>
-                    <input
-                      v-if="qtyFieldOpen.has(group.key)"
-                      v-focus
-                      v-model.number="addQty[group.key]"
-                      type="number"
-                      class="add-qty-input"
-                      min="1"
-                      max="999"
-                      @keyup.enter="handleSectionAdd(group)"
-                      @blur="closeQtyField(group.key)"
-                    />
-                    <button
-                      v-else
-                      class="add-qty-toggle"
-                      :class="{ active: (addQty[group.key] || 1) > 1 }"
-                      @click="openQtyField(group.key)"
-                      title="Anzahl festlegen"
-                    >
-                      ×{{ addQty[group.key] || 1 }}
-                    </button>
-                    <button
-                      class="add-confirm"
-                      @click="handleSectionAdd(group)"
-                      :disabled="!(addDraft[group.key] || '').trim()"
-                      title="Hinzufügen"
-                    >
-                      <i class="bi bi-plus-lg"></i>
-                    </button>
-                  </div>
-                </div>
-
-              </div>
-
-              <!-- Gekauft (globaler Block) — dieselbe kompakte Zeile wie oben.
-                   Der Zähler ist ein Knopf: er klappt die Kauf-Historie unter der
-                   Zeile auf. Ein Tooltip allein wäre auf dem Handy unerreichbar —
-                   es gibt kein Hover, Long-Press ist im Einkauf belegt und ein Tap
-                   auf die Zeile holt das Produkt zurück. -->
-              <div class="gekauft-section" v-if="gekauftItems.length > 0">
-                <h3 class="gekauft-title">
-                  <i class="bi bi-check-circle"></i> Gekauft ({{ gekauftItems.length }})
-                </h3>
-                <div class="gekauft-list">
+          <!-- Obere Leiste: Produkt · Menge · Zielkategorie · Hinzufügen · Kategorie anlegen -->
+          <div class="search-container">
+            <div class="top-bar">
+              <div class="top-name-wrap">
+                <input
+                  v-model="searchInput"
+                  type="text"
+                  class="top-name-input"
+                  placeholder="Produkt hinzufügen…"
+                  maxlength="200"
+                  @keyup.enter="handleAddItem"
+                  @focus="handleInputFocus"
+                  @blur="handleInputBlur"
+                  :disabled="shoppingStore.isLoading"
+                />
+                <div v-if="showSuggestions && suggestions.length > 0" class="suggestions-dropdown">
                   <div
-                    v-for="item in gekauftItems"
-                    :key="item.shopping_item_id"
-                    class="bought-entry"
+                    v-for="suggestion in suggestions"
+                    :key="suggestion"
+                    class="suggestion-item"
+                    @mousedown.prevent="selectSuggestion(suggestion)"
+                  >
+                    <i class="bi bi-clock-history me-2"></i>
+                    {{ suggestion }}
+                  </div>
+                </div>
+              </div>
+
+              <input
+                v-if="topQtyOpen"
+                v-focus
+                v-model.number="topQty"
+                type="number"
+                class="top-qty-input"
+                min="1"
+                max="999"
+                @keyup.enter="handleAddItem"
+                @blur="closeTopQty"
+              />
+              <button
+                v-else
+                class="top-qty-toggle"
+                :class="{ active: topQty > 1 }"
+                @click="openTopQty"
+                title="Anzahl festlegen"
+              >
+                ×{{ topQty }}
+              </button>
+
+              <CategoryCombobox
+                class="top-combo"
+                compact
+                :model-value="topCategory"
+                :options="shoppingStore.categorySuggestions"
+                placeholder="Kategorie"
+                @update:model-value="onTopCategoryInput"
+                @submit="handleAddItem"
+              />
+
+              <button
+                class="top-btn top-add"
+                @click="handleAddItem"
+                :disabled="!searchInput.trim() || shoppingStore.isLoading"
+                title="Hinzufügen"
+              >
+                <i class="bi bi-plus-lg"></i>
+              </button>
+              <button
+                class="top-btn top-new-cat"
+                @click="showCategoryCreate = true"
+                title="Kategorie anlegen"
+              >
+                <i class="bi bi-tag"></i>
+              </button>
+            </div>
+          </div>
+
+          <!-- Loading Skeleton -->
+          <div
+            v-if="shoppingStore.isLoading && shoppingStore.items.length === 0"
+            class="skeleton-loading"
+          >
+            <div class="skeleton-card" style="height: 60px"></div>
+            <div class="skeleton-card" style="height: 60px"></div>
+          </div>
+
+          <template v-else>
+            <div class="shopping-body" :class="{ 'rail-open': showRail && !railCollapsed }">
+              <div class="cat-column">
+                <!-- Zu kaufen: Kategorie-Sektionen -->
+                <div
+                  v-for="group in displaySections"
+                  :key="group.key"
+                  :ref="(el) => setSectionEl(group.key, el)"
+                  class="cat-section"
+                  :class="{
+                    'cat-uncategorized': group.isUncategorized,
+                    'cat-damped': isCategoryDamped(group),
+                  }"
+                >
+                  <!-- Die Kopfzeile ist selbst Ablageziel: eine eingeklappte
+                     Kategorie hat sonst keine Fläche zum Hineinziehen. -->
+                  <div
+                    class="cat-header"
+                    :ref="(el) => setDropEl(`${group.key}::head`, el)"
+                    :data-cat-name="group.category ?? ''"
+                    role="button"
+                    tabindex="0"
+                    @click="onCatHeaderClick(group)"
+                    @keydown.enter.prevent="onCatHeaderClick(group)"
+                    @keydown.space.prevent="onCatHeaderClick(group)"
+                  >
+                    <span
+                      class="cat-dot"
+                      :style="{ background: categoryColor(group.category) }"
+                    ></span>
+                    <span class="cat-name">{{ group.label }}</span>
+                    <div class="cat-header-right">
+                      <span class="cat-count" v-if="group.total > 0">{{ group.total }}</span>
+                      <button
+                        v-if="!isAddOpen(group)"
+                        class="cat-icon-btn"
+                        @click.stop="openAddLine(group)"
+                        title="Produkt hinzufügen"
+                      >
+                        <i class="bi bi-plus-lg"></i>
+                      </button>
+                      <button
+                        v-if="!group.isUncategorized"
+                        class="cat-icon-btn"
+                        @click.stop="openCategoryEdit(group)"
+                        title="Kategorie bearbeiten"
+                      >
+                        <i class="bi bi-pencil"></i>
+                      </button>
+                      <i
+                        class="bi cat-chevron"
+                        :class="isSectionOpen(group) ? 'bi-chevron-up' : 'bi-chevron-down'"
+                      ></i>
+                    </div>
+                  </div>
+
+                  <div
+                    v-if="isSectionOpen(group)"
+                    :ref="(el) => setDropEl(group.key, el)"
+                    :data-cat-name="group.category ?? ''"
+                    class="cat-body"
                   >
                     <ListItemRow
-                      :checked="true"
+                      v-for="item in group.items"
+                      :key="item.shopping_item_id"
+                      :data-item-id="item.purchased ? null : item.shopping_item_id"
+                      :checked="item.purchased"
                       :name="item.name"
-                      :title="purchaseHistory(item)"
-                      @toggle="onGekauftToggle(item)"
+                      :class="{
+                        'row-priority': item.is_priority && !item.purchased,
+                        'row-moved': item.shopping_item_id === justMovedId,
+                      }"
+                      @toggle="onItemToggle(item)"
                       @edit="openItemEdit(item)"
                     >
                       <template #trailing>
                         <span v-if="item.quantity > 1" class="qty-badge">×{{ item.quantity }}</span>
                         <button
-                          class="bought-count-btn"
-                          :class="{ open: historyOpenId === item.shopping_item_id }"
-                          :title="purchaseHistory(item)"
-                          :aria-expanded="historyOpenId === item.shopping_item_id"
-                          @click="toggleHistory(item.shopping_item_id)"
+                          v-if="!item.purchased"
+                          class="star-btn"
+                          :class="{ active: item.is_priority }"
+                          @click="shoppingStore.togglePriority(item.shopping_item_id)"
+                          :title="
+                            item.is_priority ? 'Priorität entfernen' : 'Als prioritär markieren'
+                          "
                         >
-                          {{ item.times_purchased }}×
-                        </button>
-                        <button
-                          class="bought-delete-btn"
-                          title="Löschen"
-                          aria-label="Löschen"
-                          @click="shoppingStore.deleteItem(item.shopping_item_id)"
-                        >
-                          <i class="bi bi-trash"></i>
+                          <i :class="item.is_priority ? 'bi bi-star-fill' : 'bi bi-star'"></i>
                         </button>
                       </template>
                     </ListItemRow>
-                    <p v-if="historyOpenId === item.shopping_item_id" class="bought-history">
-                      {{ purchaseHistory(item) }}
-                    </p>
+
+                    <!-- Per-Sektion Add-Zeile, kontextuell -->
+                    <div v-if="isAddOpen(group)" class="add-line">
+                      <!-- Leeres Kaestchen: haelt die Schreibzeile im Pinnwand-Aussehen
+                         in derselben Spur wie die Produktzeilen darueber. Im
+                         klassischen Aussehen `display: none`. -->
+                      <span class="add-ghost-box" aria-hidden="true"></span>
+                      <div class="add-input-wrap">
+                        <input
+                          v-model="addDraft[group.key]"
+                          type="text"
+                          class="add-input"
+                          :placeholder="
+                            group.isUncategorized ? '+ hinzufügen…' : `+ zu ${group.label}…`
+                          "
+                          maxlength="200"
+                          @focus="onSectionAddFocus(group.key)"
+                          @blur="onSectionAddBlur"
+                          @keyup.enter="handleSectionAdd(group)"
+                        />
+                        <div
+                          v-if="suggestFocusKey === group.key && suggestionsFor(group).length > 0"
+                          class="suggestions-dropdown"
+                        >
+                          <button
+                            v-for="s in suggestionsFor(group)"
+                            :key="s"
+                            class="suggestion-item"
+                            @mousedown.prevent="selectSectionSuggestion(group, s)"
+                          >
+                            {{ s }}
+                          </button>
+                        </div>
+                      </div>
+                      <input
+                        v-if="qtyFieldOpen.has(group.key)"
+                        v-focus
+                        v-model.number="addQty[group.key]"
+                        type="number"
+                        class="add-qty-input"
+                        min="1"
+                        max="999"
+                        @keyup.enter="handleSectionAdd(group)"
+                        @blur="closeQtyField(group.key)"
+                      />
+                      <button
+                        v-else
+                        class="add-qty-toggle"
+                        :class="{ active: (addQty[group.key] || 1) > 1 }"
+                        @click="openQtyField(group.key)"
+                        title="Anzahl festlegen"
+                      >
+                        ×{{ addQty[group.key] || 1 }}
+                      </button>
+                      <button
+                        class="add-confirm"
+                        @click="handleSectionAdd(group)"
+                        :disabled="!(addDraft[group.key] || '').trim()"
+                        title="Hinzufügen"
+                      >
+                        <i class="bi bi-plus-lg"></i>
+                      </button>
+                    </div>
                   </div>
                 </div>
-              </div>
 
-              <!-- Leere Liste: bisher stand hier nur die eingeklappte Kopfzeile
+                <!-- Gekauft (globaler Block) — dieselbe kompakte Zeile wie oben.
+                   Der Zähler ist ein Knopf: er klappt die Kauf-Historie unter der
+                   Zeile auf. Ein Tooltip allein wäre auf dem Handy unerreichbar —
+                   es gibt kein Hover, Long-Press ist im Einkauf belegt und ein Tap
+                   auf die Zeile holt das Produkt zurück. -->
+                <div class="gekauft-section" v-if="gekauftItems.length > 0">
+                  <h3 class="gekauft-title">
+                    <i class="bi bi-check-circle"></i> Gekauft ({{ gekauftItems.length }})
+                  </h3>
+                  <div class="gekauft-list">
+                    <div
+                      v-for="item in gekauftItems"
+                      :key="item.shopping_item_id"
+                      class="bought-entry"
+                    >
+                      <ListItemRow
+                        :checked="true"
+                        :name="item.name"
+                        :title="purchaseHistory(item)"
+                        @toggle="onGekauftToggle(item)"
+                        @edit="openItemEdit(item)"
+                      >
+                        <template #trailing>
+                          <span v-if="item.quantity > 1" class="qty-badge"
+                            >×{{ item.quantity }}</span
+                          >
+                          <button
+                            class="bought-count-btn"
+                            :class="{ open: historyOpenId === item.shopping_item_id }"
+                            :title="purchaseHistory(item)"
+                            :aria-expanded="historyOpenId === item.shopping_item_id"
+                            @click="toggleHistory(item.shopping_item_id)"
+                          >
+                            {{ item.times_purchased }}×
+                          </button>
+                          <button
+                            class="bought-delete-btn"
+                            title="Löschen"
+                            aria-label="Löschen"
+                            @click="shoppingStore.deleteItem(item.shopping_item_id)"
+                          >
+                            <i class="bi bi-trash"></i>
+                          </button>
+                        </template>
+                      </ListItemRow>
+                      <p v-if="historyOpenId === item.shopping_item_id" class="bought-history">
+                        {{ purchaseHistory(item) }}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Leere Liste: bisher stand hier nur die eingeklappte Kopfzeile
                    „Unkategorisiert" (der Store haelt diesen Eimer immer vor) und
                    sonst nichts. Im klassischen Aussehen bleibt das so
                    (`display: none`), im Pinnwand-Aussehen zeigt das Blatt seinen
                    leeren Zustand an. -->
-              <p v-if="shoppingStore.currentListItems.length === 0" class="list-empty">
-                — nichts notiert —
-              </p>
-            </div>
+                <p v-if="shoppingStore.currentListItems.length === 0" class="list-empty">
+                  — nichts notiert —
+                </p>
+              </div>
 
-            <!-- Rechte Kategorie-Schnellnav -->
-            <CategoryRail
-              v-if="showRail"
-              :groups="displaySections"
-              :active-key="activeCatKey"
-              :collapsed="railCollapsed"
-              @select="scrollToKey"
-              @update:collapsed="setRailCollapsed"
-            />
-          </div>
-        </template>
+              <!-- Rechte Kategorie-Schnellnav -->
+              <CategoryRail
+                v-if="showRail"
+                :groups="displaySections"
+                :active-key="activeCatKey"
+                :collapsed="railCollapsed"
+                @select="scrollToKey"
+                @update:collapsed="setRailCollapsed"
+              />
+            </div>
+          </template>
         </template>
       </LongSheet>
 
@@ -901,16 +939,32 @@ onUnmounted(() => {
     :can-delete="shoppingStore.lists.length > 1"
     @rename="handleRenameList"
     @delete="handleDeleteList"
-    @close="showListEditModal = false; editingList = null"
+    @close="
+      showListEditModal = false
+      editingList = null
+    "
   />
 
   <!-- Neue Liste erstellen Modal -->
   <Teleport to="body">
-    <div v-if="showCreateListModal" class="modal-overlay" @click.self="showCreateListModal = false; newListName = ''">
+    <div
+      v-if="showCreateListModal"
+      class="modal-overlay"
+      @click.self="
+        showCreateListModal = false
+        newListName = ''
+      "
+    >
       <div class="modal-content" @click.stop>
         <div class="modal-header">
           <h5 class="modal-title">Neue Einkaufsliste</h5>
-          <button class="btn-close" @click="showCreateListModal = false; newListName = ''"></button>
+          <button
+            class="btn-close"
+            @click="
+              showCreateListModal = false
+              newListName = ''
+            "
+          ></button>
         </div>
         <div class="modal-body">
           <input
@@ -924,7 +978,15 @@ onUnmounted(() => {
           />
         </div>
         <div class="modal-footer">
-          <button class="btn btn-secondary" @click="showCreateListModal = false; newListName = ''">Abbrechen</button>
+          <button
+            class="btn btn-secondary"
+            @click="
+              showCreateListModal = false
+              newListName = ''
+            "
+          >
+            Abbrechen
+          </button>
           <button class="btn btn-primary" @click="handleCreateList" :disabled="!newListName.trim()">
             <i class="bi bi-plus-lg me-1"></i> Erstellen
           </button>
@@ -954,7 +1016,9 @@ onUnmounted(() => {
   -webkit-overflow-scrolling: touch;
   padding: 2px;
 }
-.list-chip-container::-webkit-scrollbar { display: none; }
+.list-chip-container::-webkit-scrollbar {
+  display: none;
+}
 .list-chip {
   display: flex;
   align-items: center;
@@ -973,23 +1037,55 @@ onUnmounted(() => {
   user-select: none;
   -webkit-tap-highlight-color: transparent;
 }
-.list-chip:hover { border-color: var(--color-primary); color: var(--color-text-primary); }
-.list-chip.active { background: var(--color-primary); border-color: var(--color-primary); color: white; font-weight: 600; }
-.list-chip.add-chip { color: var(--color-text-secondary); padding: 6px 12px; }
-.list-chip.add-chip:hover { background: var(--color-primary); border-color: var(--color-primary); color: white; }
-.chip-edit-btn {
-  background: none; border: none; padding: 0; margin-left: 2px;
-  cursor: pointer; color: inherit; opacity: 0.6; font-size: 0.75rem;
-  line-height: 1; display: flex; align-items: center;
+.list-chip:hover {
+  border-color: var(--color-primary);
+  color: var(--color-text-primary);
 }
-.chip-edit-btn:hover { opacity: 1; }
+.list-chip.active {
+  background: var(--color-primary);
+  border-color: var(--color-primary);
+  color: white;
+  font-weight: 600;
+}
+.list-chip.add-chip {
+  color: var(--color-text-secondary);
+  padding: 6px 12px;
+}
+.list-chip.add-chip:hover {
+  background: var(--color-primary);
+  border-color: var(--color-primary);
+  color: white;
+}
+.chip-edit-btn {
+  background: none;
+  border: none;
+  padding: 0;
+  margin-left: 2px;
+  cursor: pointer;
+  color: inherit;
+  opacity: 0.6;
+  font-size: 0.75rem;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+}
+.chip-edit-btn:hover {
+  opacity: 1;
+}
 
 /* ---- Top add-bar ---- */
-.search-container { position: relative; margin-bottom: 1rem; }
+.search-container {
+  position: relative;
+  margin-bottom: 1rem;
+}
 
 /* Nur im Pinnwand-Aussehen sichtbar (siehe unten). */
-.add-ghost-box { display: none; }
-.list-empty { display: none; }
+.add-ghost-box {
+  display: none;
+}
+.list-empty {
+  display: none;
+}
 
 /* Einzeilig bis hinunter zu 360 px: die festen Knöpfe behalten ihre Trefferfläche,
    Produktfeld und Kategorie teilen sich den Rest — die Kategorie gibt zuerst nach. */
@@ -998,7 +1094,11 @@ onUnmounted(() => {
   align-items: center;
   gap: 4px;
 }
-.top-name-wrap { position: relative; flex: 1 1 40%; min-width: 0; }
+.top-name-wrap {
+  position: relative;
+  flex: 1 1 40%;
+  min-width: 0;
+}
 .top-name-input {
   width: 100%;
   height: 38px;
@@ -1009,8 +1109,14 @@ onUnmounted(() => {
   color: var(--color-text-primary);
   font-size: var(--font-base);
 }
-.top-name-input:focus { outline: none; border-color: var(--color-primary); }
-.top-combo { flex: 1 1 30%; min-width: 96px; }
+.top-name-input:focus {
+  outline: none;
+  border-color: var(--color-primary);
+}
+.top-combo {
+  flex: 1 1 30%;
+  min-width: 96px;
+}
 
 .top-qty-toggle {
   flex-shrink: 0;
@@ -1026,7 +1132,10 @@ onUnmounted(() => {
   cursor: pointer;
   font-variant-numeric: tabular-nums;
 }
-.top-qty-toggle.active { border-color: var(--color-primary); color: var(--color-primary); }
+.top-qty-toggle.active {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+}
 .top-qty-input {
   flex-shrink: 0;
   width: 48px;
@@ -1038,7 +1147,9 @@ onUnmounted(() => {
   color: var(--color-text-primary);
   font-variant-numeric: tabular-nums;
 }
-.top-qty-input:focus { outline: none; }
+.top-qty-input:focus {
+  outline: none;
+}
 
 .top-btn {
   flex-shrink: 0;
@@ -1050,14 +1161,24 @@ onUnmounted(() => {
   border-radius: var(--radius-md);
   cursor: pointer;
 }
-.top-add { border: none; background: var(--color-primary); color: #fff; }
-.top-add:disabled { opacity: 0.4; cursor: not-allowed; }
+.top-add {
+  border: none;
+  background: var(--color-primary);
+  color: #fff;
+}
+.top-add:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
 .top-new-cat {
   border: 1px solid var(--color-border);
   background: var(--color-background);
   color: var(--color-text-secondary);
 }
-.top-new-cat:hover { border-color: var(--color-primary); color: var(--color-primary); }
+.top-new-cat:hover {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+}
 .suggestions-dropdown {
   position: absolute;
   top: 100%;
@@ -1087,18 +1208,28 @@ onUnmounted(() => {
   font-size: var(--font-base);
   color: var(--color-text-primary);
 }
-.suggestion-item:last-child { border-bottom: none; }
-.suggestion-item:hover { background-color: var(--color-background); }
+.suggestion-item:last-child {
+  border-bottom: none;
+}
+.suggestion-item:hover {
+  background-color: var(--color-background);
+}
 
 /* ---- Body + rail reserve ---- */
-.shopping-body { position: relative; }
-.cat-column { min-width: 0; }
+.shopping-body {
+  position: relative;
+}
+.cat-column {
+  min-width: 0;
+}
 .shopping-body.rail-open .cat-column {
   padding-right: calc(20vw + 12px);
   max-width: 100%;
 }
 @media (min-width: 480px) {
-  .shopping-body.rail-open .cat-column { padding-right: 96px; }
+  .shopping-body.rail-open .cat-column {
+    padding-right: 96px;
+  }
 }
 
 /* ---- Seitenrand: 8px statt Bootstrap-Gutter (12px) ---- */
@@ -1116,7 +1247,9 @@ onUnmounted(() => {
   margin-bottom: 8px;
   scroll-margin-top: 72px;
 }
-.cat-uncategorized { opacity: 0.92; }
+.cat-uncategorized {
+  opacity: 0.92;
+}
 /* Kopfzeile ohne Box: 30px Mindesthöhe, die volle Breite bleibt Trefferfläche
    zum Auf- und Zuklappen. */
 .cat-header {
@@ -1134,7 +1267,10 @@ onUnmounted(() => {
   user-select: none;
   -webkit-tap-highlight-color: transparent;
 }
-.cat-header:focus-visible { outline: 2px solid var(--color-primary); outline-offset: -2px; }
+.cat-header:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: -2px;
+}
 .cat-header-right {
   margin-left: auto;
   display: flex;
@@ -1168,7 +1304,10 @@ onUnmounted(() => {
   position: absolute;
   inset: -6px -5px;
 }
-.cat-icon-btn:hover { opacity: 1; color: var(--color-primary); }
+.cat-icon-btn:hover {
+  opacity: 1;
+  color: var(--color-primary);
+}
 .cat-dot {
   display: inline-block;
   width: 8px;
@@ -1178,13 +1317,29 @@ onUnmounted(() => {
 }
 /* Frisch verschobenes Produkt kurz hervorheben: es springt nach dem Loslassen
    an seinen alphabetischen Platz, der Sprung soll nachvollziehbar bleiben. */
-.row-moved { animation: row-moved 600ms ease-out; }
-@keyframes row-moved {
-  from { background: var(--color-primary-subtle, rgba(99, 102, 241, 0.18)); }
-  to { background: transparent; }
+.row-moved {
+  animation: row-moved 600ms ease-out;
 }
-.cat-name { font-weight: 600; font-size: var(--font-base); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.cat-uncategorized .cat-name { color: var(--color-text-muted); font-weight: 500; }
+@keyframes row-moved {
+  from {
+    background: var(--color-primary-subtle, rgba(99, 102, 241, 0.18));
+  }
+  to {
+    background: transparent;
+  }
+}
+.cat-name {
+  font-weight: 600;
+  font-size: var(--font-base);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cat-uncategorized .cat-name {
+  color: var(--color-text-muted);
+  font-weight: 500;
+}
 /* Anzahl als dezentes Badge statt als zweite Überschrift. */
 .cat-count {
   font-size: var(--font-xs);
@@ -1195,17 +1350,30 @@ onUnmounted(() => {
   padding: 0 6px;
   margin-right: 6px;
 }
-.cat-chevron { color: var(--color-text-muted); font-size: var(--font-sm); }
+.cat-chevron {
+  color: var(--color-text-muted);
+  font-size: var(--font-sm);
+}
 
 /* ---- Gedämpfte (leere) Kategorien — Ticket 05 -----------------------------
    Verhalten (leer ⇒ gedämpft, Antippen hebt es für die Sitzung auf) sitzt in
    <script setup> und gilt in beiden Aussehen. Hier nur die Optik; die
    Kopfzeile behält ihre Mindesthöhe/Trefferfläche unverändert (Touch-Target),
    nur Schriftgröße und Deckkraft gehen zurück. */
-.cat-section.cat-damped { margin-bottom: 4px; }
-.cat-section.cat-damped .cat-header { opacity: 0.5; }
-.cat-section.cat-damped .cat-name { font-size: var(--font-sm); font-weight: 500; }
-.cat-section.cat-damped .cat-dot { width: 6px; height: 6px; }
+.cat-section.cat-damped {
+  margin-bottom: 4px;
+}
+.cat-section.cat-damped .cat-header {
+  opacity: 0.5;
+}
+.cat-section.cat-damped .cat-name {
+  font-size: var(--font-sm);
+  font-weight: 500;
+}
+.cat-section.cat-damped .cat-dot {
+  width: 6px;
+  height: 6px;
+}
 .cat-body {
   padding: 0;
   display: flex;
@@ -1214,11 +1382,17 @@ onUnmounted(() => {
 }
 /* Ziehen: die Vorschau bleibt blass an der alten Stelle, das aufgenommene
    Produkt hebt sich ab. */
-.drag-ghost { opacity: 0.35; }
-.drag-chosen { border-color: var(--color-primary); }
+.drag-ghost {
+  opacity: 0.35;
+}
+.drag-chosen {
+  border-color: var(--color-primary);
+}
 
 /* Priority highlight (no re-sorting — pure visual cue). */
-.row-priority { border-color: var(--color-warning) !important; }
+.row-priority {
+  border-color: var(--color-warning) !important;
+}
 
 /* ---- Trailing controls (star + ×N) ---- */
 .qty-badge {
@@ -1251,8 +1425,15 @@ onUnmounted(() => {
   position: absolute;
   inset: -6px;
 }
-.star-btn:hover { border-color: var(--color-warning); color: var(--color-warning); }
-.star-btn.active { border-color: var(--color-warning); background: var(--color-warning); color: #fff; }
+.star-btn:hover {
+  border-color: var(--color-warning);
+  color: var(--color-warning);
+}
+.star-btn.active {
+  border-color: var(--color-warning);
+  background: var(--color-warning);
+  color: #fff;
+}
 
 /* ---- Add line ---- */
 .add-line {
@@ -1261,7 +1442,11 @@ onUnmounted(() => {
   gap: 4px;
   padding: 0;
 }
-.add-input-wrap { position: relative; flex: 1; min-width: 0; }
+.add-input-wrap {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+}
 .add-input {
   width: 100%;
   height: 34px;
@@ -1272,7 +1457,11 @@ onUnmounted(() => {
   font-size: var(--font-base);
   color: var(--color-text-primary);
 }
-.add-input:focus { outline: none; border-color: var(--color-primary); border-style: solid; }
+.add-input:focus {
+  outline: none;
+  border-color: var(--color-primary);
+  border-style: solid;
+}
 .add-qty-toggle {
   flex-shrink: 0;
   min-width: 32px;
@@ -1287,8 +1476,15 @@ onUnmounted(() => {
   cursor: pointer;
   font-variant-numeric: tabular-nums;
 }
-.add-qty-toggle:hover { border-color: var(--color-primary); color: var(--color-primary); }
-.add-qty-toggle.active { border-style: solid; border-color: var(--color-primary); color: var(--color-primary); }
+.add-qty-toggle:hover {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+}
+.add-qty-toggle.active {
+  border-style: solid;
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+}
 .add-qty-input {
   flex-shrink: 0;
   width: 48px;
@@ -1301,7 +1497,9 @@ onUnmounted(() => {
   font-size: var(--font-base);
   font-variant-numeric: tabular-nums;
 }
-.add-qty-input:focus { outline: none; }
+.add-qty-input:focus {
+  outline: none;
+}
 .add-confirm {
   flex-shrink: 0;
   width: 34px;
@@ -1312,7 +1510,10 @@ onUnmounted(() => {
   border-radius: var(--radius-sm);
   cursor: pointer;
 }
-.add-confirm:disabled { opacity: 0.4; cursor: not-allowed; }
+.add-confirm:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
 
 /* ---- Gekauft block ---- */
 .gekauft-section {
@@ -1327,8 +1528,15 @@ onUnmounted(() => {
   color: var(--color-text-secondary);
   min-height: 30px;
 }
-.gekauft-list { display: flex; flex-direction: column; gap: 4px; }
-.bought-entry { display: flex; flex-direction: column; }
+.gekauft-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.bought-entry {
+  display: flex;
+  flex-direction: column;
+}
 
 /* Zähler als Aufklapp-Knopf: 30×30 sichtbar, 42×42 treffbar. */
 .bought-count-btn {
@@ -1349,7 +1557,10 @@ onUnmounted(() => {
   position: absolute;
   inset: -6px;
 }
-.bought-count-btn:hover { border-color: var(--color-primary); color: var(--color-primary); }
+.bought-count-btn:hover {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+}
 .bought-count-btn.open {
   border-color: var(--color-primary);
   background: var(--color-primary);
@@ -1375,7 +1586,9 @@ onUnmounted(() => {
   position: absolute;
   inset: -1px -5px;
 }
-.bought-delete-btn:hover { color: var(--color-danger); }
+.bought-delete-btn:hover {
+  color: var(--color-danger);
+}
 
 .bought-history {
   margin: 2px 0 0;
@@ -1412,7 +1625,9 @@ onUnmounted(() => {
   padding-bottom: 12px;
   border-bottom: 1px dashed rgba(36, 31, 26, 0.35);
 }
-:root[data-design='pinnwand'] .top-bar { gap: 6px; }
+:root[data-design='pinnwand'] .top-bar {
+  gap: 6px;
+}
 :root[data-design='pinnwand'] .top-name-input {
   height: 44px;
   border: 2px solid var(--pw-line);
@@ -1531,9 +1746,13 @@ onUnmounted(() => {
 }
 
 /* ---- Kategorie = Ueberschrift mit doppelter Tintenlinie, keine Box -------- */
-:root[data-design='pinnwand'] .cat-section { margin-bottom: 18px; }
+:root[data-design='pinnwand'] .cat-section {
+  margin-bottom: 18px;
+}
 /* Das klassische `opacity: 0.92` verduennt jeden Kontrast in der Sektion. */
-:root[data-design='pinnwand'] .cat-uncategorized { opacity: 1; }
+:root[data-design='pinnwand'] .cat-uncategorized {
+  opacity: 1;
+}
 :root[data-design='pinnwand'] .cat-header {
   min-height: 40px;
   margin-bottom: 4px;
@@ -1572,16 +1791,22 @@ onUnmounted(() => {
   font-weight: 800;
   font-variant-numeric: tabular-nums;
 }
-:root[data-design='pinnwand'] .cat-chevron { color: var(--pw-ink); }
+:root[data-design='pinnwand'] .cat-chevron {
+  color: var(--pw-ink);
+}
 /* 18px Abstand + 9px seitliche Erweiterung = 48×48px Trefferflaeche, die sich
    gerade beruehrt statt zu ueberlappen. Im klassischen Aussehen bleiben es 12px
    Abstand und 40×40. */
-:root[data-design='pinnwand'] .cat-header-right { gap: 18px; }
+:root[data-design='pinnwand'] .cat-header-right {
+  gap: 18px;
+}
 :root[data-design='pinnwand'] .cat-icon-btn {
   color: var(--pw-ink);
   opacity: 1;
 }
-:root[data-design='pinnwand'] .cat-icon-btn::after { inset: -10px -9px; }
+:root[data-design='pinnwand'] .cat-icon-btn::after {
+  inset: -10px -9px;
+}
 
 /* ---- Gedämpfte (leere) Kategorien — eigene Optik fürs Pinnwand-Papier -----
    Höhere Spezifität als die Basisregeln oben (`:root[data-design] .cat-name`
@@ -1603,7 +1828,9 @@ onUnmounted(() => {
 }
 
 /* ---- Produktzeile: kein Rahmen, kein Hintergrund — Schrift auf Papier ----- */
-:root[data-design='pinnwand'] .cat-body { gap: 0; }
+:root[data-design='pinnwand'] .cat-body {
+  gap: 0;
+}
 :root[data-design='pinnwand'] .cat-column :deep(.list-row) {
   min-height: var(--touch-target-min);
   padding: 0 2px;
@@ -1618,7 +1845,9 @@ onUnmounted(() => {
 }
 /* Ein abgehakter Artikel bleibt lesbar: durchgestrichen und eine Spur leiser,
    aber nicht auf 55 % heruntergeblendet. */
-:root[data-design='pinnwand'] .cat-column :deep(.list-row.checked) { opacity: 1; }
+:root[data-design='pinnwand'] .cat-column :deep(.list-row.checked) {
+  opacity: 1;
+}
 :root[data-design='pinnwand'] .cat-column :deep(.list-row.checked .list-name) {
   color: var(--pw-ink-soft);
   text-decoration: line-through 2px var(--pw-line);
@@ -1635,13 +1864,17 @@ onUnmounted(() => {
   border-color: var(--pw-line);
   color: var(--pw-ink);
 }
-:root[data-design='pinnwand'] .cat-column :deep(.row-trailing) { gap: 18px; }
+:root[data-design='pinnwand'] .cat-column :deep(.row-trailing) {
+  gap: 18px;
+}
 :root[data-design='pinnwand'] .cat-column :deep(.row-edit-btn) {
   width: 30px;
   height: 30px;
   color: var(--pw-ink);
 }
-:root[data-design='pinnwand'] .cat-column :deep(.row-edit-btn)::after { inset: -9px; }
+:root[data-design='pinnwand'] .cat-column :deep(.row-edit-btn)::after {
+  inset: -9px;
+}
 /* Prioritaet ohne Rahmen: die Zeile hat keinen mehr. Rot unterstrichen wie im
    Original — der Text bleibt Tinte, das Rot traegt keine Information allein
    (das Sternchen daneben tut es). */
@@ -1679,7 +1912,9 @@ onUnmounted(() => {
   color: var(--pw-ink);
   transition: none;
 }
-:root[data-design='pinnwand'] .cat-column .star-btn::after { inset: -9px; }
+:root[data-design='pinnwand'] .cat-column .star-btn::after {
+  inset: -9px;
+}
 :root[data-design='pinnwand'] .cat-column .star-btn:hover,
 :root[data-design='pinnwand'] .cat-column .star-btn.active {
   border-color: var(--pw-line);
@@ -1764,7 +1999,9 @@ onUnmounted(() => {
   letter-spacing: 0.06em;
   text-transform: uppercase;
 }
-:root[data-design='pinnwand'] .gekauft-list { gap: 0; }
+:root[data-design='pinnwand'] .gekauft-list {
+  gap: 0;
+}
 :root[data-design='pinnwand'] .bought-count-btn {
   min-width: 34px;
   height: 30px;
@@ -1774,7 +2011,9 @@ onUnmounted(() => {
   color: var(--pw-ink);
   font-weight: 700;
 }
-:root[data-design='pinnwand'] .bought-count-btn::after { inset: -9px -7px; }
+:root[data-design='pinnwand'] .bought-count-btn::after {
+  inset: -9px -7px;
+}
 :root[data-design='pinnwand'] .bought-count-btn:hover,
 :root[data-design='pinnwand'] .bought-count-btn.open {
   border-color: var(--pw-line);
@@ -1786,8 +2025,12 @@ onUnmounted(() => {
   height: 30px;
   color: var(--pw-ink);
 }
-:root[data-design='pinnwand'] .bought-delete-btn::after { inset: -9px; }
-:root[data-design='pinnwand'] .bought-history { color: var(--pw-ink-soft); }
+:root[data-design='pinnwand'] .bought-delete-btn::after {
+  inset: -9px;
+}
+:root[data-design='pinnwand'] .bought-history {
+  color: var(--pw-ink-soft);
+}
 
 /* ---- Leeres Blatt -------------------------------------------------------- */
 :root[data-design='pinnwand'] .list-empty {

@@ -56,7 +56,7 @@ const rows = computed(() =>
   [...props.items].sort((a, b) => {
     if (a.done !== b.done) return a.done ? 1 : -1
     return a.name.localeCompare(b.name)
-  })
+  }),
 )
 
 const toggle = (itemId: string) => {
@@ -79,7 +79,7 @@ const importSources = computed<ImportSource[]>(() => {
 // gar nicht mehr angeboten wird.
 watch(importSources, (sources) => {
   if (!importFrom.value) return
-  if (!sources.some(s => s.listId === importFrom.value?.listId)) importFrom.value = null
+  if (!sources.some((s) => s.listId === importFrom.value?.listId)) importFrom.value = null
 })
 
 const previewItems = computed<PickableItem[]>(() => {
@@ -98,11 +98,11 @@ const previewItems = computed<PickableItem[]>(() => {
 const dupeNames = computed(() => {
   const target = normalizeCategoryName(name.value)
   const existing = props.items
-    .filter(i => normalizeCategoryName(i.category ?? '') === target)
-    .map(i => normalizeCategoryName(i.name))
+    .filter((i) => normalizeCategoryName(i.category ?? '') === target)
+    .map((i) => normalizeCategoryName(i.name))
   const picked = props.items
-    .filter(i => selected.value.has(i.id))
-    .map(i => normalizeCategoryName(i.name))
+    .filter((i) => selected.value.has(i.id))
+    .map((i) => normalizeCategoryName(i.name))
   return new Set([...existing, ...picked])
 })
 
@@ -112,7 +112,7 @@ const isDupe = (item: PickableItem) => dupeNames.value.has(normalizeCategoryName
 const importCount = computed(() => {
   if (!importFrom.value) return 0
   if (!props.importPreview) return importFrom.value.count
-  return previewItems.value.filter(i => !isDupe(i)).length
+  return previewItems.value.filter((i) => !isDupe(i)).length
 })
 
 const canSubmit = computed(() => name.value.trim().length > 0)
@@ -274,7 +274,9 @@ const submit = () => {
   flex-shrink: 0;
   color: var(--color-text-muted);
 }
-.pick-row.picked .pick-box { color: var(--color-primary); }
+.pick-row.picked .pick-box {
+  color: var(--color-primary);
+}
 
 .pick-name {
   flex: 1;
@@ -353,7 +355,9 @@ const submit = () => {
   flex-shrink: 0;
   color: var(--color-text-muted);
 }
-.src-row.picked .src-box { color: var(--color-primary); }
+.src-row.picked .src-box {
+  color: var(--color-primary);
+}
 
 .src-name {
   flex: 1;
@@ -385,7 +389,9 @@ const submit = () => {
   font-size: var(--font-sm);
   border-bottom: 1px solid var(--color-border);
 }
-.preview-list li:last-child { border-bottom: none; }
+.preview-list li:last-child {
+  border-bottom: none;
+}
 
 .preview-name {
   flex: 1;

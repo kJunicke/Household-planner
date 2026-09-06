@@ -95,12 +95,12 @@ export function useCategoryDrag(options: {
           if (from === to || !itemId) return
           options.onMove(itemId, options.categoryOf(to))
         },
-      })
+      }),
     )
   }
 
   onBeforeUnmount(() => {
-    instances.forEach(s => s.destroy())
+    instances.forEach((s) => s.destroy())
     instances.clear()
   })
 

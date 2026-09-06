@@ -571,6 +571,6 @@ export function useDirectionPress(options: {
     onPointerUp,
     onPointerCancel,
     onTouchStart,
-    onTouchMove
+    onTouchMove,
   }
 }
