@@ -345,11 +345,28 @@ const onItemDecrement = (item: ChecklistItem) => {
 }
 
 // --- Per-category done grouping ---------------------------------------------
-// Rows shown in the open part: unpacked first, then still-in-grace packed ones.
-const openRows = (group: CategoryGroup): ChecklistItem[] => [
-  ...group.items.filter(i => !i.packed),
-  ...group.items.filter(i => i.packed && graceIds.value.has(i.item_id))
-]
+// Rows shown in the open part: unpacked ones plus those still in their undo
+// window. Die Zeilen im Rückgängig-Fenster stehen dabei GENAU DA, wo sie als
+// offene stünden (nach `created_at`) — nicht hinten angehängt. Hängt man sie an,
+// springt die eben angetippte Zeile sofort weg, die nächste rutscht unter den
+// Finger und ein nervöser Doppeltipp hakt zwei Einträge ab (Befund F7). Erst
+// wenn das Fenster abläuft, wandert die Zeile in den erledigt-Block.
+// Reihenfolge wie im Store, nur ohne das Kriterium `packed`: `created_at`, bei
+// gleichem Zeitstempel die Reihenfolge der Liste. Der zweite Teil ist nicht
+// Zierde — in kopierten und eingespielten Listen tragen viele Einträge
+// DENSELBEN Zeitstempel; ohne ihn fällt die Sortierung auf die Reihenfolge von
+// `group.items` zurück, und die stellt die erledigten wieder hinten an.
+const itemOrder = computed(
+  () => new Map(store.currentListItems.map((i, idx) => [i.item_id, idx]))
+)
+const openRows = (group: CategoryGroup): ChecklistItem[] =>
+  group.items
+    .filter(i => !i.packed || graceIds.value.has(i.item_id))
+    .sort(
+      (a, b) =>
+        a.created_at.localeCompare(b.created_at) ||
+        (itemOrder.value.get(a.item_id) ?? 0) - (itemOrder.value.get(b.item_id) ?? 0)
+    )
 // Packed items past their grace window → collapsed into the "erledigt" group.
 const doneRows = (group: CategoryGroup): ChecklistItem[] =>
   group.items.filter(i => i.packed && !graceIds.value.has(i.item_id))
@@ -672,8 +689,12 @@ onUnmounted(() => {
                   <i v-if="isCategoryComplete(group)" class="bi bi-check-circle-fill cat-complete-icon"></i>
                   {{ group.rawDoneCount }}/{{ group.total }}
                 </span>
+                <!-- Auch bei eingeklappter Sektion sichtbar: sonst hat eine
+                     leere, eingeklappte Kategorie keinen sichtbaren Weg,
+                     etwas hineinzulegen (Befund F1). `openAddLine` klappt auf
+                     und öffnet die Zeile in einem Zug. -->
                 <button
-                  v-if="!isAddOpen(group)"
+                  v-if="!isAddOpen(group) || !isSectionOpen(group)"
                   class="cat-icon-btn"
                   @click.stop="openAddLine(group)"
                   :title="`${labels.itemNoun.one} hinzufügen`"
@@ -704,7 +725,10 @@ onUnmounted(() => {
               <!-- Offen: noch nicht erledigt + gerade abgehakt (Grace) -->
               <!-- Gepackte Zeilen tragen keine `data-item-id` und sind damit
                    nicht ziehbar — auch die im Rückgängig-Fenster. Ziehen in und
-                   aus „erledigt" bleibt wie im Einkauf außerhalb. -->
+                   aus „erledigt" bleibt wie im Einkauf außerhalb. Sie stehen
+                   dabei MITTEN zwischen den ziehbaren; `useCategoryDrag` merkt
+                   sich zum Zurückrollen den Nachbarknoten, nicht den Index,
+                   und kommt damit ohne eine Reihenfolge-Bedingung aus. -->
               <ChecklistItemRow
                 v-for="item in openRows(group)"
                 :key="item.item_id"

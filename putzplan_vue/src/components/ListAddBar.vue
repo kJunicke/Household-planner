@@ -205,7 +205,14 @@ const handleInputBlur = () => { setTimeout(() => { showSuggestions.value = false
   font-size: var(--font-base);
 }
 .top-name-input:focus { outline: none; border-color: var(--color-primary); }
-.top-combo { flex: 1 1 30%; min-width: 64px; }
+/* 96px ist gemessen, nicht geraten: von der Aussenbreite gehen Rahmen (4),
+   Polsterung (12), Farbpunkt samt Abstand (11) und der Leeren-Knopf (15) ab —
+   bei den alten `min-width: 64px` blieben fuer das Eingabefeld selbst 28px, und
+   `QC-Kosmetik` und `QC-Kosmetika` sahen beide wie `QC-K…` aus (Befund F3).
+   Die Schranke greift ab rund 400px Leistenbreite; darueber teilen sich Name
+   und Kategorie weiter nach Anteil. Der Name gibt jetzt zuerst nach — ein
+   halber Eintragsname ist lesbar, ein halber Kategoriename verwechselbar. */
+.top-combo { flex: 1 1 30%; min-width: 96px; }
 
 .top-qty-toggle {
   flex-shrink: 0;

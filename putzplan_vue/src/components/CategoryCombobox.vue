@@ -162,11 +162,16 @@ const onEnter = () => {
 }
 .combo-field:focus-within { border-color: var(--color-primary); }
 
+/* Kompakt heisst: das Beiwerk gibt Platz ab, nicht das Eingabefeld. In der
+   oberen Leiste bleiben von 96px Aussenbreite sonst nur rund 28px zum Lesen
+   uebrig (Befund F3) — Punkt, Abstaende und der Leeren-Knopf fressen den Rest. */
 .compact .combo-field {
   min-height: 38px;
-  padding: 0 6px;
-  gap: 4px;
+  padding: 0 4px;
+  gap: 3px;
 }
+.compact .combo-dot { width: 8px; height: 8px; }
+.compact .combo-clear { padding: 4px 1px; }
 
 .combo-dot {
   display: inline-block;

@@ -62,11 +62,14 @@ const noun = (n: number) => (n === 1 ? w.value.itemOne : w.value.itemMany)
 const doneWord = (n: number) => (n === 1 ? w.value.doneOne : w.value.doneMany)
 
 /**
- * Zahl der zweiten Variante: In der Checkliste verschwinden die erledigten
- * Einträge mit, also müssen sie auch mitgezählt werden — sonst verspricht der
- * Knopf weniger, als er tut.
+ * Wo die erledigten Einträge mitzählen, zählen sie in BEIDEN Varianten mit:
+ * die zweite löscht sie mit (sonst verspricht der Knopf weniger, als er tut),
+ * und bei der ersten wandern sie genauso nach „Unkategorisiert" wie die offenen
+ * — der Text sagte dort „2 Gegenstände", gewandert sind 3 (Befund F6).
+ * Im Einkauf bleiben die gekauften in ihrem eigenen Block; dort steht weiter
+ * nur die Zahl der offenen, und der Verbleib wird gesondert benannt.
  */
-const deleteCount = computed(() =>
+const affectedCount = computed(() =>
   w.value.deleteDoneToo ? props.itemCount + props.purchasedCount : props.itemCount
 )
 
@@ -134,9 +137,9 @@ const onDeleteClick = () => {
             <button class="btn btn-sm btn-outline-danger" @click="emit('delete', category, false)">
               Nur Kategorie löschen
               <small class="d-block text-muted">
-                <template v-if="itemCount > 0">
-                  {{ itemCount }} {{ noun(itemCount) }}
-                  {{ itemCount === 1 ? 'wandert' : 'wandern' }}
+                <template v-if="affectedCount > 0">
+                  {{ affectedCount }} {{ noun(affectedCount) }}
+                  {{ affectedCount === 1 ? 'wandert' : 'wandern' }}
                   nach „Unkategorisiert"
                 </template>
                 <template v-else>
@@ -148,11 +151,11 @@ const onDeleteClick = () => {
               </small>
             </button>
             <button
-              v-if="deleteCount > 0"
+              v-if="affectedCount > 0"
               class="btn btn-sm btn-danger"
               @click="emit('delete', category, true)"
             >
-              Kategorie + {{ deleteCount }} {{ noun(deleteCount) }} löschen
+              Kategorie + {{ affectedCount }} {{ noun(affectedCount) }} löschen
               <small v-if="!w.deleteDoneToo && purchasedCount > 0" class="d-block">
                 {{ purchasedCount }} {{ doneWord(purchasedCount) }} {{ noun(purchasedCount) }}
                 {{ purchasedCount === 1 ? 'bleibt' : 'bleiben' }}, ohne Kategorie
