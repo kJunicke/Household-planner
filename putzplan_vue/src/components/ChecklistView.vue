@@ -75,6 +75,14 @@ const isCreatingList = ref(false)
 const copySourceId = ref('') // '' = empty list
 const showListEditModal = ref(false)
 const editingList = ref<{ list_id: string; name: string } | null>(null)
+
+/** Modal-Schließer als Funktionen, nicht als Inline-Mehrfachanweisung — Prettier bricht
+ *  `a = x; b = y` im Template auf zwei Zeilen ohne Trennzeichen um, was der Vue-Compiler
+ *  nicht parst (Build-Bruch am 06.09.2026). */
+const closeListEditModal = () => {
+  showListEditModal.value = false
+  editingList.value = null
+}
 const showResetConfirm = ref(false)
 const showCategoryCreate = ref(false)
 const editingItem = ref<ChecklistItem | null>(null)
@@ -922,10 +930,7 @@ onUnmounted(() => {
     :can-delete="store.lists.length > 1"
     @rename="handleRenameList"
     @delete="handleDeleteList"
-    @close="
-      showListEditModal = false
-      editingList = null
-    "
+    @close="closeListEditModal"
   />
 
   <!-- Neue Liste erstellen Modal -->

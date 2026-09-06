@@ -40,6 +40,18 @@ const showListEditModal = ref(false)
 const showCreateListModal = ref(false)
 const newListName = ref('')
 const editingList = ref<{ list_id: string; name: string } | null>(null)
+
+/** Modal-Schließer als Funktionen, nicht als Inline-Mehrfachanweisung — Prettier bricht
+ *  `a = x; b = y` im Template auf zwei Zeilen ohne Trennzeichen um, was der Vue-Compiler
+ *  nicht parst (Build-Bruch am 06.09.2026). */
+const closeListEditModal = () => {
+  showListEditModal.value = false
+  editingList.value = null
+}
+const closeCreateListModal = () => {
+  showCreateListModal.value = false
+  newListName.value = ''
+}
 const editingItem = ref<ShoppingItem | null>(null)
 const editingCategory = ref<{ name: string; count: number; purchasedCount: number } | null>(null)
 const showCategoryCreate = ref(false)
@@ -939,32 +951,16 @@ onUnmounted(() => {
     :can-delete="shoppingStore.lists.length > 1"
     @rename="handleRenameList"
     @delete="handleDeleteList"
-    @close="
-      showListEditModal = false
-      editingList = null
-    "
+    @close="closeListEditModal"
   />
 
   <!-- Neue Liste erstellen Modal -->
   <Teleport to="body">
-    <div
-      v-if="showCreateListModal"
-      class="modal-overlay"
-      @click.self="
-        showCreateListModal = false
-        newListName = ''
-      "
-    >
+    <div v-if="showCreateListModal" class="modal-overlay" @click.self="closeCreateListModal">
       <div class="modal-content" @click.stop>
         <div class="modal-header">
           <h5 class="modal-title">Neue Einkaufsliste</h5>
-          <button
-            class="btn-close"
-            @click="
-              showCreateListModal = false
-              newListName = ''
-            "
-          ></button>
+          <button class="btn-close" @click="closeCreateListModal"></button>
         </div>
         <div class="modal-body">
           <input
@@ -978,15 +974,7 @@ onUnmounted(() => {
           />
         </div>
         <div class="modal-footer">
-          <button
-            class="btn btn-secondary"
-            @click="
-              showCreateListModal = false
-              newListName = ''
-            "
-          >
-            Abbrechen
-          </button>
+          <button class="btn btn-secondary" @click="closeCreateListModal">Abbrechen</button>
           <button class="btn btn-primary" @click="handleCreateList" :disabled="!newListName.trim()">
             <i class="bi bi-plus-lg me-1"></i> Erstellen
           </button>
