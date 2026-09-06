@@ -171,7 +171,7 @@ const onEnter = () => {
   gap: 3px;
 }
 .compact .combo-dot { width: 8px; height: 8px; }
-.compact .combo-clear { padding: 4px 1px; }
+.compact .combo-clear { padding: 4px; }
 
 .combo-dot {
   display: inline-block;
@@ -194,6 +194,7 @@ const onEnter = () => {
 .compact .combo-input { font-size: var(--font-sm); padding: 4px 0; }
 
 .combo-clear {
+  position: relative;
   flex-shrink: 0;
   border: none;
   background: none;
@@ -203,6 +204,13 @@ const onEnter = () => {
   cursor: pointer;
   display: flex;
   align-items: center;
+}
+/* Erweiterte Trefferflaeche, ohne Platz zu kosten (Muster: .cat-icon-btn::after
+   in ChecklistView.vue). */
+.combo-clear::after {
+  content: '';
+  position: absolute;
+  inset: -10px -8px;
 }
 .combo-clear:hover { color: var(--color-text-primary); }
 

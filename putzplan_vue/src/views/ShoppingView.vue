@@ -1010,7 +1010,7 @@ onUnmounted(() => {
   font-size: var(--font-base);
 }
 .top-name-input:focus { outline: none; border-color: var(--color-primary); }
-.top-combo { flex: 1 1 30%; min-width: 64px; }
+.top-combo { flex: 1 1 30%; min-width: 96px; }
 
 .top-qty-toggle {
   flex-shrink: 0;
