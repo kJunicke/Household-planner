@@ -14,21 +14,25 @@ recherchieren, planen — machen Subagenten.
 - Lass parallel bauen, was parallel gebaut werden kann.
 - Subagenten in Worktrees brauchen `node_modules` (Symlink) und `.env` (Kopie) aus dem
   Hauptbaum; `.scratch/` liegt nur im Hauptbaum.
+- Agent-Worktrees starten auf `main`, nicht auf dem Integrationszweig: der Bauer setzt
+  seinen Worktree zuerst per `git reset --hard <Integrations-HEAD>` (Hash nennst du ihm).
 
 ## Ablauf
 
 1. **Bauen** lassen, Ticket für Ticket.
-2. **Formatieren** — vor dem QC, und nur wenn keine Parallelarbeit offen ist.
+2. **Formatieren** lässt du einen Subagenten — vor dem QC, und nur wenn keine
+   Parallelarbeit offen ist; danach geht der Formatierungs-Commit durchs QC.
 3. **QC**: jede Änderung, auch Fixes aus der Triage und der Formatierungs-Commit, prüft
    mindestens ein neuer Agent mit `/code-review`; bei sichtbaren Änderungen zusätzlich das
    Aussehen.
 4. **Durchspielen**: jedes Frontend-Feature (siehe unten).
 5. QC- und Durchspiel-Befunde triagierst du; Fixes bauen lassen, zurück zu 3.
-6. **Abnehmen**: Zweig prüfen, `npm run build` in `putzplan_vue/` grün, nur eigene Pfade
-   committen, nach `main` mergen, pushen.
+6. **Abnehmen** — das tust du, nicht der Maintainer: Zweig prüfen, `npm run build` in
+   `putzplan_vue/` grün, nur eigene Pfade committen, nach `main` mergen, pushen.
 7. **Abschließen**: Tickets auf `erledigt` mit Commit-Hash und Abnahmenotiz
-   ([docs/agents/tracker.md](../../../docs/agents/tracker.md)); offene Gerätetests als
-   Ticket `ready-for-human`; Vorhaben nach `.scratch/archive/`; Branch und Worktree löschen.
+   ([docs/agents/tracker.md](../../../docs/agents/tracker.md)); was nur der Maintainer am
+   Gerät prüfen kann, wird ein Backlog-Ticket `ready-for-human`; danach darf das Vorhaben
+   nach `.scratch/archive/`; Branch und Worktree löschen.
 
 ## Beleg
 
@@ -51,3 +55,5 @@ Agenten, die sich selbst freisprechen, hinterfragst du kritisch.
 ## Grenzen
 
 - Ein Browser-Agent gleichzeitig.
+- Browser-Agenten wählen nie selbst einen Browser (`select_browser`/`switch_browser`
+  verboten). Bei Verbindungsproblemen brechen sie ab und melden.

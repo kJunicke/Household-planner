@@ -107,7 +107,7 @@ Architekturentscheidungen: [docs/adr/](docs/adr/).
   - geänderter Wochenstart erst ab nächster Woche — sonst verschwänden gesammelte Punkte scheinbar.
 
 ### Zettel
-- Eine einzelne Aufgabe im Pinnwand-Aussehen: ein Stück Papier an der Wand.
+- Eine einzelne Aufgabe auf der Pinnwand: ein Stück Papier an der Wand.
 - Das Papier trägt den Typ: wiederkehrend, täglich, einmalig und Projekt sehen unterschiedlich aus.
 - Immer **genau eine** Aufgabe; hat ein **Eselsohr** und lässt sich **abreißen**.
 
@@ -137,7 +137,7 @@ Architekturentscheidungen: [docs/adr/](docs/adr/).
 ### Fetzen
 - Papierrest, der nach dem Abreißen unter der Wand hängen bleibt; trägt Titel und Punkte der Aufgabe.
 - Solange er hängt, ist die Erledigung widerrufbar → **Zurückkleben**.
-- Verfällt **nicht** von selbst: verschwindet erst beim Verlassen der Pinnwand, beim Umschalten des Aussehens oder beim Neuladen.
+- Verfällt **nicht** von selbst: verschwindet erst beim Verlassen der Pinnwand oder beim Neuladen.
 - Es hängt immer nur **einer** — ein neuer Abriss ersetzt den vorigen, der ältere ist damit endgültig.
 
 ### Zurückkleben

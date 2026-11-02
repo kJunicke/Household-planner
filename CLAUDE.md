@@ -15,9 +15,10 @@ Push auf `main` deployt sofort (GitHub Pages). Umgebung: Linux Mint, VS Code.
   keinen Blick aufs Gerät.
 - **Jede Codeänderung prüft ein zweiter Agent (QC)** — auch die einzeilige, auch die der
   Hauptinstanz, auch der Formatierungs-Commit. Wer baut, prüft nicht. Der QC macht ein
-  Code-Review **und** sieht sich bei sichtbaren Änderungen das Aussehen an. (05.09.2026:
-  „ist doch nur CSS“ ohne QC → abgeschnittene Stempelränder auf 261 von 282 Lagen, am
-  Gerät in Minuten gesehen; die eigene Messung fragte „wie breit“, nicht „sieht es ganz aus“.)
+  Code-Review mit `/code-review` **und** sieht sich bei sichtbaren Änderungen das Aussehen
+  an. (05.09.2026: „ist doch nur CSS“ ohne QC → abgeschnittene Stempelränder auf 261 von
+  282 Lagen, am Gerät in Minuten gesehen; die eigene Messung fragte „wie breit“, nicht
+  „sieht es ganz aus“.)
 - **Eine Messung ist kein Blick.** Geometrie messen und Aussehen ansehen sind zwei Aufträge;
   beide vergeben.
 - Vor jedem Push auf `main`: `npm test` und `npm run build` in `putzplan_vue/`. Nur eigene Pfade stagen.

@@ -13,7 +13,8 @@ ist das hier Beschriebene gemeint.
   (eine Datei pro Ticket, ab `01` in Abhängigkeitsreihenfolge, `Blocked by:` nennt die
   Blocker). Ein Vorhaben darf statt eigener Tickets Backlog-Nummern referenzieren.
 - **Archiv** — `.scratch/archive/<slug>/`: abgeschlossene Vorhaben, ganzer Ordner.
-  **Abgeschlossen heißt: vom Maintainer abgenommen.** Offene Gerätetests werden vor dem
+  **Abgeschlossen heißt: vom Lead abgenommen** — QC grün, nach `main` gemergt, Tickets
+  `erledigt` mit Abnahmenotiz. Was nur der Maintainer am Gerät prüfen kann, wird vor dem
   Archivieren ein Backlog-Ticket `Status: ready-for-human` mit Link auf die Testanleitung.
 
 „In den Tracker schreiben“ heißt: Datei an der passenden Stelle anlegen. „Ticket holen“
@@ -42,7 +43,7 @@ Alle vier Zeilen sind Pflicht. Kommentare und Verlauf kommen ans Dateiende unter
 | `ready-for-agent` | vollständig beschrieben, ein Agent kann bauen   |
 | `ready-for-human` | braucht einen Menschen (z. B. Gerätetest)       |
 | `wontfix`         | wird nicht gebaut                               |
-| `erledigt`        | gebaut, geprüft und abgenommen                  |
+| `erledigt`        | gebaut, geprüft und vom Lead abgenommen         |
 
 `erledigt` gibt es, weil Markdown-Tickets nicht geschlossen werden: ohne eigenen Wert
 stünde ein abgenommenes Ticket weiter auf `ready-for-agent`. `wontfix` heißt das Gegenteil.
