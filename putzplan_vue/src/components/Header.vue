@@ -10,23 +10,24 @@ import { useElementHeightVar } from '../composables/useElementHeightVar'
 /**
  * Der Header greift im `<style>` direkt auf die `--pw-*`-Rohtoken aus
  * `base.css` zu, nicht auf die `--color-*`-Token. Das stammt aus der Zeit des
- * Aussehen-Umschalters (Ticket 08 „Header überall gleich"), als die
- * `--color-*`-Token je nach Aussehen umsprangen. Seit dem Abriss gibt es nur
- * noch die Pinnwand; das Zusammenführen der Token-Sätze steht noch aus.
+ * Aussehen-Umschalters: der Header sah als einzige Ausnahme in jedem Aussehen
+ * gleich aus (Papier), während die `--color-*`-Token je nach Aussehen
+ * umsprangen. Seit dem Abriss gibt es nur noch die Pinnwand; das Zusammenführen
+ * der Token-Sätze steht noch aus.
  * `color` wird explizit auf `--pw-ink` gesetzt, damit nicht die geerbte
  * `--color-text-primary` vom `<body>` durchschlägt — dieselbe Regel gilt für
  * `SyncIndicator`, der nur hier im Header sitzt.
  *
- * Die Rangliste ist ersatzlos entfernt (siehe Ticket 08), der Store-Wert
- * `weeklyRanking` ebenfalls (Backlog-Ticket 50). Laut Glossar (Wochenziel)
- * gibt es ausdrücklich keine Rangliste — auch nicht künftig.
+ * Die Rangliste ist ersatzlos entfernt, der Store-Wert `weeklyRanking`
+ * ebenfalls (Backlog-Ticket 50). Laut Glossar (Wochenziel) gibt es
+ * ausdrücklich keine Rangliste — auch nicht künftig.
  *
  * Das „Putzplan"-Logo stand ursprünglich links neben der Rangliste und sollte
- * laut Ticket 08 ganz entfallen — der Nutzer hat das nach dem ersten Umbau
- * präzisiert: das Logo bleibt, wandert aber an die alte Avatar-Stelle rechts
- * und ist jetzt selbst der Menü-Knopf (ersetzt den rein dekorativen farbigen
- * Kreis). Die Spec-Zeile „kein Logo" meinte nur den alten Platz links neben
- * der Rangliste.
+ * laut ursprünglichem Plan ganz entfallen — der Nutzer hat das nach dem
+ * ersten Umbau präzisiert: das Logo bleibt, wandert aber an die alte
+ * Avatar-Stelle rechts und ist jetzt selbst der Menü-Knopf (ersetzt den rein
+ * dekorativen farbigen Kreis). Die Spec-Zeile „kein Logo" meinte nur den alten
+ * Platz links neben der Rangliste.
  */
 const householdStore = useHouseholdStore()
 

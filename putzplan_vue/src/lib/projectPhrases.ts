@@ -2,9 +2,8 @@
  * Der Projektspruch — der Grundabdruck eines Projekts (→ CONTEXT.md, „Projektspruch").
  *
  * Ein Projekt kann nicht in Verzug geraten, sein Stempel sagt deshalb nichts über
- * Fälligkeit, sondern einen Spruch aus einer festen Sammlung von hundert. Die Liste ist
- * vollständig aus `.scratch/archive/pinnwand-ausbau/issues/09-nachdruck.md`, Abschnitt
- * „Die Spruchliste für Projekte", übernommen.
+ * Fälligkeit, sondern einen Spruch aus einer festen Sammlung von hundert, die der
+ * Maintainer festgelegt hat. Der Witz: je höher der Stapel, desto mehr Sprüche.
  *
  * **Höchstens zehn Zeichen je Spruch.** Der Stempel steht im Fluss der Fußzeile und geht
  * damit in die Zettelbreite und über sie in die Wandhöhe ein. Wer die Liste ergänzt,
@@ -38,7 +37,8 @@ import type { Task } from '@/types/Task'
 export const PROJECT_PHRASE_MAX_LENGTH = 10
 
 /**
- * Die hundert Sprüche, in der Reihenfolge der Liste in `09-nachdruck.md`.
+ * Die hundert Sprüche. Die Reihenfolge ist Datenbestand: `tasks.project_saying_index`
+ * speichert den Listenplatz, ein Umsortieren ändert den Spruch bestehender Projekte.
  *
  * `HEUTE NOCH` fehlt bewusst: `HEUTE` war bis zur Umstellung ein Stempelwort für die
  * berechnete Fälligkeit und ist abgeschafft — als Projektspruch wiederverwendet würde es
