@@ -2,35 +2,17 @@
 /**
  * Die Pinnwand — der Putzen-Screen der Route `/`.
  *
- * Es gibt keine Kategorie-Chipleiste und keine Überschriften. Die drei Gruppen
- * fällig → täglich → Projekt bestimmen zwar die grobe Leserichtung von oben
- * nach unten (`packWall`, Ticket 02: ein Projekt landet nie oberhalb einer
- * fälligen Aufgabe), aber **innerhalb** einer Gruppe packt die Skyline frei —
- * nicht nach Dringlichkeit. Auf der Wand gelten alle fälligen Aufgaben als
- * gleich dringend (→ CONTEXT.md, „Stempel"; ADR docs/adr/0002-stempel-ordnet-nicht.md:
- * der Stempel ordnet nichts um); den Typ trägt ohnehin das Papier.
+ * Keine Kategorie-Chips, keine Überschriften. Die Gruppen fällig → täglich →
+ * Projekt bestimmen die grobe Leserichtung (`packWall`: ein Projekt landet nie
+ * oberhalb einer fälligen Aufgabe); **innerhalb** einer Gruppe packt die Skyline
+ * frei, nicht nach Dringlichkeit (→ CONTEXT.md „Stempel"; ADR
+ * docs/adr/0002-stempel-ordnet-nicht.md). Den Typ trägt das Papier.
  *
- * Oben klebt die Statusleiste mit dem gemeinsamen Wochenziel (Etappe 3).
- *
- * Unter der Wand liegt die Erledigt-Liste (Etappe 5), unten rechts der
- * schwebende Doppel-Knopf für Suche und neue Aufgabe.
- *
- * Ein Zettel mit Unteraufgaben klappt beim Antippen auf und nimmt dabei die
- * volle Wandbreite ein. Welche Zettel offen sind, weiß die Wand und nicht der
- * Zettel — sie muss es beim Packen wissen.
- *
- * Erledigt wird am **Eselsohr** des Zettels (Etappe 4, Ticket 09), und langes
- * Drücken blendet die vier Richtungen ein (Ticket 10). Beide Gesten stecken im
- * Zettel; die Wand weiß davon nur, dass sie einen Zettel unter dem Finger nicht
- * gleichzeitig durch die Gegend animieren darf. Er meldet dafür
- * `gesture-start` / `gesture-end` — ein gemeinsamer Zustand für beide Gesten,
- * unter der Bedingung, dass sie sich ausschließen (→ `gestureNoteId`).
- *
- * Über der Erledigt-Liste hängt der **Fetzen** (Ticket 11): ein Tipp klebt den
- * zuletzt abgerissenen Zettel zurück. Er verfällt nicht, sondern hängt bis zum
- * Verlassen der Pinnwand. Sein Zustand liegt in `useTornScrap` und nicht hier —
- * er entsteht im Zettel und wird unter der Wand gezeigt, die Wand selbst hat
- * damit nichts zu tun.
+ * Welche Zettel aufgeklappt sind, weiß die Wand und nicht der Zettel — sie muss
+ * es beim Packen wissen. Die Gesten (Abreißen am Eselsohr, Kranz) stecken im
+ * Zettel; die Wand weiß nur, dass sie einen Zettel unter dem Finger nicht
+ * zugleich animieren darf (→ `gestureNoteId`). Der Fetzen lebt in
+ * `useTornScrap`: er entsteht im Zettel und wird unter der Wand gezeigt.
  */
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import WallNote from '../components/WallNote.vue'
@@ -60,8 +42,7 @@ const board = useTaskBoard(() => taskStore.tasks)
 
 /**
  * Reihenfolge der Wand. `pendingTasks` ist bereits nach Dringlichkeit sortiert;
- * die Listen aus dem Composable sind `readonly`, deshalb wird kopiert statt
- * sortiert.
+ * die Listen aus dem Composable sind `readonly`, deshalb Kopie.
  */
 const wallTasks = computed((): Task[] => [
   ...board.pendingTasks.value,
@@ -70,122 +51,32 @@ const wallTasks = computed((): Task[] => [
 ])
 
 /**
- * Erledigte Aufgaben — gehen unter die Wand, nicht auf sie. Reihenfolge
- * unverändert aus dem gemeinsamen Composable; nicht sortiert, deshalb keine
- * Kopie nötig.
- *
- * Eigene Konstante statt `board.completedTasks.value` im Template: in einem
- * Objekt verschachtelte Refs werden im Template NICHT ausgepackt.
+ * Erledigte Aufgaben — unter die Wand, nicht auf sie. Eigene Konstante statt
+ * `board.completedTasks.value` im Template: in einem Objekt verschachtelte Refs
+ * werden im Template NICHT ausgepackt.
  */
 const doneTasks = computed((): readonly Task[] => board.completedTasks.value)
 
-// --- Layout ------------------------------------------------------------------
-
 /**
- * Luft zum Wandrand links und rechts — **fest, nicht anteilig**.
- *
- * **Warum fest.** Der Rand existiert für den **Daumen**: ein Zettel ganz am
- * Rand muss noch zu greifen und zu ziehen sein. Ein Daumen wächst nicht mit
- * der Bildschirmbreite. Ein anteiliger Rand gibt ausgerechnet dort am
- * wenigsten, wo am wenigsten Platz ist — und kostet dort am meisten. Gemessen
- * (Ticket 14, QC): 5 % geben dem 412-px-Gerät 19,6 px und dem 360-px-Gerät
- * 17,0 px — praktisch dasselbe für den Daumen —, kosten das 360-px-Gerät aber
- * **+22,9 % Wandhöhe**, das 390-px-Gerät nur +3,6 % (Rand allein, siehe
- * nächsten Absatz). Ein Prozentsatz wurde deshalb verworfen; wer ihn wieder
- * einführt, dreht das Ergebnis um.
- *
- * **Was die 12 px kosten — und was der Packer kostet.** Ticket 14 hat zwei
- * Dinge zugleich geändert: diesen Rand (14a-0) und die Reservierung im Packer
- * (14a-1/14a-2, → `wallLayout.ts`). Beides schlägt auf die Wandhöhe durch, und
- * die beiden Anteile sind auseinanderzuhalten, sonst hält der nächste Leser
- * den Rand für teurer oder billiger, als er ist. Im Browser gemessen (QC zu
- * Ticket 14, identischer Bestand von 86 Zetteln, Ausgangswert 4847,63 px bei
- * 390 px Fensterbreite):
- *
- * | Fenster | Rand allein | Packer allein | **gesamt** |
- * |---|---|---|---|
- * | 390 px | +0,66 % | +1,86 % | **+2,53 %** (→ 4970,49) |
- * | 375 px | +5,77 % | +3,77 % | **+9,76 %** |
- * | 360 px | +17,47 % | +4,06 % | **+22,24 %** (5207,55 → 6365,82) |
- *
- * **Diese Zahlen stammen aus dem Browser, nicht aus der Node-Fuzz-Bank.** Die
- * Bank aus der Entwicklung von 14a-2 sagte für 390 px 5076,76 px (+4,47 %) —
- * rund 2,1 % daneben, weil sie mit den Breiten der Baseline rechnet, statt sie
- * neu zu planen. Für Vorher-Nachher-Vergleiche taugt sie, als Absolutwert
- * nicht. Wer die Tabelle fortschreibt, misst im Browser.
- *
- * **Die 12 sind ein Kompromiss, keine Herleitung** — eine runde Zahl zwischen
- * Greifbarkeit und Wandhöhe. Sie sind ausdrücklich **nicht** auf die
- * gemessene Klippe hin optimiert: bei `usableWidth ≈ 324` kostet ein einzelnes
- * Pixel +8,3 % Höhe (bei 360 px Fenster liegt sie zwischen Rand 7 und 8). Ein
- * knapp darunter geparkter Rand wäre scheinbar gratis und **bräche still**,
- * sobald sich ein Aufgabentitel ändert — die Klippe ist eine Eigenschaft des
- * heutigen Bestands, nicht des Codes.
+ * Luft zum Wandrand links und rechts — **fest, nicht anteilig**. Der Rand ist
+ * für den Daumen da, und der wächst nicht mit dem Bildschirm; ein Prozentsatz
+ * gäbe dem schmalsten Gerät am wenigsten Rand und kostete es die meiste
+ * Wandhöhe. 12 ist ein Kompromiss, bewusst nicht auf eine Höhenklippe des
+ * aktuellen Bestands hin optimiert → docs/pinnwand-layout.md („Wandrand `EDGE`").
  *
  * Bezugsgröße bleibt die Wand (`wall.clientWidth`), nie `window.innerWidth`.
  */
 const EDGE = 12
 
 /**
- * Zuschlag auf jede gemessene Breite.
+ * Zuschlag auf jede gemessene Breite. Deckt den nicht herleitbaren Rundungsrest,
+ * mit dem der Browser Rahmen, Innenabstand und Textlauf unabhängig voneinander
+ * auflöst. Rahmen und Innenabstand von `.zettel` selbst zählt `chromeWidth`
+ * (→ `relayout`) — diese Marge ist kein Ersatz dafür.
  *
- * Zwischen der am Wurzelelement gemessenen Breite und der Breite, die der
- * Titel später tatsächlich zur Verfügung hat, liegt eine kleine, nicht
- * herleitbare Differenz: der Browser rundet die Auflösung von Rahmen und
- * Innenabstand sowie die Breite des Textlaufs unabhängig voneinander.
- *
- * **War bisher teilweise, aber nie vollständig, ein Ersatz für die fehlende
- * Zettel-Chrome.** Bevor `chromeWidth` (siehe `relayout`) Rahmen und
- * Innenabstand von `.zettel` selbst zu `natural`/`minimum` dazuzählte,
- * fehlten dort 18 px (2 px Rahmen + 7 px Polster, je Seite — `WallNote.vue`,
- * Regel `.zettel`). Diese 4 px deckten davon nur einen Teil; der Rest
- * (18 − 4 = 14 px) blieb Loch — sichtbar als der vom QC gemessene, über die
- * fußzeilengebundenen Zettel konstante Überstand von 14,72 px. Mit
- * `chromeWidth` ist dieses Loch eigenständig und exakt geschlossen; diese
- * Marge trägt jetzt wieder nur die Rolle aus ihrem Namen: den kleinen,
- * nicht herleitbaren Rundungsrest aus Rahmen-/Innenabstand-Auflösung und
- * Textlauf, nicht die Chrome selbst.
- *
- * Diese Marge ist deshalb **bemessen, nicht bewiesen**. Bei einem Zuschlag von
- * 1 px lag die geringste gemessene Restluft über 25 Zettel bei 0,50 px
- * („Keller entrümpeln"), danach 0,61 px und 0,96 px — es ist nie umgebrochen,
- * aber die nächste Änderung an Schriftgröße oder Innenabstand hätte darüber
- * entschieden. Mit 4 px lag derselbe Wert bei rund 3,5 px.
- *
- * **Nachgemessen mit `chromeWidth`:** bei den 15 Zetteln, die ihre volle
- * `natural`-Breite bekommen, liegt die Restluft gegen die bindende Größe bei
- * 4,00…4,86 px — diese 4 px plus der `Math.ceil`-Rest.
- *
- * Die übrigen 45 weichen in ZWEI Richtungen ab, nicht nur in einer: die einen
- * sind durch den 45-%-Deckel oder den Streifenfüller **absichtlich** schmaler
- * als einzeilig, die anderen umgekehrt BREITER als der Deckel, weil ihr
- * `minimum` ihn sticht — `defaultNoteWidth` kann nur anheben, nie unter
- * `natural` drücken. Wie viele auf jede Gruppe entfallen, ist nicht gezählt.
- *
- * Dieses `minimum` ist auch nicht mehr allein fußzeilengetrieben: seit
- * `cornerExtra` in der oberen Fassung mitzählt (Ticket 12, siehe `relayout`),
- * bindet bei 27 von 60 Zetteln `titleMinimum + cornerExtra`. Bei dreien wirkt
- * es bis in die gesetzte Breite durch — „QC-LANGTITEL: Fenster im
- * Wohnzimmer…" steht auf 163 statt 161 px, und 163 = ⌈99,5 + 41 + 18⌉ + 4 ist
- * eine reine Titelrechnung, in der die Fußzeile gar nicht vorkommt.
- *
- * Die Fußzeilen-Untergrenze selbst hält über **alle** 60 Zettel mit mindestens
- * 4,00 px Luft. 4 px ist damit die richtige Größenordnung, nicht nur eine
- * Vermutung.
- *
- * 15 und 45 sind keine Konstanten: sie gelten für `wall.clientWidth = 370`,
- * wo der 45-%-Deckel bei 161 px liegt. Bei anderer Wandbreite fällt die
- * Aufteilung anders aus.
- *
- * Die 3,5 px im Absatz davor sind **nicht dieselbe Größe**: sie stammen von
- * vor `chromeWidth` und messen den Platz, den der Titel tatsächlich hatte, in
- * einer Welt mit 14 px Loch. Nebeneinander gelesen sieht es aus, als sei die
- * Luft durch die Korrektur gewachsen — sie ist zum ersten Mal die Größe, die
- * die Formel vorsieht.
- *
- * Die frühere Doppelrolle ist rückwirkend bestätigt, nicht nur plausibel:
- * 18 (Chrome) − 4 (diese Marge) = 14, nahe an den vorher gemessenen 14,72 px
- * Überstand; die 0,72 sind der `Math.ceil`-Rest.
+ * **Bemessen, nicht bewiesen:** mit 4 px hält die Fußzeilen-Untergrenze über alle
+ * gemessenen Zettel mindestens 4,00 px Luft → docs/pinnwand-layout.md
+ * („Messmarge `MEASURE_SAFETY`").
  *
  * Ein paar Pixel zusätzliche Zettelbreite sieht niemand; ein fehlendes halbes
  * Pixel bricht den Titel um. Die Marge geht deshalb immer nach oben.
@@ -207,51 +98,37 @@ const wallEl = ref<HTMLElement | null>(null)
 const wallHeight = ref(0)
 
 /**
- * Hat auf dieser Ansicht schon **ein** Packlauf durchgehalten?
+ * Hat auf dieser Ansicht schon **ein** Packlauf durchgehalten? Bis dahin sitzen
+ * alle Zettel auf `left: 0; top: 0` (`WallNote.vue`) übereinander, und die Wand
+ * zeigt den Platzhalter.
  *
- * Bis dahin sitzt jeder Zettel auf `left: 0; top: 0` (`WallNote.vue`) — sie
- * liegen also alle gestapelt auf demselben Punkt. Solange das so ist, zeigt die
- * Wand den Platzhalter statt der Zettel (Ticket 02).
+ * **Bewusst NICHT der übliche Wächter `isLoading && liste.length === 0`.**
+ * `WallView` läuft ohne `keep-alive` und wird bei jedem Reiterwechsel neu
+ * montiert; die Aufgaben liegen dann schon im Store, `wallTasks` ist sofort
+ * nicht leer und `isLoading` womöglich schon `false` — und genau dann sind die
+ * Zettel unpositioniert. Der Wächter muss „noch nie erfolgreich gepackt" heißen,
+ * nicht „lädt noch".
  *
- * **Das ist bewusst NICHT der übliche Wächter `isLoading && liste.length === 0`
- * der anderen Ansichten.** `WallView` läuft ohne `keep-alive` und wird bei jedem
- * Reiterwechsel neu montiert; die Aufgaben liegen dann bereits im Store,
- * `wallTasks` ist also sofort nicht leer und `isLoading` womöglich schon wieder
- * `false` — und genau in diesem Moment sind die Zettel unpositioniert. Der
- * Wächter muss „noch nie erfolgreich gepackt" heißen, nicht „lädt noch", sonst
- * sieht es in der Entwicklung richtig aus und bricht im gemeldeten Fall.
- *
- * Einmal `true`, bleibt es `true`: die Zettel stehen dann irgendwo Gültigem,
- * und ein späterer vertagter Lauf darf die Wand nicht erneut ausblenden.
+ * Einmal `true`, bleibt es `true`: ein späterer vertagter Lauf darf die Wand
+ * nicht erneut ausblenden.
  */
 const hasPacked = ref(false)
 
 /**
- * Mindesthöhe der Wand, solange der Platzhalter steht.
+ * Mindesthöhe der Wand, solange der Platzhalter steht: die zuletzt gepackte Höhe
+ * aus `wallLayout` (überlebt das Neumontieren beim Reiterwechsel). Gelesen
+ * **einmal** beim Aufbau — ein Wert, der sich unter dem Platzhalter noch ändert,
+ * wäre selbst ein Höhensprung.
  *
- * Erste Wahl ist die zuletzt gepackte Höhe aus `wallLayout` — sie überlebt das
- * Neumontieren beim Reiterwechsel und trifft bei gleichen Aufgaben fast exakt,
- * was gleich kommt. Gelesen wird sie **einmal** beim Aufbau: während der
- * Platzhalter steht, kommt kein neuer Packlauf durch, und ein Wert, der sich
- * unter dem Platzhalter noch ändert, wäre selbst ein Höhensprung.
+ * Ohne Vorwissen (erster Aufruf der Sitzung) `60vh`, absichtlich kleiner als das
+ * Fenster: `.wall-page` trägt `min-height: 100vh`, die Seite ist dann genau einen
+ * Bildschirm hoch, und ein späteres Schrumpfen der Wand bewegt nichts.
  *
- * Ohne Vorwissen — erster Aufruf nach dem Laden der App — bleibt nur ein
- * **geschätzter** Startwert. `60vh` ist absichtlich kleiner als das Fenster:
- * `.wall-page` trägt `min-height: 100vh`, solange der Platzhalter also unter
- * der Fensterhöhe bleibt, ist die Seite in dieser Phase genau ein Bildschirm
- * hoch und ein späteres Schrumpfen der Wand bewegt nichts.
- *
- * **Der Schutz ist nicht unbedingt, er hat eine Grenze.** Das Polster von
- * `.wall-page` (`10px + 148px` plus App-Header plus Safe-Area) liegt INNERHALB
- * der 100vh; für die Wand bleiben `100vh − 158px − Header − Safe-Area`. Ab
- * etwa 640 px Fensterhöhe — kurzes Fenster, oder ein Header, der mit der
- * Mitgliederzahl wächst — kippt die Rechnung um einige zehn Pixel ins
- * Negative, und dann bewegt auch das Schrumpfen etwas.
- *
- * Der Wachstumsfall (gepackte Wand höher als das Fenster) bleibt ohnehin. Beide
- * treffen ausschließlich den allerersten Aufruf einer Sitzung; ab dem zweiten
- * trägt das Höhengedächtnis. Bewusst in Kauf genommen, statt dafür eine zweite
- * Schätzung einzuführen.
+ * **Der Schutz hat eine Grenze:** das Polster von `.wall-page` (plus Header und
+ * Safe-Area) liegt INNERHALB der 100vh. Ab etwa 640 px Fensterhöhe abwärts — oder
+ * mit einem hohen Header — bewegt auch das Schrumpfen etwas; wächst die Wand über
+ * das Fenster, ohnehin. Beides trifft nur den ersten Aufruf einer Sitzung und ist
+ * bewusst in Kauf genommen, statt eine zweite Schätzung einzuführen.
  */
 const placeholderMinHeight = (() => {
   const remembered = rememberedWallHeight()
@@ -261,18 +138,14 @@ const placeholderMinHeight = (() => {
 let revealFrame = 0
 
 /**
- * Gibt die Zettel frei — einen Frame **nach** dem geglückten Packlauf.
+ * Gibt die Zettel frei — einen Frame **nach** dem geglückten Packlauf. Aufgerufen
+ * nur hinter der Schleife, die `left`/`top` schreibt, und nur bei vollständigem
+ * Lauf (→ `skipped`): die Freigabe darf erst fallen, wenn jeder Zettel steht.
  *
- * Aufgerufen wird sie in `relayout` **hinter** der Schleife, die `left`/`top`
- * schreibt, und nur bei vollständigem Lauf (→ `skipped`). Beides gehört
- * zusammen: die Freigabe darf erst fallen, wenn wirklich jeder Zettel steht.
- *
- * Der gewartete Frame verhindert einen Höhensprung: `wallHeight` erreicht das DOM
- * erst im nächsten Vue-Tick. Fiele `hasPacked` im selben Tick, verlöre die Wand
- * ihre Mindesthöhe genau in dem Moment, in dem ihre echte Höhe von `0` aus
- * gesetzt wird. Ein Frame später steht die Höhe bereits (`.wall--unpacked`
- * schaltet die Transition dafür ab), und das Ablegen der Mindesthöhe kostet
- * nichts mehr.
+ * Der Frame verhindert einen Höhensprung: `wallHeight` erreicht das DOM erst im
+ * nächsten Vue-Tick. Fiele `hasPacked` im selben Tick, verlöre die Wand ihre
+ * Mindesthöhe genau, während ihre echte Höhe von `0` aus gesetzt wird
+ * (`.wall--unpacked` schaltet die Transition dafür ab).
  */
 const revealNotes = () => {
   if (hasPacked.value || revealFrame) return
@@ -294,74 +167,54 @@ const revealNotes = () => {
 const expandedIds = ref(new Set<string>())
 
 /**
- * Die gemerkten Oberkanten der aufgeklappten Zettel (Ticket 13): der aufgeklappte
- * Zettel bleibt liegen, wo er lag, und die anderen weichen ihm aus.
+ * Gemerkte Oberkanten der aufgeklappten Zettel: der aufgeklappte Zettel bleibt
+ * liegen, wo er lag, die anderen weichen ihm aus. `packWall` ist zustandslos; das
+ * Gedächtnis steht hier. Eingetragen wird die y-Koordinate unmittelbar vor dem
+ * Antippen (`lastPositions`), verworfen beim Zuklappen und beim Verschwinden von
+ * der Wand, zusammen mit `expandedIds`.
  *
- * `packWall` ist zustandslos und kennt kein „vorher"; das „vorher" steht hier.
- * Eingetragen wird die y-Koordinate, die der Zettel **unmittelbar vor dem
- * Antippen** hatte (`lastPositions`), verworfen wird beim Zuklappen — und beim
- * Verschwinden von der Wand, zusammen mit `expandedIds`.
+ * **Die Reihenfolge ist Teil des Zustands.** Der letzte Eintrag der `Map` ist der
+ * zuletzt angetippte Zettel und gewinnt, wenn sich zwei Vorgaben nicht vertragen
+ * (→ `resolvePins` in `wallLayout.ts`). Beim erneuten Antippen deshalb erst
+ * löschen, dann setzen — sonst bliebe er auf seinem alten Platz in der Reihenfolge.
  *
- * **Die Reihenfolge ist Teil des Zustands.** Eine `Map` behält ihre
- * Einfügereihenfolge; der letzte Eintrag ist der zuletzt angetippte Zettel, und
- * genau der gewinnt, wenn sich zwei Vorgaben nicht gleichzeitig einhalten lassen
- * (→ `resolvePins` in `wallLayout.ts`). Ein `Set`/`Map` wird beim erneuten
- * Antippen deshalb erst gelöscht und dann neu gesetzt — sonst bliebe der Zettel
- * auf seinem alten Platz in der Reihenfolge stehen.
- *
- * Bewusst **nicht** reaktiv: gelesen wird das ausschließlich in `relayout`, und
- * jede Änderung daran zieht ohnehin selbst ein `relayout` nach sich. Ein `ref`
- * würde hier nur eine Abhängigkeit vortäuschen, die es nicht gibt.
+ * Bewusst **nicht** reaktiv: gelesen nur in `relayout`, und jede Änderung zieht
+ * ohnehin selbst ein `relayout` nach sich.
  */
 const pinnedTops = new Map<string, number>()
 
 /**
- * Zettel, deren Punktwert oben rechts statt in der Fußzeile steht
- * (Karten-Redesign, Ticket 00a, Handoff Punkt 6 — ursprünglich „Punktwert
- * UND Rückstand"; der Rückstandstext ist seither entfernt, siehe `stampLabel`
- * im Skript von `WallNote.vue`, die Fußzeile ist dadurch etwas schmaler
- * geworden — inzwischen aber wieder breiter, weil jeder Zettel einen
- * Grundabdruck trägt). Die Entscheidung fällt während der Messung in `relayout` — nur
- * dort sind Titel- und Fußzeilenbreite bekannt —, wird aber HIER als
- * Vue-Zustand festgehalten und über das `meta-top`-Prop an `WallNote`
+ * Zettel, deren Punktwert oben rechts statt in der Fußzeile steht. Entschieden
+ * wird beim Messen in `relayout` (nur dort sind Titel- und Fußzeilenbreite
+ * bekannt), festgehalten aber HIER und über das `meta-top`-Prop an `WallNote`
  * gereicht.
  *
- * **`relayout` fasst diese Klasse an KEINER Stelle mehr per `classList` an
- * — weder setzend noch entfernend.** Ein Blocker-Befund des QC zeigte, dass
- * schon das ENTFERNEN allein genügt, um sie dauerhaft zu verlieren: Vue
- * vergleicht bei jedem Patch nur seinen eigenen zuletzt berechneten
- * Klassen-String gegen den neu berechneten, sieht dort keine Änderung (die
- * Entscheidung blieb ja gleich) und schreibt `className` gar nicht neu — die
- * extern entfernte Klasse kommt dann NIE zurück, außer eine völlig
- * UNABHÄNGIGE Bindungsänderung am selben Element patcht zufällig die ganze
- * Klassenliste neu. Einzige Quelle ist deshalb ausschließlich dieses Set
- * über das `meta-top`-Prop — siehe die Messung in `relayout` für die Technik,
- * mit der die nötige Breite OHNE DOM-Mutation ermittelt wird.
+ * **`relayout` fasst diese Klasse an KEINER Stelle per `classList` an — weder
+ * setzend noch entfernend.** Schon das Entfernen allein genügt, um sie dauerhaft
+ * zu verlieren: Vue vergleicht beim Patch nur seinen eigenen zuletzt berechneten
+ * Klassen-String mit dem neuen; bleibt die Entscheidung gleich, schreibt es
+ * `className` gar nicht neu, und die extern entfernte Klasse kommt NIE zurück —
+ * außer eine UNABHÄNGIGE Bindungsänderung am selben Element patcht zufällig die
+ * ganze Klassenliste. Einzige Quelle ist deshalb dieses Set.
  */
 const metaTopIds = ref(new Set<string>())
 
 /**
- * Der Zettel, der gerade **unter einer Geste des Fingers steht** — und deshalb
- * von der Animation ausgenommen ist.
- *
- * Das sind zwei Gesten: das Ziehen am Eselsohr (Abreißen, Ticket 09) und das
- * lange Drücken mit den vier Richtungen (Ticket 10). Der Name sagt bewusst
- * nicht „tearing": er hieß einmal so, und das war falsch, sobald die zweite
- * Geste dazukam.
+ * Der Zettel, der gerade **unter einer Geste des Fingers steht** — Abreißen am
+ * Eselsohr oder langes Drücken mit Kranz — und deshalb von der Animation
+ * ausgenommen ist.
  *
  * **Ein Zustand für beide, und die Bedingung dafür:** die Gesten schließen sich
  * gegenseitig aus. Der Long-Press startet nicht auf dem Eselsohr (→
- * `isPressControl` im Zettel), und in keiner der beiden kommt ein zweiter
- * Finger durch. Genau deshalb kann hier höchstens eine ID stehen. Fällt diese
- * Bedingung — etwa wenn eine dritte Geste dazukommt, die überall startet —,
- * fällt die Konstruktion und es braucht einen Zustand je Geste.
+ * `isPressControl` im Zettel), und in keiner der beiden kommt ein zweiter Finger
+ * durch — deshalb höchstens eine ID. Kommt eine Geste dazu, die überall startet,
+ * braucht es einen Zustand je Geste.
  *
- * Warum überhaupt: beim Neupacken schreibt die FLIP-Animation `transform`, und
- * genau das schreibt auch die Zieh-Geste; der Richtungskranz wiederum liegt in
- * Fensterkoordinaten fest. Ohne diese Ausnahme flöge der Zettel unter dem
- * Finger davon, wenn währenddessen ein anderes Mitglied etwas ändert. Seine
- * neue **Position** (`left`/`top`) bekommt er trotzdem — die Wand bleibt
- * korrekt gepackt, der Zettel springt nur dorthin, statt zu fliegen.
+ * Warum überhaupt: die FLIP-Animation schreibt `transform`, genau wie die
+ * Zieh-Geste, und der Kranz liegt in Fensterkoordinaten fest. Ohne Ausnahme
+ * flöge der Zettel unter dem Finger davon, wenn ein anderes Mitglied etwas
+ * ändert. Seine neue Position (`left`/`top`) bekommt er trotzdem — er springt
+ * dorthin, statt zu fliegen.
  */
 const gestureNoteId = ref<string | null>(null)
 const noteEls = new Map<string, HTMLElement>()
@@ -383,62 +236,42 @@ const setNoteEl = (taskId: string, instance: unknown) => {
 
 /**
  * Packt die Wand neu: Breiten messen, Breiten planen, Höhen messen, Skyline
- * rechnen, Positionen schreiben. Muss nach jedem Datenwechsel, nach dem Laden
- * der Schrift und nach jeder Breitenänderung laufen — sonst stünden die Zettel
- * auf Maßen, die nicht mehr gelten.
+ * rechnen, Positionen schreiben. Muss nach jedem Datenwechsel, nach dem Laden der
+ * Schrift und nach jeder Breitenänderung laufen.
  *
- * Der Reihenfolge nach: erst wird **jeder** Zettel gemessen, dann werden **alle**
- * Breiten geplant, dann werden sie gesetzt. Ein Zettel kann seine Breite nicht
- * allein bestimmen, weil sie davon abhängt, was neben ihn passt — deshalb die
- * getrennten Durchläufe statt einer Schleife.
+ * Erst wird **jeder** Zettel gemessen, dann werden **alle** Breiten geplant, dann
+ * gesetzt — die Breite eines Zettels hängt davon ab, was neben ihn passt.
  *
- * **Kosten.** Ein vollständiger Lauf über 23 Zettel wurde vom QC mit 8,1–19,2 ms
- * gemessen, davon 5,5–13,0 ms allein in Schritt 1. Das ist fast vollständig
- * DOM-Messung: jeder Zettel erzwingt dort zwei Layouts (`max-content` und
- * `min-content`). Die Rechnung selbst — `planNoteWidths` plus `packWall` — liegt
- * bei rund 0,05 ms und ist damit belanglos. Wer diese Zahlen zitiert, muss
- * dazusagen, welche von beiden gemeint ist; die Messung skaliert linear mit der
- * Zahl der Zettel und liegt bereits in der Größenordnung eines Frames.
+ * **Kosten** liegen fast ganz in der DOM-Messung von Schritt 1 (mehrere erzwungene
+ * Layouts je Zettel, linear in der Zettelzahl, in der Größenordnung eines Frames);
+ * `planNoteWidths` plus `packWall` sind mit rund 0,05 ms belanglos.
  *
- * Die Zahlen stammen von VOR dem Karten-Redesign (Ticket 00a): Schritt 1 misst
- * seither pro Zettel zusätzlich `.foot` und `.title` einzeln (für
- * `zettel--meta-top`, siehe dort) — zwei weitere erzwungene Layouts. Neu
- * gemessen ist das nicht; erwartbar ist ein spürbarer, aber kein
- * größenordnungsmäßiger Aufschlag auf Schritt 1.
+ * **`tappedId`** ist der angetippte Zettel beim Auf- und Zuklappen. Er steht still
+ * (→ `pinnedTops`) und wird hier nur von der Flug-Animation ausgenommen.
  *
- * **`tappedId`** ist der angetippte Zettel beim Auf- und Zuklappen. Er steht
- * still — beim Aufklappen, weil seine gemerkte Oberkante als Vorgabe in
- * `packWall` geht (→ `pinnedTops`), beim Zuklappen, weil er ohne Vorgabe
- * wieder dort landet, wo er als schmaler Zettel schon vorher lag. Gebraucht
- * wird die Kennung hier nur noch, um ihn von der Flug-Animation auszunehmen.
+ * Liefert `false`, wenn der Lauf nicht vollständig war (→ `runRelayout`).
  */
 const relayout = (animate: boolean, tappedId?: string): boolean => {
   const wall = wallEl.value
   if (!wall) return false
 
-  // `EDGE` steht hier und beim Setzen von `left` (`note.x + EDGE`) — es muss
-  // an beiden Stellen derselbe Wert sein, und deshalb ist es eine Konstante
-  // und keine Rechnung: `packWall` klemmt jeden Zettel intern auf
+  // `EDGE` steht hier und beim Setzen von `left` (`note.x + EDGE`) — es muss an
+  // beiden Stellen derselbe Wert sein: `packWall` klemmt jeden Zettel intern auf
   // `[0, usableWidth − Breite]`, die rechte Wandkante steht also bei
-  // `EDGE + usableWidth`. Wer den Rand hier aus der Wandbreite rechnet und
-  // dort auch nur um 1 px anders rundet, lässt genau den Zettel, der an der
-  // Klemmung hängt, über die Kante ragen — ohne dass irgendetwas darauf
-  // aufmerksam macht.
+  // `EDGE + usableWidth`. Wer den Rand hier aus der Wandbreite rechnet und dort
+  // auch nur um 1 px anders rundet, lässt genau den Zettel, der an der Klemmung
+  // hängt, über die Kante ragen — ohne dass irgendetwas darauf aufmerksam macht.
   const usableWidth = wall.clientWidth - 2 * EDGE
   if (usableWidth <= 0) return false
 
   const before = new Map(lastPositions)
 
-  // Merker für den Stempel-Wächter weiter unten: EIN Hinweis je Packlauf, nicht
-  // einer je Zettel. Ungebremst wären es hunderte identische Zeilen pro
-  // Layoutdurchgang — die Meldung ginge im Rauschen unter, statt aufzufallen.
+  // Für den Stempel-Wächter unten: EIN Hinweis je Packlauf, nicht einer je
+  // Zettel — sonst ginge die Meldung im Rauschen unter.
   let stampWarned = false
 
-  // Gruppenzuordnung je Zettel (0 = fällig, 1 = täglich, 2 = Projekt) — steuert
-  // die freie Packreihenfolge und die weiche Gruppengrenze in `packWall`. Die
-  // drei Listen aus dem Composable sind bereits genau diese drei Gruppen; hier
-  // wird nur zurück auf die `task_id` gemappt, weil `packWall` keine Task-
-  // Objekte kennt.
+  // Gruppe je Zettel (0 = fällig, 1 = täglich, 2 = Projekt) für Packreihenfolge
+  // und Gruppengrenze in `packWall`, das keine Task-Objekte kennt.
   const taskGroups = new Map<string, number>()
   board.pendingTasks.value.forEach((task) => taskGroups.set(task.task_id, 0))
   board.dailyTasks.value.forEach((task) => taskGroups.set(task.task_id, 1))
@@ -447,45 +280,33 @@ const relayout = (animate: boolean, tappedId?: string): boolean => {
   // Schritt 1 — messen, was jeder Zettel an Breite braucht.
   //
   // Gemessen wird mit `getBoundingClientRect()`, NICHT mit `offsetWidth`.
-  // `offsetWidth` ist eine ganze Zahl und rundet ab: bei einer echten
-  // Textbreite von 123,4 px liefert es 123, wir setzen 123 als feste Breite
-  // — und der Titel passt um 0,4 px nicht mehr in seine Zeile und bricht um.
-  // Das trifft im Mittel jeden zweiten Titel und sieht wie ein Zufall aus.
-  // `getBoundingClientRect().width` liefert die Nachkommastellen; danach
-  // wird aufgerundet und `MEASURE_SAFETY` addiert. Was das garantiert, steht
-  // dort — kurz: die Marge ist bemessen, nicht bewiesen, und geht nach oben.
+  // `offsetWidth` ist eine ganze Zahl und rundet ab: bei 123,4 px Textbreite
+  // setzten wir 123 — und der Titel bricht um, im Mittel bei jedem zweiten und
+  // scheinbar zufällig. Danach wird aufgerundet und `MEASURE_SAFETY` addiert.
   //
   // Zwei Werte je Zettel:
   // - `max-content` (Titel per Klasse einzeilig gestellt) = natürliche Breite,
   // - `min-content` = die Breite, unter der ein Wort abgeschnitten würde.
   //
-  // Die Untergrenze wird gemessen und nicht am Text abgelesen: `min-content`
-  // kennt die tatsächlichen Umbruchstellen des Browsers, eine Suche nach
-  // Leerzeichen im Titel nur die vermuteten. Wo beide Werte gleich sind, hat
-  // der Titel keine Umbruchstelle — genau die Zettel bleiben vom zweiten Lauf
-  // ausgenommen.
+  // Die Untergrenze wird gemessen und nicht am Text abgelesen: nur der Browser
+  // kennt seine tatsächlichen Umbruchstellen. Sind beide Werte gleich, hat der
+  // Titel keine Umbruchstelle — genau die bleiben vom zweiten Lauf ausgenommen.
   const shapes: WallNoteShape[] = []
   const nextMetaTopIds = new Set<string>()
   const elements = new Map<string, HTMLElement>()
   const lineHeights = new Map<string, number>()
 
   /**
-   * Zettel, die dieser Lauf übersprungen hat, weil zu ihnen kein Element
-   * vorlag. Beide Schleifen — Messen und Positionieren — zählen hier hoch, und
-   * ein Lauf mit auch nur einem übersprungenen Zettel gilt als **nicht**
-   * geglückt (Ticket 02).
+   * Zettel, die dieser Lauf mangels Element übersprungen hat. Messen und
+   * Positionieren zählen hier hoch; ein Lauf mit auch nur einem übersprungenen
+   * Zettel gilt als **nicht** geglückt. Der Rückgabewert ist das Freigabesignal
+   * für den Platzhalter — meldete ein Teillauf `true`, stünden gestapelte Zettel
+   * offen da. Der Rückgabewert muss halten, was er behauptet.
    *
-   * Vor Ticket 02 war das folgenlos: die Zettel waren ohnehin sichtbar und der
-   * nächste Lauf räumte auf. Jetzt ist der Rückgabewert das Freigabesignal für
-   * den Platzhalter — ein Lauf, der nur einen Teil positioniert und trotzdem
-   * `true` meldet, stellt genau die gestapelten Zettel frei, die dieses Ticket
-   * beseitigt, und zwar ohne jede Vertagung. Der Rückgabewert muss halten, was
-   * er behauptet.
-   *
-   * Erreichbar ist der Zustand vor allem über die Nachhol-Leiter: sie ruft
-   * `relayout` direkt aus einem `requestAnimationFrame`, also NICHT hinter
-   * `nextTick`. Ändert sich `wallTasks` in dem Moment (Realtime-Subscription),
-   * misst sie einen Stand, den Vue noch nicht gepatcht hat.
+   * Erreichbar vor allem über die Nachhol-Leiter: sie ruft `relayout` direkt aus
+   * einem `requestAnimationFrame`, also NICHT hinter `nextTick`. Ändert sich
+   * `wallTasks` in dem Moment (Realtime-Subscription), misst sie einen Stand, den
+   * Vue noch nicht gepatcht hat.
    */
   let skipped = 0
 
@@ -496,39 +317,23 @@ const relayout = (animate: boolean, tappedId?: string): boolean => {
       continue
     }
 
-    // Aufgeklappt heißt: volle Wandbreite, ohne Messung.
-    //
-    // Ein aufgeklappter Zettel darf hier NICHT durch die Messung laufen. Bei
-    // `width: max-content` misst sie nicht mehr den Titel, sondern die Reihe
-    // der Zettelchen daneben — ein Vielfaches der Wandbreite, aus dem der
-    // Planer dann eine Breite ableiten würde, die der Zettel nie haben soll.
-    //
-    // `natural = minimum = usableWidth` ist die Form, die dem Planer genau das
-    // sagt, was gilt: der Zettel ist so breit wie die Wand und lässt sich nicht
-    // verschmälern (`minimum` = `natural`, also keine Umbruchstelle). Er belegt
-    // damit von selbst eine Reihe allein.
+    // Aufgeklappt heißt: volle Wandbreite, ohne Messung. Bei `width: max-content`
+    // mäße sie die Reihe der Zettelchen, ein Vielfaches der Wandbreite.
+    // `natural = minimum = usableWidth` sagt dem Planer: so breit wie die Wand,
+    // nicht verschmälerbar — der Zettel belegt von selbst eine Reihe allein.
     if (expandedIds.value.has(task.task_id)) {
       el.style.width = `${usableWidth}px`
       shapes.push({ id: task.task_id, natural: usableWidth, minimum: usableWidth })
       elements.set(task.task_id, el)
       lineHeights.set(task.task_id, 0)
-      // Die bisherige Entscheidung über den Punktwert oben rechts wird
-      // MITGENOMMEN, obwohl dieser Zettel nicht gemessen wird (Ticket 13).
-      //
-      // Ohne diese Zeile fiel er aus `nextMetaTopIds` heraus und verlor die
-      // Klasse `zettel--meta-top`, solange er offen war — der Sticker sprang
-      // sichtbar von der Ecke in die Fußzeile und beim Zuklappen zurück. Der
-      // Schaden war aber nicht nur kosmetisch: `zettel--meta-top` verengt den
-      // Titelkasten um die Ecke (`cornerExtra`, 41…46 px), der Titel braucht
-      // damit unter Umständen eine Zeile mehr. Beim Zuklappen wird die Klasse
-      // in DIESEM Lauf zwar neu entschieden, sie erreicht das DOM aber erst
-      // im nächsten Tick — Schritt 4 misst dann noch die Höhe der ALTEN
-      // Fassung und `packWall` packt die Wand auf eine Höhe, die es gleich
-      // nicht mehr gibt (gemessen: bis zu ±18 px, eine Titelzeile, bei 21 von
-      // 83 Zetteln). Die Wand pendelte dadurch je nach zuletzt aufgeklapptem
-      // Zettel zwischen zwei Packungen — dieselbe Eingabe, zwei Ergebnisse.
-      // Der Prüfschritt „Zuklappen stellt die Wandhöhe exakt wieder her"
-      // scheiterte schon daran.
+      // Die bisherige Punktwert-Entscheidung wird MITGENOMMEN, obwohl dieser
+      // Zettel nicht gemessen wird. Sonst verlöre er `zettel--meta-top`, solange
+      // er offen ist. Die Klasse verengt den Titel um `cornerExtra`; beim
+      // Zuklappen erreichte die neu entschiedene Klasse das DOM erst im nächsten
+      // Tick, Schritt 4 mäße die Höhe der ALTEN Fassung, und die Wand pendelte je
+      // nach zuletzt aufgeklapptem Zettel zwischen zwei Packungen — dieselbe
+      // Eingabe, zwei Ergebnisse. „Zuklappen stellt die Wandhöhe exakt wieder
+      // her" hängt an dieser Zeile.
       if (metaTopIds.value.has(task.task_id)) nextMetaTopIds.add(task.task_id)
       continue
     }
@@ -539,27 +344,15 @@ const relayout = (animate: boolean, tappedId?: string): boolean => {
     const titleEl = el.querySelector<HTMLElement>('.title')
     const footEl = el.querySelector<HTMLElement>('.foot')
 
-    // Waagerechte Zettel-CHROME: `titleWidth`/`correctedFootWidth` (unten)
-    // sind Content-Box-Breiten von `.title`/`.foot`, den KINDERN von
-    // `.zettel`. Gesetzt wird später aber die Border-Box-Breite von `.zettel`
-    // SELBST (`box-sizing: border-box`, `base.css` Universalregel) — Rahmen
-    // und Innenabstand von `.zettel` liegen AUSSERHALB dieser Kindbreiten und
-    // müssen extra dazugerechnet werden, sonst schneidet die gesetzte Breite
-    // die Fußzeile ab (QC-Befund).
+    // Waagerechte Zettel-Chrome: `titleWidth` und die Fußzeilenbreiten (unten)
+    // sind Content-Box-Breiten der KINDER `.title`/`.foot`. Gesetzt wird aber die
+    // Border-Box-Breite von `.zettel` SELBST (`box-sizing: border-box`, `base.css`
+    // Universalregel) — Rahmen und Innenabstand von `.zettel` (`WallNote.vue`,
+    // gilt für alle Zetteltypen) müssen dazu, sonst schneidet die gesetzte Breite
+    // die Fußzeile ab.
     //
-    // Aus `WallNote.vue`, Regel `.zettel`: `border: 2px solid transparent`
-    // plus `padding: 5px 7px 0 7px` — links und rechts also je 2 px Rahmen +
-    // 7 px Polster. Gilt unverändert für alle drei Zetteltypen: weder
-    // `.zettel--daily` noch `.zettel--project` überschreiben Rahmenbreite
-    // oder linkes/rechtes Polster, nur `padding-top` (siehe Kommentar bei
-    // `.zettel--project`, „Keine eigene border-width mehr").
-    //
-    // Gemessen statt fest verdrahtet: `getComputedStyle` liefert, was am
-    // Element tatsächlich gilt, eine Konstante hier würde bei einer
-    // künftigen Änderung an Rahmen oder Polster still auseinanderlaufen —
-    // genau die Fehlerklasse, die dieser Fix beseitigt. Der Mehrpreis ist
-    // ein `getComputedStyle`-Aufruf je Zettel, im selben Messlauf, der
-    // ohnehin mehrere `getBoundingClientRect`-Aufrufe je Zettel macht.
+    // Gemessen statt fest verdrahtet: eine Konstante liefe bei der nächsten
+    // Änderung an Rahmen oder Polster still auseinander.
     const zettelStyle = getComputedStyle(el)
     const chromeWidth =
       parseFloat(zettelStyle.borderLeftWidth) +
@@ -567,39 +360,23 @@ const relayout = (animate: boolean, tappedId?: string): boolean => {
       parseFloat(zettelStyle.paddingLeft) +
       parseFloat(zettelStyle.paddingRight)
 
-    // --- Punktwert oben rechts? (Karten-Redesign, Ticket 00a, Handoff
-    // Punkt 6) ----------------------------------------------------------
-    //
-    // Der Sticker wandert nach oben, wenn der Zettel DADURCH schmaler wird.
-    // Nicht schon dann, wenn die Fußzeile breiter als der Titel ist: oben
-    // kostet er `cornerExtra` (er verengt den Titelkasten, siehe dort), unten
-    // kostet er `pointsWidth` plus `gap`. Verglichen werden deshalb die beiden
-    // Breiten, die der Zettel wirklich BEKÄME — und zwar die geplanten, nicht
-    // die gewünschten (siehe `defaultNoteWidth` unten). Titel UND Fußzeile
-    // stehen für die Messung auf `max-content` (Regeln dazu in `WallNote.vue`,
+    // Punktwert oben rechts? Der Sticker wandert nach oben, wenn der Zettel
+    // DADURCH schmaler wird — oben kostet er `cornerExtra` (er verengt den
+    // Titelkasten), unten `pointsWidth` plus `gap`. Verglichen werden die
+    // geplanten Breiten, nicht die gewünschten (→ `defaultNoteWidth` unten).
+    // Titel UND Fußzeile stehen für die Messung auf `max-content` (`WallNote.vue`,
     // `.zettel--measuring .title`/`.foot`).
     //
-    // **`zettel--meta-top` gehört AUSSCHLIESSLICH Vue** (Prop `metaTop`,
-    // siehe `metaTopIds` oben und `WallNote.vue`). Weder `add`/`toggle` NOCH
-    // `remove` dürfen diese Klasse hier anfassen — auch das Entfernen nicht,
-    // so wie es vorher hier stand. QC-Befund: Vue vergleicht bei jedem Patch
-    // nur den von IHM zuletzt berechneten Klassen-String mit dem NEUEN
-    // berechneten; eine extern (per `classList`) veränderte Klasse fällt aus
-    // diesem Vergleich komplett heraus. Blieb die Entscheidung über zwei
-    // Läufe gleich (der Normalfall — nichts an DIESEM Zettel hat sich
-    // geändert), hielt Vue seinen Klassen-String für unverändert und schrieb
-    // `className` gar nicht neu — die extern entfernte Klasse kam NIE
-    // zurück. Nur eine völlig UNABHÄNGIGE Bindungsänderung am selben Element
-    // (z. B. `zettel--tear-ready` beim Abreißen) brachte sie zufällig wieder
-    // mit, weil Vue dabei den GANZEN Klassen-String neu schreibt.
+    // **`zettel--meta-top` gehört AUSSCHLIESSLICH Vue** (Prop `metaTop`, siehe
+    // `metaTopIds` oben und `WallNote.vue`). Weder `add`/`toggle` NOCH `remove`
+    // dürfen diese Klasse hier anfassen — Begründung bei `metaTopIds`.
     //
-    // Die Breite, die die Fußzeile MIT Punkte-Sticker hätte, wird deshalb aus
-    // dem GERADE gerenderten Zustand REKONSTRUIERT statt am DOM erzwungen:
-    // `wasMetaTop` sagt, ob der Sticker aktuell in der Ecke sitzt (dann fehlt
-    // er der Fußzeile und wird rechnerisch wieder dazugezählt) oder schon in
-    // der Fußzeile steht (dann ist nichts zu tun). Gemessen wird der Sticker
-    // an der Stelle, an der er GERADE TATSÄCHLICH im DOM steht — Ecke oder
-    // Fußzeile —, weil `.points--sN` an beiden Orten dieselbe Größe vorgibt.
+    // Die Fußzeilenbreite MIT Punkte-Sticker wird deshalb aus dem GERADE
+    // gerenderten Zustand REKONSTRUIERT statt am DOM erzwungen: `wasMetaTop` sagt,
+    // ob der Sticker in der Ecke sitzt (dann fehlt er der Fußzeile und wird
+    // rechnerisch dazugezählt) oder schon in der Fußzeile steht. Gemessen wird er
+    // dort, wo er GERADE TATSÄCHLICH im DOM steht — `.points--sN` gibt an beiden
+    // Orten dieselbe Größe vor.
     const wasMetaTop = metaTopIds.value.has(task.task_id)
     el.style.width = 'max-content'
     const footWidthCurrent = footEl?.getBoundingClientRect().width ?? 0
@@ -608,46 +385,35 @@ const relayout = (animate: boolean, tappedId?: string): boolean => {
       ? el.querySelector<HTMLElement>('.corner .points')
       : el.querySelector<HTMLElement>('.foot > .points')
 
-    // Der Sticker klebt SCHIEF (`.points { transform: rotate(-6deg) }`, der
-    // Stern `-10deg`). `getBoundingClientRect()` liefert das Rechteck NACH der
-    // Transformation, also den gedrehten Umriss — für das Layout zählt aber
-    // die ungedrehte Breite: eine Drehung verschiebt nichts im Fluss. QC
-    // gemessen: 37,37 statt 34,00 px, beim Stern 45,29 statt 39,09 px. Die
-    // Differenz ginge in `cornerExtra` UND in `footWidthFull` ein und machte
-    // jeden Zettel mit Sticker oben rund 3 px zu breit.
+    // Der Sticker klebt SCHIEF (`.points { transform: rotate(-6deg) }`, der Stern
+    // `-10deg`). `getBoundingClientRect()` liefert den gedrehten Umriss, für das
+    // Layout zählt die ungedrehte Breite — sonst würde jeder Zettel mit Sticker
+    // oben rund 3 px zu breit (über `cornerExtra` UND `footWidthFull`).
     //
-    // Die Neigung wird für den Moment der Messung per Inline-Style
-    // abgeschaltet und danach zurückgenommen (`''`, denn im Ruhezustand steht
-    // dort nichts) — dasselbe Muster wie bei `.title` und `min-content` unten.
-    // `offsetWidth` wäre der falsche Ausweg: es rundet auf ganze Zahlen ab,
-    // wogegen der Kommentar am Kopf dieses Messblocks steht. Und
-    // `zettel--measuring` hilft hier nicht: dessen `transform: none` gilt für
-    // den ZETTEL, nicht für den Sticker.
+    // Die Neigung wird für die Messung per Inline-Style abgeschaltet und danach
+    // zurückgenommen (`''`, im Ruhezustand steht dort nichts). `offsetWidth` wäre
+    // der falsche Ausweg (rundet ab, siehe Kopf dieses Messblocks), und
+    // `zettel--measuring` hilft nicht: dessen `transform: none` gilt für den
+    // ZETTEL, nicht für den Sticker.
     if (visiblePointsEl) visiblePointsEl.style.transform = 'none'
     const pointsWidth = visiblePointsEl?.getBoundingClientRect().width ?? 0
     if (visiblePointsEl) visiblePointsEl.style.transform = ''
 
     // Beim Herausrechnen des Punktwerts zählt ein Flex-`gap` mit — ein `gap`
-    // entsteht nur ZWISCHEN Geschwistern, bei einem einzelnen Kind gäbe es
-    // keinen.
+    // entsteht nur ZWISCHEN Geschwistern. Der Punktwert ist in der Fußzeile
+    // **nie** das einzige Kind: JEDER Zettel trägt einen Stempel (→ `WallNote.vue`,
+    // `stampLabel`).
     //
-    // Der Punktwert ist in der Fußzeile **nie** das einzige Kind: seit dem
-    // Grundabdruck trägt JEDER Zettel einen Stempel (→ `WallNote.vue`,
-    // `stampLabel`). Die frühere Abfrage `hasOtherFootContent` (`.subs-badge,
-    // .due-stamp`) war damit immer wahr und ihr Null-Zweig toter Code; sie ist
-    // hier durch eine Prüfung der Voraussetzung ersetzt, auf der die Rechnung
-    // wirklich steht.
-    //
-    // Denn die Rechnung steht auf ZWEI Annahmen über `WallNote.vue`: der
+    // Die Rechnung steht auf ZWEI Annahmen über `WallNote.vue`: der
     // Stempel heißt `.due-stamp`, und er ist ein DIREKTES Flex-Kind von
     // `.foot`. Fällt eine davon, ist `footGap` falsch, und die Zettel werden
     // still falsch breit gepackt — kein Fehler, keine Warnung, nur ein Zettel,
     // der nicht passt. Deshalb wird sie geprüft und laut gemeldet, statt
     // stumm auf 0 zurückzufallen.
     //
-    // Die 6 selbst bleibt verdrahtet (`.foot { gap: 6px }`) — dass sie nicht
-    // aus dem `getComputedStyle` der Fußzeile kommt, ist ein bekannter,
-    // eigener Befund (→ Ticket `42`) und hier bewusst nicht mitgeändert.
+    // Die 6 selbst bleibt verdrahtet (`.foot { gap: 6px }`) statt aus dem
+    // `getComputedStyle` der Fußzeile gelesen — bekannte Lücke, bewusst hier
+    // nicht mitgeändert.
     if (!stampWarned && !footEl?.querySelector(':scope > .due-stamp')) {
       stampWarned = true
       console.warn(
@@ -664,110 +430,62 @@ const relayout = (animate: boolean, tappedId?: string): boolean => {
       : Math.max(0, footWidthCurrent - pointsWidth - footGap)
 
     // Die Breite, unter der ein Wort abgeschnitten würde — `.title` SELBST auf
-    // `min-content` gestellt (nicht der ganze Zettel, dessen Breite von der
-    // jetzt Vue-exklusiven `zettel--meta-top`-Klasse mitbestimmt würde).
-    // Steht HIER und nicht mehr hinter der Entscheidung, weil die Entscheidung
-    // sie inzwischen braucht: `defaultNoteWidth` klemmt nach unten gegen
-    // `minimum`, und `minimum` hängt an dieser Messung.
+    // `min-content` gestellt (nicht der ganze Zettel, dessen Breite die
+    // Vue-exklusive `zettel--meta-top`-Klasse mitbestimmt). Steht vor der
+    // Entscheidung, weil `defaultNoteWidth` nach unten gegen `minimum` klemmt.
     el.classList.remove('zettel--single-line')
     if (titleEl) titleEl.style.width = 'min-content'
     const titleMinimum = titleEl?.getBoundingClientRect().width ?? titleWidth
     if (titleEl) titleEl.style.width = ''
 
-    // Was der Sticker OBEN kostet.
-    //
-    // Der Anlass (Ticket 12): ohne diesen Zuschlag setzten **21 von 60**
-    // Zetteln ihren Titel mehrzeilig, obwohl sie ihre volle natürliche Breite
-    // hatten — die Messung beschrieb einen Titel, den es so nie gab. Mit ihm
-    // sind es 0 von 60. An dieser Spanne merkt der Nächste, ob die Korrektur
-    // noch trägt.
+    // Was der Sticker OBEN kostet. Ohne diesen Zuschlag setzt ein Teil der Zettel
+    // seinen Titel mehrzeilig, obwohl er die volle natürliche Breite hat.
     //
     // `.corner` ist in `WallNote.vue` ein `float: right` in `.head`
     // (`display: flow-root`) — der Titel steht aber NICHT „um ihn herum": weil
     // `.title` mit `overflow: hidden` einen eigenen Block-Formatierungskontext
     // öffnet, darf sein Kasten den Float-Margin-Kasten nicht überlappen. Der
-    // Titel wird deshalb über seine GANZE Höhe schmaler, nicht nur in der
-    // ersten Zeile — der Text steht in einer verengten Spalte neben dem
-    // Sticker, jede Zeile gleich kurz. QC-Beleg: `head.clientWidth −
-    // title.clientWidth` ist bei jedem `metaTop`-Zettel die Breite dieser Ecke
-    // und bei allen anderen 0 — gemessen 41 bei 36 Zetteln und 46 bei zweien.
-    //
-    // Die Ecke ist also NICHT über alle Zettel gleich breit: die beiden
-    // Ausreißer sind die Fünf-Punkte-Sterne, die `.points--s5` auf 39,1 statt
-    // 34 px verbreitert. Wer hier mit einer festen 41 rechnet, rechnet für
-    // jeden Stern falsch.
-    //
-    // Die beiden Zahlen sind ganzzahlig, weil `clientWidth` es ist — der
-    // Zähler zeigt den gerundeten Wert, nicht den gerechneten. `cornerExtra`
-    // selbst ergibt 41,000 bzw. 46,094 px; die fehlenden 0,094 px des Sterns
-    // sind keine Abweichung, sondern die Auflösung des Messwerkzeugs.
+    // Titel wird deshalb über seine GANZE Höhe schmaler, nicht nur in der ersten
+    // Zeile.
     //
     // Verengt wird um die Sticker-Breite plus dessen waagerechte Ränder
-    // (`.corner { margin: -1px 0 2px 7px }`: links 7 px, rechts 0).
+    // (`.corner { margin: -1px 0 2px 7px }`: links 7 px, rechts 0). Gemessen,
+    // nicht verdrahtet: die Ecke ist nicht über alle Zettel gleich breit — der
+    // Fünf-Punkte-Stern `.points--s5` ist breiter; eine feste 41 rechnete für
+    // jeden Stern falsch.
     //
-    // Gemessen, nicht verdrahtet — dieselbe Begründung wie bei `chromeWidth`:
-    // eine Konstante `41` liefe bei der nächsten Änderung an Sticker-Größe
-    // oder Rand still auseinander, und sie stimmte ohnehin nur für vier der
-    // fünf Sticker-Formen (der Stern ist breiter, `.points--s5`).
-    //
-    // `getComputedStyle` für die Ränder und NICHT `getBoundingClientRect`:
-    // ohne `zettel--meta-top` ist `.corner` `display: none` und liefert ein
-    // Rechteck der Breite 0. Ein Rand in px ist dagegen ohne Layout auflösbar
-    // und kommt auch bei `display: none` richtig heraus. Kurz einschalten
-    // wäre keine Alternative — die Klasse gehört ausschließlich Vue (siehe
-    // oben).
+    // `getComputedStyle` für die Ränder und NICHT `getBoundingClientRect`: ohne
+    // `zettel--meta-top` ist `.corner` `display: none` und misst 0. Ein Rand in px
+    // ist auch dann richtig auflösbar. Kurz einschalten geht nicht — die Klasse
+    // gehört ausschließlich Vue (siehe oben).
     const cornerEl = el.querySelector<HTMLElement>('.corner')
     const cornerStyle = cornerEl ? getComputedStyle(cornerEl) : null
     const cornerMargins = cornerStyle
       ? parseFloat(cornerStyle.marginLeft) + parseFloat(cornerStyle.marginRight)
       : NaN
-    // Zwei Ausfälle, beide nur erreichbar, wenn `WallNote` sein Markup
-    // ändert — der Vollständigkeit halber, nicht weil sie vorkommen:
-    // - Ohne `.corner` im DOM (oder mit Rändern, die nicht als Zahl
-    //   herauskommen) ist `cornerExtra` 0. Der Sticker oben kostet dann
-    //   rechnerisch nichts, und es entscheidet wieder allein die Fußzeile —
-    //   also die zu großzügige Rechnung von VOR diesem Ticket, kein sicherer
-    //   Wert.
-    // - Findet sich kein sichtbarer Sticker, ist `pointsWidth` 0 und
-    //   `cornerExtra` gleich dem Rand allein (7 px). Der Zettel wird oben
-    //   dann nie schmaler als unten, `metaTop` ist immer `false` — der
-    //   Punktwert bliebe dauerhaft in der Fußzeile.
+    // Zwei Ausfälle, beide nur erreichbar, wenn `WallNote` sein Markup ändert:
+    // - Ohne `.corner` (oder mit Rändern, die keine Zahl ergeben) ist
+    //   `cornerExtra` 0 — der Sticker oben kostet rechnerisch nichts, es
+    //   entscheidet allein die Fußzeile. Zu großzügig, kein sicherer Wert.
+    // - Ohne sichtbaren Sticker ist `pointsWidth` 0 und `cornerExtra` nur der
+    //   Rand; `metaTop` bleibt dann immer `false`.
     const cornerExtra = Number.isFinite(cornerMargins) ? pointsWidth + cornerMargins : 0
 
-    // Die beiden Fassungen des Zettels, zwischen denen die Entscheidung wählt.
-    // Jede rechnet mit IHRER Fußzeile — die eine ohne Punktwert (der steht
-    // dann oben), die andere mit. Dass `natural`/`minimum` zur GERADE
-    // getroffenen Entscheidung passen und nicht zur vorigen (`wasMetaTop`),
-    // ist damit strukturell erledigt: unten wird eine der beiden Fassungen
-    // GANZ übernommen, es gibt keine dritte Rechnung mehr, die auseinander
-    // laufen könnte.
+    // Die beiden Fassungen des Zettels, zwischen denen die Entscheidung wählt,
+    // jede mit IHRER Fußzeile (ohne bzw. mit Punktwert). Unten wird eine davon
+    // GANZ übernommen — so passen `natural`/`minimum` strukturell zur gerade
+    // getroffenen Entscheidung, nicht zur vorigen (`wasMetaTop`).
     //
-    // Beide Fassungen enthalten:
-    // - `natural`: der Titel einzeilig, mindestens so breit wie die Fußzeile
-    //   es verlangt;
-    // - `minimum`: derselbe Boden, aber der Titel darf an Wortgrenzen
-    //   umbrechen;
-    // - `chromeWidth`: Rahmen und Innenabstand von `.zettel` selbst (siehe
-    //   oben) — ohne sie fehlt der gesetzten Border-Box-Breite genau der Rand,
-    //   den Rahmen und Innenabstand brauchen;
-    // - `MEASURE_SAFETY`: die Rundungsmarge, Begründung dort.
+    // - `natural`: Titel einzeilig, mindestens so breit wie die Fußzeile;
+    // - `minimum`: derselbe Boden, aber der Titel darf an Wortgrenzen umbrechen;
+    // - plus `chromeWidth` (Rahmen und Innenabstand, siehe oben) und
+    //   `MEASURE_SAFETY` (Rundungsmarge, Begründung dort).
     //
-    // `cornerExtra` zählt in der oberen Fassung zu BEIDEN Titelmaßen. Auch zu
-    // `minimum`: der Titelkasten ist über seine ganze Höhe um `cornerExtra`
-    // verengt (siehe oben), das längste Wort muss also in die VERENGTE Spalte
-    // passen — sonst schneidet `text-overflow: ellipsis` es still ab, obwohl
-    // `minimum` genau für dieses Wort berechnet war. QC-Negativkontrolle mit
-    // ersetztem Titeltext: ohne diesen Zuschlag werden 14, 23 und 35 px
-    // abgeschnitten, mit ihm 0.
-    //
-    // **Gratis ist die Zusage nicht**, auch wenn sie meist folgenlos bleibt:
-    // der Zuschlag hebt `minimum` der oberen Fassung bei 27 von 60 Zetteln um
-    // 3…47 px, ändert dadurch bei 9 die geplante Breite, und 3 davon stehen am
-    // Ende wirklich mit Sticker oben und sind breiter als ohne ihn (161 → 163,
-    // 161 → 179, 220 → 223 px, live gemessen). Die ENTSCHEIDUNG `metaTop`
-    // kippt dabei bei keinem einzigen Zettel. Wer sich später fragt, warum
-    // drei Zettel breiter sind als ihr Titel verlangt: das ist der Preis
-    // dafür, dass kein Wort still abgeschnitten wird.
+    // `cornerExtra` zählt in der oberen Fassung zu BEIDEN Titelmaßen, auch zu
+    // `minimum`: der Titelkasten ist über seine ganze Höhe verengt, das längste
+    // Wort muss in die VERENGTE Spalte passen — sonst schneidet `text-overflow:
+    // ellipsis` es still ab. Der Preis: einzelne Zettel mit Sticker oben sind ein
+    // paar Pixel breiter, als ihr Titel verlangt.
     const shapeWithMetaTop: WallNoteShape = {
       id: task.task_id,
       natural:
@@ -783,32 +501,22 @@ const relayout = (animate: boolean, tappedId?: string): boolean => {
       minimum: Math.ceil(Math.max(titleMinimum, footWidthFull) + chromeWidth) + MEASURE_SAFETY,
     }
 
-    // Entschieden wird gegen die Breite, die TATSÄCHLICH herauskommt — nicht
-    // gegen die gewünschte. Der Unterschied ist der 45-%-Deckel: übersteigen
-    // beide Fassungen ihn, sind sie in Wahrheit gleich breit, und dann ist der
-    // Sticker oben die schlechtere Wahl, weil er dem Titel bei identischer
-    // Zettelbreite `cornerExtra` je Zeile wegnimmt, ohne dass der Zettel dafür
-    // schmaler würde. Ein QC hat genau das gemessen: mit der gewünschten
-    // Breite als Maßstab wurden 13 Zettel um 13…20 px breiter, ohne eine Zeile
-    // zu gewinnen — die Wand wuchs dadurch um 13,4 % in der Höhe, obwohl die
-    // Zettel zusammen 5 % niedriger waren.
+    // Entschieden wird gegen die Breite, die TATSÄCHLICH herauskommt, nicht gegen
+    // die gewünschte. Übersteigen beide Fassungen den 45-%-Deckel, sind sie gleich
+    // breit, und der Sticker oben nähme dem Titel `cornerExtra` je Zeile, ohne
+    // dass der Zettel schmaler würde.
     //
-    // Das ist ein Beleg, keine Zusage: die Regel minimiert die Breite des
-    // EINZELNEN Zettels und schaut nie auf die Wandhöhe — auch nicht auf die
-    // Höhe des Zettels selbst. Ein schmaler Zettel ist ein hoher Zettel: acht
-    // Zettel sind seit dieser Runde sechs- oder siebenzeilig (vorher einer).
-    // Vom Nutzer gesehen und so entschieden — die Wand ist unterm Strich
-    // kürzer (3548,12 gegen 3596,72 gemessen). Wer hier später Höhe
-    // optimieren will, baut eine andere Regel, nicht diese um.
+    // Die Regel minimiert die Breite des EINZELNEN Zettels und schaut nie auf
+    // Höhen — ein schmaler Zettel ist ein hoher Zettel. So entschieden, weil die
+    // Wand unterm Strich kürzer wird; wer Höhe optimieren will, baut eine andere
+    // Regel, nicht diese um.
     //
     // Benutzt wird die ECHTE Regel aus `wallLayout.ts` statt einer Kopie des
-    // Deckels an dieser Stelle. Eine zweite Fassung derselben Entscheidung ist
-    // genau die Fehlerklasse, um die es hier geht.
+    // Deckels — eine zweite Fassung derselben Entscheidung liefe auseinander.
     //
-    // Bei Gleichstand bleibt der Sticker UNTEN: `<`, nicht `<=`. Beide Werte
-    // sind ganze Pixel, der Umzug muss also mindestens 1 px echt einsparen.
-    // Dass die Fußzeile dabei nie abgeschnitten wird, garantiert `minimum` —
-    // `defaultNoteWidth` klemmt nach unten nie darunter.
+    // Bei Gleichstand bleibt der Sticker UNTEN: `<`, nicht `<=`; der Umzug muss
+    // mindestens 1 px echt einsparen. Dass die Fußzeile nie abgeschnitten wird,
+    // garantiert `minimum` — `defaultNoteWidth` klemmt nach unten nie darunter.
     const widthWithMetaTop = defaultNoteWidth(shapeWithMetaTop, usableWidth)
     const widthWithMetaFoot = defaultNoteWidth(shapeWithMetaFoot, usableWidth)
 
@@ -831,40 +539,26 @@ const relayout = (animate: boolean, tappedId?: string): boolean => {
     lineHeights.set(task.task_id, Number.isFinite(lineHeight) && lineHeight > 0 ? lineHeight : 0)
   }
 
-  // Die frisch getroffene `metaTop`-Entscheidung wird VORWÄRTS ans DOM
-  // übergeben, bevor irgendeine Höhe gemessen wird (Ticket 19 — die
-  // Resize-Hälfte des Mechanismus aus Ticket 13).
+  // Die frisch getroffene `metaTop`-Entscheidung wird VORWÄRTS ans DOM gegeben,
+  // bevor eine Höhe gemessen wird. Das Set erreicht das DOM als Klasse
+  // `zettel--meta-top` erst im NÄCHSTEN Tick, Schritt 3 (Zeilen) und Schritt 4
+  // (Höhen) laufen aber in DIESEM. Für jeden gekippten Zettel mäßen sie die ALTE
+  // Fassung, und `packed.height` (Inline-Höhe der Wand) stünde nach einer
+  // Breitenänderung deutlich zu niedrig. Der Resize-Wächter (`width ===
+  // lastWidth`) lässt bewusst nur EINEN Lauf zu — nichts heilte das später.
   //
-  // Das Set unten erreicht das DOM als Klasse `zettel--meta-top` erst im
-  // NÄCHSTEN Tick; Schritt 3 (Zeilen zählen) und Schritt 4 (Höhen messen)
-  // laufen aber noch in DIESEM. Für jeden Zettel, dessen Entscheidung gerade
-  // gekippt ist, beschrieben beide Schritte damit die ALTE Fassung: nach einer
-  // Breitenänderung kippten 20 von 86 Zetteln, 16 Höhen änderten sich NACH dem
-  // Packlauf um bis zu +53 px, und `packed.height` blieb rund 300 px unter dem
-  // konvergierten Wert — sichtbar, weil diese Zahl als Inline-Höhe am
-  // Wand-Element steht. Der Resize-Wächter (`width === lastWidth`) lässt
-  // bewusst nur EINEN Lauf zu, es gab also nichts, das das später heilte.
+  // Die Klasse selbst darf hier NICHT gesetzt werden — sie gehört ausschließlich
+  // Vue. Sie schaltet aber nur `display` an zwei vorhandenen Knoten um
+  // (`WallNote.vue`: `.zettel--meta-top .corner { display: flex }`,
+  // `.zettel--meta-top .foot > .points { display: none }`). Genau diese Wirkung
+  // wird als Inline-`display` vorweggenommen; schreibt Vue im nächsten Tick die
+  // Klasse, ändert sich an der Darstellung nichts mehr.
   //
-  // Die Klasse selbst darf hier NICHT gesetzt werden — sie gehört
-  // ausschließlich Vue (Begründung oben im Messblock). Sie schaltet aber nur
-  // `display` an zwei ohnehin vorhandenen Knoten um (`WallNote.vue`:
-  // `.zettel--meta-top .corner { display: flex }`, `.zettel--meta-top .foot >
-  // .points { display: none }`). Genau diese Wirkung wird deshalb als
-  // Inline-`display` vorweggenommen: das DOM zeigt die NEUE Fassung sofort,
-  // die Messungen treffen sie, und wenn Vue im nächsten Tick die Klasse
-  // schreibt, ändert sich an der Darstellung nichts mehr.
-  //
-  // Aufgeräumt wird per `nextTick`, NACH Vues DOM-Update: dann sagt die Klasse
-  // dasselbe wie der Inline-Stil, und der Stil muss weg, weil er sonst jede
-  // SPÄTERE Klassenänderung überstimmen würde (Inline schlägt Stylesheet).
-  // Sofortiges Zurücknehmen nach der Messung wäre falsch: bis zum Klassen-
-  // Update stünde wieder die alte Fassung im DOM, und genau das — Höhen, die
-  // sich nach dem Packlauf noch ändern — ist der Fehler dieses Tickets.
-  //
-  // Der Lade-Pfad bleibt davon unberührt, sobald er konvergiert ist (dort
-  // kippt keine Entscheidung, die Schleife unten findet nichts); im expanded-
-  // Zweig kippt nie etwas, weil die Entscheidung dort mitgenommen wird
-  // (Ticket 13).
+  // Aufgeräumt wird per `nextTick`, NACH Vues DOM-Update — sonst überstimmte der
+  // Inline-Stil jede SPÄTERE Klassenänderung. Sofort nach der Messung
+  // zurücknehmen wäre falsch: bis zum Klassen-Update stünde wieder die alte
+  // Fassung im DOM. Im expanded-Zweig kippt nie etwas, weil die Entscheidung dort
+  // mitgenommen wird.
   const flippedEls: HTMLElement[] = []
   for (const shape of shapes) {
     const el = elements.get(shape.id)
@@ -901,17 +595,13 @@ const relayout = (animate: boolean, tappedId?: string): boolean => {
   const planned = planNoteWidths(shapes, usableWidth)
 
   // Schritt 3 — geplante Breiten setzen, Zeilen prüfen, zu Hohes zurücknehmen.
-  //
-  // Ob eine geplante Verschmälerung den Zettel zu hoch macht, lässt sich nur
-  // messen: wie viele Zeilen ein Titel bei einer Breite braucht, weiß der
+  // Wie viele Zeilen ein Titel bei einer Breite braucht, weiß nur der
   // Umbruch-Algorithmus des Browsers, keine Formel.
   //
-  // **Bezugsgröße der Grenze ist `fallback`** — die Breite, die dieser Zettel
-  // ohne den zweiten Packlauf bekäme, also die bereits bei `MAX_WIDTH_RATIO`
-  // gedeckelte. NICHT die natürliche, einzeilige Breite. Gemessen wird also
-  // „eine Zeile mehr, als dieser Zettel ohnehin gehabt hätte"; ein Zettel, der
-  // schon gedeckelt zweizeilig ist, darf dreizeilig werden. Das ist Absicht:
-  // der Deckel ist der Bestand, gegen den dieses Ticket antritt.
+  // **Bezugsgröße der Grenze ist `fallback`** — die Breite ohne zweiten Packlauf,
+  // also die bereits bei `MAX_WIDTH_RATIO` gedeckelte, NICHT die einzeilige. Ein
+  // gedeckelt zweizeiliger Zettel darf also dreizeilig werden. Absicht: der Deckel
+  // ist der Bestand, gegen den der zweite Lauf antritt.
   const fallbacks = new Map<string, number>()
   const widths = new Map<string, number>()
   for (const shape of shapes) {
@@ -949,15 +639,9 @@ const relayout = (animate: boolean, tappedId?: string): boolean => {
     if (lines > baseLines + MAX_EXTRA_LINES) rejected.add(shape.id)
   }
 
-  // Zurücknehmen — auf `fallback`, also auf den Stand ohne zweiten Packlauf.
-  //
-  // Vorher gab es hier eine Kette „Paar zurücknehmen, wenn zu hoch": die
-  // Paar-Erzwingung in `planNoteWidths` konnte zwei Zettel gemeinsam
-  // verschmälern, und wer davon zu hoch wurde, musste den Partner mitverwerfen
-  // (sonst stünde die andere Hälfte schmal UND ohne Gegenwert allein). Die
-  // Paar-Erzwingung ist entfallen (Ticket 02) — übrig bleibt nur noch der
-  // Streifen-Füller, der Zettel einzeln verschmälert, also braucht es keine
-  // Partner-Rücknahme mehr.
+  // Zurücknehmen — auf `fallback`, den Stand ohne zweiten Packlauf. Der
+  // Streifen-Füller verschmälert Zettel einzeln, eine Partner-Rücknahme braucht
+  // es deshalb nicht.
   for (const id of rejected) {
     const el = elements.get(id)
     const fallback = fallbacks.get(id)
@@ -979,21 +663,16 @@ const relayout = (animate: boolean, tappedId?: string): boolean => {
       expanded: expandedIds.value.has(shape.id),
       // **`-1`, nicht `0` — das ist Absicht, bitte nicht „aufräumen".**
       //
-      // Die drei Listen oben (`pendingTasks` / `dailyTasks` / `projectTasks`)
-      // teilen `wallTasks` heute vollständig auf, dieser Fall tritt also nicht
-      // ein. Wenn er je einträte, wäre `0` die schlechteste Antwort: Gruppe 0
-      // ist eine ECHTE Gruppe (fällig, Reißzwecke), und `fastenersOfGroup` in
-      // `wallLayout.ts` gäbe dem Zettel damit still die Befestigung mit dem
-      // KLEINSTEN Überstand. Die Wand polsterte oben zu knapp und die
-      // Befestigung ragte wieder über den Kork (Ticket 04).
+      // Die drei Listen (`pendingTasks` / `dailyTasks` / `projectTasks`) teilen
+      // `wallTasks` heute vollständig auf. Träte der Fall je ein, wäre `0` die
+      // schlechteste Antwort: Gruppe 0 ist eine ECHTE Gruppe (fällig, Reißzwecke),
+      // und `fastenersOfGroup` in `wallLayout.ts` gäbe dem Zettel still die
+      // Befestigung mit dem KLEINSTEN Überstand — die Wand polsterte oben zu knapp,
+      // die Befestigung ragte über den Kork.
       //
-      // `-1` ist keine Gruppe. `fastenersOfGroup` findet dafür nichts und fällt
-      // auf ALLE Befestigungen zurück — die Wand polstert dann für die
-      // ungünstigste. Erst dadurch ist das Netz dort überhaupt erreichbar.
-      //
-      // Für das Packen selbst ist der Wert unschädlich: `packWall` gruppiert
-      // nur und sortiert die Gruppenschlüssel aufsteigend, ein unbekannter
-      // Zettel landet also schlicht ganz oben in einer eigenen Gruppe.
+      // `-1` ist keine Gruppe: `fastenersOfGroup` fällt auf ALLE Befestigungen
+      // zurück und polstert für die ungünstigste. Für das Packen unschädlich — ein
+      // unbekannter Zettel landet ganz oben in einer eigenen Gruppe.
       group: taskGroups.get(shape.id) ?? -1,
       // Wo dieser Zettel im vorigen Lauf stand. `packWall` braucht das nur,
       // solange eine Vorgabe im Spiel ist: wer vorher unter oder neben dem
@@ -1003,10 +682,9 @@ const relayout = (animate: boolean, tappedId?: string): boolean => {
     })
   }
 
-  // Vorgaben für die aufgeklappten Zettel, in Antipp-Reihenfolge (Ticket 13).
-  // Gefiltert auf das, was gerade wirklich an der Wand hängt — eine Vorgabe für
-  // einen Zettel, den `packWall` gar nicht bekommt, wäre nur ein stiller
-  // Konfliktpartner für die übrigen.
+  // Vorgaben der aufgeklappten Zettel in Antipp-Reihenfolge, gefiltert auf das,
+  // was gerade an der Wand hängt — eine Vorgabe für einen Zettel, den `packWall`
+  // nicht bekommt, wäre ein stiller Konfliktpartner für die übrigen.
   const onWall = new Set(metrics.map((note) => note.id))
   const pins = [...pinnedTops].filter(([id]) => onWall.has(id)).map(([id, top]) => ({ id, top }))
 
@@ -1030,18 +708,11 @@ const relayout = (animate: boolean, tappedId?: string): boolean => {
     el.style.zIndex = String(note.z)
     lastPositions.set(note.id, { x, y })
 
-    // Der angetippte Zettel wird NICHT animiert.
-    //
-    // Aufklappen ist eine Aussage über genau diesen Zettel. Rutscht er dabei
-    // selbst sichtbar weg, ist der Bezugspunkt der Handlung verloren: die
-    // Bewegung der anderen Zettel liest sich als „die Wand ordnet sich um mich
-    // herum" — richtig —, die eigene Bewegung als „ich habe danebengetippt" —
-    // falsch. Die Anheft-Bewegung der Spec gilt den ANDEREN Zetteln.
-    //
-    // Seit Ticket 13 steht er ohnehin still (seine Oberkante ist Vorgabe, →
-    // `pinnedTops`); das Auslassen hier bleibt trotzdem: die eine Ausnahme, in
-    // der er doch wandert — zwei Vorgaben, die sich nicht vertragen —, ist
-    // gerade die, in der eine Flugbahn am meisten verwirrte.
+    // Der angetippte Zettel wird NICHT animiert: rutschte er selbst sichtbar,
+    // läse sich das als „ich habe danebengetippt". Die Bewegung gilt den ANDEREN
+    // Zetteln. Meist steht er ohnehin still (Vorgabe, → `pinnedTops`); die
+    // Ausnahme — zwei unverträgliche Vorgaben — ist gerade die, in der eine
+    // Flugbahn am meisten verwirrte.
     // Ebenso der Zettel, der gerade unter einer Geste steht (→ `gestureNoteId`).
     if (note.id === tappedId || note.id === gestureNoteId.value) continue
 
@@ -1055,30 +726,20 @@ const relayout = (animate: boolean, tappedId?: string): boolean => {
     }
   }
 
-  // Hier stand bis Ticket 13 die **Scroll-Nachführung**: sie merkte sich die
-  // Bildschirmposition des angetippten Zettels, schrieb die neue Wandhöhe vorab
-  // ans Element (damit ein Bildlauf nach unten nicht am alten Seitenende
-  // abschnitt) und zog den Bildlauf um die Wanderstrecke des Zettels nach. Sie
-  // ist ersatzlos entfallen: sie existierte nur, um einen wandernden Zettel im
-  // Blick zu halten. Er wandert nicht mehr — und der Bildlauf einer Seite ist
-  // das, was der Nutzer eingestellt hat, nicht das, was die Wand für richtig
-  // hält. Gemessen wurde vor dem Umbau ein Nachzug von bis zu 906 px pro
-  // Aufklappen; nach oben war er bei `scrollY = 0` abgeschnitten, sodass der
-  // Zettel dann doch aus dem Bild sprang.
+  // Bewusst keine Scroll-Nachführung: der angetippte Zettel wandert nicht, und
+  // der Bildlauf gehört dem Nutzer, nicht der Wand.
+  //
   // Geglückt ist der Lauf nur, wenn JEDER gerenderte Zettel eine Position
   // bekommen hat (→ `skipped`). Sonst meldet er `false`, wird vertagt und
   // nachgeholt — und der Platzhalter bleibt so lange stehen.
   const complete = skipped === 0
   if (complete) {
-    // Erst jetzt darf die Wand ihre Zettel zeigen; vorher säßen sie alle auf
-    // `left: 0; top: 0` übereinander. Die Positionen oben stehen bereits, und
-    // `revealNotes` wartet zusätzlich einen Frame ab (Begründung dort).
+    // Erst jetzt dürfen die Zettel sichtbar werden; `revealNotes` wartet
+    // zusätzlich einen Frame ab (Begründung dort).
     revealNotes()
-    // Gedächtnisstütze für die Mindesthöhe des Platzhalters beim nächsten
-    // Montieren (→ `placeholderMinHeight`). Ebenfalls NUR bei vollständigem
-    // Lauf: ein Lauf mit übersprungenen Zetteln packt weniger und liefert eine
-    // zu kleine Höhe — gemerkt würde daraus eine Mindesthöhe, die beim nächsten
-    // Montieren zu klein ist, also genau der Sprung, den sie verhindern soll.
+    // Höhengedächtnis für `placeholderMinHeight` — NUR bei vollständigem Lauf:
+    // ein Teillauf liefert eine zu kleine Höhe und damit beim nächsten Montieren
+    // genau den Sprung, den die Mindesthöhe verhindern soll.
     rememberWallHeight(packed.height)
   }
 
@@ -1090,31 +751,17 @@ const relayout = (animate: boolean, tappedId?: string): boolean => {
 /**
  * Auf- und Zuklappen eines Zettels mit Unteraufgaben.
  *
- * Seit Ticket 02 packt die Skyline **frei innerhalb ihrer Gruppe** (→
- * `packWall`): sie wählt bei jedem Schritt den Zettel mit der aktuell
- * niedrigsten möglichen Oberkante, nicht strikt die Eingabereihenfolge. Ändert
- * sich dadurch die Höhe des aufklappenden Zettels, kann sich deshalb auch die
- * Platzierung **anderer** Zettel derselben Gruppe verschieben — nicht nur die
- * der nachfolgenden. Es gibt hier bewusst keine Garantie „Zettel oberhalb
- * bewegen sich um 0 px" mehr; das FLIP-Animationssystem (`animateMoves`)
- * behandelt das bereits: es animiert jeden Zettel, dessen Position sich
- * tatsächlich ändert, und lässt den Rest unangetastet.
+ * Die Skyline packt frei innerhalb ihrer Gruppe (→ `packWall`): ändert sich die
+ * Höhe des aufklappenden Zettels, können sich auch **andere** Zettel derselben
+ * Gruppe verschieben, nicht nur die nachfolgenden. Bewusst keine Garantie
+ * „oberhalb bewegt sich nichts" — `animateMoves` animiert jeden Zettel, dessen
+ * Position sich tatsächlich ändert.
  *
- * **Der angetippte Zettel selbst bleibt liegen** (Ticket 13). Beim Aufklappen
- * wird seine aktuelle Oberkante gemerkt und geht `packWall` als Vorgabe mit; die
- * anderen weichen ihm aus. Vorher wanderte er ans untere Ende seiner Gruppe —
- * mit voller Wandbreite verliert er jeden Vergleich um die niedrigste Oberkante
- * — und ein Scroll-Anker zog die Seite hinterher. Beides ist weg.
- *
- * Gemerkt wird die zuletzt GESETZTE Position (`lastPositions`), nicht eine frisch
- * gemessene: sie ist die Zahl, die `packWall` ausgerechnet hat, und genau die
- * soll er behalten. Eine Messung am DOM lieferte hier den Wert MITTEN in einer
- * laufenden Fluganimation — der Zettel bliebe dann dort liegen, wo er zufällig
- * gerade schwebte.
- *
- * Steht dort noch nichts (erster Lauf, Zettel gerade erst eingehängt), gibt es
- * keine Vorgabe und der Zettel packt frei mit — sichtbar wie vor diesem Ticket,
- * aber nicht falsch.
+ * **Der angetippte Zettel selbst bleibt liegen:** seine Oberkante geht `packWall`
+ * als Vorgabe mit, die anderen weichen aus. Gemerkt wird die zuletzt GESETZTE
+ * Position (`lastPositions`), nicht eine frisch gemessene — eine DOM-Messung
+ * träfe ihn mitten in einer laufenden Fluganimation. Steht dort noch nichts
+ * (erster Lauf), packt er ohne Vorgabe frei mit.
  */
 const toggleNote = (taskId: string) => {
   const next = new Set(expandedIds.value)
@@ -1149,17 +796,13 @@ const animateMoves = (
   moved.forEach(({ el, id, dx, dy, z }, index) => {
     const rot = rotationOf(id)
     const lift = `translate(${dx * 0.6}px, ${dy * 0.6 - 8}px) rotate(${rot * 0.25}deg) scale(1.07)`
-    // Während des Flugs über die ruhenden Zettel gehoben (600), aber NICHT
-    // nach Laufnummer sortiert: `z` ist der bereits von `packWall` berechnete
-    // Stapelwert (Ticket 11, kleineres x/y oben) — damit gilt „der linke
-    // Zettel liegt oben" auch WÄHREND der Bewegung, nicht erst danach.
-    // `z` reicht von 1 bis `placed.length` (real deutlich unter 100), also
-    // bleibt `600 + z` sicher unter den 800/810, die `WallNote.vue` per
-    // `!important` für den gezogenen bzw. lang gedrückten Zettel reserviert
-    // (siehe Obergrenze in `packWall`). Die Staffelung der Verzögerung
-    // (`delay` unten) bleibt an der Laufnummer `index` hängen — sie sagt nur,
-    // WANN ein Zettel losfliegt, nicht wer oben liegt; das sind zwei
-    // verschiedene Aussagen.
+    // Während des Flugs über die ruhenden Zettel gehoben (600), aber NICHT nach
+    // Laufnummer sortiert: `z` ist der Stapelwert aus `packWall`, damit „der linke
+    // Zettel liegt oben" auch WÄHREND der Bewegung gilt. `600 + z` bleibt sicher
+    // unter den 800/810, die `WallNote.vue` per `!important` für den gezogenen
+    // bzw. lang gedrückten Zettel reserviert (siehe Obergrenze in `packWall`).
+    // Die Verzögerung (`delay`) hängt an `index` — sie sagt, WANN ein Zettel
+    // losfliegt, nicht wer oben liegt.
     el.style.zIndex = String(600 + z)
     const animation = el.animate(
       [
@@ -1200,48 +843,35 @@ const animateMoves = (
 
 /**
  * Ein Packlauf ohne brauchbare Wandbreite ist **nicht gescheitert, sondern
- * vertagt** (Ticket 02).
+ * vertagt**. Ohne Nachholen bliebe der Abbruch endgültig: `layoutSignature`
+ * ändert sich beim Reiterwechsel nicht, und der Resize-Wächter
+ * (`width === lastWidth`) schluckt den Nachschlag — die Zettel blieben bis zum
+ * Neuladen gestapelt.
  *
- * `relayout` bricht still ab, wenn das Wand-Element fehlt oder keine brauchbare
- * Breite hat — und bis Ticket 02 versuchte es danach niemand erneut:
- * `layoutSignature` ändert sich beim Reiterwechsel nicht (dieselben Aufgaben),
- * und der Resize-Wächter (`width === lastWidth`) schluckt den Nachschlag. Der
- * Abbruch war endgültig bis zum Neuladen, die Zettel blieben gestapelt liegen.
- *
- * Deshalb hängt die Vertagung am **Rückgabewert**, nicht an den beiden bekannten
- * `return`-Stellen: ein dritter, heute unbekannter Abbruchweg muss nur `false`
- * liefern und wird ohne weiteres Zutun mit nachgeholt. Der dritte gibt es
- * bereits — ein Lauf, der Zettel ohne Element übersprungen hat (→ `skipped`),
- * meldet ebenfalls `false` und wird nachgeholt.
+ * Die Vertagung hängt am **Rückgabewert**, nicht an den bekannten
+ * `return`-Stellen: jeder Abbruchweg, der `false` liefert (auch `skipped`), wird
+ * ohne weiteres Zutun nachgeholt.
  *
  * **Was die Nachhol-Schleife stoppt** — zwei getrennte Bremsen:
  * 1. Die Frame-Leiter ist auf `MAX_DEFER_FRAMES` begrenzt. Bleibt die Breite
- *    dauerhaft unbrauchbar (Wand `display: none`, Breite 0), läuft sie einmal
- *    ab und hört auf — es wird nichts gepollt.
- * 2. Danach hängt der Nachschlag nur noch am `ResizeObserver`, der von sich aus
- *    ausschließlich bei einer echten Größenänderung feuert. Kein Timer, kein
- *    Selbstaufruf.
+ *    dauerhaft unbrauchbar (Wand `display: none`), läuft sie einmal ab — es wird
+ *    nichts gepollt.
+ * 2. Danach hängt der Nachschlag nur noch am `ResizeObserver`, der nur bei einer
+ *    echten Größenänderung feuert. Kein Timer, kein Selbstaufruf.
  * Ein geglückter Lauf entwaffnet die Vertagung sofort.
  */
 const MAX_DEFER_FRAMES = 60
 
 /**
- * Steht ein Nachschlag aus?
+ * Steht ein Nachschlag aus? Nur ein Merker: ein vertagter Lauf **animiert nicht**
+ * und trägt keinen angetippten Zettel mit. Bei den Breiten-Abbrüchen ist keine
+ * Position geschrieben, es gibt kein „vorher", von dem aus ein Zettel fliegen
+ * könnte; und `tappedId` Frames später anzuwenden träfe eine längst vergangene
+ * Handlung.
  *
- * Mehr als ein Merker ist es nicht: ein vertagter Lauf **animiert nicht** und
- * trägt keinen angetippten Zettel mit, es gibt also nichts zu merken außer
- * „ja". Beides hängt zusammen: In den beiden Breiten-Fällen bricht der Lauf ab,
- * ohne eine einzige Position zu schreiben — es gibt kein „vorher", von dem aus
- * ein Zettel fliegen könnte. Und `tappedId` mitzutragen hieße, die Ausnahme
- * „der Angetippte steht still" Frames später auf eine Handlung anzuwenden, die
- * längst vorbei ist. Ohne `animate` fällt beides zusammen weg, statt sich zu
- * widersprechen.
- *
- * Beim dritten Abbruchweg (`skipped > 0`) stimmt das Erste **nicht**: dort ist
- * `lastPositions` bereits geleert und ein Teil der Zettel steht schon. Ein
- * „vorher" gäbe es also — verloren geht damit eine Animation, eine falsche
- * entsteht nicht. Das ist der Preis dafür, dass hier nur ein Merker steht statt
- * eines Gedächtnisses für Absichten, und er ist bewusst bezahlt.
+ * Beim Abbruch über `skipped` gäbe es ein „vorher" — verloren geht dort eine
+ * Animation, eine falsche entsteht nicht. Bewusst bezahlt, statt ein Gedächtnis
+ * für Absichten zu führen.
  */
 let relayoutDeferred = false
 let deferFrame = 0
@@ -1257,8 +887,8 @@ const cancelDeferredRelayout = () => {
 }
 
 /**
- * Einziger Weg, einen Packlauf auszulösen. Glückt er, ist alles wie bisher;
- * bricht er ab, wird er vertagt statt fallen gelassen.
+ * Einziger Weg, einen Packlauf auszulösen. Bricht er ab, wird er vertagt statt
+ * fallen gelassen.
  */
 const runRelayout = (animate: boolean, tappedId?: string) => {
   if (relayout(animate, tappedId)) {
@@ -1310,9 +940,8 @@ watch(layoutSignature, () => {
   if ([...expandedIds.value].some((id) => !onWall.has(id))) {
     expandedIds.value = new Set([...expandedIds.value].filter((id) => onWall.has(id)))
   }
-  // Mit dem Aufklapp-Zustand geht auch die gemerkte Oberkante (Ticket 13).
-  // Bliebe sie hängen, käme der Zettel nach einem „wieder dreckig" mit einer
-  // Vorgabe aus einer Wand zurück, die es nicht mehr gibt.
+  // Mit dem Aufklapp-Zustand geht auch die gemerkte Oberkante — sonst käme der
+  // Zettel mit einer Vorgabe aus einer Wand zurück, die es nicht mehr gibt.
   for (const id of [...pinnedTops.keys()]) {
     if (!onWall.has(id)) pinnedTops.delete(id)
   }
@@ -1357,11 +986,10 @@ onMounted(async () => {
     lastWidth = wallEl.value.clientWidth
     resizeObserver = new ResizeObserver(() => {
       const width = wallEl.value?.clientWidth ?? 0
-      // `&& !relayoutDeferred`: steht ein vertagter Lauf aus, ist genau dieser
-      // Wächter das, was den Nachschlag bisher verschluckt hat (Ticket 02) —
-      // beim Reiterwechsel ist die Breite dieselbe wie beim abgebrochenen Lauf.
-      // Eine Schleife entsteht daraus nicht: der Observer feuert von sich aus
-      // nur bei einer echten Größenänderung.
+      // `&& !relayoutDeferred`: bei ausstehendem Nachschlag ist die Breite oft
+      // dieselbe wie beim abgebrochenen Lauf (Reiterwechsel), und dieser Wächter
+      // verschluckte ihn. Keine Schleife: der Observer feuert nur bei einer echten
+      // Größenänderung.
       if (width === lastWidth && !relayoutDeferred) return
       lastWidth = width
       runRelayout(false)
@@ -1369,22 +997,16 @@ onMounted(async () => {
     resizeObserver.observe(wallEl.value)
   }
 
-  // Die Schrift bestimmt die Textbreite und damit JEDE Zettelbreite. Wird mit
-  // der Ersatzschrift gemessen, fallen alle Zettel zu schmal aus und die Titel
-  // brechen um — dasselbe Schadensbild wie bei einer abgerundeten Messung.
-  // `relayout()` misst die Breiten neu, deshalb genügt hier ein weiterer Lauf,
-  // sobald die Schriften stehen. Ist bereits alles geladen, löst das Promise
-  // sofort aus und der Lauf kostet nichts.
+  // Die Schrift bestimmt JEDE Zettelbreite; mit der Ersatzschrift gemessen,
+  // fallen alle Zettel zu schmal aus und die Titel brechen um. Deshalb ein
+  // weiterer Lauf, sobald die Schriften stehen (sind sie schon geladen, kostet
+  // er nichts).
   //
-  // Der Lauf liegt in einem `requestAnimationFrame`, nicht direkt im
-  // `then`-Callback: `fonts.ready` ist beim **Umschalten des Aussehens** bereits
-  // erfüllt und löst dann als Mikrotask aus — also möglicherweise noch bevor der
-  // Browser die eben gesetzte Wandhöhe angewandt hat. Gemessen würde dann in
-  // einem Zwischenzustand, und weil `wallEl.clientWidth` davon abhängt, ob die
-  // Seite in diesem Moment schon eine Bildlaufleiste hat, fällt die Wandbreite
-  // um deren Breite anders aus als nach einem Neuladen — genau das Bild aus dem
-  // QC-Befund (ein Zettel rutscht beim Umschalten in die zweite Reihe, nach dem
-  // Neuladen steht er wieder oben). Ein Frame später steht der Zustand.
+  // In einem `requestAnimationFrame`, nicht direkt im `then`: beim **Umschalten
+  // des Aussehens** ist `fonts.ready` schon erfüllt und löst als Mikrotask aus,
+  // womöglich bevor die eben gesetzte Wandhöhe angewandt ist. `wallEl.clientWidth`
+  // hängt dann davon ab, ob schon eine Bildlaufleiste da ist — ein Zettel rutscht
+  // in die zweite Reihe und steht erst nach dem Neuladen wieder oben.
   document.fonts?.ready.then(() => requestAnimationFrame(() => runRelayout(false)))
 })
 
@@ -1395,12 +1017,10 @@ onUnmounted(() => {
   taskStore.stopProjectEffortTotals()
   resizeObserver?.disconnect()
   // Sonst liefe die Frame-Leiter eines vertagten Laufs an der ausgehängten
-  // Ansicht weiter (Ticket 02).
+  // Ansicht weiter.
   cancelDeferredRelayout()
   if (revealFrame) cancelAnimationFrame(revealFrame)
 })
-
-// --- Suche, Erstellen, Quick-Aufgabe (funktional unverändert) ----------------
 
 const showCreateModal = ref(false)
 const showQuickModal = ref(false)
@@ -1529,9 +1149,9 @@ const handleCreateQuickTask = async (data: {
 
 <template>
   <main class="wall-page">
-    <!-- Die Statusleiste (`WallStatusBar`) steckt seit Ticket 08 im globalen
-         App-Header (`Header.vue`) und läuft auf jeder Route mit — sie wird
-         hier bewusst NICHT mehr eingebunden, sonst rendert sie doppelt. -->
+    <!-- Die Statusleiste (`WallStatusBar`) steckt im globalen App-Header
+         (`Header.vue`) und läuft auf jeder Route mit — hier NICHT einbinden,
+         sonst rendert sie doppelt. -->
 
     <!-- Die Wand: Kork, absolut positionierte Zettel, keine Überschriften. -->
     <div
@@ -1543,9 +1163,9 @@ const handleCreateQuickTask = async (data: {
         minHeight: hasPacked ? undefined : placeholderMinHeight,
       }"
     >
-      <!-- Platzhalter, solange noch kein Packlauf durchgehalten hat (Ticket 02).
-           Er steht IN der Wand: so trägt die Wand selbst die Mindesthöhe und die
-           Seite springt nicht, wenn die Zettel erscheinen. -->
+      <!-- Platzhalter, solange noch kein Packlauf durchgehalten hat. Er steht IN
+           der Wand: so trägt die Wand selbst die Mindesthöhe und die Seite springt
+           nicht, wenn die Zettel erscheinen. -->
       <div v-if="!hasPacked" class="skeleton-loading wall-skeleton">
         <div class="skeleton-card"></div>
         <div class="skeleton-card"></div>
@@ -1574,10 +1194,8 @@ const handleCreateQuickTask = async (data: {
       Nichts angepinnt.
     </p>
 
-    <!-- Der Fetzen: hängt über der Erledigt-Liste und klebt den zuletzt
-         abgerissenen Zettel auf einen Tipp zurück (Ticket 11). Er rendert
-         nichts, solange nichts abgerissen wurde, und verschwindet erst beim
-         Verlassen der Pinnwand. -->
+    <!-- Der Fetzen: klebt den zuletzt abgerissenen Zettel auf einen Tipp zurück.
+         Rendert nichts, solange nichts abgerissen wurde. -->
     <WallScrap />
 
     <!-- Erledigt: kompakter Streifen UNTER der Wand, nicht auf ihr. -->
@@ -1695,18 +1313,12 @@ const handleCreateQuickTask = async (data: {
 .wall-page {
   min-height: 100vh;
   background: var(--pw-cork-deep);
-  /* Unten kommt zum FAB-Polster die Höhe des oben klebenden App-Headers dazu
-     (Header-Zeile + eingebettete Wochenziel-Leiste zusammen). Seit Ticket 08
-     ist `WallStatusBar` kein eigenständiges sticky-Element mehr, sondern Teil
-     von `Header.vue` — `--wall-status-height` ist deshalb ENTFALLEN (bewusst,
-     siehe Kommentar in `WallStatusBar.vue`) und durch `--app-header-height`
-     ersetzt, das der Header ohnehin schon meldet (`useElementHeightVar`). Eine
-     feste Pixelzahl wäre falsch, weil der Header kompakt/nicht kompakt und je
-     nach Mitgliederzahl unterschiedlich hoch ist. Ohne dieses Polster bleiben
-     am Seitenende Zettel dauerhaft unter dem Header verdeckt und ihr Eselsohr
-     (Etappe 4) wäre unerreichbar — derselbe Effekt, den vor Ticket 08
-     `--wall-status-height` allein für die (damals separate) Statusleiste
-     abgedeckt hat. */
+  /* Unten kommt zum FAB-Polster die Höhe des klebenden App-Headers dazu
+     (`--app-header-height`, gemeldet von `Header.vue` per `useElementHeightVar`;
+     er enthält die Wochenziel-Leiste). Keine feste Pixelzahl: der Header ist je
+     nach Kompaktheit und Mitgliederzahl verschieden hoch. Ohne dieses Polster
+     blieben am Seitenende Zettel samt Eselsohr dauerhaft unter dem Header
+     verdeckt. */
   /* Der untere Wert ist gerechnet, nicht gemessen: der FAB sitzt 64 + 18 px
      über der Unterkante, ist 52 px hoch und trägt Rahmen samt Schlagschatten —
      zusammen rund 138 px. Mit 148 px bleibt am Seitenende Luft unter ihm, statt
@@ -1732,21 +1344,18 @@ const handleCreateQuickTask = async (data: {
   /* Während der Breitenmessung ist ein Zettel kurzzeitig `max-content` breit
      und kann die Wand überragen. `clip` verhindert, dass dabei ein waagerechter
      Bildlauf aufblitzt; `visible` in der Senkrechten hält Reißzwecke und
-     Klebeband sichtbar, die über die Oberkante hinausragen. Das bleibt so,
-     obwohl seit Ticket 04 oben Platz für sie reserviert ist: es trägt weiter
-     den Fall, dass ein Zettel während der Breitenmessung kurzzeitig übersteht. */
+     Klebeband sichtbar, die über die Oberkante hinausragen. Bleibt, obwohl oben
+     Platz für sie reserviert ist: es trägt den kurzzeitig überstehenden Zettel. */
   overflow-x: clip;
   overflow-y: visible;
   border: 2px solid rgba(0, 0, 0, 0.12);
   transition: height 0.42s cubic-bezier(0.2, 0.8, 0.3, 1);
 }
 
-/* Vor dem ersten geglückten Packlauf (Ticket 02). Die Mindesthöhe steht als
-   Inline-Style am Element (→ `placeholderMinHeight`), weil sie aus der zuletzt
-   gepackten Höhe kommt und keine Konstante ist. Hier bleibt nur, was sich nicht
-   rechnen lässt: Die erste Höhe darf NICHT von `0` heranfahren — sie steht
-   schon, bevor die Zettel sichtbar werden, und ein Wachsen unter dem
-   Platzhalter wäre genau der Höhensprung, den die Mindesthöhe verhindert. */
+/* Vor dem ersten geglückten Packlauf. Die Mindesthöhe steht inline
+   (→ `placeholderMinHeight`). Die erste Höhe darf NICHT von `0` heranfahren —
+   ein Wachsen unter dem Platzhalter wäre genau der Höhensprung, den die
+   Mindesthöhe verhindert. */
 .wall--unpacked {
   transition: none;
 }
@@ -1798,7 +1407,6 @@ const handleCreateQuickTask = async (data: {
   color: var(--pw-ink-soft);
 }
 
-/* --- FAB als schwebende Papierkarte ---------------------------------------- */
 .fab-card {
   position: fixed;
   right: 18px;
@@ -1851,7 +1459,6 @@ const handleCreateQuickTask = async (data: {
   border-radius: 50%;
 }
 
-/* --- Such-Overlay ------------------------------------------------------------ */
 .search-overlay {
   position: fixed;
   inset: 0;
