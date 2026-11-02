@@ -13,6 +13,7 @@ import {
   buildCategoryOptions,
 } from '@/lib/categoryOrder'
 import { runQueuePass, type QueuePassResult } from '@/lib/queueRetry'
+import { withStatus } from '@/lib/networkError'
 import {
   ownedKey,
   queueOwner,
@@ -381,7 +382,7 @@ export const useShoppingStore = defineStore('shopping', () => {
     if (mutation.operation === 'create') {
       const listId = mutation.payload.listId!
       const name = mutation.payload.name!
-      const { data, error } = await supabase
+      const { data, error, status } = await supabase
         .from('shopping_categories')
         .insert({
           household_id: householdStore.currentHousehold!.household_id,
@@ -393,7 +394,7 @@ export const useShoppingStore = defineStore('shopping', () => {
         .single()
 
       if (error) {
-        if (error.code !== '23505') throw error
+        if (error.code !== '23505') throw withStatus(error, status)
         const { data: existing } = await supabase
           .from('shopping_categories')
           .select('*')
@@ -409,32 +410,32 @@ export const useShoppingStore = defineStore('shopping', () => {
     }
 
     if (mutation.operation === 'update') {
-      const { error } = await supabase
+      const { error, status } = await supabase
         .from('shopping_categories')
         .update(mutation.payload.updates!)
         .eq('category_id', categoryId!)
-      if (error && error.code !== '23505') throw error
+      if (error && error.code !== '23505') throw withStatus(error, status)
       if (error) {
         // Der neue Name gehört schon einer anderen Zeile dieser Liste:
         // verschmelzen. Die Produkte folgen dem Namen über ihre eigenen
         // wartenden Mutationen; die umbenannte Zeile bliebe sonst auf dem
         // Server unter dem alten Namen stehen und käme beim Neuabgleich als
         // leere Kategorie zurück.
-        const { error: deleteError } = await supabase
+        const { error: deleteError, status: deleteStatus } = await supabase
           .from('shopping_categories')
           .delete()
           .eq('category_id', categoryId!)
-        if (deleteError) throw deleteError
+        if (deleteError) throw withStatus(deleteError, deleteStatus)
         categories.value = categories.value.filter((c) => c.category_id !== categoryId)
       }
       return true
     }
 
-    const { error } = await supabase
+    const { error, status } = await supabase
       .from('shopping_categories')
       .delete()
       .eq('category_id', categoryId!)
-    if (error) throw error
+    if (error) throw withStatus(error, status)
     return true
   }
 
@@ -456,7 +457,7 @@ export const useShoppingStore = defineStore('shopping', () => {
     }
 
     if (mutation.operation === 'create') {
-      const { data, error } = await supabase
+      const { data, error, status } = await supabase
         .from('shopping_items')
         .insert({
           name: mutation.payload.name!,
@@ -468,7 +469,7 @@ export const useShoppingStore = defineStore('shopping', () => {
         .select()
         .single()
 
-      if (error) throw error
+      if (error) throw withStatus(error, status)
 
       // Temp-ID chaining: swap the optimistic temp row for the real one and
       // rewrite any already-queued follow-up mutations (toggle/edit/delete of
@@ -476,19 +477,19 @@ export const useShoppingStore = defineStore('shopping', () => {
       const tempId = mutation.payload.tempId
       if (tempId && data) reconcileTempId(tempId, data as ShoppingItem)
     } else if (mutation.operation === 'update') {
-      const { error } = await supabase
+      const { error, status } = await supabase
         .from('shopping_items')
         .update(mutation.payload.updates!)
         .eq('shopping_item_id', mutation.payload.itemId!)
 
-      if (error) throw error
+      if (error) throw withStatus(error, status)
     } else if (mutation.operation === 'delete') {
-      const { error } = await supabase
+      const { error, status } = await supabase
         .from('shopping_items')
         .delete()
         .eq('shopping_item_id', mutation.payload.itemId!)
 
-      if (error) throw error
+      if (error) throw withStatus(error, status)
     }
 
     console.log('✅ Synced mutation:', mutation.operation, mutation.payload)

@@ -13,6 +13,7 @@ import {
   orphanSortOrder,
 } from '@/lib/categoryOrder'
 import { createMutationQueue } from '@/lib/mutationQueue'
+import { withStatus } from '@/lib/networkError'
 import { queueOwner } from '@/lib/queueStorage'
 import { supabase } from '@/lib/supabase'
 import { useHouseholdStore } from './householdStore'
@@ -284,7 +285,7 @@ export function createChecklistStore(config: ChecklistStoreConfig) {
       if (m.operation === 'create') {
         const listId = m.payload.listId!
         const name = m.payload.name!
-        const { data, error } = await supabase
+        const { data, error, status } = await supabase
           .from(categoriesTable)
           .insert({
             household_id: householdStore.currentHousehold!.household_id,
@@ -296,7 +297,7 @@ export function createChecklistStore(config: ChecklistStoreConfig) {
           .single()
 
         if (error) {
-          if (error.code !== '23505') throw error
+          if (error.code !== '23505') throw withStatus(error, status)
           const { data: existing } = await supabase
             .from(categoriesTable)
             .select('*')
@@ -312,29 +313,32 @@ export function createChecklistStore(config: ChecklistStoreConfig) {
       }
 
       if (m.operation === 'update') {
-        const { error } = await supabase
+        const { error, status } = await supabase
           .from(categoriesTable)
           .update(m.payload.updates!)
           .eq('category_id', categoryId!)
-        if (error && error.code !== '23505') throw error
+        if (error && error.code !== '23505') throw withStatus(error, status)
         if (error) {
           // Der neue Name gehört schon einer anderen Zeile dieser Liste:
           // verschmelzen. Die Einträge folgen dem Namen über ihre eigenen
           // wartenden Mutationen; die umbenannte Zeile bliebe sonst auf dem
           // Server unter dem alten Namen stehen und käme beim Neuabgleich als
           // leere Kategorie zurück.
-          const { error: deleteError } = await supabase
+          const { error: deleteError, status: deleteStatus } = await supabase
             .from(categoriesTable)
             .delete()
             .eq('category_id', categoryId!)
-          if (deleteError) throw deleteError
+          if (deleteError) throw withStatus(deleteError, deleteStatus)
           categories.value = categories.value.filter((c) => c.category_id !== categoryId)
         }
         return true
       }
 
-      const { error } = await supabase.from(categoriesTable).delete().eq('category_id', categoryId!)
-      if (error) throw error
+      const { error, status } = await supabase
+        .from(categoriesTable)
+        .delete()
+        .eq('category_id', categoryId!)
+      if (error) throw withStatus(error, status)
       return true
     }
 
@@ -355,17 +359,20 @@ export function createChecklistStore(config: ChecklistStoreConfig) {
       }
 
       if (m.operation === 'update') {
-        const { error } = await supabase
+        const { error, status } = await supabase
           .from(itemsTable)
           .update(m.payload.updates!)
           .eq('item_id', m.payload.itemId!)
-        if (error) throw error
+        if (error) throw withStatus(error, status)
         return true
       }
 
       if (m.operation === 'delete') {
-        const { error } = await supabase.from(itemsTable).delete().eq('item_id', m.payload.itemId!)
-        if (error) throw error
+        const { error, status } = await supabase
+          .from(itemsTable)
+          .delete()
+          .eq('item_id', m.payload.itemId!)
+        if (error) throw withStatus(error, status)
         return true
       }
 

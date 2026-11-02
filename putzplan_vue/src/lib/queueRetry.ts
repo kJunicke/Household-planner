@@ -4,7 +4,7 @@
 // lässt. Was eine einzelne Mutation tut, bleibt Sache des Stores (`process`).
 
 import type { PendingMutation } from '@/types/PendingMutation'
-import { isNetworkMessage } from './networkError'
+import { isTransientFailure } from './networkError'
 
 /**
  * Fehlversuche, die kürzer als dieser Abstand nach dem letzten gezählten
@@ -15,22 +15,16 @@ import { isNetworkMessage } from './networkError'
 export const COUNT_GAP_MS = 30_000
 
 /**
- * Fehler, nach denen ein späterer Versuch sicher anders ausgeht: kein Netz
- * (auch bei `navigator.onLine === true`, z. B. Funkloch, Captive Portal) oder
- * ein abgelaufenes Token, das supabase-js gleich erneuert. Sie verbrauchen
- * keinen Versuch — sonst verwirft die Warteschlange gerade die Änderungen,
- * für die es sie gibt.
- *
- * Bewusst nur über den Fehltext und nicht über `name === 'TypeError'` wie in
- * `isNetworkError`: supabase-js liefert Netzfehler als Objekt mit „TypeError:
- * Failed to fetch" im Text. Ein echter TypeError aus einem Programmfehler muss
- * zählen, sonst hielte er die Warteschlange für immer an.
+ * Fehler, nach denen ein späterer Versuch sicher anders ausgeht: kein Netz,
+ * ein Serverfehler 5xx (→ `isTransientFailure`) oder ein abgelaufenes Token,
+ * das supabase-js gleich erneuert. Sie verbrauchen keinen Versuch — sonst
+ * verwirft die Warteschlange gerade die Änderungen, für die es sie gibt.
  */
 export function isTransientError(error: unknown): boolean {
   if (typeof navigator !== 'undefined' && navigator.onLine === false) return true
   if (!error) return false
+  if (isTransientFailure(error)) return true
   const message = String((error as { message?: unknown }).message ?? error)
-  if (isNetworkMessage(message)) return true
   const code = String((error as { code?: unknown }).code ?? '')
   return code === 'PGRST301' || code === 'PGRST303' || message.toLowerCase().includes('jwt expired')
 }
