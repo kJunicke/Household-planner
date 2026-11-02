@@ -28,10 +28,10 @@ export const useAuthStore = defineStore('auth', () => {
         userId: previousUserId,
         reason: nextUserId !== null ? 'user-changed' : loggingOut ? 'logout' : 'signed-out',
       })
-      // Kehrbesen nach den Stores: auch Kanäle von Stores, die sich nicht
-      // selbst abmelden. Ein Kanal des alten Kontos liefe sonst mit dessen
-      // Haushaltsfilter weiter.
-      void supabase.removeAllChannels()
+      // Kein `removeAllChannels()` als Kehrbesen: realtime-js trennt danach
+      // bedingungslos den Socket und reißt damit auch die Kanäle ab, die das
+      // neue Konto gleich anlegt. Jeder Store mit Kanal meldet ihn in seinem
+      // `onSessionEnd` selbst per `removeChannel` ab.
     }
     session.value = newSession
     user.value = newSession?.user ?? null
