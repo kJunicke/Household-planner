@@ -8,8 +8,11 @@ Push auf `main` deployt sofort (GitHub Pages). Umgebung: Linux Mint, VS Code.
 - **Mobile first**, kleinster Viewport zuerst. Jedes Feature muss auf Android **und** iOS
   funktionieren. Barrierefreiheit und Tastaturbedienung sind kein Ziel — Gesten dürfen der
   einzige Weg sein.
-- **Kein Test-Framework**, bewusst. Geprüft wird manuell im Browser über die
-  Chrome-Erweiterung. Messfallen im ferngesteuerten Tab: [docs/testing.md](docs/testing.md).
+- **UI wird manuell geprüft**, im Browser über die Chrome-Erweiterung — kein UI-Test-Framework,
+  bewusst. Messfallen im ferngesteuerten Tab: [docs/testing.md](docs/testing.md).
+- **Reine Logik unter `src/lib` hat vitest-Tests** (`npm test` in `putzplan_vue/`, Datei
+  `*.test.ts` neben dem Modul, ohne DOM). Neue reine Logik bekommt Tests. Grüne Tests ersetzen
+  keinen Blick aufs Gerät.
 - **Jede Codeänderung prüft ein zweiter Agent (QC)** — auch die einzeilige, auch die der
   Hauptinstanz, auch der Formatierungs-Commit. Wer baut, prüft nicht. Der QC macht ein
   Code-Review **und** sieht sich bei sichtbaren Änderungen das Aussehen an. (05.09.2026:
@@ -17,7 +20,7 @@ Push auf `main` deployt sofort (GitHub Pages). Umgebung: Linux Mint, VS Code.
   Gerät in Minuten gesehen; die eigene Messung fragte „wie breit“, nicht „sieht es ganz aus“.)
 - **Eine Messung ist kein Blick.** Geometrie messen und Aussehen ansehen sind zwei Aufträge;
   beide vergeben.
-- Vor jedem Push auf `main`: `npm run build` in `putzplan_vue/`. Nur eigene Pfade stagen.
+- Vor jedem Push auf `main`: `npm test` und `npm run build` in `putzplan_vue/`. Nur eigene Pfade stagen.
 - Nennt der User einen Skill, der zu fehlen scheint: erst danach suchen (`.claude/skills/`),
   dann entscheiden.
 
