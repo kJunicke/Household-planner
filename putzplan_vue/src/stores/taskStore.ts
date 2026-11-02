@@ -16,6 +16,7 @@ import {
   serializeMutation,
 } from '@/lib/optimistic'
 import { createLatestRunner } from '@/lib/latestRun'
+import { createJoinReloadGate } from '@/lib/joinReload'
 import { mergeLoadedRows, type ChangeDuringLoad } from '@/lib/rowMerge'
 import { collectKeysetPages } from '@/lib/keysetPages'
 import { onSessionEnd } from '@/lib/sessionEnd'
@@ -105,6 +106,9 @@ export const useTaskStore = defineStore('tasks', () => {
   // Realtime subscription channel (wird in subscribe() initialisiert)
   let realtimeChannel: RealtimeChannel | null = null
   let tasksVisibilityHandler: (() => void) | null = null
+  // Je Abo neu (→ `subscribeToTasks`); die Ladeläufe melden ihren Start.
+  let tasksJoinGate: ReturnType<typeof createJoinReloadGate> | null = null
+  let totalsJoinGate: ReturnType<typeof createJoinReloadGate> | null = null
 
   // Aufgaben, deren Abschluss gerade beim Server liegt — Doppel-Tap-Schutz,
   // siehe completeTask.
@@ -180,6 +184,7 @@ export const useTaskStore = defineStore('tasks', () => {
 
     try {
       const householdId = householdStore.currentHousehold.household_id
+      tasksJoinGate?.loadStarted()
       // Nur aktive Tasks laden (deleted_at IS NULL = nicht soft-deleted)
       const { data: tasksData, error: tasksError } = await supabase
         .from('tasks')
@@ -1067,7 +1072,10 @@ export const useTaskStore = defineStore('tasks', () => {
 
     // Alte Subscription cleanup (falls vorhanden)
     unsubscribeFromTasks()
-    let joinedOnce = false
+    const tasksGate = createJoinReloadGate()
+    const totalsGate = createJoinReloadGate()
+    tasksJoinGate = tasksGate
+    totalsJoinGate = totalsGate
 
     console.log(
       '🔴 Subscribing to tasks for household:',
@@ -1221,21 +1229,13 @@ export const useTaskStore = defineStore('tasks', () => {
 
         if (status === 'SUBSCRIBED') {
           console.log('✅ Successfully subscribed to tasks and completions')
-          // Bei jedem Beitritt nachladen: Ereignisse zwischen einem SELECT und
-          // dem Beitritt kommen nie an, und nach einem Verbindungsabriss
-          // (Funkloch, Standby) fehlt alles dazwischen.
-          //
-          // Ausnahme: der erste Beitritt, solange der Erstlauf der Ansicht noch
-          // unterwegs ist. Ein Nachladen jetzt hängte an `loadTasks` einen
-          // zweiten SELECT, auf den die Wand mitwartet, und ein neuer
-          // Summen-Lauf liefe ihr unter dem ersten Packen hindurch — doppelte
-          // Anfragen und ein Layoutsprung. Der bewusst gezahlte Preis: was
-          // zwischen dem SELECT des Erstlaufs und dem Beitritt geschieht, fehlt
-          // bis zum nächsten vollen Nachladen (Sichtbarwerden, Neubeitritt).
-          const firstJoin = !joinedOnce
-          joinedOnce = true
-          if (!(firstJoin && loadTasksRun)) void loadTasks()
-          if (!(firstJoin && projectTotalsRunner.isRunning())) refreshProjectEffortTotals()
+          // Nachladen bei jedem Beitritt außer dem ersten nach einem schon
+          // gestarteten Erstlauf (Regel und Preis → `createJoinReloadGate`).
+          // Ein Nachladen dort hängte an `loadTasks` einen zweiten SELECT, auf
+          // den die Wand mitwartet, und ein neuer Summen-Lauf liefe ihr unter
+          // dem ersten Packen hindurch — doppelte Anfragen und ein Layoutsprung.
+          if (tasksGate.joined()) void loadTasks()
+          if (totalsGate.joined()) refreshProjectEffortTotals()
         } else if (status === 'CHANNEL_ERROR') {
           console.error('❌ Channel subscription error')
         } else if (status === 'TIMED_OUT') {
@@ -1259,6 +1259,8 @@ export const useTaskStore = defineStore('tasks', () => {
   // REALTIME - Unsubscribe von Änderungen
   // Muss beim Component Cleanup aufgerufen werden (z.B. WallView.onUnmounted)
   const unsubscribeFromTasks = () => {
+    tasksJoinGate = null
+    totalsJoinGate = null
     if (realtimeChannel) {
       console.log('🔴 Unsubscribing from tasks')
       supabase.removeChannel(realtimeChannel)
@@ -1570,6 +1572,7 @@ export const useTaskStore = defineStore('tasks', () => {
   const fetchProjectEffortTotals = async (isLatest: () => boolean): Promise<void> => {
     const householdStore = useHouseholdStore()
     if (!householdStore.currentHousehold) return
+    totalsJoinGate?.loadStarted()
 
     // Schritt 1: alle Unteraufgaben des Haushalts mit ihrem Elternteil.
     //

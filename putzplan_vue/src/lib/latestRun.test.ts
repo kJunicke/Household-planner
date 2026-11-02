@@ -102,17 +102,6 @@ describe('createLatestRunner', () => {
     expect(state).toBe('da')
   })
 
-  it('isRunning gilt, bis auch der neueste Lauf fertig ist', async () => {
-    const response = deferred()
-    const runner = createLatestRunner(() => response.promise)
-    expect(runner.isRunning()).toBe(false)
-    const done = runner.run()
-    expect(runner.isRunning()).toBe(true)
-    response.release()
-    await done
-    expect(runner.isRunning()).toBe(false)
-  })
-
   it('nach invalidate endet der Wartende mit dem eigenen Lauf, ohne zu hängen', async () => {
     let state = 'leer'
     const response = deferred()

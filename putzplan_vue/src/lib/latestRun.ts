@@ -39,12 +39,10 @@ export function createLatestRunGuard() {
 export function createLatestRunner(work: (isLatest: () => boolean) => Promise<void>) {
   const guard = createLatestRunGuard()
   let latest: Promise<void> = Promise.resolve()
-  let running = 0
 
   return {
     async run(): Promise<void> {
-      running++
-      const own = work(guard.start()).finally(() => running--)
+      const own = work(guard.start())
       latest = own
       let current = own
       for (;;) {
@@ -58,7 +56,5 @@ export function createLatestRunner(work: (isLatest: () => boolean) => Promise<vo
       }
     },
     invalidate: guard.invalidate,
-    /** Läuft gerade irgendein Lauf? */
-    isRunning: () => running > 0,
   }
 }
