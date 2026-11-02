@@ -518,6 +518,7 @@ const buildDate = __BUILD_DATE__
 }
 
 .close-btn {
+  position: relative;
   background: none;
   border: none;
   font-size: 1.5rem;
@@ -530,6 +531,18 @@ const buildDate = __BUILD_DATE__
 
 .close-btn:hover {
   color: var(--color-text-primary);
+}
+
+/* Sichtbar kleiner, damit die Kopfzeile ihre Höhe behält; die Trefferfläche wächst
+   per Pseudo-Element auf 48px und bleibt im Innenabstand der Kopfzeile. */
+.close-btn::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: var(--touch-target-min, 48px);
+  height: var(--touch-target-min, 48px);
+  transform: translate(-50%, -50%);
 }
 
 /* Sidebar Content */

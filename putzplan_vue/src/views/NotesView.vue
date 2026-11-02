@@ -283,8 +283,26 @@ onUnmounted(() => {
 
 .note-actions {
   display: flex;
-  gap: var(--spacing-xs);
+  /* Nicht kleiner: die 48px-Treffflächen der Knöpfe (unten) ragen je etwa 5px
+     über den Knopf hinaus und dürfen sich im Abstand nicht überlappen. */
+  gap: var(--spacing-sm);
   align-items: flex-start;
+}
+
+.note-actions .btn {
+  position: relative;
+}
+
+/* Sichtbar bleiben die Knöpfe klein (`btn-sm`); die Trefferfläche wächst per
+   Pseudo-Element auf 48px. */
+.note-actions .btn::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: var(--touch-target-min, 48px);
+  height: var(--touch-target-min, 48px);
+  transform: translate(-50%, -50%);
 }
 
 .note-edit {
