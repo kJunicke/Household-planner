@@ -1208,6 +1208,10 @@ export function createChecklistStore(config: ChecklistStoreConfig) {
           }
           if (payload.eventType === 'UPDATE') {
             const updated = payload.new as ChecklistItem
+            // Wartet für den Eintrag noch eine eigene Mutation, ist das Echo
+            // älter als der lokale Stand; den Serverstand holt der Neuabgleich,
+            // sobald die Warteschlange leer ist.
+            if (queue.pendingItemIds().has(updated.item_id)) return
             const idx = items.value.findIndex((i) => i.item_id === updated.item_id)
             if (idx !== -1) items.value[idx] = updated
           }

@@ -1125,6 +1125,11 @@ export const useShoppingStore = defineStore('shopping', () => {
 
           if (payload.eventType === 'UPDATE') {
             const updatedItem = payload.new as ShoppingItem
+            // Wartet für die Zeile noch eine eigene Mutation, ist das Echo älter
+            // als der lokale Stand (schnell „gekauft" und wieder „zurück"). Den
+            // Serverstand holt der Neuabgleich, sobald die Warteschlange leer ist.
+            if (mutationQueue.value.some((m) => m.payload.itemId === updatedItem.shopping_item_id))
+              return
             const index = items.value.findIndex(
               (i) => i.shopping_item_id === updatedItem.shopping_item_id,
             )
