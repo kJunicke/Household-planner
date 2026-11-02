@@ -2,7 +2,7 @@ import { onUnmounted, readonly, ref } from 'vue'
 import { releaseScrollWatch, retainScrollWatch, scrollQuietState } from './useScrollQuiet'
 
 /**
- * Abreißen am Eselsohr (Pinnwand-Redesign, Etappe 4).
+ * Abreißen am Eselsohr.
  *
  * Eine Zieh-Geste nach unten, die **sofort** greift — ohne vorheriges langes
  * Drücken, weil Erledigen die häufigste Handlung ist und nicht die langsamste
@@ -23,7 +23,7 @@ import { releaseScrollWatch, retainScrollWatch, scrollQuietState } from './useSc
  *   @pointerdown @pointermove @pointerup @pointercancel
  *   @touchstart.passive @touchmove
  *
- * ## Warum zusaetzlich Touch-Ereignisse (iOS-Korrektur)
+ * ## Warum zusaetzlich Touch-Ereignisse (iOS)
  *
  * `touch-action: none` am Griff ist die *Absichtserklaerung*, dass hier nicht
  * gescrollt wird — mehr nicht. Android Chrome haelt sich daran, WebKit auf dem
@@ -33,8 +33,8 @@ import { releaseScrollWatch, retainScrollWatch, scrollQuietState } from './useSc
  * Finger nicht folgt.
  *
  * `touch-action` ist auf iOS seit iOS 13 umgesetzt und wird im Regelfall auch
- * respektiert — die frueher hier stehende pauschale Behauptung, WebKit halte
- * sich nicht daran, war falsch. Belegte Loecher gibt es trotzdem: waehrend
+ * respektiert — die pauschale Behauptung, WebKit halte sich nicht daran, ist
+ * falsch. Belegte Loecher gibt es trotzdem: waehrend
  * **Momentum-Scrolling** greift nach Aussage eines WebKit-Entwicklers auch
  * `touch-action: none` nicht, und verschachtelte Hierarchien mit
  * unterschiedlichen Werten sind offen fehlerhaft. Gegen den ersten Fall steht
@@ -78,12 +78,7 @@ const TEAR_DISTANCE = 56
  */
 const AXIS_RATIO = 1.4
 
-// --- Scroll-Wächter -----------------------------------------------------------
-//
-// Liegt seit Ticket 10 in `useScrollQuiet`: der Long-Press braucht denselben
-// Zustand, und zwei Wächter wären zwei Wahrheiten. Verhalten unverändert,
-// einschließlich der 300 ms Nachlauf.
-
+// Der Scroll-Wächter ist mit dem Long-Press geteilt (→ `useScrollQuiet`).
 const scrolling = scrollQuietState
 
 export function useTearGesture(options: {
@@ -201,8 +196,8 @@ export function useTearGesture(options: {
       // `docs/research/ios-gesten-webkit.md`.
       //
       // Im `try`, weil `setPointerCapture` einen `NotFoundError` wirft, wenn
-      // der Zeiger nicht (mehr) aktiv ist — beim QC mit synthetischen Zeigern
-      // der Browser-Automatisierung beobachtet. Ein Wurf darf die Geste nicht
+      // der Zeiger nicht (mehr) aktiv ist — etwa bei synthetischen Zeigern
+      // der Browser-Automatisierung. Ein Wurf darf die Geste nicht
       // verschlucken; ohne Einfangen laeuft sie weiter.
       if (event.pointerType !== 'touch') {
         try {

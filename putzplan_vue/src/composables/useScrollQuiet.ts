@@ -1,15 +1,12 @@
 import { onUnmounted, readonly, ref } from 'vue'
 
 /**
- * Der Scroll-Wächter der Pinnwand (Pinnwand-Redesign, Etappe 4).
+ * Der Scroll-Wächter der Pinnwand.
  *
- * **EIN** Zustand für alle Gesten der Seite: ein einziger passiver Zuhörer am
- * Fenster, nicht einer je Zettel. Bei rund zwanzig Zetteln mit je einem
- * Eselsohr, deren Zettelchen und dazu dem Long-Press wären es sonst dutzende
- * Zuhörer für dieselbe Information.
- *
- * Herausgelöst aus `useTearGesture` (Ticket 09), als der Long-Press (Ticket 10)
- * denselben Zustand brauchte.
+ * **EIN** Zustand für alle Gesten der Seite (Abreißen und Long-Press): ein
+ * einziger passiver Zuhörer am Fenster, nicht einer je Zettel — sonst wären es
+ * dutzende Zuhörer für dieselbe Information, und zwei Wächter wären zwei
+ * Wahrheiten.
  */
 
 /**
@@ -24,13 +21,12 @@ const SCROLL_QUIET_MS = 300
 /**
  * Was hier als Bildlauf zaehlt — und was nicht (iOS).
  *
- * Der Waechter hing frueher am blossen Auftreten des `scroll`-Ereignisses.
+ * Das blosse Auftreten des `scroll`-Ereignisses reicht nicht.
  * Auf Android geht das auf, auf iOS nicht: dort federt WebKit die ganze Seite,
  * sobald man am Ende weiterzieht, und **meldet die Gummiband-Position
  * ungeklemmt an das DOM**. Jede Federbewegung ist damit ein echter Bildlauf mit
- * echten, grossen Deltas — nicht etwa ein Ereignis ohne Bewegung, wie eine
- * fruehere Fassung dieses Kommentars behauptete. Ein Schwellwert auf die
- * Schrittweite faengt das ausdruecklich NICHT.
+ * echten, grossen Deltas — nicht etwa ein Ereignis ohne Bewegung. Ein
+ * Schwellwert auf die Schrittweite faengt das ausdruecklich NICHT.
  *
  * Was das Gummiband dagegen sicher verraet, ist die Position selbst: sie liegt
  * ausserhalb von `0 … scrollHeight − innerHeight`. Genau daran wird es hier

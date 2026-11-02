@@ -2,7 +2,7 @@ import { onUnmounted, readonly, ref } from 'vue'
 import { useScrollQuiet } from './useScrollQuiet'
 
 /**
- * Long-Press mit vier Richtungen (Pinnwand-Redesign, Etappe 4, Ticket 10).
+ * Long-Press mit vier Richtungen (→ CONTEXT.md „Kranz“, „Greifen“).
  *
  * Lange auf einen Zettel drücken blendet alle vier Richtungen **beschriftet**
  * ein; danach entscheidet ein Zug, welche Aktion es wird. Die Beschriftung ist
@@ -11,8 +11,8 @@ import { useScrollQuiet } from './useScrollQuiet'
  *
  * ## Die vierte Bedienart auf demselben Zettel
  *
- * Auf dem Zettel liegen bereits: Antippen (aufklappen, Ticket 06), Ziehen am
- * Eselsohr (abreißen, Ticket 09) und der Seitenbildlauf. Die Abgrenzungen:
+ * Auf dem Zettel liegen bereits: Antippen (aufklappen), Ziehen am Eselsohr
+ * (abreißen) und der Seitenbildlauf. Die Abgrenzungen:
  *
  * - **gegen das Antippen**: allein die Zeit. Unter `PRESS_MS` passiert hier
  *   nichts und der Klick läuft unangetastet durch. Erst wenn ausgelöst wurde,
@@ -21,9 +21,9 @@ import { useScrollQuiet } from './useScrollQuiet'
  * - **gegen das Eselsohr**: der Ort. `isControl` hält die Abreiß-Griffe
  *   komplett aus dieser Geste heraus; dort startet der Timer gar nicht erst.
  *   Die beiden Gesten können sich damit nicht überschneiden — und das
- *   Abreißen bleibt ohne Wartezeit und **ohne Kranz**. Seit Ticket 01 ist das
- *   auch alles, was `isControl` noch aussperrt: Knöpfe gehören zum Griff, ihr
- *   Klick wird nach überschrittener Schwelle vom Klick-Wächter geschluckt.
+ *   Abreißen bleibt ohne Wartezeit und **ohne Kranz**. Mehr sperrt `isControl`
+ *   nicht aus: Knöpfe gehören zum Griff, ihr Klick wird nach überschrittener
+ *   Schwelle vom Klick-Wächter geschluckt.
  * - **gegen den Bildlauf**: die Bewegung und der Wächter. Jede Bewegung über
  *   `MOVE_TOLERANCE` vor dem Auslösen bricht ab, ebenso jedes Scroll-Ereignis
  *   (mit 300 ms Nachlauf, → `useScrollQuiet`). Im Zweifel gewinnt also immer
@@ -52,7 +52,7 @@ import { useScrollQuiet } from './useScrollQuiet'
  * Handler am Zettel binden:
  *   @pointerdown @pointermove @pointerup @pointercancel @touchstart @touchmove
  *
- * Dazu gehört **`@contextmenu.prevent` am selben Element** (Ticket 01). Es
+ * Dazu gehört **`@contextmenu.prevent` am selben Element**. Es
  * hängt kein Handler von hier daran, es ist reines Abbestellen — aber ohne das
  * nimmt die native Langdruck-Geste des Browsers dem Zettel den Zeiger wieder
  * weg, und zwar nur dort, wo etwas unter dem Finger liegt (Text, Sticker).
@@ -66,24 +66,21 @@ import { useScrollQuiet } from './useScrollQuiet'
 export type PressDirection = 'up' | 'down' | 'left' | 'right'
 
 /**
- * Haltezeit bis zum Einblenden. Gesetzt, nicht gemessen: dieselbe Größenordnung
- * wie das frühere Langdrücken der Listen (480 ms), etwas kürzer, weil danach
- * noch ein Zug folgt und die Geste sonst insgesamt zäh wirkt.
+ * Haltezeit bis zum Einblenden. Gesetzt, nicht gemessen: kurz gehalten, weil
+ * danach noch ein Zug folgt und die Geste sonst insgesamt zäh wirkt.
  */
 const PRESS_MS = 420
 
-/** Bis hierhin gilt der Finger als still. Wie beim früheren Langdrücken der Listen. */
+/** Bis hierhin gilt der Finger als still. */
 const MOVE_TOLERANCE = 10
 
 /**
  * Ab dieser Strecke — gemessen ab dem **Aufsetzpunkt** — ist eine Richtung
  * gewählt.
  *
- * Früher 48 px, weil die Beschriftungen 56 px um die Zettelmitte lagen und die
- * Richtung feststehen musste, bevor der Daumen auf ihnen lag. Dieser Grund ist
- * mit den Beschriftungen an den **Bildschirm**rändern entfallen (Ticket 00b);
- * ein Zettel am linken Wandrand brauchte sonst einen Zug bis fast an die Kante.
- * Gesetzt, nicht gemessen.
+ * Gesetzt, nicht gemessen. Klein, weil die Beschriftungen an den
+ * **Bildschirm**rändern stehen und nicht um den Zettel: ein Zettel am linken
+ * Wandrand bräuchte sonst einen Zug bis fast an die Kante.
  *
  * `WallDirectionMenu` hängt seine Pfeilgeometrie an genau diese Zahl: der Pfeil
  * erscheint auf denselben Pixel, auf dem die erste Richtung anliegen kann.
@@ -128,8 +125,7 @@ export function useDirectionPress(options: {
    *
    * **Nicht** die Zettelmitte: Richtungswahl und Pfeil müssen denselben
    * Ursprung haben, sonst zeigt der Pfeil eine andere Strecke an als die, über
-   * die entschieden wird (→ `WallDirectionMenu`). Die Richtung wird ohnehin
-   * schon immer ab hier gemessen (`startX`/`startY`).
+   * die entschieden wird (→ `WallDirectionMenu`; Richtung: `startX`/`startY`).
    */
   const origin = ref<{ x: number; y: number } | null>(null)
   /** Wo der Finger gerade liegt — dorthin zeigt der Pfeil. */
@@ -159,10 +155,8 @@ export function useDirectionPress(options: {
   let startX = 0
   let startY = 0
 
-  // --- Der nachlaufende Klick ------------------------------------------------
-  //
-  // Jeder ausgelöste Long-Press hinterlässt einen Klick, auch der Abbruch ohne
-  // Richtung. Käme er durch, klappte der Zettel als Nebenwirkung auf — auch
+  // Der nachlaufende Klick: jeder ausgelöste Long-Press hinterlässt einen
+  // Klick, auch der Abbruch ohne Richtung. Käme er durch, klappte der Zettel als Nebenwirkung auf — auch
   // dann, wenn die Geste gerade ein Modal geöffnet hat.
   //
   // **Warum ein Wächter am Fenster und keine Fahne, die ein Klick-Handler am
@@ -232,12 +226,9 @@ export function useDirectionPress(options: {
     // Ganz oben, VOR jedem Rücksprung: setzt der Finger wieder auf, ist ein
     // noch scharfer Wächter aus der vorigen Geste gegenstandslos. Stünde diese
     // Zeile hinter `isControl`, verschluckte er den ersten Klick auf alles, was
-    // `isControl` aussperrt — heute (seit Ticket 01) sind das die Abreiß-Griffe
-    // `.ear` und `.mini-ear`: ein Zug am Eselsohr direkt nach einem Long-Press
-    // verlöre sonst seinen nachlaufenden Klick an den fremden Wächter. Die
-    // frühere Begründung nannte den Bearbeiten-Knopf; der ist seit Ticket 01
-    // kein Control mehr und braucht die Zeile nicht mehr. Die Reihenfolge
-    // bleibt trotzdem richtig.
+    // `isControl` aussperrt — die Abreiß-Griffe `.ear` und `.mini-ear`: ein Zug
+    // am Eselsohr direkt nach einem Long-Press verlöre sonst seinen
+    // nachlaufenden Klick an den fremden Wächter.
     dropClickGuard()
     if (isControl(event.target)) return
     // Wer in eine noch fliegende Wand fasst, will scrollen (Nachlauf → Wächter).
@@ -282,8 +273,8 @@ export function useDirectionPress(options: {
       // `docs/research/ios-gesten-webkit.md`.
       //
       // Im `try`, weil `setPointerCapture` einen `NotFoundError` wirft, wenn
-      // der Zeiger nicht (mehr) aktiv ist — beim QC mit synthetischen Zeigern
-      // der Browser-Automatisierung beobachtet. Ein Wurf darf die Geste nicht
+      // der Zeiger nicht (mehr) aktiv ist — etwa bei synthetischen Zeigern
+      // der Browser-Automatisierung. Ein Wurf darf die Geste nicht
       // verschlucken; ohne Einfangen laeuft sie weiter.
       if (pointerType !== 'touch') {
         try {
@@ -327,7 +318,7 @@ export function useDirectionPress(options: {
   }
 
   /**
-   * Sammelt die `Touch.identifier` **dieser** Geste ein (Ticket 01).
+   * Sammelt die `Touch.identifier` **dieser** Geste ein.
    *
    * Der Browser feuert `pointerdown` vor `touchstart`; wenn wir hier ankommen,
    * steht also schon fest, ob die Geste überhaupt läuft (`active`) — und wenn
@@ -354,10 +345,8 @@ export function useDirectionPress(options: {
     if (event.cancelable) event.preventDefault()
   }
 
-  // --- Der Zeiger gehört ab dem Auslösen dem Zettel (Ticket 01) --------------
-  //
-  // Regel aus dem Ticket: „Ab der spürbaren Bestätigung gehört der Zeiger dem
-  // Zettel, bis der Finger hochgeht — auch bei Bewegung null."
+  // Der Zeiger gehört ab dem Auslösen dem Zettel, bis der Finger hochgeht —
+  // auch bei Bewegung null (→ CONTEXT.md „Greifen“).
   //
   // Die erste Hälfte der Umsetzung ist das Abbestellen des Kontextmenüs am
   // Zettel (`@contextmenu.prevent` in `WallNote.vue`, Begründung dort). Das
@@ -366,19 +355,20 @@ export function useDirectionPress(options: {
   //
   // Warum das nötig ist: `pointercancel` ist die Art, wie der Browser eine
   // Geste an sich zieht. Danach kommt für diesen `pointerId` weder ein
-  // `pointermove` noch ein `pointerup` — die bisherige Fassung musste die
-  // Geste deshalb abräumen. Genau das ist der gemeldete Fehler: es vibriert
-  // (nativ, die App vibriert nirgends), und der Griff ist sofort wieder weg.
+  // `pointermove` noch ein `pointerup`. Wer daraufhin abräumt, bekommt genau
+  // diesen Fehler: es vibriert (nativ, die App vibriert nirgends), und der
+  // Griff ist sofort wieder weg.
   //
   // Die Touch-Ereignisse laufen unabhängig davon weiter, solange der Finger
   // liegt. Das ist keine Hoffnung, sondern belegt: WebKit ruft beim Beginn des
   // Bildlaufs `cancelPointersForGestureRecognizer:` — das bricht ausschliesslich
-  // die ZEIGER ab, die UIKit-Touches laufen unberuehrt weiter. Wir hören ab dem Abbruch am **Fenster** zu und führen die Geste mit
+  // die ZEIGER ab, die UIKit-Touches laufen unberuehrt weiter. Wir hören ab
+  // dem Abbruch am **Fenster** zu und führen die Geste mit
   // denselben Zahlen weiter (Ursprung, `directionOf`, Klick-Wächter) — der
   // Nutzer merkt vom Wechsel nichts.
   //
-  // **Nur nach dem Auslösen und nur bei `touch`.** Vor dem Auslösen bleibt es
-  // beim alten Verhalten: im Zweifel gewinnt der Bildlauf. Und mit Maus oder
+  // **Nur nach dem Auslösen und nur bei `touch`.** Vor dem Auslösen gilt
+  // weiter: im Zweifel gewinnt der Bildlauf. Und mit Maus oder
   // Stift gibt es keine Touch-Ereignisse, auf die man ausweichen könnte.
   //
   // **Der Wächter nimmt ausschließlich die EIGENE Berührung an** (`touchId`,
@@ -387,8 +377,8 @@ export function useDirectionPress(options: {
   // Berührung irgendwo in der App; er rechnete sie gegen den alten
   // Aufsetzpunkt, käme fast sicher über `COMMIT_DISTANCE` — und ein
   // `touchend` löste `onDirection('down')` aus, also eine gebuchte Erledigung,
-  // die der Nutzer nie als Fehler erkennt. Derselbe Mangel machte im Alltag
-  // schon den zweiten Finger zum Beender der Geste des ersten.
+  // die der Nutzer nie als Fehler erkennt. Ebenso beendete ein zweiter Finger
+  // die Geste des ersten.
   //
   // **Im ferngesteuerten Tab ist dieser ganze Weg NICHT prüfbar** (→
   // `docs/testing.md`). Synthetische Zeiger der Browser-Automatisierung
@@ -536,7 +526,7 @@ export function useDirectionPress(options: {
    * Ausgangszustand, ohne etwas auszulösen und ohne Klick zu schlucken — ein
    * Antippen soll den Zettel weiterhin aufklappen.
    *
-   * **Nach dem Auslösen** gilt die Regel aus Ticket 01: der Zeiger gehört dem
+   * **Nach dem Auslösen** gilt (→ CONTEXT.md „Greifen“): der Zeiger gehört dem
    * Zettel, bis der Finger hochgeht. Bei einem Finger wird deshalb nicht
    * abgeräumt, sondern auf Touch-Ereignisse ausgewichen (→ `armTouchWatch`).
    * Nur mit Maus oder Stift bleibt es beim Abräumen: dorthin gibt es keinen
