@@ -62,6 +62,10 @@ const pendingMutationCount = computed(
     todoStore.pendingMutationCount,
 )
 const showLogoutConfirm = ref(false)
+// Stand beim Öffnen: sendet die Warteschlange währenddessen, spränge die Zahl
+// unter dem Lesen auf 0 und der Text widerspräche sich. Bestätigen meldet ab,
+// egal was inzwischen gesendet ist.
+const pendingAtOpen = ref(0)
 
 const logout = async () => {
   showLogoutConfirm.value = false
@@ -71,7 +75,8 @@ const logout = async () => {
 }
 
 const handleLogout = () => {
-  if (pendingMutationCount.value > 0) showLogoutConfirm.value = true
+  pendingAtOpen.value = pendingMutationCount.value
+  if (pendingAtOpen.value > 0) showLogoutConfirm.value = true
   else void logout()
 }
 
@@ -433,7 +438,7 @@ const buildDate = __BUILD_DATE__
 
     <LogoutConfirmModal
       v-if="showLogoutConfirm"
-      :pending-count="pendingMutationCount"
+      :pending-count="pendingAtOpen"
       @close="showLogoutConfirm = false"
       @confirm="logout"
     />

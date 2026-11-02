@@ -7,7 +7,7 @@
  * dasselbe Konto anmeldet; wer das Gerät weitergibt, soll das vorher wissen.
  */
 defineProps<{
-  /** Ungesendete Änderungen aus Einkauf, Packliste und To-do zusammen. */
+  /** Ungesendete Änderungen aus Einkauf, Packliste und To-do, Stand beim Öffnen. */
   pendingCount: number
 }>()
 
@@ -28,10 +28,13 @@ const emit = defineEmits<{
 
         <div class="modal-body">
           <p class="logout-text">
-            <template v-if="pendingCount === 1">1 Änderung ist</template>
-            <template v-else>{{ pendingCount }} Änderungen sind</template>
-            noch nicht gesendet. Sie werden nachgereicht, sobald du dich auf diesem Gerät wieder mit
-            diesem Konto anmeldest.
+            <template v-if="pendingCount === 1">
+              1 Änderung ist noch nicht gesendet. Sie wird nachgereicht,
+            </template>
+            <template v-else>
+              {{ pendingCount }} Änderungen sind noch nicht gesendet. Sie werden nachgereicht,
+            </template>
+            sobald du dich auf diesem Gerät wieder mit diesem Konto anmeldest.
           </p>
         </div>
 
