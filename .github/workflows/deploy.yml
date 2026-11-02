@@ -35,6 +35,14 @@ jobs:
         working-directory: ./putzplan_vue
         run: npm ci
 
+      - name: Lint (nur prüfend, ohne --fix)
+        working-directory: ./putzplan_vue
+        run: npm run lint:check
+
+      - name: Unit-Tests (reine Logik)
+        working-directory: ./putzplan_vue
+        run: npm test
+
       - name: Create .env file with Supabase credentials
         working-directory: ./putzplan_vue
         run: |
