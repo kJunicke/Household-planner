@@ -375,15 +375,20 @@ export const useTaskStore = defineStore('tasks', () => {
         // Reloads im Hintergrund — der Nutzer hat seine Rückmeldung längst.
         // Die eigenen Zeilen dürfen den Echo-Schutz umgehen, er selbst
         // bleibt gegen spät eintreffende Realtime-Echos bestehen.
-        await loadTasks(touchedIds)
-        await householdStore.loadWeeklyCompletions({ force: true })
-        // Erst NACH dem Reload entfernen, sonst zählt die Woche kurz doppelt
-        // bzw. fällt die Erledigung kurz aus dem Ranking.
-        householdStore.removeOptimisticCompletion(clientMutationId)
-        // Die echte Completion holen und die optimistische ERSETZEN, statt
-        // sie nur zu löschen — sonst verschwindet der Eintrag ersatzlos,
-        // wenn das Realtime-Echo ausbleibt.
-        await replaceOptimisticCompletion(clientMutationId, taskId, userId)
+        try {
+          await loadTasks(touchedIds)
+          await householdStore.loadWeeklyCompletions({ force: true })
+        } finally {
+          // Erst NACH dem Reload entfernen, sonst zählt die Woche kurz doppelt
+          // bzw. fällt die Erledigung kurz aus dem Ranking. Im `finally`: wirft
+          // ein Nachlader, bliebe die optimistische Zeile neben der bestätigten
+          // stehen und die Woche zählte die Erledigung dauerhaft doppelt.
+          householdStore.removeOptimisticCompletion(clientMutationId)
+          // Die echte Completion holen und die optimistische ERSETZEN, statt
+          // sie nur zu löschen — sonst verschwindet der Eintrag ersatzlos,
+          // wenn das Realtime-Echo ausbleibt.
+          await replaceOptimisticCompletion(clientMutationId, taskId, userId)
+        }
         // Das Projekt-Abzeichen zieht hier NICHT nach — das tut die
         // ERSTE Zeile des Realtime-INSERT-Zweiges, absichtlich vor allen
         // frühen `return`. Genau dieser Aufruf hier stand einmal an
