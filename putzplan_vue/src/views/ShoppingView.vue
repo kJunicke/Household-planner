@@ -1197,6 +1197,10 @@ onUnmounted(() => {
   /* Ein langer Name ohne Leerzeichen bricht um, statt das Dropdown seitlich
      scrollbar zu machen. */
   overflow-wrap: anywhere;
+  /* Die Liste ist eine Spalten-Flexbox mit `max-height`: ohne `0` staucht sie
+     umgebrochene Einträge unter ihre Inhaltshöhe, und der Text läuft in den
+     nächsten Eintrag. Überlauf gehört dem Bildlauf der Liste. */
+  flex-shrink: 0;
 }
 .suggestion-item:last-child {
   border-bottom: none;
