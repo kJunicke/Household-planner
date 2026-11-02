@@ -45,7 +45,15 @@ function buildStamp(): { commit: string; time: string } {
 const stamp = buildStamp()
 
 // https://vite.dev/config/
-export default defineConfig({
+export default defineConfig(({ command }) => ({
+  // Im Prod-Build fallen console.log/debug/info weg — sie geben u. a.
+  // Nutzerdaten aus (Backlog-Ticket 12). `pure` statt `drop: ['console']`:
+  // console.error und console.warn bleiben, auf console.error verlaesst sich
+  // z. B. das Alt-Projekt ohne Arbeits-Unteraufgabe (Ticket 03). `pure`
+  // streicht nur Aufrufe, deren Ergebnis unbenutzt ist; Argumente mit
+  // Seiteneffekten wertet esbuild weiterhin aus.
+  esbuild:
+    command === 'build' ? { pure: ['console.log', 'console.debug', 'console.info'] } : {},
   define: {
     __BUILD_COMMIT__: JSON.stringify(stamp.commit),
     __BUILD_DATE__: JSON.stringify(stamp.time)
@@ -96,4 +104,4 @@ export default defineConfig({
   },
   // GitHub Pages deployment - repo wird unter /Household-planner/ gehostet
   base: '/Household-planner/',
-})
+}))
