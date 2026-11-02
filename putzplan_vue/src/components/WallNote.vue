@@ -204,10 +204,8 @@ const effectivePoints = computed(() => {
  * Punkte das Projekt bis jetzt verschlungen hat: die Summe aller Erledigungen
  * seiner Unteraufgaben, aus `taskStore.projectEffortTotals`.
  *
- * Bewusst NICHT `taskStore.getProjectEffort()`: das rechnet aus
- * `taskStore.completions`, und die sind an der Wand leer — die Zahl stünde
- * dauerhaft auf 0. Der klassische `TaskCard` lädt seine Erledigungen selbst und
- * bleibt deshalb unverändert an der alten Rechnung.
+ * Bewusst NICHT aus `taskStore.completions`: die sind an der Wand leer — die
+ * Zahl stünde dauerhaft auf 0.
  *
  * Klassenname `.points` und Platz im `.corner` bleiben, weil
  * `WallView.relayout` genau danach misst.
@@ -298,8 +296,7 @@ const centerOf = (el: HTMLElement) => {
 /**
  * Ein Projekt wird nie fertig, es wird beackert. **Beide** Gesten nach unten —
  * der Zug am Eselsohr und der Long-Press-Zug — landen deshalb im selben
- * `ProjectWorkModal` wie der Knopf „Am Projekt arbeiten" im klassischen
- * Aussehen. Kein Erledigen, kein Fetzen, kein Verschwinden vom Board.
+ * `ProjectWorkModal`. Kein Erledigen, kein Fetzen, kein Verschwinden vom Board.
  *
  * Die beiden Wege können sich nicht gegenseitig auslösen und auch nicht zwei
  * Einträge erzeugen: der Long-Press startet auf dem Eselsohr gar nicht erst
@@ -327,8 +324,7 @@ const projectWorkSubtaskId = computed(() => {
  * Ein Altbestands-Projekt ohne diese Unteraufgabe (angelegt, bevor der Store
  * sie automatisch mitanlegte) bekommt **kein** Fenster: es hätte nichts, worauf
  * es buchen könnte, und ein Bestätigen liefe ins Leere. Stilles Nachlegen aus
- * einer Geste heraus wäre eine Datenänderung, die niemand angefordert hat —
- * dieselbe Entscheidung wie in `TaskCard` (dort `console.error`).
+ * einer Geste heraus wäre eine Datenänderung, die niemand angefordert hat.
  */
 const openProjectWork = () => {
   if (!projectWorkSubtaskId.value) {
@@ -339,13 +335,11 @@ const openProjectWork = () => {
 }
 
 /**
- * Buchen. Punkte und Notiz gehen an die Work-Unteraufgabe, genau wie am Knopf
- * im klassischen Aussehen — die Punkte laufen damit ins Wochenziel wie bei
- * jeder Erledigung.
+ * Buchen. Punkte und Notiz gehen an die Work-Unteraufgabe — die Punkte laufen
+ * damit ins Wochenziel wie bei jeder Erledigung.
  *
- * **Kein Konfetti**, obwohl `TaskCard` welches zündet: an der Wand ist die
- * Rückmeldung der Punkteflug plus das Bestätigungsfenster, das ja schon
- * dastand. **Kein Toast** aus demselben Grund. **Kein `markAsDirty`**: die
+ * Die Rückmeldung ist der Punkteflug plus das Bestätigungsfenster, das ja schon
+ * dastand. **Kein Toast** deshalb. **Kein `markAsDirty`**: die
  * Work-Unteraufgabe ist an der Wand ohnehin ausgeblendet, und ein
  * Zurücksetzen von hier aus wäre eine zweite Wahrheit neben dem Store.
  *
@@ -1446,8 +1440,8 @@ const handlePostponeConfirm = async (targetDate: string) => {
       @confirm="handleCustomCompletion"
     />
 
-    <!-- Beide Gesten nach unten an einem Projekt: dasselbe Fenster wie der
-         Knopf „Am Projekt arbeiten" im klassischen Aussehen. Auswahl UND Notiz
+    <!-- Beide Gesten nach unten an einem Projekt: das Arbeitseintrag-Fenster.
+         Auswahl UND Notiz
          sind dort Pflicht, nichts ist vorausgewählt — Schließen ohne Eintrag
          bucht nichts. -->
     <ProjectWorkModal

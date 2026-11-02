@@ -297,40 +297,17 @@
 /* ----------------------------------------------------------------------------
    3. Badges — kleine gestempelte Marken
    ----------------------------------------------------------------------------
-   Nur Form und Kontur. Die Fuellfarbe kommt weiterhin aus den Komponenten
-   bzw. den `.badge-*`-Klassen der Views, damit hier keine Semantik verloren
-   geht. Die Kontur ist halbtransparente Tinte und funktioniert deshalb sowohl
-   auf hellen als auch auf gesaettigten Fuellungen.
+   Nur Form und Kontur. Die Fuellfarbe kommt weiterhin aus den Komponenten.
+   Die Kontur ist halbtransparente Tinte und funktioniert deshalb sowohl auf
+   hellen als auch auf gesaettigten Fuellungen.
 
-   `.badge` selbst kommt im Repo nur EINMAL literal vor
-   (`SettlementView.vue:190`). Die sichtbaren Marken heissen anders und sind
-   in den Komponenten scoped definiert. Deren Selektoren sind
-   `.effort-badge[data-v-…]` = (0,2,0); die Liste hier ist (0,3,0) und
+   Die Marken sind in den Komponenten scoped definiert. Deren Selektoren sind
+   `.qty-badge[data-v-…]` = (0,2,0); die Liste hier ist (0,3,0) und
    ueberschreibt sie, ohne dass ein Template angefasst wird.
-
-   Bewusst NICHT in der Liste: `.fab-plus-badge`. Der FAB gehoert zu den
-   kosmetischen Resten ausserhalb des Bootstrap-Perimeters und ist laut Spec
-   Out of Scope.
    --------------------------------------------------------------------------*/
 :root[data-design='pinnwand'] .badge,
-:root[data-design='pinnwand'] .meta-badge,
-:root[data-design='pinnwand'] .effort-badge,
-:root[data-design='pinnwand'] .subtask-effort-badge,
-:root[data-design='pinnwand'] .subtask-group-badge,
 :root[data-design='pinnwand'] .qty-badge,
-:root[data-design='pinnwand'] .preview-badge,
-:root[data-design='pinnwand'] .postponed-badge,
-:root[data-design='pinnwand'] .overdue-badge,
-:root[data-design='pinnwand'] .completed-badge,
-:root[data-design='pinnwand'] .type-badge-daily,
-:root[data-design='pinnwand'] .type-badge-project,
-:root[data-design='pinnwand'] .type-badge-one-time,
-:root[data-design='pinnwand'] .badge-daily,
-:root[data-design='pinnwand'] .badge-project,
-:root[data-design='pinnwand'] .badge-one-time,
-:root[data-design='pinnwand'] .badge-checklist,
-:root[data-design='pinnwand'] .badge-bonus,
-:root[data-design='pinnwand'] .badge-deduct {
+:root[data-design='pinnwand'] .preview-badge {
   border: 1.5px solid rgba(36, 31, 26, 0.55);
   border-radius: var(--radius-sm);
   font-weight: 700;

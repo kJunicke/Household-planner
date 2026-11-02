@@ -34,7 +34,7 @@ const createHousehold = async () => {
 
   try {
     await householdStore.createHousehold(newHouseholdName.value)
-    // Success: Redirect zur HomeView
+    // Success: Redirect zur Pinnwand
     router.push('/')
   } catch (error) {
     // Error: Zeige Fehlermeldung im UI (nicht console.log!)

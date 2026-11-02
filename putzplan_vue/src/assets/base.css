@@ -440,7 +440,7 @@ select:disabled {
    - h1 (1.5rem): Auth pages (Login, Register, HouseholdSetup), Main App Title (Header)
    - h2 (1.25rem): View page titles (Verlauf, Statistiken, Einkaufsliste)
    - h3 (1.125rem): Modal titles, Shopping list sections, Section titles (HouseholdSetup)
-   - h4-h6 (1rem): Subsection titles (SubtaskManagementModal sections, TaskCard titles)
+   - h4-h6 (1rem): Subsection titles (SubtaskManagementModal sections)
 */
 h1 {
   font-size: 1.5rem;

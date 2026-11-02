@@ -36,7 +36,6 @@ import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import WallNote from '../components/WallNote.vue'
 import WallDoneList from '../components/WallDoneList.vue'
 import WallScrap from '../components/WallScrap.vue'
-import TaskCard from '../components/TaskCard.vue'
 import TaskCreateModal from '../components/TaskCreateModal.vue'
 import QuickTaskModal from '../components/QuickTaskModal.vue'
 import { useTaskStore } from '../stores/taskStore'
@@ -1419,9 +1418,10 @@ const {
   isOpen: showSearchOverlay,
   open: openSearchOverlay,
   close: closeSearchOverlay,
-} = useOverlayHistoryEntry<'modal'>('suche', (reason) => {
+} = useOverlayHistoryEntry<'modal' | 'jump'>('suche', (reason) => {
   if (reason === 'modal') return
   searchQuery.value = ''
+  if (reason === 'jump') revealJumpTarget()
 })
 
 const searchResults = computed(() => searchTasks(taskStore.tasks, searchQuery.value))
@@ -1441,6 +1441,50 @@ watch(
   },
   { immediate: true },
 )
+
+// Ein Suchtreffer ist ein Sprung, keine zweite Karte: der Tipp schließt die
+// Suche und zeigt auf den Zettel bzw. auf die Zeile der Erledigt-Liste. Bedient
+// wird die Aufgabe dann dort, mit denselben Gesten und Knöpfen wie sonst auch.
+// `useTaskBoard` verteilt jede Hauptaufgabe auf genau eine der beiden Stellen.
+//
+// Gezeigt wird erst nach dem Schließen: das läuft über einen Verlaufssprung,
+// und ein Scrollen davor könnte die Scroll-Wiederherstellung des Browsers
+// zurücksetzen.
+let jumpTargetId: string | null = null
+
+const jumpToResult = (taskId: string) => {
+  jumpTargetId = taskId
+  closeSearchOverlay('jump')
+}
+
+function revealJumpTarget() {
+  const id = jumpTargetId
+  jumpTargetId = null
+  if (!id) return
+  void nextTick(() =>
+    requestAnimationFrame(() => {
+      const note = noteEls.get(id)
+      const el =
+        note ?? document.querySelector<HTMLElement>(`.done-row[data-task-id="${CSS.escape(id)}"]`)
+      if (!el) return
+      const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+      el.scrollIntoView({ block: 'center', behavior: reduceMotion ? 'auto' : 'smooth' })
+      // Per Web Animations statt per Klasse: `class` gehört Vue und würde beim
+      // nächsten Rendern überschrieben. Der Zettel ist gedreht, der Umriss dreht
+      // mit. Die Zeile liegt in einer Liste mit Rand, deshalb nach innen.
+      const accent = getComputedStyle(document.documentElement).getPropertyValue('--pw-accent')
+      const ring = `3px solid ${accent.trim() || '#2b4a8f'}`
+      const offset = note ? '4px' : '-3px'
+      el.animate(
+        [
+          { outline: ring, outlineOffset: offset },
+          { outline: '3px solid transparent', outlineOffset: offset },
+        ],
+        { duration: 500, iterations: 4, easing: 'ease-in', delay: reduceMotion ? 0 : 250 },
+      )
+    }),
+  )
+}
 
 // Aus der Suche heraus weiter: erst den eigenen Verlaufseintrag verbrauchen,
 // dann das Modal öffnen. `searchQuery` bleibt als Titelvorschlag stehen und
@@ -1554,8 +1598,8 @@ const handleCreateQuickTask = async (data: {
       </button>
     </div>
 
-    <!-- Such-Overlay: funktional unverändert, inklusive der bestehenden Karte
-         als Ergebniszeile — sie bleibt in dieser Etappe der Weg zum Erledigen. -->
+    <!-- Such-Overlay. Ein Treffer springt zum Zettel bzw. zur Erledigt-Zeile
+         (→ `jumpToResult`). -->
     <div v-if="showSearchOverlay" class="search-overlay">
       <div class="search-overlay-backdrop" @click="closeSearchOverlay()"></div>
       <div class="search-overlay-content">
@@ -1598,14 +1642,19 @@ const handleCreateQuickTask = async (data: {
 
         <div class="search-overlay-body">
           <template v-if="searchResults && searchResults.length > 0">
-            <div
+            <button
               v-for="result in searchResults"
               :key="result.task.task_id"
+              type="button"
               class="search-result-item"
+              @click="jumpToResult(result.task.task_id)"
             >
-              <div class="search-result-category">{{ result.categoryLabel }}</div>
-              <TaskCard :task="result.task" />
-            </div>
+              <span class="search-result-text">
+                <span class="search-result-category">{{ result.categoryLabel }}</span>
+                <span class="search-result-title">{{ result.task.title }}</span>
+              </span>
+              <i class="bi bi-arrow-right-short" aria-hidden="true"></i>
+            </button>
           </template>
 
           <div
@@ -1802,12 +1851,12 @@ const handleCreateQuickTask = async (data: {
   border-radius: 50%;
 }
 
-/* --- Such-Overlay (Aufbau wie im Putzen-Screen) ----------------------------- */
+/* --- Such-Overlay ------------------------------------------------------------ */
 .search-overlay {
   position: fixed;
   inset: 0;
   /* Über dem FAB (1000), unter der Modal-Ebene (1050, utilities.css): die
-     Modals der Ergebniskarten teleportieren nach <body>. */
+     Modals aus der Suche heraus teleportieren nach <body>. */
   z-index: 1010;
 }
 
@@ -1922,7 +1971,33 @@ const handleCreateQuickTask = async (data: {
 }
 
 .search-result-item {
-  margin-bottom: 0.5rem;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: var(--touch-target-min);
+  margin-bottom: 8px;
+  padding: 8px 8px 8px 12px;
+  text-align: left;
+  color: var(--pw-ink);
+  background: var(--pw-paper);
+  border: 1.5px solid var(--pw-line);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.search-result-item > .bi {
+  flex: none;
+  font-size: 1.5rem;
+  color: var(--pw-ink-soft);
+}
+
+/* `min-width: 0`, sonst kürzt der lange Titel nicht und schiebt den Pfeil raus. */
+.search-result-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
 }
 
 .search-result-category {
@@ -1930,8 +2005,14 @@ const handleCreateQuickTask = async (data: {
   color: var(--color-text-secondary);
   text-transform: uppercase;
   letter-spacing: 0.5px;
-  margin-bottom: 0.25rem;
-  padding-left: 0.5rem;
+  font-weight: 700;
+}
+
+.search-result-title {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: 15px;
   font-weight: 700;
 }
 
