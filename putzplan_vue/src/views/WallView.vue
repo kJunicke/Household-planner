@@ -1519,6 +1519,9 @@ const handleCreateQuickTask = async (data: {
 
 .search-overlay-input-wrapper {
   flex: 1;
+  /* Mit `auto` setzte die Eigenbreite des Felds die Untergrenze, und der
+     Schließen-Knopf rutschte auf schmalen Geräten aus dem Bild. */
+  min-width: 0;
   display: flex;
   align-items: center;
   gap: 12px;
@@ -1530,6 +1533,9 @@ const handleCreateQuickTask = async (data: {
 
 .search-overlay-input {
   flex: 1;
+  /* Siehe Hülle: ein `<input>` hat eine Eigenbreite (`size`), die `auto` als
+     Untergrenze nimmt. */
+  min-width: 0;
   border: none;
   outline: none;
   background: transparent;
@@ -1550,10 +1556,25 @@ const handleCreateQuickTask = async (data: {
 }
 
 .search-clear-btn {
+  position: relative;
   width: 24px;
   height: 24px;
   padding: 4px;
   font-size: 1rem;
+}
+
+/* Sichtbar 24px, damit das Feld seine Höhe behält; die Trefferfläche wächst per
+   Pseudo-Element auf 48px. Sie ragt je 12px über den Knopf und bleibt damit
+   innerhalb von Innenabstand plus Rand der Hülle — rechts davon liegen noch die
+   12px Abstand zum Schließen-Knopf, den sie nicht erreicht. */
+.search-clear-btn::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: var(--touch-target-min, 48px);
+  height: var(--touch-target-min, 48px);
+  transform: translate(-50%, -50%);
 }
 
 .search-overlay-close {
