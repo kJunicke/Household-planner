@@ -677,41 +677,6 @@ export const useHouseholdStore = defineStore('household', () => {
     return true
   }
 
-  const leaveHousehold = async () => {
-    const authStore = useAuthStore()
-    const toastStore = useToastStore()
-
-    if (!authStore.user) {
-      console.error('No user logged in')
-      toastStore.showToast('Fehler: Nicht angemeldet', 'error')
-      throw new Error('Not logged in')
-    }
-
-    if (!currentHousehold.value) {
-      toastStore.showToast('Fehler: Kein Haushalt vorhanden', 'error')
-      throw new Error('Not in a household')
-    }
-
-    // Delete household_member entry
-    const { error } = await supabase
-      .from('household_members')
-      .delete()
-      .eq('user_id', authStore.user.id)
-
-    if (error) {
-      console.error('Error leaving household:', error)
-      toastStore.showToast('Fehler beim Verlassen des Haushalts', 'error')
-      throw new Error(error.message)
-    }
-
-    // Clear state
-    unsubscribeFromHouseholdSettings()
-    currentHousehold.value = null
-    householdMembers.value = []
-    console.log('Left household')
-    toastStore.showToast('Haushalt verlassen', 'success', 3000)
-  }
-
   return {
     currentHousehold,
     householdMembers,
@@ -720,7 +685,6 @@ export const useHouseholdStore = defineStore('household', () => {
     getCurrentMemberDisplayName,
     createHousehold,
     joinHousehold,
-    leaveHousehold,
     loadWeeklyCompletions,
     // Bewusst NICHT die rohe `weeklyCompletions` exportieren: wer sie statt
     // `effectiveWeeklyCompletions` benutzt, übersieht optimistische
