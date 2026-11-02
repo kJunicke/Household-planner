@@ -95,6 +95,7 @@ onUnmounted(() => {
         <div class="input-group">
           <textarea
             v-model="newNoteContent"
+            maxlength="10000"
             class="form-control"
             placeholder="Neue Notiz schreiben..."
             rows="2"
@@ -165,7 +166,12 @@ onUnmounted(() => {
           <!-- Edit Mode -->
           <template v-else>
             <div class="note-edit">
-              <textarea v-model="editContent" class="form-control" rows="3"></textarea>
+              <textarea
+                v-model="editContent"
+                class="form-control"
+                rows="3"
+                maxlength="10000"
+              ></textarea>
               <div class="edit-actions mt-2">
                 <button class="btn btn-sm btn-secondary" @click="cancelEditing">Abbrechen</button>
                 <button

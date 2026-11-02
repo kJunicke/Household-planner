@@ -166,6 +166,7 @@ const handleDeleteSubtask = (subtaskId: string) => {
                 type="text"
                 class="form-control"
                 v-model="newSubtaskTitle"
+                maxlength="200"
                 placeholder="Name der Unteraufgabe"
                 @keyup.enter="handleAddSubtask"
               />
@@ -237,10 +238,12 @@ const handleDeleteSubtask = (subtaskId: string) => {
                 <span class="subtask-title">{{ subtask.title }}</span>
                 <span class="subtask-effort">{{ subtask.effort }}</span>
 
-                <!-- Points Mode Selector für existierende Subtasks (nur wenn nicht Daily) -->
+                <!-- Points Mode Selector für existierende Subtasks (nur wenn nicht Daily).
+                     Dieselben Modi wie beim Anlegen: unter Projekten kein deduct —
+                     die DB weist das seit 20261102120000 ab (trg_guard_task_type). -->
                 <div v-if="!isDailyTask" class="subtask-mode-selector">
                   <button
-                    v-for="mode in ['checklist', 'deduct', 'bonus'] as const"
+                    v-for="mode in availableModes"
                     :key="mode"
                     class="mode-btn"
                     :class="{ active: subtask.subtask_points_mode === mode }"

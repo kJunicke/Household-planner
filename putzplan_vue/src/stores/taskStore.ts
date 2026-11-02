@@ -1310,16 +1310,25 @@ export const useTaskStore = defineStore('tasks', () => {
     const toastStore = useToastStore()
     isLoading.value = true
 
-    const { error } = await supabase
+    // `.select()` liefert die tatsächlich gelöschten Zeilen zurück. Die
+    // DELETE-Policy erlaubt nur eigene Erledigungen; bei einer fremden löscht
+    // die DB still 0 Zeilen, ohne Fehler — das darf nicht als Erfolg gelten.
+    const { data, error } = await supabase
       .from('task_completions')
       .delete()
       .eq('completion_id', completionId)
+      .select('completion_id')
 
     isLoading.value = false
 
     if (error) {
       console.error('Error deleting completion:', error)
       toastStore.showToast('Fehler beim Löschen des Eintrags', 'error')
+      return false
+    }
+
+    if (!data || data.length === 0) {
+      toastStore.showToast('Nur eigene Einträge lassen sich löschen', 'error')
       return false
     }
 

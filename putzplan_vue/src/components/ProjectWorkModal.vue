@@ -66,6 +66,7 @@ const handleClose = () => {
             <textarea
               id="note"
               v-model="note"
+              maxlength="1000"
               class="form-control"
               rows="4"
               placeholder="z.B. Wände gestrichen, Möbel aufgebaut, Recherche zu neuen Features..."

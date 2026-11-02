@@ -300,6 +300,7 @@ const buildDate = __BUILD_DATE__
             <div v-else class="profile-edit">
               <input
                 v-model="newDisplayName"
+                maxlength="50"
                 type="text"
                 class="form-control mb-3"
                 placeholder="Dein Name"

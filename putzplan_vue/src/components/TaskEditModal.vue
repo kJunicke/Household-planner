@@ -139,6 +139,7 @@ const handleClose = () => {
                 class="form-control"
                 id="title"
                 v-model="editForm.title"
+                maxlength="200"
                 required
               />
             </div>

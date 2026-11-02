@@ -100,6 +100,7 @@ const joinHousehold = async () => {
                 <input
                   type="text"
                   v-model="newHouseholdName"
+                  maxlength="100"
                   class="form-control"
                   placeholder="z.B. WG Musterstraße"
                   :disabled="createLoading"

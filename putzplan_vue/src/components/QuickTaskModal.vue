@@ -74,6 +74,7 @@ const handleClose = () => {
               <input
                 type="text"
                 v-model="formData.title"
+                maxlength="200"
                 placeholder="z.B. Müll rausgebracht"
                 class="form-control"
                 :disabled="isLoading"
@@ -95,6 +96,7 @@ const handleClose = () => {
               <label class="form-label">Notiz (optional)</label>
               <textarea
                 v-model="formData.note"
+                maxlength="1000"
                 placeholder="z.B. Details zur Aufgabe"
                 class="form-control"
                 rows="2"

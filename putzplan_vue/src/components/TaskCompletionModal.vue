@@ -71,6 +71,7 @@ const handleClose = () => {
             <textarea
               id="note"
               v-model="note"
+              maxlength="1000"
               class="form-control"
               rows="3"
               placeholder="z.B. War sehr dreckig, Pfannen eingebrannt und Kühlschrank noch ausgewischt"

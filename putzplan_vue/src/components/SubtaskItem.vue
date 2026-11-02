@@ -117,6 +117,7 @@ const handleProjectWork = async (effort: number, note: string) => {
       <input
         type="text"
         v-model="editForm.title"
+        maxlength="200"
         class="form-control form-control-sm"
         placeholder="Subtask Name"
       />

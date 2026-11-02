@@ -2,12 +2,17 @@
 import { ref, onMounted, onUnmounted } from 'vue'
 import { useTaskStore } from '../stores/taskStore'
 import { useHouseholdStore } from '../stores/householdStore'
+import { useAuthStore } from '../stores/authStore'
 import { useHistoryGroups, type HistoryEntry } from '@/composables/useHistoryGroups'
 import HistoryRow from '@/components/HistoryRow.vue'
 import HistoryFoldRow from '@/components/HistoryFoldRow.vue'
 
 const taskStore = useTaskStore()
 const householdStore = useHouseholdStore()
+const authStore = useAuthStore()
+
+// Löschen nur für eigene Einträge — fremde lehnt die DB ab (DELETE-Policy).
+const isOwnEntry = (entry: HistoryEntry) => entry.user_id === authStore.user?.id
 
 const isLoading = ref(true)
 
@@ -152,6 +157,7 @@ onUnmounted(() => {
               :completion="row.entry"
               :note-expanded="expanded.has(row.entry.completion_id)"
               :swipe-open-id="swipeOpenId"
+              :deletable="isOwnEntry(row.entry)"
               @toggle-note="toggleNote(row.entry)"
               @swipe-start="swipeOpenId = row.entry.completion_id"
               @swipe-end="closeSwipe(row.entry.completion_id)"
@@ -170,6 +176,7 @@ onUnmounted(() => {
                 :completion="child"
                 :note-expanded="expanded.has(child.completion_id)"
                 :swipe-open-id="swipeOpenId"
+                :deletable="isOwnEntry(child)"
                 indented
                 @toggle-note="toggleNote(child)"
                 @swipe-start="swipeOpenId = child.completion_id"

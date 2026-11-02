@@ -76,6 +76,7 @@ const handleClose = () => {
               <input
                 type="text"
                 v-model="formData.title"
+                maxlength="200"
                 placeholder="z.B. Küche putzen"
                 class="form-control"
                 :disabled="isLoading"
