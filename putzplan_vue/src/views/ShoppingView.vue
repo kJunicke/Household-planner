@@ -585,6 +585,10 @@ onUnmounted(() => {
           <div class="search-container">
             <div class="top-bar">
               <div class="top-name-wrap">
+                <!-- Nicht an `isLoading` sperren: `loadItems` läuft nach jedem Anlegen
+                   im Hintergrund. Ein gesperrtes Feld verliert den Fokus, und die
+                   Handytastatur klappt nach jedem Artikel zu. Das Anlegen selbst
+                   geht über die Warteschlange; das Nachladen behält temp-Zeilen. -->
                 <input
                   v-model="searchInput"
                   type="text"
@@ -595,7 +599,6 @@ onUnmounted(() => {
                   @input="openSuggestions"
                   @focus="openSuggestions"
                   @blur="handleInputBlur"
-                  :disabled="shoppingStore.isLoading"
                 />
                 <div v-if="showSuggestions && suggestions.length > 0" class="suggestions-dropdown">
                   <div
@@ -644,7 +647,7 @@ onUnmounted(() => {
               <button
                 class="top-btn top-add"
                 @click="handleAddItem"
-                :disabled="!searchInput.trim() || shoppingStore.isLoading"
+                :disabled="!searchInput.trim()"
                 title="Hinzufügen"
               >
                 <i class="bi bi-plus-lg"></i>
