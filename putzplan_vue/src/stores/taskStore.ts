@@ -17,6 +17,7 @@ import {
 } from '@/lib/optimistic'
 import { createLatestRunGuard } from '@/lib/latestRun'
 import { mergeLoadedRows, type ChangeDuringLoad } from '@/lib/rowMerge'
+import { collectKeysetPages } from '@/lib/keysetPages'
 
 /**
  * Optimistische Completion: trägt eine Client-Kennung, weil die `completion_id`
@@ -1289,11 +1290,26 @@ export const useTaskStore = defineStore('tasks', () => {
 
     // JOIN task_completions → tasks (via task_id)
     // Mit Soft Delete bleiben Tasks erhalten → JOIN funktioniert immer
-    // Filterung über user_id für Household-Zugehörigkeit
-    const { data, error } = await supabase
-      .from('task_completions')
-      .select(
-        `
+    // Filterung über user_id für Household-Zugehörigkeit, dazu der Haushalt
+    // am Inner Join: sonst zählten Erledigungen anderer Haushalte mit gegen
+    // jede Seite.
+    //
+    // ALLE Zeilen, geblättert: PostgREST kappt jede Antwort bei `max_rows`
+    // (1000), und die Bilanz im Ausgleich rechnet über die ganze Historie —
+    // ohne Blättern fielen die ältesten Erledigungen still weg. Seitengröße =
+    // `max_rows`: größer kappt der Server ohnehin, kleiner kostet nur Anfragen.
+    // Geblättert wird über den PK (Keyset, → `collectKeysetPages`), sortiert
+    // für die Ansichten erst danach.
+    const householdId = householdStore.currentHousehold.household_id
+    const PAGE = 1000
+    let data
+    try {
+      data = await collectKeysetPages(
+        async (after) => {
+          let query = supabase
+            .from('task_completions')
+            .select(
+              `
                 completion_id,
                 completed_at,
                 user_id,
@@ -1301,21 +1317,37 @@ export const useTaskStore = defineStore('tasks', () => {
                 effort_override,
                 completion_note,
                 is_quick,
-                tasks (
+                tasks!inner (
                     title,
                     household_id,
                     deleted_at
                 )
             `,
+            )
+            .eq('tasks.household_id', householdId)
+            .in('user_id', householdUserIds)
+            .order('completion_id', { ascending: true })
+            .limit(PAGE)
+          if (after !== null) query = query.gt('completion_id', after)
+          const { data: page, error } = await query
+          if (error) throw error
+          return page ?? []
+        },
+        (row) => row.completion_id as string,
       )
-      .in('user_id', householdUserIds)
-      .order('completed_at', { ascending: false })
-
-    if (error) {
+    } catch (error) {
       console.error('Error fetching completions:', error)
       toastStore.showToast('Fehler beim Laden der Historie', 'error')
       return []
     }
+
+    // Neueste zuerst, wie es Historie und Übersicht erwarten. Gleichstand über
+    // den PK, damit die Reihenfolge nicht von der Seitengrenze abhängt.
+    data.sort((a, b) => {
+      const diff = Date.parse(b.completed_at) - Date.parse(a.completed_at)
+      if (diff !== 0) return diff
+      return a.completion_id < b.completion_id ? 1 : a.completion_id > b.completion_id ? -1 : 0
+    })
 
     // Filtere auf aktuellen Household
     const filteredData = data.filter((completion) => {
