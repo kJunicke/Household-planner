@@ -255,7 +255,7 @@ const projectWorkSubtaskId = computed(() => {
 })
 
 /**
- * Ein Altbestands-Projekt ohne diese Unteraufgabe bekommt **kein** Fenster: es
+ * Ein Projekt ohne diese Unteraufgabe bekommt **kein** Fenster: es
  * hätte nichts, worauf es buchen könnte. Stilles Nachlegen aus einer Geste
  * heraus wäre eine Datenänderung, die niemand angefordert hat.
  */

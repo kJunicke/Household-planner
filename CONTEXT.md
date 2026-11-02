@@ -134,6 +134,15 @@ Architekturentscheidungen: [docs/adr/](docs/adr/).
 - Gesendet wird nur, solange genau dieser Besitzer angemeldet ist; sonst wartet sie auf dem Gerät. Wer abmeldet, verliert nichts — derselbe Besitzer reicht sie beim nächsten Anmelden nach.
 - Sonst landete die Änderung mit der `household_id` des Nachfolgers in dessen Haushalt.
 
+### Altbestand (Warteschlange)
+- Ungesendete Offline-Änderungen ohne **Besitzer** — gespeichert, bevor Warteschlangen an Konto und Haushalt gebunden waren.
+- Übernommen wird er nur von einem Haushalt, dem jede darin genannte Liste gehört; sonst bleibt er unangetastet liegen.
+
+### Neuabgleich
+- Nach einem Durchlauf der Warteschlange den Stand einer Liste neu vom Server holen — wenn sie leer ist oder etwas verworfen wurde.
+- Zeilen mit noch wartender Änderung behalten ihren lokalen Stand; eine verworfene Änderung verschwindet dabei aus der Anzeige.
+- Ein Neuabgleich stößt selbst keinen Durchlauf an: der eben fertige hat alles versucht.
+
 ### Abreißen
 - Geste zum Erledigen: den Zettel am **Eselsohr** greifen und nach unten ziehen.
 - Fachlich dasselbe wie jede Erledigung — Punkte über die Edge Function `complete-task`, die Aufgabe verlässt „Jetzt dran".

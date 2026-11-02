@@ -73,8 +73,7 @@ describe('judgeFailure', () => {
     expect(j.retries).toBe(5)
   })
 
-  it('ein schon erschöpfter Altbestand bekommt genau einen weiteren Versuch', () => {
-    // Einträge aus der Zeit, als Netzfehler mitzählten: retries 5, ohne Zeitstempel.
+  it('ein erschöpfter Eintrag ohne Zeitstempel bekommt genau einen weiteren Versuch', () => {
     expect(judgeFailure({ retries: 5 }, serverError, 0, 5).verdict).toBe('discard')
     expect(judgeFailure({ retries: 5 }, fetchFailed, 0, 5).verdict).toBe('later')
   })

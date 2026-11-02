@@ -28,7 +28,7 @@ export function createLatestRunGuard() {
  *
  * Mit dem Wächter allein verwirft ein überholter Lauf seine Antwort und endet —
  * wer auf ihn gewartet hat, macht dann mit einem Stand ohne seine Daten weiter
- * (die Wand packte so einmal mit Projektsummen 0 und sprang beim nächsten Lauf).
+ * (die Wand packt dann mit Projektsummen 0 und springt beim nächsten Lauf).
  * Hier endet `run()` erst, wenn auch der jüngste inzwischen gestartete Lauf
  * fertig ist. Fehler überholter Läufe fallen weg, ihr Ergebnis zählt ohnehin
  * nicht.

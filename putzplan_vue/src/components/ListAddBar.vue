@@ -205,8 +205,8 @@ const handleInputBlur = () => {
   align-items: center;
   gap: 4px;
   /* Bezugsrahmen der Namensvorschläge ist die ganze Leiste, nicht das
-     Namensfeld: bei 360 px hatte das Feld Platz für rund elf Zeichen, die
-     Vorschläge darunter waren entsprechend gequetscht. */
+     Namensfeld: das Feld allein ist auf schmalen Telefonen zu schmal, um
+     Vorschläge lesbar darunter zu zeigen. */
   position: relative;
 }
 .top-name-wrap {

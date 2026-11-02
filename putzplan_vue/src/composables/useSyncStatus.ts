@@ -4,9 +4,8 @@ import { useNetworkStatus } from './useNetworkStatus'
 type BoolSource = Ref<boolean> | ComputedRef<boolean>
 
 /**
- * Eine Datenquelle, die unsynchronisierte Änderungen halten kann.
- * Heute meldet sich nur der Einkaufs-Store an; Etappe 5 (Checklisten) kann sich
- * ohne Änderung am Header andocken.
+ * Eine Datenquelle, die unsynchronisierte Änderungen halten kann (Einkauf,
+ * Packliste, To-do). Der Header kennt nur diese Schnittstelle, nicht die Stores.
  */
 export interface SyncSource {
   hasPending: BoolSource
