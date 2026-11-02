@@ -938,7 +938,11 @@ onUnmounted(() => {
       <div class="modal-content" @click.stop>
         <div class="modal-header">
           <h5 class="modal-title">{{ labels.createListTitle }}</h5>
-          <button class="btn-close" @click="showCreateListModal = false"></button>
+          <button
+            class="btn-close"
+            @click="showCreateListModal = false"
+            aria-label="Schließen"
+          ></button>
         </div>
         <div class="modal-body">
           <div class="form-group">
@@ -983,7 +987,11 @@ onUnmounted(() => {
       <div class="modal-content" @click.stop>
         <div class="modal-header">
           <h5 class="modal-title">Alle zurücksetzen?</h5>
-          <button class="btn-close" @click="showResetConfirm = false"></button>
+          <button
+            class="btn-close"
+            @click="showResetConfirm = false"
+            aria-label="Schließen"
+          ></button>
         </div>
         <div class="modal-body">
           <p class="text-muted mb-0">{{ labels.resetConfirmBody }}</p>

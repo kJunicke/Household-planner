@@ -188,9 +188,7 @@ onUnmounted(() => {
         <div class="modal-content" @click.stop>
           <div class="modal-header">
             <h3 class="modal-title">Notiz löschen</h3>
-            <button @click="closeDeleteModal" class="btn-close" aria-label="Schließen">
-              <i class="bi bi-x-lg"></i>
-            </button>
+            <button @click="closeDeleteModal" class="btn-close" aria-label="Schließen"></button>
           </div>
           <div class="modal-body">
             <p>Möchtest du diese Notiz wirklich löschen?</p>

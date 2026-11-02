@@ -955,7 +955,7 @@ onUnmounted(() => {
       <div class="modal-content" @click.stop>
         <div class="modal-header">
           <h5 class="modal-title">Neue Einkaufsliste</h5>
-          <button class="btn-close" @click="closeCreateListModal"></button>
+          <button class="btn-close" @click="closeCreateListModal" aria-label="Schließen"></button>
         </div>
         <div class="modal-body">
           <input

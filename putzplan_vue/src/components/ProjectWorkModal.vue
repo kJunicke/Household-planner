@@ -40,7 +40,7 @@ const handleClose = () => {
       <div class="modal-content" @click.stop>
         <div class="modal-header">
           <h3 class="modal-title">Am Projekt arbeiten</h3>
-          <button class="btn-close" @click="handleClose" aria-label="Schließen">×</button>
+          <button class="btn-close" @click="handleClose" aria-label="Schließen"></button>
         </div>
 
         <div class="modal-body">

@@ -126,7 +126,7 @@ const handleDeleteSubtask = (subtaskId: string) => {
       <div class="modal-content" @click.stop>
         <div class="modal-header">
           <h3 class="modal-title">{{ parentTask.title }} - Unteraufgabe hinzufügen</h3>
-          <button class="btn-close" @click="handleClose" aria-label="Schließen">×</button>
+          <button class="btn-close" @click="handleClose" aria-label="Schließen"></button>
         </div>
 
         <div class="modal-body">

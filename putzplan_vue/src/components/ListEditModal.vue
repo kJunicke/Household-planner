@@ -31,7 +31,7 @@ const handleDelete = () => {
       <div class="modal-content" @click.stop>
         <div class="modal-header">
           <h5 class="modal-title">Liste bearbeiten</h5>
-          <button class="btn-close" @click="emit('close')"></button>
+          <button class="btn-close" @click="emit('close')" aria-label="Schließen"></button>
         </div>
 
         <div class="modal-body">
