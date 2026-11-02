@@ -16,7 +16,7 @@ import { createMutationQueue } from '@/lib/mutationQueue'
 import { keepPendingLocal } from '@/lib/rowMerge'
 import { pendingCategoryIds } from '@/lib/queueRetry'
 import { withStatus } from '@/lib/networkError'
-import { queueOwner } from '@/lib/queueStorage'
+import { legacyListsBelong, queueOwner } from '@/lib/queueStorage'
 import { supabase } from '@/lib/supabase'
 import { useHouseholdStore } from './householdStore'
 import { useAuthStore } from './authStore'
@@ -97,6 +97,7 @@ export function createChecklistStore(config: ChecklistStoreConfig) {
         await loadItems()
         await loadCategories()
       },
+      ownsLegacy: (legacy) => legacyListsBelong(legacy, new Set(lists.value.map((l) => l.list_id))),
       successToast: labels.syncSuccess,
     })
 
@@ -411,6 +412,8 @@ export function createChecklistStore(config: ChecklistStoreConfig) {
         if (error) throw error
 
         lists.value = data || []
+        // Erst jetzt lässt sich ein Altbestand der Warteschlange zuordnen.
+        queue.adoptLegacy()
 
         if (lists.value.length > 0) {
           const currentExists =

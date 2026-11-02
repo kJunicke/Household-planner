@@ -23,26 +23,7 @@ export function queueOwner(
 
 export const ownedKey = (base: string, owner: string) => `${base}:${owner}`
 
-/**
- * Warteschlange des Besitzers. Ein Altbestand unter dem ungebundenen Schlüssel
- * (vor der Bindung geschrieben) geht an den ersten Besitzer, der danach liest —
- * praktisch derselbe Nutzer, dessen Sitzung das Update überdauert hat.
- */
-export function readOwnedQueue(
-  storage: KeyValueStorage,
-  base: string,
-  owner: string,
-): PendingMutation[] {
-  const key = ownedKey(base, owner)
-  let raw = storage.getItem(key)
-  if (raw === null) {
-    const legacy = storage.getItem(base)
-    if (legacy !== null) {
-      storage.setItem(key, legacy)
-      storage.removeItem(base)
-      raw = legacy
-    }
-  }
+const parseQueue = (raw: string | null): PendingMutation[] => {
   if (!raw) return []
   try {
     const parsed: unknown = JSON.parse(raw)
@@ -50,6 +31,66 @@ export function readOwnedQueue(
   } catch {
     return []
   }
+}
+
+/**
+ * Warteschlange des Besitzers.
+ *
+ * Fehlt sie, kann ein Altbestand unter dem ungebundenen Schlüssel (vor der
+ * Bindung geschrieben) übernommen werden — aber nur, wenn `ownsLegacy` ihn dem
+ * aktuellen Haushalt zuordnet. Sonst bleibt er unangetastet liegen: wessen
+ * Änderungen das sind, weiß niemand mehr, und abgespielt landeten sie mit der
+ * `household_id` des Lesers in dessen Haushalt. Ohne `ownsLegacy` wird nie
+ * übernommen.
+ */
+export function readOwnedQueue(
+  storage: KeyValueStorage,
+  base: string,
+  owner: string,
+  ownsLegacy?: (legacy: PendingMutation[]) => boolean,
+): PendingMutation[] {
+  const raw = storage.getItem(ownedKey(base, owner))
+  if (raw !== null) return parseQueue(raw)
+  return ownsLegacy ? adoptLegacyQueue(storage, base, owner, ownsLegacy) : []
+}
+
+/**
+ * Nur die Übernahme des Altbestands (siehe `readOwnedQueue`), ohne die eigene
+ * Warteschlange zu lesen. Liegt schon eine eigene, bleibt alles, wie es ist.
+ * Für einen zweiten Anlauf, sobald die Listen des Haushalts bekannt sind.
+ */
+export function adoptLegacyQueue(
+  storage: KeyValueStorage,
+  base: string,
+  owner: string,
+  ownsLegacy: (legacy: PendingMutation[]) => boolean,
+): PendingMutation[] {
+  const key = ownedKey(base, owner)
+  if (storage.getItem(key) !== null) return []
+  const legacyRaw = storage.getItem(base)
+  const legacy = parseQueue(legacyRaw)
+  if (legacy.length === 0 || !ownsLegacy(legacy)) return []
+  storage.setItem(key, legacyRaw!)
+  storage.removeItem(base)
+  return legacy
+}
+
+/**
+ * Gehört ein Altbestand in diesen Haushalt? Ja, wenn jede Liste, die er nennt,
+ * eine des Haushalts ist. Solange dessen Listen nicht geladen sind, ist die
+ * Menge leer und jedes Anlegen bleibt liegen, bis sie es sind.
+ *
+ * Mutationen ohne Liste (Abhaken, Ändern, Löschen per Zeilen-ID) halten nicht
+ * auf: auf fremde Zeilen lässt RLS sie ins Leere laufen, und nur ein Anlegen
+ * schreibt die `household_id` des Lesers.
+ */
+export function legacyListsBelong(
+  legacy: readonly PendingMutation[],
+  householdListIds: ReadonlySet<string>,
+): boolean {
+  return legacy.every(
+    (m) => m.payload.listId === undefined || householdListIds.has(m.payload.listId),
+  )
 }
 
 export function writeOwnedQueue(

@@ -16,7 +16,12 @@ import type { PendingMutation } from '@/types/PendingMutation'
 import { registerSyncSource } from '@/composables/useSyncStatus'
 import { useToastStore } from '@/stores/toastStore'
 import { runQueuePass, type QueuePassResult } from './queueRetry'
-import { readOwnedQueue, removeFromOwnedQueue, writeOwnedQueue } from './queueStorage'
+import {
+  adoptLegacyQueue,
+  readOwnedQueue,
+  removeFromOwnedQueue,
+  writeOwnedQueue,
+} from './queueStorage'
 
 const DEFAULT_MAX_RETRIES = 5
 
@@ -51,6 +56,11 @@ export interface MutationQueueOptions {
    * dieselben Fehlschläge samt Meldung.
    */
   reconcile?: () => Promise<void> | void
+  /**
+   * Ordnet einen Altbestand vom ungebundenen Schlüssel dem aktuellen Haushalt
+   * zu (`legacyListsBelong`). Fehlt sie, wird er nie übernommen.
+   */
+  ownsLegacy?: (legacy: PendingMutation[]) => boolean
   successToast?: string // z. B. 'Packliste synchronisiert'
   maxRetries?: number // Standard 5
 }
@@ -68,6 +78,11 @@ export interface MutationQueue {
   pendingItemIds(): Set<string>
   /** true, solange `reconcile` nach einem Durchlauf läuft. */
   isReconciling(): boolean
+  /**
+   * Altbestand erneut prüfen, z. B. sobald die Listen geladen sind — beim
+   * Anlegen der Warteschlange kennt `ownsLegacy` sie meist noch nicht.
+   */
+  adoptLegacy(): void
 }
 
 export function createMutationQueue(opts: MutationQueueOptions): MutationQueue {
@@ -92,7 +107,7 @@ export function createMutationQueue(opts: MutationQueueOptions): MutationQueue {
   const loadFromStorage = () => {
     const key = owner.value
     try {
-      queue.value = key ? readOwnedQueue(localStorage, opts.storageKey, key) : []
+      queue.value = key ? readOwnedQueue(localStorage, opts.storageKey, key, opts.ownsLegacy) : []
       console.log('📦 Loaded mutation queue from storage:', opts.storageKey, queue.value.length)
     } catch (error) {
       console.error('Failed to load queue from storage:', error)
@@ -127,6 +142,17 @@ export function createMutationQueue(opts: MutationQueueOptions): MutationQueue {
 
   const rewrite = (fn: (m: PendingMutation) => void) => {
     for (const m of queue.value) fn(m)
+  }
+
+  const adoptLegacy = () => {
+    const key = owner.value
+    if (!key || !opts.ownsLegacy || queue.value.length > 0) return
+    try {
+      const adopted = adoptLegacyQueue(localStorage, opts.storageKey, key, opts.ownsLegacy)
+      if (adopted.length > 0) queue.value = adopted
+    } catch (error) {
+      console.error('Failed to adopt legacy queue:', error)
+    }
   }
 
   const pendingItemIds = () =>
@@ -207,5 +233,6 @@ export function createMutationQueue(opts: MutationQueueOptions): MutationQueue {
     sync,
     pendingItemIds,
     isReconciling: () => reconciling,
+    adoptLegacy,
   }
 }

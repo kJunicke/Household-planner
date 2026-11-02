@@ -16,6 +16,7 @@ import { pendingCategoryIds, runQueuePass, type QueuePassResult } from '@/lib/qu
 import { keepPendingLocal } from '@/lib/rowMerge'
 import { withStatus } from '@/lib/networkError'
 import {
+  legacyListsBelong,
   ownedKey,
   queueOwner,
   readOwnedQueue,
@@ -113,7 +114,13 @@ export const useShoppingStore = defineStore('shopping', () => {
   const loadQueueFromStorage = () => {
     const owner = storageOwner.value
     try {
-      mutationQueue.value = owner ? readOwnedQueue(localStorage, STORAGE_KEY_QUEUE, owner) : []
+      // Ein Altbestand ohne Besitzer nur, wenn seine Listen die dieses
+      // Haushalts sind. `loadItems` liest nach `loadLists` erneut.
+      mutationQueue.value = owner
+        ? readOwnedQueue(localStorage, STORAGE_KEY_QUEUE, owner, (legacy) =>
+            legacyListsBelong(legacy, new Set(lists.value.map((l) => l.list_id))),
+          )
+        : []
       console.log('📦 Loaded mutation queue from storage:', mutationQueue.value.length)
     } catch (error) {
       console.error('Failed to load queue from storage:', error)
