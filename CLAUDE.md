@@ -25,6 +25,14 @@ Push auf `main` deployt sofort (GitHub Pages). Umgebung: Linux Mint, VS Code.
 - Nennt der User einen Skill, der zu fehlen scheint: erst danach suchen (`.claude/skills/`),
   dann entscheiden.
 
+## Kommentare
+
+- Ein Kommentar sagt **warum so** oder **was bricht, wenn man es ändert**. Was der Code tut, sagt der Code.
+- Nicht in den Code: Ticketnummern, Etappen, QC-Runden, Daten, „vorher/früher/seit/nicht mehr“,
+  Messprotokolle — das gehört in Commit oder Ticket. Messwerte nur als Ergebnis, ggf. mit Verweis.
+- Verweise auf ADR, `CONTEXT.md` und `docs/` sind erwünscht. Lange Herleitungen dorthin, nicht in den Code.
+- Fallen-Warnungen (Messvertrag von `relayout`, iOS/WebKit) bleiben wörtlich stehen.
+
 ## Wissen
 
 - Vor dem Erkunden lesen: [CONTEXT.md](CONTEXT.md) und die ADRs des Bereichs.
