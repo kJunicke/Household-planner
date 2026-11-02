@@ -3,6 +3,7 @@ import { onMounted, onUnmounted, ref } from 'vue'
 import { useNotesStore } from '@/stores/notesStore'
 import { useHouseholdStore } from '@/stores/householdStore'
 import type { Note } from '@/types/Note'
+import { NOTE_CONTENT_MAX_LENGTH } from '@/lib/limits'
 
 const notesStore = useNotesStore()
 const householdStore = useHouseholdStore()
@@ -95,6 +96,7 @@ onUnmounted(() => {
         <div class="input-group">
           <textarea
             v-model="newNoteContent"
+            :maxlength="NOTE_CONTENT_MAX_LENGTH"
             class="form-control"
             placeholder="Neue Notiz schreiben..."
             rows="2"
@@ -165,7 +167,12 @@ onUnmounted(() => {
           <!-- Edit Mode -->
           <template v-else>
             <div class="note-edit">
-              <textarea v-model="editContent" class="form-control" rows="3"></textarea>
+              <textarea
+                v-model="editContent"
+                class="form-control"
+                rows="3"
+                :maxlength="NOTE_CONTENT_MAX_LENGTH"
+              ></textarea>
               <div class="edit-actions mt-2">
                 <button class="btn btn-sm btn-secondary" @click="cancelEditing">Abbrechen</button>
                 <button
@@ -188,9 +195,7 @@ onUnmounted(() => {
         <div class="modal-content" @click.stop>
           <div class="modal-header">
             <h3 class="modal-title">Notiz löschen</h3>
-            <button @click="closeDeleteModal" class="btn-close" aria-label="Schließen">
-              <i class="bi bi-x-lg"></i>
-            </button>
+            <button @click="closeDeleteModal" class="btn-close" aria-label="Schließen"></button>
           </div>
           <div class="modal-body">
             <p>Möchtest du diese Notiz wirklich löschen?</p>
@@ -278,8 +283,27 @@ onUnmounted(() => {
 
 .note-actions {
   display: flex;
-  gap: var(--spacing-xs);
+  /* Nicht kleiner: die 48px-Treffflächen der Knöpfe (unten) sind breiter als die
+     Knöpfe; der Abstand muss den Überstand beider Nachbarn aufnehmen, sonst
+     überlappen sie. */
+  gap: var(--spacing-sm);
   align-items: flex-start;
+}
+
+.note-actions .btn {
+  position: relative;
+}
+
+/* Sichtbar bleiben die Knöpfe klein (`btn-sm`); die Trefferfläche wächst per
+   Pseudo-Element auf 48px. */
+.note-actions .btn::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: var(--touch-target-min, 48px);
+  height: var(--touch-target-min, 48px);
+  transform: translate(-50%, -50%);
 }
 
 .note-edit {

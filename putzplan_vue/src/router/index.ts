@@ -8,9 +8,7 @@ const router = createRouter({
     {
       path: '/',
       name: 'home',
-      // HomeView entscheidet anhand der Aussehen-Einstellung zwischen dem
-      // bestehenden Putzen-Screen und der Pinnwand — sofort, ohne Neuladen.
-      component: () => import('../views/HomeView.vue'),
+      component: () => import('../views/WallView.vue'),
     },
     {
       path: '/history',

@@ -1,26 +1,53 @@
-- Du bist auf Linux Mint in VScode
-- **Tests sind grundsätzlich manuell.** Es gibt bewusst kein Test-Framework, Tests immer im Browser mit Chrome Erweiterung. Messfallen im ferngesteuerten Tab → [docs/testing.md](docs/testing.md)
+# Putzplan
 
-- Entwicklung ist immer Mobile First. Auf kleinen Viewport optimieren.
-- Alle features müssen auf Android und IOS funktionieren
-- wenn ein invocter skill vom user vermeintlich nicht existiert suche nach ihm, bevor du entscheidest, dass dieser nicht existiert.
-- **Jede Änderung am Code wird von einem zweiten Agenten geprüft — immer, auch die
-  einzeilige.** Wer baut, prüft nicht. Das gilt ausdrücklich auch dann, wenn die
-  Hauptinstanz selbst gebaut hat: dann geht sie trotzdem an einen unabhängigen QC.
-  Am 05.09.2026 hat genau diese Ausnahme („ist doch nur CSS") einen Fehler
-  durchgelassen, den der Maintainer in Minuten am Gerät sah — abgeschnittene
-  Stempelränder auf 261 von 282 Lagen. Die eigene Messung hatte ihn nicht gefunden,
-  weil sie „wie breit" fragte und nicht „sieht es ganz aus".
-- **Eine Messung ist kein Blick.** Wer Geometrie misst, hat nicht geprüft, ob etwas
-  richtig aussieht. Beides beauftragen.
+Vue 3 + Supabase, PWA für einen Zwei-Personen-Haushalt. App in `putzplan_vue/`.
+Push auf `main` deployt sofort (GitHub Pages). Umgebung: Linux Mint, VS Code.
 
-## Agent skills
+## Regeln
 
-- **Issue tracker**: Issues und Specs als Markdown unter `.scratch/<feature-slug>/`
-  (gitignored) → [docs/agents/issue-tracker.md](docs/agents/issue-tracker.md)
-  - active dev operations are in .scratch and completed one are in .scratch/archive
-  - whenever a dev operation is completed move the entire folder into /archive
-- **Triage labels**: die fünf kanonischen Rollen als `Status:`-Zeile im Issue-File
-  → [docs/agents/triage-labels.md](docs/agents/triage-labels.md)
-- **Domain docs**: single-context, `CONTEXT.md` + `docs/adr/` im Root
-  → [docs/agents/domain.md](docs/agents/domain.md)
+- **Mobile first**, kleinster Viewport zuerst. Jedes Feature muss auf Android **und** iOS
+  funktionieren. Barrierefreiheit und Tastaturbedienung sind kein Ziel — Gesten dürfen der
+  einzige Weg sein.
+- **UI wird manuell geprüft**, im Browser über die Chrome-Erweiterung — kein UI-Test-Framework,
+  bewusst. Messfallen im ferngesteuerten Tab: [docs/testing.md](docs/testing.md).
+- **Reine Logik unter `src/lib` hat vitest-Tests** (`npm test` in `putzplan_vue/`, Datei
+  `*.test.ts` neben dem Modul, ohne DOM). Neue reine Logik bekommt Tests. Grüne Tests ersetzen
+  keinen Blick aufs Gerät.
+- **Jede Codeänderung prüft ein zweiter Agent (QC)** — auch die einzeilige, auch die der
+  Hauptinstanz, auch der Formatierungs-Commit. Wer baut, prüft nicht. Der QC macht ein
+  Code-Review mit `/code-review` **und** sieht sich bei sichtbaren Änderungen das Aussehen
+  an. (05.09.2026: „ist doch nur CSS“ ohne QC → abgeschnittene Stempelränder auf 261 von
+  282 Lagen, am Gerät in Minuten gesehen; die eigene Messung fragte „wie breit“, nicht
+  „sieht es ganz aus“.)
+- **Eine Messung ist kein Blick.** Geometrie messen und Aussehen ansehen sind zwei Aufträge;
+  beide vergeben.
+- Vor jedem Push auf `main`: `npm test` und `npm run build` in `putzplan_vue/`. Nur eigene Pfade stagen.
+- Nennt der User einen Skill, der zu fehlen scheint: erst danach suchen (`.claude/skills/`),
+  dann entscheiden.
+
+## Kommentare
+
+- Ein Kommentar sagt **warum so** oder **was bricht, wenn man es ändert**. Was der Code tut, sagt der Code.
+- Nicht in den Code: Ticketnummern, Etappen, QC-Runden, Daten, „vorher/früher/seit/nicht mehr“,
+  Messprotokolle — das gehört in Commit oder Ticket. Messwerte nur als Ergebnis, ggf. mit Verweis.
+- Verweise auf ADR, `CONTEXT.md` und `docs/` sind erwünscht. Lange Herleitungen dorthin, nicht in den Code.
+- Fallen-Warnungen (Messvertrag von `relayout`, iOS/WebKit) bleiben wörtlich stehen.
+
+## Wissen
+
+- Vor dem Erkunden lesen: [CONTEXT.md](CONTEXT.md) und die ADRs des Bereichs.
+- Vokabular: Begriffe aus [CONTEXT.md](CONTEXT.md), keine Synonyme; fehlt einer, ist das
+  ein Befund. Wo Skills `GLOSSARY.md` sagen, ist diese Datei gemeint.
+- Entscheidungen: [docs/adr/](docs/adr/). Ein ADR gilt, bis er ausdrücklich zurückgezogen ist;
+  wer ihm widerspricht, schreibt das in den ADR. Wer eine Festlegung ersetzt, liest vorher,
+  was in der ersetzten Quelle wirklich steht.
+- Getrackte Dateien verlinken nicht in `.scratch/` — Wesentliches wird übernommen.
+
+## Tracker
+
+Lokal unter `.scratch/` (gitignored); Ordner, Pflichtzeilen und `Status:`-Werte:
+[docs/agents/tracker.md](docs/agents/tracker.md).
+
+- Backlog: `.scratch/backlog/` (Einstieg `README.md`). Vorhaben: `.scratch/<slug>/`.
+- Abgeschlossenes Vorhaben → ganzer Ordner nach `.scratch/archive/`. Das Archiv nur auf
+  Verweis lesen.

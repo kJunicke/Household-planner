@@ -1,35 +1,17 @@
 <script setup lang="ts">
 /**
- * Wochenziel-Leiste (Pinnwand-Redesign, Etappe 3 — seit Ticket 08 globale
- * Header-Komponente).
+ * Wochenziel-Leiste (→ CONTEXT.md „Wochenziel“), eingebettet in `Header.vue`
+ * und damit auf jeder Route sichtbar.
  *
- * Zeigt, wie weit der Haushalt diese Woche **gemeinsam** gekommen ist: **ein
- * einziger** Balken über die volle Papierbreite, ein Farbsegment je Mitglied in
- * dessen `user_color`. Die Legende (Farbe + Name + Punkte je Mitglied) steht
- * links in der Kopfzeile, die Gesamtpunktzahl rechts — dieselbe Zeile, kein
- * zusätzlicher Platzbedarf.
- *
- * **Kurzes Kapitel Beschriftung-IM-Balken, wieder verworfen:** ein
- * Zwischenstand hat die Legende versuchsweise in die Balkensegmente selbst
- * verlegt (samt Canvas-Textmessung und Kontrast-Halo), um im Header noch
- * kompakter zu sein. Der Nutzer hat das gesehen und ausdrücklich abgelehnt
- * („das sieht seltsam aus") — die Legende gehört zurück in die Kopfzeile, wo
- * ohnehin noch Platz neben der Punktzahl ist. Diese Fassung ist der Rückbau
- * dazu; die gesamte Fit-/Kontrast-Logik aus diesem Zwischenstand ist entfernt,
- * nicht nur ausgeblendet.
+ * **Ein einziger** Balken über die volle Papierbreite, ein Farbsegment je
+ * Mitglied in dessen `user_color`. Die Legende (Farbe + Name + Punkte je
+ * Mitglied) steht links in der Kopfzeile, die Gesamtpunktzahl rechts. Die
+ * Legende gehört in die Kopfzeile, nicht in die Segmente — Beschriftung im
+ * Balken hat der Maintainer gesehen und abgelehnt.
  *
  * Ausdrücklich **keine Rangliste**: weder Reihenfolge noch Legende richten
  * sich nach der Punktzahl, es gibt keine Platzierung. Die Reihenfolge ist die
  * der Mitgliederliste und bleibt deshalb über die Woche stabil.
- *
- * **Seit Ticket 08 eingebettet in `Header.vue`**, nicht mehr eigenständig in
- * `WallView`. Sie klebt deshalb NICHT mehr selbst (siehe `.wall-status` unten)
- * — das übernimmt der App-Header als Ganzes, in dessen sticky-Box diese
- * Komponente jetzt steckt. Damit läuft sie auf jeder Route mit, nicht nur auf
- * der Wand, und der Kompaktzustand beim Scrollen (`isScrolled` unten) gilt
- * dadurch automatisch überall — derselbe `window`-Scroll-Listener läuft jetzt
- * einfach auf jeder Seite, weil dieselbe Komponenten-Instanz im globalen
- * Header sitzt statt nur in `WallView`.
  *
  * Bearbeitet wird das Ziel hier nicht — das gehört in die Settings-Sidebar.
  */
@@ -72,9 +54,9 @@ interface Segment {
 /**
  * Die Farbsegmente im gefüllten Teil, verhältnistreu nach Punkten.
  *
- * **Warum absolute Positionen statt eines Flex-Containers:** die Segmente lagen
- * früher im Flex-Fluss. Sobald ihre Summe die Spurbreite übersteigt, staucht
- * Flexbox sie stillschweigend auf die Spur zurück — jeder Füllstand ab 100 %
+ * **Warum absolute Positionen statt eines Flex-Containers:** im Flex-Fluss
+ * staucht Flexbox die Segmente, sobald ihre Summe die Spurbreite übersteigt,
+ * stillschweigend auf die Spur zurück — jeder Füllstand ab 100 %
  * rendert dann pixelidentisch, ohne Fehlermeldung, und `overflow: visible`
  * hilft nicht. Hier ist die Falle strukturell ausgeschlossen: jedes Segment ist
  * `position: absolute` mit `left`/`width` in Prozent seines Containers. Absolut
@@ -110,10 +92,9 @@ const segments = computed<Segment[]>(() => {
  * Der Druck im Rohr — das Maß, an dem das Ausmaß des Übertreffens hängt.
  *
  * `P = log2(Punkte / Ziel)`, also 0 bei punktgenau erfülltem Ziel und danach
- * **streng monoton wachsend ohne obere Grenze**. Genau das war der Fehler des
- * Vorgängeransatzes: dort sah ab einer Schwelle jeder Stand gleich aus. Hier
- * gibt es keine Schwelle und kein Plateau — jede zusätzliche Erledigung erhöht
- * P und damit jede daraus abgeleitete Größe.
+ * **streng monoton wachsend ohne obere Grenze**: keine Schwelle, ab der jeder
+ * Stand gleich aussieht — jede zusätzliche Erledigung erhöht P und damit jede
+ * daraus abgeleitete Größe.
  *
  * Warum logarithmisch und nicht linear: linear wäre bei Ziel 1 und 100 Punkten
  * ein hundertfach heftiges Spritzen, das die Leiste sprengt. Der Logarithmus wächst
@@ -158,20 +139,17 @@ const MAX_JETS = 9
  * - `strength`  — Einfärbung der überlasteten Kante.
  * - `glowPeak`  — wie hell der gefüllte Balken **als Ganzes** aufleuchtet. Das
  *                 ist der tragende Kanal des Erfolgssignals: er ändert Fläche
- *                 und Kontrast, nicht eine Kantendicke. Ein früheres wanderndes
- *                 Streifenmuster war zu schnell und zu ablenkend und ist
- *                 ersetzt.
+ *                 und Kontrast, nicht eine Kantendicke. Ein wanderndes
+ *                 Streifenmuster wäre zu schnell und zu ablenkend.
  * - `glowCycle` — bleibt bewusst **ruhig** (5,2 s → 3 s). Tempo trägt hier
  *                 kein Ausmaß, es würde nur aufdringlich.
  *
  * `travelPx` und `linePx` sind gedeckelt, weil der Streifen fest ist und ein
  * `overflow: hidden` sonst genau das Plateau erzeugen würde, das hier verboten
- * ist. Der QC hat nachgemessen, wer das Ausmaß tatsächlich trägt: die
- * **gerenderte Reichweite** (16,8 → 22,2 px), nicht die Taktrate — 17 %
- * Unterschied im Atemzug sind ohne A/B-Vergleich nicht wahrnehmbar. Oberhalb
- * der Travel-Grenze (P ≥ 2,5, r ≥ 5,66) tragen deshalb `linePx` (8,56 → 10,37 →
- * 13,00 px, bis r ≈ 32) und `jetCount` (6 → 7 → 9, bis r ≈ 45) weiter; erst
- * jenseits davon bleibt `durationS` als einzige ungedeckelte Größe.
+ * ist. Das Ausmaß trägt sichtbar die **Reichweite**, nicht die Taktrate. Oberhalb
+ * der Travel-Grenze (P ≥ 2,5, r ≥ 5,66) tragen `linePx` (bis r ≈ 32) und
+ * `jetCount` (bis r ≈ 45) weiter; erst jenseits davon bleibt `durationS` als
+ * einzige ungedeckelte Größe.
  *
  * Animiert werden nur `transform` und `opacity`. Kein `requestAnimationFrame`.
  */
@@ -182,19 +160,12 @@ const burstStyle = computed(() => {
   // **Die Helligkeit trägt das Ausmaß**, nicht das Tempo: schneller hieße
   // aufdringlicher, und genau das soll es nicht sein.
   //
-  // Der Basisterm ist 0,08, nicht 0,05: mit 0,05 lag der Hub knapp über dem
-  // Ziel auf einer **hellen** Mitgliederfarbe (gemessen an rgb(226,164,74))
-  // bei nur 4,9 von 255 Stufen und war im Screenshot nicht auszumachen. Die
-  // Steigung ist im Gegenzug von 0,085 auf 0,075 gesenkt, damit der Deckel
-  // bei 0,30 ungefähr an seiner Stelle bleibt: er rückt dadurch von r = 7,684
-  // auf r = 7,639 vor, also um 0,6 % — mit 0,08 bei unveränderter Steigung
-  // wäre er auf r = 6,01 gewandert. (Vom QC nachgerechnet; eine frühere
-  // Fassung dieses Kommentars behauptete „nicht früher", das war falsch.)
-  // Der Deckel bei 0,30
-  // ist echt und wird nicht kaschiert — er hält die Segmentfarben lesbar und
-  // ist ab P = 2,93 (r ≈ 7,6) erreicht. Oberhalb trägt die exakte
-  // `+N`-Zahl das Ausmaß; das sichtbare Signal trägt dann die Tatsache
-  // „wir sind drüber", plus die feine Abstufung über die Spritzer.
+  // Basisterm 0,08: darunter ist der Hub knapp über dem Ziel auf einer
+  // **hellen** Mitgliederfarbe nicht zu sehen. Die Steigung 0,075 hält den
+  // Deckel bei r ≈ 7,6. Der Deckel bei 0,30 ist echt und wird nicht kaschiert —
+  // er hält die Segmentfarben lesbar und ist ab P = 2,93 erreicht. Oberhalb
+  // trägt die exakte `+N`-Zahl das Ausmaß; das sichtbare Signal trägt dann die
+  // Tatsache „wir sind drüber", plus die feine Abstufung über die Spritzer.
   const glowPeak = Math.min(0.3, 0.08 + 0.075 * p)
   // Ein voller Atemzug (Auf **und** Ab, wegen `alternate` zwei Halbwellen)
   // dauert 5,2 s und geht nur sanft auf 3 s herunter — ruhig bleibt ruhig.
@@ -256,10 +227,9 @@ const jets = computed<Jet[]>(() => {
  * Beim Scrollen schrumpft die Leiste auf den Balken zusammen.
  *
  * Eine oben klebende Leiste verdeckt zwangsläufig, was unter ihr durchscrollt —
- * und verdeckte Zettel sind später verdeckte Eselsohren. Seit die Legende im
- * Kopf steht, gibt es nichts mehr auszublenden: kompakt heißt nur noch engere
- * Polster. Der Balken selbst bleibt unverändert stehen, damit die Punkte aus
- * Ticket 09 ihr Ziel behalten.
+ * und verdeckte Zettel sind später verdeckte Eselsohren. Kompakt heißt nur
+ * engere Polster. Der Balken selbst bleibt unverändert stehen, damit der
+ * Punkteflug sein Ziel behält.
  */
 const isScrolled = ref(false)
 const onScroll = () => {
@@ -267,23 +237,11 @@ const onScroll = () => {
 }
 
 /**
- * `--wall-status-height` ist mit Ticket 08 ENTFALLEN — bewusste Entscheidung,
- * nicht vergessen.
- *
- * Vor Ticket 08 hing diese Komponente eigenständig unter dem App-Header und
- * musste ihre eigene Höhe separat melden, damit `WallView` unten genug
- * Polster reserviert (siehe Git-Historie dieser Datei für die alte Fassung).
- * Seit sie IM Header steckt, ist sie kein zweites klebendes Element mehr,
- * dessen Höhe man getrennt kennen müsste — sie ist Teil derselben sticky-Box
- * wie der Rest des Headers. Die Höhe, die am oberen Bildschirmrand verdeckt,
- * ist jetzt schlicht die Headerhöhe, und die trägt bereits `--app-header-height`
- * (`useElementHeightVar` in `Header.vue`, per `ResizeObserver`). Eine zweite,
- * fast identische Variable hier wäre keine neue Bedeutung, sondern eine
- * Dopplung, die auseinanderlaufen kann.
- *
- * `WallView.vue` reserviert sein unteres Polster deshalb jetzt direkt gegen
- * `--app-header-height` statt gegen `--wall-status-height` — siehe Kommentar
- * dort an `.wall-page`.
+ * Bewusst **keine** eigene Höhenvariable: die Leiste ist Teil der sticky-Box
+ * des Headers, die verdeckte Höhe ist also die Headerhöhe — und die trägt
+ * bereits `--app-header-height` (`useElementHeightVar` in `Header.vue`). Eine
+ * zweite, fast identische Variable wäre eine Dopplung, die auseinanderlaufen
+ * kann. `WallView.vue` rechnet sein Polster gegen `--app-header-height`.
  */
 onMounted(() => {
   onScroll()
@@ -298,10 +256,7 @@ onUnmounted(() => {
 <template>
   <div class="wall-status" :class="{ 'wall-status--compact': isScrolled }">
     <div class="status-paper">
-      <!-- Kopfzeile: Legende links, Punktzahl rechts — dieselbe Zeile, kein
-           zusätzlicher Platzbedarf (die Legende stand kurzzeitig IM Balken,
-           siehe Script-Kommentar oben; der Nutzer wollte sie zurück hier).
-           Reihenfolge ist die der Mitgliederliste — keine Sortierung, keine
+      <!-- Reihenfolge ist die der Mitgliederliste — keine Sortierung, keine
            Platzierung; ein Mitglied ohne Punkte steht mit 0 da. -->
       <div class="status-head">
         <ul class="status-legend">
@@ -320,7 +275,7 @@ onUnmounted(() => {
       <!-- Genau eine Bahn über die volle Papierbreite. Über dem Ziel platzt sie
            an der rechten Kante auf, statt umzulaufen. -->
       <div class="status-bars" :class="{ 'status-bars--burst': isOverflowing }" :style="burstStyle">
-        <!-- `data-points-target` ist das Ziel des Punkteflugs aus Ticket 09.
+        <!-- `data-points-target` ist das Ziel des Punkteflugs.
              Ein Attribut und keine Klasse, weil `lib/pointsFlight.ts` von
              ausserhalb dieser Komponente sucht: Klassennamen in scoped Styles
              sind zwar stabil, aber als Vertrag nach aussen nicht erkennbar —
@@ -374,35 +329,23 @@ onUnmounted(() => {
 </template>
 
 <style scoped>
-/* KEIN eigenes `position: sticky` mehr (Ticket 08). Vor Ticket 08 hing diese
-   Komponente als eigenständiges Element unterhalb des App-Headers und musste
-   sich selbst an dessen gemeldeter Höhe (`--app-header-height`) einklinken.
-   Seit sie IN `Header.vue` eingebettet ist, wäre genau das zirkulär: sie misst
-   sich dann an der Höhe des Elements, dessen Teil sie selbst ist — der Header
-   trägt die Sticky-Position jetzt für beide gemeinsam (`.app-header` in
-   `Header.vue`, dort auch der Stapelkontext/z-index). Diese Regel war die
-   heikelste Einzelstelle beim Umbau: sie musste WEG, nicht bloß mitkopiert
-   werden. */
-/* `flex: 1 1 auto` — diese Komponente sitzt seit dem Header-Umbau NEBEN den
-   Icons in `Header.vue`s Zeile (`.header-bar`, flex row) und nimmt dort die
-   freie Breite ein, die früher Logo + Rangliste belegt haben. Sie wird
-   ausschließlich dort eingesetzt (kein zweiter Verwendungsort), deshalb ist
-   das hier fest verdrahtet statt über eine Wrapper-Klasse von außen. */
+/* KEIN eigenes `position: sticky`: die Komponente steckt IN `Header.vue`, und
+   ein Einklinken an `--app-header-height` wäre zirkulär — sie mäße sich an der
+   Höhe des Elements, dessen Teil sie ist. Die Sticky-Position samt z-index
+   trägt `.app-header` in `Header.vue` für beide.
+   `flex: 1 1 auto`: sitzt neben den Icons in `.header-bar` (flex row) und nimmt
+   die freie Breite. Einziger Verwendungsort, deshalb hier fest verdrahtet. */
 .wall-status {
   flex: 1 1 auto;
   min-width: 0;
   margin: 0;
 }
 
-/* KEIN eigenes Papier-Kärtchen mehr (Rahmen/Schatten/Innenabstand). Vor dem
-   Header-Umbau brauchte diese Komponente ihre eigene Papier-Optik, weil sie
-   frei über dem Kork der Wand schwebte (Kontrast nötig). Jetzt steckt sie IM
-   Header, der selbst schon durchgehend Papier ist (`--pw-paper`,
-   `Header.vue`) — ein zweites, identisch gefärbtes Kärtchen darin wäre
-   doppeltes Chrome ohne Wirkung, kostet aber Höhe, die laut Vorgabe
-   `Header ≤ ~61px` fehlt. `overflow: hidden` bleibt: das Spritzen (siehe
-   `.status-bars`) geht über die Balkenkante hinaus und muss weiterhin am
-   Komponentenrand enden, nicht in den Header-Icons daneben. */
+/* KEIN eigenes Papier-Kärtchen: der Header ist selbst Papier (`--pw-paper`),
+   ein zweites kostete nur Höhe, die laut Vorgabe `Header ≤ ~61px` fehlt.
+   `overflow: hidden`: das Spritzen (siehe `.status-bars`) geht über die
+   Balkenkante hinaus und muss am Komponentenrand enden, nicht in den
+   Header-Icons daneben. */
 .status-paper {
   overflow: hidden;
 }
@@ -411,33 +354,14 @@ onUnmounted(() => {
    restliche Text und erscheint erst beim Überschreiten des Ziels. Ohne feste
    Höhe würde die Leiste genau dann um ein paar Pixel wachsen — die geforderte
    Höhenkonstanz über alle Punktstände hinge sonst am Textinhalt. 22px trägt die
-   um 3° gedrehte Marke — aber **knapp**: dreistellig gemessen 20,20px, es
-   bleiben 1,8px. Gescrollt liegen zwischen Markenunterkante und Balken nur
-   1,16px. Kollisionsfrei, aber ohne Puffer: wer an Schriftgröße, Zeilenhöhe
-   oder Drehung von `.status-over` dreht, muss diese Höhe mit anheben.
+   um 3° gedrehte Marke — aber **knapp**: dreistellig 20,20px, es bleiben 1,8px;
+   gescrollt liegen zwischen Markenunterkante und Balken nur 1,16px. Wer an
+   Schriftgröße, Zeilenhöhe oder Drehung von `.status-over` dreht, muss diese
+   Höhe mit anheben.
 
-   Höhe DIESER Komponente, selbst nachgerechnet (alle Werte aus dieser Datei;
-   ohne eigenes Papier-Kärtchen entfallen Rahmen und Innenabstand komplett,
-   siehe `.status-paper` oben):
-
-     offen:   Kopf 22 + Abstand 5 = 27 · Spur 20 → 47px
-     kompakt: Kopf 22 + Abstand 1 = 23 · Spur 20 → 43px
-
-   Das ist **gerechnet, nicht gemessen** — die Gesamt-Headerhöhe (diese
-   Komponente + `Header.vue`s Zeilenpolster + Icons + dessen `border-bottom`)
-   steht dort kommentiert; der QC misst nach. QC-Runde 2 hat dabei eine echte
-   Lücke in einer früheren Fassung dieser Rechnung gefunden: sie hatte
-   `Header.vue`s 2px `border-bottom` schlicht vergessen und lag deshalb überall
-   2px zu niedrig (Ist: 61/57px mobil, nicht 59/55px). Header.vue rechnet seit
-   der Korrektur mit Grenzfall EINSCHLIESSLICH Rahmen. Kopf (22px) und Spur
-   (20px) bleiben unangetastet, weil sie die Höhenkonstanz bzw. die
-   Streifenbreite tragen — siehe die frühere Fassung dieses Kommentars in der
-   Git-Historie für die (inzwischen durch das entfallene Papier-Kärtchen
-   gegenstandslose) Herleitung der 5px/1px Kopfabstände.
-
-   Die Höhenkonstanz über alle Punktstände (0px Abweichung über sieben
-   Zustände) ist gemessen und strukturell unverändert: feste Kopfhöhe, feste
-   Spur, alles Übrige absolut positioniert. */
+   Höhe dieser Komponente (gerechnet): offen 22 + 5 + 20 = 47px, kompakt
+   22 + 1 + 20 = 43px. Die Gesamt-Headerhöhe einschließlich Rahmen steht in
+   `Header.vue`. */
 .status-head {
   display: flex;
   align-items: center;
@@ -496,20 +420,16 @@ onUnmounted(() => {
 
 /* Die Zielkante ist die rechte Kante dieser Spur — es gibt nur diese eine.
  *
- * Rahmen **konstant 2px**, Innenraum **konstant 16px**, Border-Box 20px. Ein
- * Versuch, die Kontur unter Druck dicker werden zu lassen, ist verworfen: er
- * war bei den dunklen Mitgliederfarben praktisch unsichtbar, quantisierte in
- * Chrome auf drei ganzzahlige Stufen — und er ließ den farbigen Streifen
- * schrumpfen, je mehr geschafft war. Genau verkehrt herum. Das Erfolgssignal
- * trägt jetzt das Überdruck-Muster in der Füllung.
+ * Rahmen **konstant 2px**, Innenraum **konstant 16px**, Border-Box 20px. Eine
+ * unter Druck dicker werdende Kontur ist verworfen: bei dunklen
+ * Mitgliederfarben praktisch unsichtbar, in Chrome auf ganze Pixel quantisiert,
+ * und sie ließe den farbigen Streifen schrumpfen, je mehr geschafft ist. Das
+ * Erfolgssignal trägt das Aufleuchten der Füllung.
  *
- * **Achtung, hier lag ein Fehler:** die Längenvariable der Spritzer hieß früher
- * `--pw-line` und überschrieb damit auf `.status-bars` das gleichnamige globale
- * Farb-Token aus `base.css`. `border: 2px solid var(--pw-line)` wurde dadurch zu
- * `2px solid 6.56px`, also ungültig — die Spur stand ohne Kontur da und die
- * Rahmenüberlastung unten hatte gar keine Wirkung. Die Variable heißt jetzt
- * `--pw-jet-len`. Alle Namen, die diese Komponente auf `.status-bars` setzt,
- * sind gegen `base.css` abgeglichen. */
+ * **Falle:** Die Variablen, die diese Komponente auf `.status-bars` setzt,
+ * dürfen kein globales Token aus `base.css` überschatten. Hieße eine davon
+ * `--pw-line`, würde `border: 2px solid var(--pw-line)` ungültig, und die Spur
+ * stünde ohne Kontur da. */
 .status-track {
   position: relative;
   box-sizing: border-box;
@@ -528,7 +448,7 @@ onUnmounted(() => {
   );
 }
 
-/* Ankunftsquittung des Punkteflugs (Ticket 09). Nur ein kurzer Ring um die
+/* Ankunftsquittung des Punkteflugs. Nur ein kurzer Ring um die
    Spur — die eigentliche Aussage macht der wachsende Balken. Die Klasse setzt
    `lib/pointsFlight.ts` fuer rund 420 ms; sie greift auch imperativ gesetzt,
    weil scoped Styles ueber das Datenattribut des ELEMENTS matchen und nicht
@@ -545,10 +465,7 @@ onUnmounted(() => {
 }
 
 /* Absolut positioniert — siehe Kommentar an `segments`: so kann Flexbox die
-   Breiten nicht stauchen, weder heute noch nach einem späteren Umbau. Trägt
-   keine Beschriftung mehr (die stand kurzzeitig hier drin, siehe
-   Script-Kommentar oben zum Rückbau) — reiner Farbblock, kein Flex-Kontext
-   mehr nötig. */
+   Breiten nicht stauchen. Reiner Farbblock ohne Beschriftung. */
 .status-seg {
   position: absolute;
   top: 0;
@@ -567,15 +484,10 @@ onUnmounted(() => {
   border-right: 0;
 }
 
-/* ---- Das Aufleuchten der Füllung ------------------------------------ */
-
 /* Eine einzige Schicht über den Segmenten, exakt so breit wie die Füllung
    (sie erbt deren Breite als `inset: 0`). Animiert wird **nur** `opacity` —
    eine Eigenschaft, die der Kompositor allein erledigt; kein Layout, kein
    Neuzeichnen der Segmente darunter.
- *
- * Vom früheren Streifenmuster bleibt genau **eine** Ebene übrig statt dreier
- * verschachtelter, und sie wechselt ihren Zustand rund zwanzigmal langsamer.
  *
  * Warum die Segmentfarben erkennbar bleiben: das Weiß liegt bei höchstens
  * `--pw-glow-peak` = 0,30 Deckkraft und sinkt in jeder Halbwelle auf 12 % davon
@@ -603,8 +515,6 @@ onUnmounted(() => {
   }
 }
 
-/* ---- Der Überlauf an der rechten Kante ---------------------------------- */
-
 /* Sitzt genau auf der Zielkante, außerhalb der Spur, und ist **absolut**
    positioniert: er kann die Höhe der Leiste nicht beeinflussen. Die Breite ist
    der konstante Streifen aus `.status-bars`. */
@@ -617,8 +527,6 @@ onUnmounted(() => {
   pointer-events: none;
 }
 
-/* Der Riss im Rahmen — das Zeichen dafür, dass er überlastet ist. Er wird mit
-   dem Druck breiter. */
 /* Die Austrittsstelle. Sie atmet ruhig rein und raus, damit man sieht, **wo**
    der Druck anliegt — eine Halbwelle dauert `2,5 × --pw-burst-dur`, ein voller
    Atemzug wegen `alternate` also das Fünffache: ein Atmen, kein Blinklicht.
@@ -658,6 +566,8 @@ onUnmounted(() => {
   }
 }
 
+/* Der Riss im Rahmen — das Zeichen dafür, dass er überlastet ist. Er wird mit
+   dem Druck breiter. */
 .burst-crack {
   position: absolute;
   /* Deckt genau den 2px-Rahmen der Spur ab, liegt also noch in deren
@@ -709,11 +619,7 @@ onUnmounted(() => {
   }
 }
 
-/* Die Legende sitzt links in der Kopfzeile, neben der Punktzahl rechts —
-   dieselbe Zeile, kein zusätzlicher Platzbedarf (Rückbau des kurzzeitigen
-   Zwischenstands „Beschriftung im Segment", siehe Script-Kommentar oben).
-
-   **Fit-Regel, absichtlich rein in CSS, keine gemessene/geschätzte Breite in
+/* **Fit-Regel, absichtlich rein in CSS, keine gemessene/geschätzte Breite in
    JavaScript:** `flex: 1 1 auto` + `min-width: 0` auf `.status-legend` heißt,
    sie nimmt den Platz zwischen dem linken Rand und `.status-score` und gibt
    ihn zuerst wieder her, wenn es eng wird — die Punktzahl ist `flex: 0 0 auto`
@@ -729,9 +635,8 @@ onUnmounted(() => {
    (61/57px, siehe `Header.vue`). `flex-wrap: nowrap` verhindert den Umbruch
    strukturell, nicht nur der Optik nach.
 
-   Gemessene Grenze (vor dem kurzen Zwischenstand ermittelt, Layout-Mechanik
-   unverändert): bei **drei** Mitgliedern auf **375px** ellipsieren die Namen
-   ab **5 Zeichen**. */
+   Gemessene Grenze: bei **drei** Mitgliedern auf **375px** ellipsieren die
+   Namen ab **5 Zeichen**. */
 .status-legend {
   flex: 1 1 auto;
   min-width: 0;
@@ -776,10 +681,8 @@ onUnmounted(() => {
   color: var(--pw-ink);
 }
 
-/* Gescrollt: die Leiste wird flacher. Da `.status-paper` seit dem Header-
-   Umbau kein eigenes Innenpolster mehr hat (siehe Kommentar dort), bleibt hier
-   nur noch der Kopfabstand zum Sparen — der Rest der Ersparnis kommt aus
-   `Header.vue`s eigenem, knapperem Zeilenpolster. */
+/* Gescrollt: die Leiste wird flacher. Hier lässt sich nur der Kopfabstand
+   sparen; der Rest kommt aus `Header.vue`s knapperem Zeilenpolster. */
 .wall-status--compact .status-head {
   margin-bottom: 1px;
 }

@@ -114,9 +114,8 @@
    Pinnwand-Farbwelt — zweiter Token-Satz (Pinnwand-Redesign, Etappe 1)
    ----------------------------------------------------------------------------
    Liegt NEBEN dem Bestand, überschreibt `:root` nicht. Aktiv nur, wenn
-   `data-design="pinnwand"` am <html> steht (→ src/lib/design.ts). Ohne das
-   Attribut gilt der obige Satz unverändert — das alte Aussehen bleibt exakt
-   wie bisher.
+   `data-design="pinnwand"` am <html> steht — und das steht seit dem Abriss des
+   klassischen Aussehens fest in index.html.
 
    Die bestehenden Token-NAMEN bleiben; nur ihre Werte hängen am aktiven Satz.
    Das sind die Papier-**Regeln** (welche Farbe `--color-background` etc.
@@ -324,16 +323,6 @@ body {
   border-color: var(--color-danger);
 }
 
-.btn-link {
-  color: var(--color-primary);
-  text-decoration: none;
-}
-
-.btn-link:hover {
-  color: var(--color-primary-light);
-  text-decoration: underline;
-}
-
 /* Modern Card Overrides */
 .card {
   border: 1px solid var(--color-border);
@@ -349,18 +338,6 @@ body {
 
 .card-body {
   padding: var(--spacing-lg);
-}
-
-.card-footer {
-  background: transparent;
-  border-top: 1px solid var(--color-border);
-  padding: var(--spacing-md) var(--spacing-lg);
-}
-
-.card-title {
-  color: var(--color-text-primary);
-  font-weight: 600;
-  margin-bottom: var(--spacing-sm);
 }
 
 /* Modern Form Controls */
@@ -463,7 +440,7 @@ select:disabled {
    - h1 (1.5rem): Auth pages (Login, Register, HouseholdSetup), Main App Title (Header)
    - h2 (1.25rem): View page titles (Verlauf, Statistiken, Einkaufsliste)
    - h3 (1.125rem): Modal titles, Shopping list sections, Section titles (HouseholdSetup)
-   - h4-h6 (1rem): Subsection titles (SubtaskManagementModal sections, TaskCard titles)
+   - h4-h6 (1rem): Subsection titles (SubtaskManagementModal sections)
 */
 h1 {
   font-size: 1.5rem;

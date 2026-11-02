@@ -4,8 +4,8 @@
  * sections with entries ("Einträge"), quick-nav rail and all modals.
  *
  * Everything list-type-specific arrives via props: the store instance (from
- * `createChecklistStore`) and the labels/icons. `PackingView` is a thin shell
- * around this; Etappe 5 Teil B docks the To-do view on the same seam.
+ * `createChecklistStore`) and the labels/icons. `PackingView` and `TodoView`
+ * are thin shells around this.
  */
 import { onMounted, onUnmounted, ref, computed, watch } from 'vue'
 import type { ChecklistStore } from '@/stores/createChecklistStore'
@@ -25,6 +25,7 @@ import CategoryCreateModal from '@/components/CategoryCreateModal.vue'
 import CategoryEditModal from '@/components/CategoryEditModal.vue'
 import ListAddBar from '@/components/ListAddBar.vue'
 import LongSheet from '@/components/LongSheet.vue'
+import { SHOPPING_ITEM_NAME_MAX_LENGTH } from '@/lib/limits'
 
 export interface ChecklistLabels {
   /** Title of the "new list" modal, e.g. 'Neue Packliste'. */
@@ -160,7 +161,7 @@ const { graceIds, markGrace, clearGrace, clearAllGrace } = useGraceWindow(6000)
  * — die Kopfzeile zeigt ihn sofort an, sonst widerspricht sie 6s lang dem
  * Gesamtfortschritt (`store.overallProgress`), der ebenfalls roh zählt.
  */
-export interface DisplayCategoryGroup extends CategoryGroup {
+interface DisplayCategoryGroup extends CategoryGroup {
   rawDoneCount: number
 }
 
@@ -252,6 +253,8 @@ const suggestionsFor = (group: CategoryGroup): string[] => {
   return out
 }
 
+// Auch beim Tippen öffnen: ein Vorschlag schließt die Liste, das Feld behält
+// aber den Fokus — ein Fokus-Ereignis kommt bis zum nächsten Feldwechsel nicht.
 const onAddFocus = (key: string) => {
   suggestFocusKey.value = key
 }
@@ -802,8 +805,9 @@ onUnmounted(() => {
                           :placeholder="
                             group.isUncategorized ? '+ hinzufügen…' : `+ zu ${group.label}…`
                           "
-                          maxlength="200"
+                          :maxlength="SHOPPING_ITEM_NAME_MAX_LENGTH"
                           @focus="onAddFocus(group.key)"
+                          @input="onAddFocus(group.key)"
                           @blur="onAddBlur"
                           @keyup.enter="handleSectionAdd(group)"
                         />
@@ -907,7 +911,6 @@ onUnmounted(() => {
   <!-- Kategorie bearbeiten / löschen -->
   <CategoryEditModal
     v-if="editingCategory"
-    variants
     :category="editingCategory.name"
     :item-count="editingCategory.count"
     :purchased-count="editingCategory.doneCount"
@@ -939,7 +942,11 @@ onUnmounted(() => {
       <div class="modal-content" @click.stop>
         <div class="modal-header">
           <h5 class="modal-title">{{ labels.createListTitle }}</h5>
-          <button class="btn-close" @click="showCreateListModal = false"></button>
+          <button
+            class="btn-close"
+            @click="showCreateListModal = false"
+            aria-label="Schließen"
+          ></button>
         </div>
         <div class="modal-body">
           <div class="form-group">
@@ -984,7 +991,11 @@ onUnmounted(() => {
       <div class="modal-content" @click.stop>
         <div class="modal-header">
           <h5 class="modal-title">Alle zurücksetzen?</h5>
-          <button class="btn-close" @click="showResetConfirm = false"></button>
+          <button
+            class="btn-close"
+            @click="showResetConfirm = false"
+            aria-label="Schließen"
+          ></button>
         </div>
         <div class="modal-body">
           <p class="text-muted mb-0">{{ labels.resetConfirmBody }}</p>
@@ -1105,7 +1116,15 @@ onUnmounted(() => {
   color: var(--color-text-secondary);
 }
 
+/* Sichtbar 27×32, damit die Fortschrittszeile schlank bleibt; die Trefferfläche
+   wird per Pseudo-Element auf 48×48 erweitert — dasselbe Muster wie
+   `.history-search-clear` (HistoryView), nur rechtsbündig statt mittig: der
+   Knopf sitzt an der Innenkante von `.container-fluid` (klassisch 8px Rand),
+   mittig zentriert ragte die Fläche 10,5px nach rechts und damit 2,5px über
+   den Viewport — horizontales Scrollen auf dem Telefon. Nach links wächst sie
+   über die Lücke zur Zählung, dort liegt nichts Bedienbares. */
 .reset-inline-btn {
+  position: relative;
   margin-left: auto;
   background: none;
   border: none;
@@ -1114,6 +1133,15 @@ onUnmounted(() => {
   padding: 4px 6px;
   border-radius: var(--radius-sm);
   font-size: var(--font-base);
+}
+.reset-inline-btn::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  right: 0;
+  width: var(--touch-target-min, 48px);
+  height: var(--touch-target-min, 48px);
+  transform: translateY(-50%);
 }
 .reset-inline-btn:hover {
   color: var(--color-warning-dark);
@@ -1193,7 +1221,7 @@ onUnmounted(() => {
 }
 
 /* ---- Category Section ----
-   Etappe 2: dieselbe Verdichtung wie im Einkauf — die Sektions-Box entfällt,
+   Dieselbe Verdichtung wie im Einkauf — keine Sektions-Box,
    die Kopfzeile sitzt ohne Rahmen auf dem Seitenhintergrund. */
 .cat-section {
   margin-bottom: 8px;
@@ -1383,12 +1411,14 @@ onUnmounted(() => {
   align-items: center;
   gap: 4px;
   padding: 0;
+  /* Vorschläge über die ganze Zeile statt nur über das Eingabefeld —
+     wie bei der oberen Leiste. */
+  position: relative;
 }
 .add-ghost-box {
   display: none;
 }
 .add-input-wrap {
-  position: relative;
   flex: 1;
   min-width: 0;
 }
@@ -1434,6 +1464,13 @@ onUnmounted(() => {
   color: var(--color-text-primary);
   cursor: pointer;
   transition: background-color 0.15s;
+  /* Ein langer Name ohne Leerzeichen bricht um, statt das Dropdown seitlich
+     scrollbar zu machen. */
+  overflow-wrap: anywhere;
+  /* Die Liste ist eine Spalten-Flexbox mit `max-height`: ohne `0` staucht sie
+     umgebrochene Einträge unter ihre Inhaltshöhe, und der Text läuft in den
+     nächsten Eintrag. Überlauf gehört dem Bildlauf der Liste. */
+  flex-shrink: 0;
 }
 .suggestion-item:last-child {
   border-bottom: none;

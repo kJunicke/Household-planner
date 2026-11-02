@@ -2,6 +2,7 @@
 import type { Task } from '@/types/Task'
 import { ref, computed } from 'vue'
 import { canPostpone } from '@/lib/taskSchedule'
+import { TASK_TITLE_MAX_LENGTH } from '@/lib/limits'
 
 interface Props {
   task: Task
@@ -55,16 +56,6 @@ const emit = defineEmits<Emits>()
 //   (Eine Zeile mit ECHTER Erledigung UND gesetztem Verschiebe-Datum — die
 //   Altdaten aus Befund 2 — zeigt den Knopf hier ebenfalls wieder. Das ist
 //   kein neuer Fehler, sondern der Weg, genau diese Zeilen zu bereinigen.)
-//
-// **Betrifft auch das klassische Aussehen**, nicht nur die Pinnwand:
-// `TaskCard.vue` rendert den Bearbeiten-Stift ohne `completed`-Bedingung,
-// verschobene Aufgaben laufen dort unter der Kategorie „Erledigt" und nutzen
-// dasselbe Modal. Ohne den `postponed_until`-Zweig ließe sich dort ein
-// bereits gesetztes Verschiebe-Datum nicht mehr ändern oder aufheben, ohne
-// den Umweg über „wieder dreckig" — das war vor diesem Kommentar kurzzeitig
-// genau der Stand, und Ticket 04 nennt nur die Pinnwand. Wer diese Bedingung
-// künftig anfasst, MUSS beide Ansichten im Kopf haben, nicht nur den
-// Erledigt-Streifen.
 //
 // `canPostpone` prüft nur den `task_type` und kennt keinen der drei
 // Zustände oben — dieser zweite Teil der Bedingung ist deshalb Pflicht,
@@ -127,7 +118,7 @@ const handleClose = () => {
       <div class="modal-content" @click.stop>
         <div class="modal-header">
           <h3 class="modal-title">Aufgabe bearbeiten</h3>
-          <button class="btn-close" @click="handleClose" aria-label="Schließen">×</button>
+          <button class="btn-close" @click="handleClose" aria-label="Schließen"></button>
         </div>
 
         <div class="modal-body">
@@ -139,6 +130,7 @@ const handleClose = () => {
                 class="form-control"
                 id="title"
                 v-model="editForm.title"
+                :maxlength="TASK_TITLE_MAX_LENGTH"
                 required
               />
             </div>

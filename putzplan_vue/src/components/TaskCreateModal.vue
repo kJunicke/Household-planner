@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
+import { TASK_TITLE_MAX_LENGTH } from '@/lib/limits'
 
 interface Props {
   initialTitle?: string
@@ -22,8 +23,13 @@ interface Emits {
 const props = defineProps<Props>()
 const emit = defineEmits<Emits>()
 
+// Der Suchbegriff wird als Titel übernommen; `maxlength` kürzt nur Getipptes,
+// nicht einen vorbelegten Wert — deshalb hier auf die Titel-Grenze kürzen.
+const titleFromSearch = (query: string | undefined): string =>
+  (query ?? '').slice(0, TASK_TITLE_MAX_LENGTH)
+
 const formData = ref({
-  title: props.initialTitle || '',
+  title: titleFromSearch(props.initialTitle),
   effort: 1 as 1 | 2 | 3 | 4 | 5,
   recurrence_days: 0,
   task_type: 'recurring' as 'recurring' | 'daily' | 'one-time' | 'project',
@@ -34,7 +40,7 @@ watch(
   () => props.initialTitle,
   (newVal) => {
     if (newVal) {
-      formData.value.title = newVal
+      formData.value.title = titleFromSearch(newVal)
     }
   },
   { immediate: true },
@@ -66,7 +72,7 @@ const handleClose = () => {
       <div class="modal-content" @click.stop>
         <div class="modal-header">
           <h3 class="modal-title">Neue Aufgabe erstellen</h3>
-          <button class="btn-close" @click="handleClose" aria-label="Schließen">×</button>
+          <button class="btn-close" @click="handleClose" aria-label="Schließen"></button>
         </div>
 
         <div class="modal-body">
@@ -76,6 +82,7 @@ const handleClose = () => {
               <input
                 type="text"
                 v-model="formData.title"
+                :maxlength="TASK_TITLE_MAX_LENGTH"
                 placeholder="z.B. Küche putzen"
                 class="form-control"
                 :disabled="isLoading"

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
+import { COMPLETION_NOTE_MAX_LENGTH } from '@/lib/limits'
 
 interface Props {
   taskTitle: string
@@ -42,7 +43,7 @@ const handleClose = () => {
       <div class="modal-content" @click.stop>
         <div class="modal-header">
           <h3 class="modal-title">Aufwand anpassen</h3>
-          <button class="btn-close" @click="handleClose" aria-label="Schließen">×</button>
+          <button class="btn-close" @click="handleClose" aria-label="Schließen"></button>
         </div>
 
         <div class="modal-body">
@@ -71,6 +72,7 @@ const handleClose = () => {
             <textarea
               id="note"
               v-model="note"
+              :maxlength="COMPLETION_NOTE_MAX_LENGTH"
               class="form-control"
               rows="3"
               placeholder="z.B. War sehr dreckig, Pfannen eingebrannt und Kühlschrank noch ausgewischt"

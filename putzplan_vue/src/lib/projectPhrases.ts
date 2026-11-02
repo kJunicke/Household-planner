@@ -2,9 +2,8 @@
  * Der Projektspruch — der Grundabdruck eines Projekts (→ CONTEXT.md, „Projektspruch").
  *
  * Ein Projekt kann nicht in Verzug geraten, sein Stempel sagt deshalb nichts über
- * Fälligkeit, sondern einen Spruch aus einer festen Sammlung von hundert. Die Liste ist
- * vollständig aus `.scratch/archive/pinnwand-ausbau/issues/09-nachdruck.md`, Abschnitt
- * „Die Spruchliste für Projekte", übernommen.
+ * Fälligkeit, sondern einen Spruch aus einer festen Sammlung von hundert, die der
+ * Maintainer festgelegt hat. Der Witz: je höher der Stapel, desto mehr Sprüche.
  *
  * **Höchstens zehn Zeichen je Spruch.** Der Stempel steht im Fluss der Fußzeile und geht
  * damit in die Zettelbreite und über sie in die Wandhöhe ein. Wer die Liste ergänzt,
@@ -30,16 +29,23 @@
 
 import type { Task } from '@/types/Task'
 
-/** Die harte Grenze: der Stempel geht in die Zettelbreite ein. */
+/**
+ * Die harte Grenze: der Stempel geht in die Zettelbreite ein.
+ *
+ * @public — Diagnose in der Browserkonsole (mit `findOverlongProjectPhrases`).
+ */
 export const PROJECT_PHRASE_MAX_LENGTH = 10
 
 /**
- * Die hundert Sprüche, in der Reihenfolge der Liste in `09-nachdruck.md`.
+ * Die hundert Sprüche. Die Reihenfolge ist Datenbestand: `tasks.project_saying_index`
+ * speichert den Listenplatz, ein Umsortieren ändert den Spruch bestehender Projekte.
  *
  * `HEUTE NOCH` fehlt bewusst: `HEUTE` war bis zur Umstellung ein Stempelwort für die
  * berechnete Fälligkeit und ist abgeschafft — als Projektspruch wiederverwendet würde es
  * die eine Bedeutung mit der anderen verwechselbar machen. `SOFORT`, `GLEICH` und
  * `AB HEUTE` bleiben dagegen drin: sie klingen nach Frist, meinen aber einen Vorsatz.
+ *
+ * @public — Diagnose in der Browserkonsole: die Liste zum Nachsehen.
  */
 export const PROJECT_PHRASES: readonly string[] = [
   'BAUSTELLE',
@@ -150,6 +156,8 @@ export const PROJECT_PHRASES: readonly string[] = [
  * Bewusst eine Funktion und kein Kommentar „ist geprüft": ein Beispiel beweist nichts,
  * und die Liste ist ausdrücklich zum Ergänzen gedacht. Aufrufbar aus der Konsole des
  * ferngesteuerten Tabs, ohne Test-Framework.
+ *
+ * @public — Diagnose in der Browserkonsole: ohne Importeur im Code.
  */
 export function findOverlongProjectPhrases(): string[] {
   return PROJECT_PHRASES.filter((phrase) => phrase.length > PROJECT_PHRASE_MAX_LENGTH)

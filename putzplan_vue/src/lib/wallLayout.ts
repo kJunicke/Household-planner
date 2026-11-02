@@ -1,21 +1,19 @@
 /**
- * Geometrie der Pinnwand (Pinnwand-Redesign, Etappe 2 / Ticket 02).
+ * Geometrie der Pinnwand.
  *
  * Reine Funktionen: kein Vue, kein DOM, keine Seiteneffekte. Die Höhe eines
  * Zettels kann hier nicht berechnet werden — sie hängt am Textumbruch und wird
  * von der Wand gemessen und hier hereingereicht.
  *
  * **Alles Unordentliche ist deterministisch.** Rotation, Versatz und Abstand
- * kommen aus einem FNV-1a-Hash über die `task_id` — nie aus
- * `Math.random()` und nie aus der Position in der Liste. Eine Neigung, die sich
- * beim Neuladen oder beim Umsortieren ändert, sieht aus wie ein Fehler. Weil die
- * `task_id` die einzige Eingabe ist, liegt derselbe Zettel nach jedem Neuladen
- * exakt gleich schief, und ein Zettel, der von Platz 7 auf Platz 2 wandert,
- * nimmt seine Neigung mit.
+ * kommen aus einem FNV-1a-Hash über die `task_id` — nie aus `Math.random()` und
+ * nie aus der Position in der Liste. Eine Neigung, die sich beim Neuladen oder
+ * Umsortieren ändert, sieht aus wie ein Fehler; so nimmt ein Zettel seine
+ * Neigung überallhin mit.
  */
 
 /** FNV-1a, 32 Bit. Klein, schnell, gut gestreut — kryptografisch irrelevant. */
-export function fnv1a(input: string): number {
+function fnv1a(input: string): number {
   let hash = 2166136261
   for (let i = 0; i < input.length; i++) {
     hash ^= input.charCodeAt(i)
@@ -33,17 +31,12 @@ export function rotationOf(taskId: string): number {
  * Versatz in Pixeln, −range … +range. `key` trennt die Achsen, damit x und y
  * desselben Zettels nicht identisch ausfallen.
  *
- * **Der Schlüssel steht VORN, und das ist keine Kosmetik.** Stand bis zum
- * 05.09.2026 die Kennung vorn (`${taskId}#${key}`), dann unterschieden sich
- * Schlüssel wie `stamp-dx0`, `stamp-dx1`, `stamp-dx2` nur in der letzten
- * Ziffer — und FNV-1a mischt den letzten Schritt nicht mehr durch: die
- * Ergebnisse hingen messbar zusammen. Gemessen an 100 000 Kennungen betrug
- * die Korrelation zwischen Lage 0 und 1 **−0,49** und zwischen Lage 0 und 2
- * **+0,68**. Die dritte Lage landete also systematisch dort, wo die erste
- * schon lag, und die zweite systematisch gegenüber. An der Wand sah das aus
- * wie ein Muster, und der Maintainer hat es gesehen, bevor eine Prüfung es
- * fand. Mit vorangestelltem Schlüssel liegt dieselbe Korrelation bei
- * **0,003**.
+ * **Der Schlüssel steht VORN, und das ist keine Kosmetik.** Mit der Kennung
+ * vorn (`${taskId}#${key}`) unterscheiden sich Schlüssel wie `stamp-dx0`,
+ * `stamp-dx1`, `stamp-dx2` nur in der letzten Ziffer, und FNV-1a mischt den
+ * letzten Schritt nicht mehr durch: die Stempellagen korrelieren dann sichtbar
+ * (−0,49 bzw. +0,68 über 100 000 Kennungen, an der Wand ein Muster). Mit
+ * vorangestelltem Schlüssel liegt die Korrelation bei 0,003.
  *
  * Wer hier Schlüssel vergibt, die sich nur in einem Zeichen am Ende
  * unterscheiden, bekommt das Problem zurück — dann lieber ein eigenes Wort je
@@ -54,7 +47,7 @@ export function jitterOf(taskId: string, key: string, range: number): number {
 }
 
 /** Abstand unter einem Zettel: 2 … 15 px. */
-export function gapOf(taskId: string): number {
+function gapOf(taskId: string): number {
   return 2 + (fnv1a(`${taskId}#gap`) % 14)
 }
 
@@ -68,71 +61,44 @@ export function kindOfTaskType(taskType: string): WallNoteKind {
 }
 
 /**
- * Obergrenze für Zettel mit **mehrwortigen** Titeln, als Anteil der Wandbreite.
- * Kurze Titel erreichen sie nie und bleiben einzeilig; lange brechen an einer
- * Wortgrenze um, statt eine ganze Reihe für sich zu beanspruchen.
+ * Obergrenze für Zettel mit **mehrwortigen** Titeln, als Anteil der Wandbreite;
+ * lange Titel brechen an einer Wortgrenze um. Fest bei 45 %: so passen immer
+ * zwei Zettel nebeneinander. Ein adaptiver Deckel ist bewusst verworfen — sonst
+ * ließe das Anlegen einer Aufgabe unbeteiligte Zettel umbrechen.
  *
- * Fest bei **45 %**, unabhängig vom Bestand: bei 45 % passen immer zwei Zettel
- * nebeneinander, die Entartung zur einspaltigen Liste kann nicht mehr
- * auftreten. Ein adaptiver Deckel (abhängig davon, was sonst an der Wand
- * hängt) wurde ausdrücklich verworfen — sonst würde das Anlegen einer Aufgabe
- * unbeteiligte Zettel umbrechen lassen. Vorher 68 %.
- *
- * Ein Titel ohne Wortgrenze ist ausgenommen — er kann nicht umbrechen, ein
- * Deckel würde ihn nur abschneiden. Ein solcher Zettel bekommt stattdessen so
- * viel Breite, wie er braucht, höchstens die ganze Wand. Bewusste Entscheidung
- * von vor diesem Ticket, unverändert übernommen — nur der Deckelwert selbst
- * ist gesunken (68 % → 45 %). In der Praxis betrifft das seltene, sehr lange
- * Komposita; ein alltägliches wie „Dunstabzugshaubenfilter" (23 Zeichen)
- * bleibt deutlich unter der vollen Wandbreite.
+ * Ein Titel ohne Wortgrenze ist ausgenommen — ein Deckel würde ihn nur
+ * abschneiden; er bekommt so viel Breite, wie er braucht, höchstens die Wand.
  */
-export const MAX_WIDTH_RATIO = 0.45
+const MAX_WIDTH_RATIO = 0.45
 
 /**
- * Waagerechter Abstand, den der Reihenplaner (`planNoteWidths`) zwischen einem
- * Zettel und seinem rechten Nachbarn reserviert — Basiswert.
- *
- * Der x-Versatz aus `jitterOf` beträgt ±5 px **je Zettel**; zwei benachbarte
- * Zettel können also um bis zu 10 px aufeinander zulaufen. 12 px lassen dann
- * noch 2 px Luft. Die Zahl ist gerechnet, nicht gemessen.
- *
- * Um diesen Basiswert streut `rowGapOf` — siehe dort.
+ * Basisabstand zum rechten Nachbarn. Der x-Versatz aus `jitterOf` beträgt
+ * ±5 px je Zettel, zwei Nachbarn laufen also um bis zu 10 px aufeinander zu;
+ * 12 px lassen dann noch 2 px Luft (gerechnet, nicht gemessen).
  */
 const ROW_GAP_BASE = 12
 
-/** Streubreite von `rowGapOf` um `ROW_GAP_BASE`, in Pixeln. */
 const ROW_GAP_JITTER = 4
 
 /**
- * Waagerechter Abstand zwischen einem Zettel und seinem rechten Nachbarn im
- * Reihenmodell, deterministisch aus der Aufgaben-Kennung des LINKEN Zettels.
- *
- * **Neu:** vorher war der Abstand mit `PAIR_GAP` für jedes Paar exakt
- * gleich — 8…16 px, Mitte weiter bei den ursprünglich hergeleiteten 12 px.
- * Eigener Hash-Schlüssel (`hgap`), damit die Streuung nicht denselben Wert
- * trifft wie die Neigung (`rotationOf`, ungeschlüsselter Hash) oder der
- * x-/y-Versatz (`jitterOf` mit den Schlüsseln `x`/`y`) — sie muss von der
- * Drehung unabhängig sein.
+ * Abstand zum rechten Nachbarn, 8…16 px aus der Kennung des LINKEN Zettels.
+ * Eigener Hash-Schlüssel (`hgap`): die Streuung muss von Neigung und Versatz
+ * unabhängig sein.
  */
-export function rowGapOf(taskId: string): number {
+function rowGapOf(taskId: string): number {
   return ROW_GAP_BASE + jitterOf(taskId, 'hgap', ROW_GAP_JITTER)
 }
 
 /**
- * Zusätzliche Einrückung für einen Zettel an der LINKEN Wandkante, in Pixeln
- * (Karten-Redesign, Ticket 00a). Die Skyline setzt jeden Zettel, der links
- * Platz findet, exakt auf x = 0 — dadurch stehen fast alle Zettel auf einer
- * perfekten Linie untereinander. So pinnt kein Mensch: der Versatz aus
- * `jitterOf` (±5 px) fällt dagegen nicht ins Gewicht, um die Linie zu brechen.
- *
- * **0…12 px.** Der Handoff (`HANDOFF-kartengroesse.md`, Punkt 8) hatte 0…26 px
- * erprobt; Ticket 02 hat den Wert vorab auf 12 px gesenkt, deshalb wird hier
- * gleich der niedrigere Wert eingebaut.
+ * Zusätzliche Einrückung (0…12 px) für einen Zettel an der LINKEN Wandkante.
+ * Die Skyline setzt jeden Zettel, der links Platz findet, exakt auf x = 0 —
+ * fast alle Zettel stünden auf einer perfekten Linie untereinander. So pinnt
+ * kein Mensch, und der Versatz aus `jitterOf` (±5 px) reicht nicht, um die
+ * Linie zu brechen.
  */
 const LEFT_INDENT_MAX = 12
 
-/** Einrückung dieses Zettels: 0…`LEFT_INDENT_MAX`, deterministisch aus der `task_id`. */
-export function indentOf(taskId: string): number {
+function indentOf(taskId: string): number {
   return fnv1a(`${taskId}#indent`) % (LEFT_INDENT_MAX + 1)
 }
 
@@ -143,42 +109,28 @@ export interface WallNoteMetrics {
   /** Nach dem Setzen der Breite gemessene Höhe. */
   height: number
   /**
-   * Aufgeklappt (Unteraufgaben sichtbar). Ein solcher Zettel nimmt die volle
-   * Wandbreite ein und bekommt **keinen** Versatz: der x-Versatz wäre bei voller
-   * Breite ohnehin weggeklemmt, und ein y-Versatz von bis zu −6,5 px würde ihn
-   * unter den Zettel darüber schieben. Statt des unregelmäßigen Abstands steht
-   * unter ihm ein fester (`EXPANDED_GAP`) — eine aufgeklappte Aufgabe ist ein
-   * Block, kein bepinnter Schnipsel.
+   * Aufgeklappt: volle Wandbreite, **kein** Versatz (ein y-Versatz bis −6,5 px
+   * schöbe ihn unter den Zettel darüber) und fester Abstand `EXPANDED_GAP` —
+   * ein Block, kein bepinnter Schnipsel.
    */
   expanded?: boolean
-  /**
-   * Gruppe des Zettels, aufsteigend: 0 = fällig, 1 = täglich, 2 = Projekt.
-   * Steuert sowohl die freie Packreihenfolge als auch die weiche Untergrenze
-   * zwischen den Gruppen — siehe `packWall`.
-   */
+  /** 0 = fällig, 1 = täglich, 2 = Projekt — Packreihenfolge und Gruppengrenze, siehe `packWall`. */
   group: number
   /**
-   * Die Oberkante, an der dieser Zettel im **vorigen** Lauf tatsächlich stand,
-   * sofern bekannt (Ticket 13). Wird ausschließlich gebraucht, solange ein
+   * Oberkante im **vorigen** Lauf, sofern bekannt. Nur relevant, solange ein
    * anderer Zettel eine Vorgabe hat (`WallPin`): wer vorher auf gleicher Höhe
-   * oder darunter lag, darf danach nicht darüber stehen. Ohne Vorgabe im Lauf
-   * bleibt der Wert unbenutzt — das freie Packen kennt keine Vergangenheit.
-   *
-   * Fehlt der Wert (neuer Zettel), gilt der Zettel als unbelastet und darf
-   * überall hin.
+   * oder darunter lag, darf danach nicht darüber stehen. Fehlt der Wert (neuer
+   * Zettel), darf der Zettel überall hin.
    */
   previousTop?: number
 }
 
 /**
  * Vorgabe für genau einen Zettel: er steht bei `top` und nimmt am Wettbewerb um
- * die niedrigste Oberkante nicht teil (Ticket 13 — „der aufgeklappte Zettel
- * bleibt liegen").
+ * die niedrigste Oberkante nicht teil (→ CONTEXT.md, „Aufklappen").
  *
- * Die Reihenfolge des Feldes ist die **Antipp-Reihenfolge**: der letzte Eintrag
- * ist der zuletzt angetippte Zettel. Lassen sich zwei Vorgaben arithmetisch
- * nicht gleichzeitig einhalten, gewinnt der spätere Eintrag; der frühere rutscht
- * unter ihn (siehe `resolvePins`).
+ * Die Reihenfolge des Feldes ist die **Antipp-Reihenfolge**; bei Konflikt
+ * gewinnt der spätere Eintrag (→ `resolvePins`).
  */
 export interface WallPin {
   id: string
@@ -186,24 +138,15 @@ export interface WallPin {
   top: number
 }
 
-/**
- * Abstand unter einem aufgeklappten Zettel. Übernommen aus dem Prototypen
- * `r5-freiewand.html` (`gap = open ? 8 : gapOf(id)`) — gestalterisch gesetzt,
- * nicht gemessen.
- */
+/** Abstand unter einem aufgeklappten Zettel — gestalterisch gesetzt, nicht gemessen. */
 const EXPANDED_GAP = 8
 
 /**
- * Spaltenzahl der Zettelchen eines aufgeklappten Zettels: zwei, bei durchweg
- * kurzen Titeln drei.
- *
- * Die Grenze von 12 Zeichen stammt aus dem Prototypen und ist eine Setzung,
- * keine Messung: sie zählt Zeichen, nicht Pixel, und kennt die Schriftbreite
- * nicht. Sie ist bewusst streng — drei Spalten sind der Sonderfall („Regale",
- * „Boden", „Lampen"), zwei der Regelfall. Fällt ein Titel zu lang aus, verteilt
- * die Zeile ihn auf zwei Zeilen; falsch wird nur die Dichte, nie die Lesbarkeit.
+ * Spaltenzahl der Zettelchen: zwei, bei durchweg kurzen Titeln drei. Die
+ * 12-Zeichen-Grenze ist eine bewusst strenge Setzung (Zeichen, nicht Pixel);
+ * liegt sie daneben, wird nur die Dichte falsch, nie die Lesbarkeit.
  */
-export const SUBTASK_C3_MAX_TITLE = 12
+const SUBTASK_C3_MAX_TITLE = 12
 
 export function subtaskColumns(titles: readonly string[]): 2 | 3 {
   if (titles.length === 0) return 2
@@ -213,27 +156,20 @@ export function subtaskColumns(titles: readonly string[]): 2 | 3 {
 
 /**
  * Was die Wand an einem Zettel gemessen hat, bevor sie seine Breite festlegt.
- * Beide Werte sind ganzzahlig und enthalten bereits den Sicherheitszuschlag der
- * Messung — das Planen rechnet ausschließlich in ganzen Zahlen, damit dieselben
- * Eingaben immer dieselben Breiten ergeben.
+ * Ganzzahlig und inklusive Sicherheitszuschlag — damit dieselben Eingaben
+ * immer dieselben Breiten ergeben.
  */
 export interface WallNoteShape {
   id: string
   /** Breite bei `max-content`: der Titel steht in einer Zeile. */
   natural: number
   /**
-   * Breite bei `min-content`: das breiteste unteilbare Stück des Zettels —
-   * in der Regel das längste Wort des Titels, bei sehr kurzen Titeln die
-   * Fußzeile. Schmaler heißt **abschneiden**, nicht umbrechen.
+   * Breite bei `min-content`: das breiteste unteilbare Stück (meist das
+   * längste Titelwort, sonst die Fußzeile). Schmaler heißt **abschneiden**.
    *
-   * `.title` hat zwar `overflow: hidden` (Ellipse, `WallNote.vue`), aber das
-   * senkt seinen Beitrag zur `min-content`-BREITE nicht auf 0: die
-   * CSS-Regel zur automatischen Mindestgröße bei nicht-sichtbarem Overflow
-   * gilt nur für die Flex-HAUPTachse, und `.zettel` steht auf
-   * `flex-direction: column` — die Hauptachse ist die Höhe, nicht die
-   * Breite. Gemessen an echten Zetteln: `minimum` reicht von 73 bis 380 px
-   * über 26 verschiedene Werte, stets `min-content` des Titels plus eine
-   * für den Zetteltyp feste Fußzeilen-Zutat — es IST das längste Wort.
+   * `overflow: hidden` an `.title` senkt das nicht auf 0: die automatische
+   * Mindestgröße gilt nur für die Flex-HAUPTachse, und `.zettel` steht auf
+   * `flex-direction: column`.
    */
   minimum: number
 }
@@ -242,60 +178,30 @@ export interface WallNoteShape {
 const wraps = (shape: WallNoteShape) => shape.minimum < shape.natural
 
 /**
- * Die Breite nach der Voreinstellung „Breite folgt dem Titel", ohne den zweiten
- * Packlauf: die natürliche Breite, für **mehrwortige** Titel gedeckelt.
+ * Die Breite nach der Voreinstellung „Breite folgt dem Titel": die natürliche
+ * Breite, für **mehrwortige** Titel gedeckelt (→ `MAX_WIDTH_RATIO`). Auch die
+ * Rückfallbreite des zweiten Laufs.
  *
- * Die natürliche Breite selbst bestimmt der **Titel**, nicht eine Formel: die
- * Wand misst ihn einzeilig im Browser (`width: max-content` bei
- * `white-space: nowrap`) und übernimmt das Ergebnis. Eine Zeichenzahl-Schätzung
- * stünde hier nur im Weg — sie hinge an Schriftart und Schriftschnitt und läge
- * bei Umlauten und Großbuchstaben regelmäßig daneben.
+ * Die natürliche Breite misst die Wand im Browser (`max-content`, `nowrap`);
+ * eine Zeichenzahl-Schätzung hinge an der Schrift und läge bei Umlauten und
+ * Großbuchstaben regelmäßig daneben.
  *
- * Kurze Titel erreichen den Deckel nie und bleiben einzeilig; ein langer,
- * mehrwortiger Titel bricht lieber an einer Wortgrenze um, als 45 % der Wand
- * zu beanspruchen. Ein einzelnes langes Wort ist ausgenommen — es kann nicht
- * umbrechen, ein Deckel würde es nur abschneiden; es bekommt so viel Breite,
- * wie es braucht, höchstens die ganze Wand (`wraps(shape)` ist dann `false`,
- * der Rückgabewert fällt auf `shape.natural` zurück und wird nur noch gegen
- * `wallWidth` geklemmt). Bewusste Entscheidung von vor diesem Ticket,
- * unverändert übernommen — nur der Deckelwert ist gesunken.
- *
- * Zum Maßstab: an einem 347-px-Wand-Beispiel mit 156-px-Deckel landete ein
- * 42–43 Zeichen langes, eigens dafür erdachtes Scherzwort bei 341 px bzw. der
- * vollen Wandbreite. Alltägliche Komposita sind kürzer — „Dunstabzugshaubenfilter"
- * (23 Zeichen) landet bei grob der halben Wandbreite. Der Fall ist real, aber
- * schmaler, als das Extrembeispiel vermuten lässt.
- *
- * Auch die Rückfallbreite des zweiten Laufs: was er verwirft, landet wieder
- * hier.
- *
- * **Keine eigene Untergrenzen-Konstante mehr.** Bis Ticket 11 gab es
- * zusätzlich `MIN_NOTE_WIDTH` (96 px) als Auffangnetz. QC-Beleg: kleinster
- * `shape.minimum`-Wert im ganzen Bestand war 110 — `MIN_NOTE_WIDTH` griff
- * nirgends mehr, entfernt. Kein Zufall des Bestands, sondern strukturell:
+ * **Keine eigene Untergrenzen-Konstante** — die Untergrenze ist strukturell:
  * `shape.minimum` enthält immer die volle Fußzeile, und darin reserviert
- * allein die Griffzeile (Karten-Redesign, Ticket 00a) `padding-right: 88px`
- * für Bearbeiten-Stift und Eselsohr (je 44 px, `WallNote.vue`, `.foot`) —
- * dazu kommen 18 px waagerechte Zettel-Chrome (`chromeWidth`) und 4 px
- * `MEASURE_SAFETY` (beide `WallView.vue`). 88 + 18 + 4 = **110**, exakt der
- * Wert der schmalsten gemessenen Zettel — die mit leerer sichtbarer
- * Fußzeile, ohne Punkte-Sticker, Stempel oder Unteraufgaben-Zeichen; jeder
- * Zettel mit Fußzeileninhalt liegt darüber. Wer die Griffe verkleinert oder
- * `padding-right` senkt, senkt damit auch diese Untergrenze — ohne diesen
- * Kommentar fiele das niemandem auf, und ein kurzer Titel würde wieder zum
- * Schnipsel.
+ * allein die Griffzeile `padding-right: 88px` für Bearbeiten-Stift und
+ * Eselsohr (je 44 px, `WallNote.vue`, `.foot`) — dazu kommen 18 px waagerechte
+ * Zettel-Chrome (`chromeWidth`) und 4 px `MEASURE_SAFETY` (beide
+ * `WallView.vue`). 88 + 18 + 4 = **110** px, die Breite eines Zettels mit
+ * leerer sichtbarer Fußzeile. Wer die Griffe verkleinert oder `padding-right`
+ * senkt, senkt damit auch diese Untergrenze — ohne diesen Kommentar fiele das
+ * niemandem auf, und ein kurzer Titel würde wieder zum Schnipsel.
  */
 export function defaultNoteWidth(shape: WallNoteShape, wallWidth: number): number {
   const cap = Math.min(wallWidth, Math.round(wallWidth * MAX_WIDTH_RATIO))
   const wanted = shape.natural > cap && wraps(shape) ? cap : shape.natural
-  // `shape.minimum` sticht den 45-%-Deckel: eine Fußzeile mit Punkte-Sticker,
-  // Unteraufgaben-Zeichen und Dringlichkeits-Stempel kann breiter sein als
-  // 45 % der Wand, und `wanted` darf dann nicht darunter fallen — sonst läuft
-  // die Fußzeile über den Zettelrand und die Griffzeile (Stift, Eselsohr)
-  // hinaus. Die Wandklemmung (`Math.min(wallWidth, …)`) bleibt trotzdem außen:
-  // ein unbrechbarer Titel, dessen `minimum` selbst die Wand übersteigt, darf
-  // weiterhin über den Deckel hinausgezogen werden, aber nie über die Wand
-  // hinaus (siehe Funktionskommentar oben, „Ein einzelnes langes Wort").
+  // `shape.minimum` sticht den Deckel: eine volle Fußzeile kann breiter sein
+  // als 45 % der Wand und liefe sonst über den Zettelrand und die Griffe
+  // hinaus. Die Wandklemmung bleibt trotzdem außen.
   return Math.min(wallWidth, Math.max(wanted, shape.minimum))
 }
 
@@ -303,42 +209,21 @@ export function defaultNoteWidth(shape: WallNoteShape, wallWidth: number): numbe
  * Zweiter Packlauf: Breiten so wählen, dass möglichst zwei Zettel
  * nebeneinander stehen.
  *
- * Voreinstellung bleibt „Breite folgt dem Titel": jeder Zettel bekommt seine
- * natürliche Breite (gedeckelt bei `MAX_WIDTH_RATIO`). Das erzeugt auf schmalen
- * Wänden aber Reststreifen: ein Zettel misst 140 px auf einer 347-px-Wand,
- * daneben bleiben 195 px, und dort passt nur hinein, wessen Titel zufällig
- * darunter liegt. Bleibt keiner übrig, verkommt die Wand zur einspaltigen
- * Liste.
+ * Mit natürlichen Breiten bleiben auf schmalen Wänden Reststreifen, in die nur
+ * zufällig etwas passt. Deshalb **Streifen füllen**: passt der nächste Zettel
+ * nicht mit seiner natürlichen Breite in den Rest der Reihe, wohl aber an einer
+ * Wortgrenze (ohne ein Wort abzuschneiden, `minimum`), bekommt er die Breite
+ * des Streifens. Keine Paar-Erzwingung — was hier nicht nebeneinandersteht,
+ * platziert die freie Skyline (`packWall`).
  *
- * Ein Eingriff: **Streifen füllen** — passt der nächste Zettel nicht mit
- * seiner natürlichen Breite in den Rest der Reihe, wohl aber an einer
- * Wortgrenze, bekommt er die Breite des Streifens. Er greift nur, wenn der
- * Zettel dabei kein Wort abschneidet (`minimum`).
+ * **Das Reihenmodell ist eine Näherung**: es entscheidet nur Breiten und
+ * unterstellt gleich hohe Zettel (Regelfall: einzeilig). Liegt es daneben,
+ * packt die Skyline trotzdem gültig, nur weniger dicht.
  *
- * **Die Paar-Erzwingung entfällt ersatzlos.** Sie existierte nur, weil beim
- * vorigen Deckel von 68 % zwei Zettel selten nebeneinander passten und der
- * Packer danach stur der Reihe nach arbeitete. Beide Gründe sind mit dem
- * 45-%-Deckel und der freien Skyline (`packWall`) weg — bei 45 % passen immer
- * zwei Zettel, und was hier nicht nebeneinandersteht, findet die Skyline
- * ohnehin frei einen Platz.
- *
- * **`MIN_NOTE_WIDTH` ist entfallen** (Ticket 11 QC-Beleg): die Griffzeile des
- * Karten-Redesigns setzt die Untergrenze jetzt strukturell selbst, über
- * `shape.minimum` — Herleitung der 110 px bei `defaultNoteWidth`.
- *
- * **Das Reihenmodell ist eine Näherung.** Gepackt wird danach weiter mit der
- * Skyline, die Höhen kennt und keine Reihen; dieses Modell entscheidet nur über
- * Breiten. Es unterstellt gleich hohe Zettel — das ist der Regelfall, weil
- * nahezu jeder Zettel einzeilig ist. Wo die Näherung danebenliegt, packt die
- * Skyline trotzdem gültig, nur eben nicht so dicht wie erhofft.
- *
- * **Die Zeilenobergrenze steckt nicht hier.** Ob ein verschmälerter Zettel
- * dadurch zu hoch wird, kann nur die Wand entscheiden, weil sie die Höhe misst
- * (→ `WallView`). Diese Funktion liefert Vorschläge, keine Zusagen.
- *
- * Die Reihenfolge der Eingabe wird **nie** verändert — sie steuert nur, welche
- * Zettel im Reihenmodell als Nachbarn gelten. Welcher Zettel auf der Wand am
- * Ende WO steht, entscheidet danach ausschließlich `packWall`.
+ * Ob ein verschmälerter Zettel zu hoch wird, entscheidet die Wand, die die
+ * Höhe misst (→ `WallView`) — Vorschläge, keine Zusagen. Die Eingabereihenfolge
+ * bestimmt nur, wer im Reihenmodell Nachbar ist; wo ein Zettel am Ende steht,
+ * entscheidet `packWall`.
  */
 export function planNoteWidths(
   shapes: readonly WallNoteShape[],
@@ -346,12 +231,9 @@ export function planNoteWidths(
 ): Map<string, number> {
   const defaultOf = (s: WallNoteShape) => defaultNoteWidth(s, wallWidth)
   /**
-   * Passt der Zettel in `width`, ohne ein Wort zu zerschneiden? Die
-   * Untergrenze ist `s.minimum` selbst (früher zusätzlich gegen
-   * `MIN_NOTE_WIDTH` geklemmt, seit Ticket 11 entfallen — siehe
-   * `defaultNoteWidth`). Bewusst **nicht** auf die Wandbreite geklemmt — ein
-   * einzelnes Wort, das breiter als die Wand ist, schließt sich dadurch von
-   * jeder Verschmälerung selbst aus.
+   * Passt der Zettel in `width`, ohne ein Wort zu zerschneiden? Bewusst
+   * **nicht** auf die Wandbreite geklemmt — ein einzelnes Wort, das breiter
+   * als die Wand ist, schließt sich dadurch von jeder Verschmälerung selbst aus.
    */
   const fitsShrunk = (s: WallNoteShape, width: number) => wraps(s) && width >= s.minimum
 
@@ -359,14 +241,12 @@ export function planNoteWidths(
 
   let index = 0
   while (index < shapes.length) {
-    // Erster Zettel der Reihe.
     const first = shapes[index]
     const width = defaultOf(first)
     plan.set(first.id, width)
     let rest = wallWidth - width - rowGapOf(first.id)
     index++
 
-    // Weitere Zettel derselben Reihe.
     while (index < shapes.length) {
       const shape = shapes[index]
       const wanted = defaultOf(shape)
@@ -388,17 +268,16 @@ export function planNoteWidths(
   return plan
 }
 
-export interface PackedNote {
+interface PackedNote {
   id: string
   x: number
   y: number
   /**
-   * Stapelreihenfolge (Ticket 11). **Nicht** die Packreihenfolge — die folgt
-   * der Skyline und weiß nichts von links und rechts. Kleineres `x` gewinnt:
-   * der linke Zettel liegt über dem rechten, sein Eselsohr (untere rechte
-   * Ecke, Karten-Redesign Ticket 00a) bleibt frei statt vom rechten Nachbarn
-   * verdeckt. Bei gleichem `x` gewinnt kleineres `y` — aus derselben
-   * Begründung: zwei Zettel untereinander überlappen an der UNTEREN Kante des
+   * Stapelreihenfolge. **Nicht** die Packreihenfolge — die folgt der Skyline
+   * und weiß nichts von links und rechts. Kleineres `x` gewinnt: der linke
+   * Zettel liegt über dem rechten, sein Eselsohr (untere rechte Ecke) bleibt
+   * frei statt vom rechten Nachbarn verdeckt. Bei gleichem `x` gewinnt
+   * kleineres `y` — aus derselben Begründung: zwei Zettel untereinander überlappen an der UNTEREN Kante des
    * oberen, wo Stift und Eselsohr sitzen, also gewinnt wieder der frühere.
    * Vergeben wird `z` erst NACH dem Packen, aus der fertigen Position — siehe
    * `packWall`.
@@ -417,25 +296,19 @@ const SKYLINE_RESOLUTION = 4
 /**
  * Die Rahmenbreite von `.zettel` (`WallNote.vue`, `border: 2px solid transparent`).
  *
- * **Unsichtbar, aber nicht folgenlos.** Bei universellem `box-sizing:
- * border-box` (`src/assets/base.css`) belegt der Rahmen Platz INNERHALB der
- * Breite, die `WallView` setzt. Der umschließende Block einer absolut
- * positionierten Befestigung ist die **Padding-Box** von `.zettel`, der Packer
- * positioniert aber gegen die **Border-Box** (`el.style.top = note.y`). Jede
- * Befestigung sitzt damit 2 px tiefer und 2 px weiter innen, als ihr eigenes
- * CSS vermuten lässt — wer diesen Rahmen ändert, verschiebt alle drei
- * Befestigungen und damit das obere Polster der Wand.
+ * **Unsichtbar, aber nicht folgenlos.** Eine absolut positionierte Befestigung
+ * sitzt in der **Padding-Box** von `.zettel`, der Packer positioniert aber die
+ * **Border-Box** — jede Befestigung sitzt 2 px tiefer und weiter innen, als ihr
+ * CSS vermuten lässt. Wer diesen Rahmen ändert, verschiebt alle Befestigungen
+ * und damit das obere Polster der Wand.
  */
 const ZETTEL_BORDER = 2
 
 /**
- * Wo eine Befestigung waagerecht auf dem Zettel sitzt. Entscheidend für den
- * Überstand, weil der geneigte Zettel alles, was nicht in seiner Mitte sitzt,
- * mit anhebt oder absenkt (→ `overhangOf`).
- *
- * - `center` — `left: 50%` plus negatives `margin-left` in halber Breite.
- * - `left` / `right` — `inset` ist der Abstand von der jeweiligen Kante der
- *   **Padding-Box** bis zur **Mitte** der Befestigung.
+ * Wo eine Befestigung waagerecht sitzt — der geneigte Zettel hebt alles
+ * außerhalb seiner Mitte mit an (→ `overhangOf`). Bei `left`/`right` ist
+ * `inset` der Abstand von der Kante der **Padding-Box** bis zur **Mitte** der
+ * Befestigung.
  */
 type FastenerAnchor = 'center' | 'left' | 'right'
 
@@ -443,48 +316,25 @@ type FastenerAnchor = 'center' | 'left' | 'right'
  * Die **Befestigungen** (→ CONTEXT.md) als Geometrie, abgeschrieben aus den
  * CSS-Regeln in `WallNote.vue`.
  *
- * **Warum das hier steht.** Jede Befestigung sitzt konstruktiv über der
- * Oberkante ihres Zettels (negatives `top`). Steht ein Zettel in der obersten
- * Reihe, ragt sie damit über die Oberkante der WAND — der Befund aus Ticket 04.
- * Die Wand muss oben Platz reservieren, und wie viel, ist keine freie Setzung
- * des Layouts, sondern eine Ablesung aus dem Stylesheet.
+ * Jede Befestigung sitzt über der Oberkante ihres Zettels (negatives `top`) und
+ * ragt in der obersten Reihe über die WAND. Wie viel Platz die Wand oben
+ * reserviert, ist deshalb eine Ablesung aus dem Stylesheet: „so hoch wie die
+ * höchste Befestigung". Wer eine Sorte hinzufügt, verschiebt, dreht oder
+ * umhängt, ändert diese Tabelle mit.
  *
- * **Es ist eine Zeile je Befestigung, nicht je Sorte.** Die beiden Hälften der
- * doppelten Büroklammer stehen getrennt: sie sind verschieden gedreht (`-7deg`
- * / `+6deg`) und sitzen an verschiedenen KANTEN. Genau diese Kantenlage
- * entscheidet, welche von beiden der geneigte Zettel nach oben fährt, und sie
- * ließe sich mit einer gemeinsamen Zeile gar nicht ausdrücken.
+ * Eine Zeile je Befestigung, nicht je Sorte: die Klammerhälften sind
+ * verschieden gedreht und sitzen an verschiedenen KANTEN — genau das
+ * entscheidet, welche der geneigte Zettel nach oben fährt.
  *
- * **Die Regel lautet „so hoch wie die höchste Befestigung", nicht „11".**
- * Deshalb steht hier die Geometrie und nicht das Ergebnis: wer eine vierte
- * Befestigungssorte baut, trägt sie hier ein und bekommt das Polster geschenkt.
- * Wer eine bestehende verschiebt, dreht oder umhängt, ändert diese Zeile mit.
+ * **Es ist eine Kopie.** Eine gemeinsame Quelle mit `WallNote.vue` ist nicht
+ * herstellbar: der Packer rechnet, bevor ein Zettel im DOM steht. Die Kopplung
+ * tragen Kommentare an BEIDEN Enden — die CSS-Regeln in `WallNote.vue`
+ * (`.zettel`, `.pin`, `.tape`, `.clip`) verweisen hierher.
  *
- * **Der Wermutstropfen: es ist eine Kopie.** Eine echte einzige Quelle — eine
- * CSS-Custom-Property, an der `WallNote.vue` und diese Rechnung gemeinsam
- * hängen — ist nicht herstellbar: der Packer rechnet in Zahlen, lange bevor ein
- * Zettel im DOM steht, und die Werte am Element abzumessen hieße, sie in genau
- * dem Moment zu brauchen, in dem es sie noch nicht gibt. Getragen wird die
- * Kopplung deshalb durch Kommentare an BEIDEN Enden: die CSS-Regeln in
- * `WallNote.vue` (`.zettel`, `.pin`, `.tape`, `.clip`) verweisen hierher.
- *
- * **Nicht enthalten:** `.pw-tape` aus `pinnwand.css` (62 × 20 px, `top: -10px`)
- * hätte den größten Überstand von allen, ist aber **toter Code** — die Klasse
- * kommt in keinem Markup vor, nur die gleichnamige CSS-Variable wird benutzt.
- * Sollte sie je in Gebrauch kommen, gehört sie in diese Tabelle.
- *
- * **Ebenfalls nicht enthalten: Schlagschatten** (alle werfen nach unten) und
- * die zusätzlichen Neigungen der Griff-Zustände (`.zettel--tearing` u. a., bis
- * +9 deg).
- *
- * Letztere sind nicht bloß „kurz", sie sind **geometrisch ausgeschlossen**: die
- * Zusatzneigung tritt ausschließlich zusammen mit einer Abwärtsbewegung auf
- * (`translate(pull·0.1, pull) rotate(rotation + min(9, pull·0.09))` in
- * `noteStyle`, immer mit `pull > 0`). Je Pixel `pull` wächst der Überstand um
- * höchstens rund 0,24 px, während der Zettel um volle 1,0 px nach UNTEN
- * wandert — Verhältnis rund 4 : 1 zugunsten von unten. Ein gegriffener Zettel
- * ragt damit in keinem Moment weiter über den Kork als im Ruhezustand. Für ihn
- * zu polstern wäre nicht nur teuer, es wäre gegenstandslos.
+ * **Nicht enthalten:** Schlagschatten (werfen nach unten) und die Zusatzneigung
+ * der Griff-Zustände (`.zettel--tearing` u. a., bis +9 deg). Die tritt nur mit
+ * einer Abwärtsbewegung auf (`pull > 0` in `noteStyle`): je Pixel `pull` wächst
+ * der Überstand um höchstens rund 0,24 px, der Zettel sinkt um 1 px.
  */
 const FASTENERS: ReadonlyArray<{
   /** Die CSS-Regel in `WallNote.vue`, aus der diese Zeile abgeschrieben ist. */
@@ -552,20 +402,11 @@ const FASTENERS: ReadonlyArray<{
 /**
  * Die Befestigungen, die ein Zettel dieser Gruppe tragen KANN.
  *
- * `WallView` füllt die Gruppen aus `pendingTasks` / `dailyTasks` /
- * `projectTasks`; welche Befestigung ein Zettel wirklich zeichnet, entscheidet
- * `WallNote.vue` dagegen über `kindOfTaskType` (`open` / `daily` / `project`).
- *
- * **Das deckt sich NICHT überall Eins zu Eins, und zwar bei Gruppe 1.**
- * `dailyTasks` ist `daily` **und** `one-time` (`useTaskBoard.ts`), aus
- * `one-time` macht `kindOfTaskType` aber ein `'open'` — ein einmaliger Zettel
- * liegt also in Gruppe 1 und trägt trotzdem eine **Reißzwecke**. Diese Funktion
- * gibt ihm hier `.tape`.
- *
- * **Die Abweichung fällt auf die sichere Seite.** `.tape` überstehet weiter als
- * `.pin` (bei 160 px: 9,7 gegen 5,4), das Polster wird für einen solchen Zettel
- * also ÜBERschätzt, nie unterschätzt. Wer die Zuordnung eines Tages
- * begradigt, gewinnt hier ein paar Pixel; nötig ist es nicht.
+ * Gruppe und gezeichnete Sorte decken sich bei Gruppe 1 nicht: `dailyTasks`
+ * enthält auch `one-time` (`useTaskBoard.ts`), und der trägt eine Reißzwecke
+ * (`kindOfTaskType`), bekommt hier aber `.tape`. Das fällt auf die sichere
+ * Seite — `.tape` steht weiter über, das Polster wird überschätzt, nie
+ * unterschätzt.
  *
  * Eine **unbekannte** Gruppe bekommt aus demselben Grund **alle**
  * Befestigungen, nicht keine — sichtbarer Kork ist ein Schönheitsfehler, eine
@@ -585,33 +426,20 @@ const RAD = Math.PI / 180
  * Wie weit eine Befestigung über die Oberkante ihres Zettels hinausragt —
  * in Abhängigkeit von **Zettelbreite** und **Zettelneigung**.
  *
- * **Der Überstand ist keine Konstante.** Drei Dinge wirken zusammen:
+ * **Keine Konstante**, drei Dinge wirken zusammen:
  *
- * 1. **Der Zettelrahmen** verschiebt den Ursprung: `top` ist gegen die
- *    Padding-Box gemessen, positioniert wird gegen die Border-Box
- *    (→ `ZETTEL_BORDER`). Das SENKT den Überstand um 2 px.
- * 2. **Die eigene Drehung** der Befestigung. Gedreht wird um die Mitte
- *    (`transform-origin` steht nirgends, also der Vorgabewert `50% 50%`), die
- *    Mitte bleibt liegen und die halbe Höhe der umschließenden Kiste wächst auf
- *    `(b·sin α + h·cos α) / 2`. Das HEBT den Überstand.
- * 3. **Die Neigung des Zettels** (`rotationOf`, −3…+3 deg, in `noteStyle` als
- *    Inline-`transform`, ebenfalls um die Mitte). Sie wirkt doppelt: die
- *    Drehungen **komponieren** (ein Klebestreifen steht faktisch −7…−1 deg), und
- *    eine Befestigung, die NICHT in der Zettelmitte sitzt, fährt mit hoch, wenn
- *    der Zettel sich zu ihr hin neigt. Der Hebel ist der Abstand zur Zettelmitte
- *    — also **breitenabhängig**: auf einem wandbreiten aufgeklappten Projekt
- *    hebt eine Klammer an der Kante um mehrere Pixel, auf einem 160-px-Zettel
- *    kaum.
- *
- * Punkt 3 ist der Grund, warum ein Skalar das nicht tragen kann: der Überstand
- * eines 320-px-Zettels ist ein anderer als der eines 160-px-Zettels, bei
- * identischem CSS.
+ * 1. **Zettelrahmen** (→ `ZETTEL_BORDER`): SENKT den Überstand um 2 px.
+ * 2. **Eigene Drehung** der Befestigung um ihre Mitte (`transform-origin` ist
+ *    nirgends gesetzt): die halbe Höhe der umschließenden Kiste wächst auf
+ *    `(b·sin α + h·cos α) / 2`. HEBT den Überstand.
+ * 3. **Neigung des Zettels** (`rotationOf`, ebenfalls um die Mitte): die
+ *    Drehungen komponieren, und eine Befestigung außerhalb der Zettelmitte
+ *    fährt mit hoch. Der Hebel ist der Abstand zur Mitte — deshalb
+ *    **breitenabhängig**, und deshalb reicht kein Skalar.
  *
  * **Bewusst weggelassen:** die Zettelneigung senkt die Oberkante in der
- * Zettelmitte zusätzlich um `(H/2)·(1 − cos θ)`. Bei 3 deg sind das rund
- * **0,05 px** an einem gewöhnlichen 80-px-Zettel und rund **0,34 px** an einem
- * hohen aufgeklappten Projekt (H ≈ 500) — die Spanne wächst mit der
- * Zettelhöhe. Der Term braucht genau diese Höhe und macht das Ergebnis nur
+ * Zettelmitte zusätzlich um `(H/2)·(1 − cos θ)` (bei 3 deg und H ≈ 500 rund
+ * 0,3 px, wächst mit der Zettelhöhe). Der Term braucht die Zettelhöhe und macht das Ergebnis nur
  * KLEINER; ihn wegzulassen ist die konservative Seite und spart die
  * Abhängigkeit.
  *
@@ -644,54 +472,24 @@ const overhangOf = (
 
 /**
  * Das Polster, das die Wand oben freihält, damit **keine** Befestigung über den
- * Kork hinausragt (Ticket 04) — aufgerundet auf ganze Pixel.
+ * Kork hinausragt — aufgerundet auf ganze Pixel.
  *
- * **Gerechnet wird über die Zettel, die wirklich gepackt werden**, nicht über
- * eine Tabellenzeile und nicht über einen Worst Case der Wandbreite. Jeder
- * Zettel bringt beide Eingangsgrößen mit: seine gemessene Breite steht in
- * `WallNoteMetrics`, seine Neigung ist `rotationOf(id)` — **deterministisch aus
- * der Kennung**, dieselbe Funktion, die `WallNote.vue` für sein `transform`
- * benutzt. Es wird also nichts geschätzt und kein ungünstigster Winkel
- * angenommen: der Überstand jedes einzelnen Zettels ist exakt bekannt.
+ * Gerechnet über die Zettel, die wirklich gepackt werden: Breite aus
+ * `WallNoteMetrics`, Neigung aus `rotationOf(id)` wie in `WallNote.vue` —
+ * exakt, kein Worst Case.
  *
- * **Das Maximum über ALLE Zettel, nicht über die oberste Reihe.** Die oberste
- * Reihe steht erst fest, wenn gepackt ist — das Polster muss aber vorher
- * feststehen, sonst müsste zweimal gepackt werden, und beim zweiten Lauf
- * verschöbe das geänderte Polster womöglich wieder, wer oben steht. Diese
- * Rückkopplung ist es nicht wert.
+ * **Das Maximum über ALLE Zettel, nicht über die oberste Reihe**: die steht
+ * erst nach dem Packen fest, das Polster muss vorher feststehen. Preis: ein
+ * paar Pixel leerer Kork, wenn der größte Überstand nicht oben hängt.
  *
- * **Der Preis, benannt:** steht der Zettel mit dem größten Überstand NICHT in
- * der obersten Reihe, bleibt oben etwas leerer Kork stehen. Der Betrag ist die
- * Differenz zweier Überstände, nicht der Überstand selbst — im Alltag (Mobil,
- * Zettel um 160 px, gemischte Sorten) liegen alle Zettel zwischen rund 5 und
- * 10 px, es geht also um **wenige Pixel**.
+ * **Erwartete Bewegung, kein Fehler:** bei Projekten hängt der Überstand an der
+ * Breite. Klappt ein Projekt auf (volle Wandbreite), wächst das Polster um rund
+ * 4 px, die ganze Wand rutscht über die FLIP-Schwelle und **alle** Zettel
+ * fliegen mit; Zuklappen bewegt sie zurück. Ein Polster, das nie schrumpft,
+ * kostete stattdessen dauerhaft Kork.
  *
- * **Der Preis hat aber auch eine Bewegung, und die gab es vorher nicht.** Für
- * `.pin` und `.tape` ist der Hebelarm null, ihr Überstand hängt also gar nicht
- * an der Breite — bei **Projekten** hängt er daran. Wer ein Projekt aufklappt
- * (rund 144 px → volle Wandbreite), treibt `.clip--l` von rund 9,2 auf rund
- * 13,8 px und damit das Polster von **10 auf 14 px**. Die ganze Wand rutscht in
- * dem Moment 4–5 px nach unten, und das liegt über der FLIP-Schwelle von
- * 0,6 px: **alle** Zettel fliegen die Animation mit, nicht nur die, die dem
- * aufgeklappten ausweichen. Zuklappen bewegt sie ebenso zurück, und ebenso das
- * Abreißen des letzten Projekts.
- *
- * Wahrscheinlich unauffällig, weil es genau im Aufklapp-Moment passiert, in dem
- * sich ohnehin die halbe Wand bewegt — aber es ist eine neue Bewegung, und wer
- * sie beim Testen sieht, soll sie hier wiederfinden statt sie für einen Fehler
- * zu halten. Sie ist der Preis dafür, dass die Abnahme in JEDER Konstellation
- * hält: ein zu knappes Polster verfehlt sie, ein Polster, das dem breitesten
- * Fall dauerhaft folgt (also nie schrumpft), kostete stattdessen dauerhaft
- * 4–5 px Kork.
- *
- * Ohne Zettel ist das Polster **0**: keine Befestigung, kein Platzbedarf. Die
- * leere Wand bleibt damit 0 px hoch und trägt keinen Streifen Kork, den niemand
- * bestellt hat (den sich `rememberWallHeight` in `WallView.vue` sonst als
- * Mindesthöhe des Platzhalters merkte).
- *
- * Es kommt oben Platz **hinzu**, es wird nichts umgerechnet: die Abstände der
- * Zettel untereinander sind unberührt, die Wand wächst um genau diesen Betrag
- * nach oben. Die Unterkante bleibt bewusst ohne Polster (Ticket 04).
+ * Ohne Zettel ist das Polster **0**, sonst merkte sich `rememberWallHeight`
+ * leeren Kork als Mindesthöhe. Die Unterkante bleibt bewusst ohne Polster.
  */
 function topPaddingFor(notes: readonly WallNoteMetrics[]): number {
   let worst = 0
@@ -709,42 +507,27 @@ function topPaddingFor(notes: readonly WallNoteMetrics[]): number {
  * Wie weit der y-Versatz einen Zettel höchstens nach UNTEN schiebt.
  * `jitterOf(id, 'y', 4) - 2.5` liegt in [−6,5; +1,5] — nach unten also 1,5 px.
  *
- * Die Untergrenze −6,5 ist NICHT −range/2: `jitterOf(id, key, 4)` liefert
- * −4 … +4, davon 2,5 abgezogen ergibt −6,5 … +1,5 (im Bestand gemessen
- * −6,41 … 1,49). Der Kommentar nannte hier bis zur QC von Ticket 13 fälschlich
- * −2,5; `WallNoteMetrics.expanded` nennt −6,5 seit jeher korrekt. Die Konstante
- * selbst stimmte — sie zählt nur die obere Grenze.
- *
- * Gebraucht wird die Zahl nur beim Packen oberhalb einer Vorgabe: dort wird
- * gegen die GEPLANTE Oberkante geprüft, gezeichnet wird aber die verschobene.
- * Ohne diesen Zuschlag dürfte ein Zettel bis auf 1,5 px in den vorgegebenen
- * Zettel hineinragen. Wer `jitterOf`-Bereich oder Mitte ändert, muss diese Zahl
- * mitziehen — sie ist eine Ableitung, keine Setzung.
+ * Gebraucht beim Packen oberhalb einer Vorgabe: geprüft wird die GEPLANTE
+ * Oberkante, gezeichnet die verschobene; ohne Zuschlag ragte ein Zettel bis
+ * 1,5 px in den vorgegebenen hinein. Eine Ableitung, keine Setzung — wer
+ * `jitterOf`-Bereich oder Mitte ändert, zieht sie mit.
  */
 const JITTER_DOWN_MAX = 1.5
 
 /**
- * Vorgaben in tatsächliche Oberkanten übersetzen (Ticket 13).
+ * Vorgaben in tatsächliche Oberkanten übersetzen.
  *
  * Jede Vorgabe beansprucht ein Fenster [top, top + Höhe + `EXPANDED_GAP`].
  * Überschneiden sich zwei Fenster, **gewinnt der zuletzt angetippte** — deshalb
- * wird das Feld von hinten nach vorn abgearbeitet: wer zuerst drankommt, hat die
- * höhere Priorität und behält seine Oberkante; wer später kommt und anstößt,
- * rutscht unter das störende Fenster.
+ * von hinten nach vorn: wer später drankommt und anstößt, rutscht unter das
+ * störende Fenster. Typisch: erst unten aufgeklappt (A), dann darüber (B), B
+ * wächst in A hinein — B bleibt liegen, A rutscht auf B's Unterkante.
  *
- * Der typische Fall: erst wird ein unterer Zettel aufgeklappt (Vorgabe A), dann
- * ein Zettel darüber (Vorgabe B). B wächst nach unten in A hinein. B ist der
- * zuletzt angetippte, also bleibt B liegen und A rutscht auf B's Unterkante.
- * Umgekehrt (erst oben, dann unten) entsteht gar kein Konflikt, weil die zweite
- * Vorgabe erst NACH dem Aufklappen der ersten gemerkt wird.
+ * Terminiert: jeder Ausweichschritt setzt `top` auf die Unterkante eines
+ * vergebenen Fensters, das danach nicht mehr stören kann.
  *
- * Die Schleife terminiert: jeder Ausweichschritt setzt `top` auf die Unterkante
- * eines vergebenen Fensters, danach kann genau dieses Fenster nicht mehr stören
- * — höchstens so viele Schritte wie vergebene Fenster.
- *
- * Zettel ohne bekannte Höhe (Vorgabe für einen Zettel, der gar nicht mehr an der
- * Wand hängt) fallen heraus; der Aufrufer soll solche Vorgaben gar nicht erst
- * schicken, aber diese Funktion baut darauf nicht.
+ * Vorgaben ohne bekannte Höhe (Zettel hängt nicht mehr an der Wand) fallen
+ * heraus.
  */
 function resolvePins(
   pins: readonly WallPin[],
@@ -777,104 +560,57 @@ function resolvePins(
  * Skyline-Packing: **frei innerhalb dreier Gruppen** (0 = fällig, 1 = täglich,
  * 2 = Projekt, aus `WallNoteMetrics.group`).
  *
- * Innerhalb einer Gruppe wählt der Packer selbst, welcher der noch
- * verbliebenen Zettel als Nächstes kommt — nicht die Eingabereihenfolge: bei
- * jedem Schritt wird für jeden übrigen Zettel der Gruppe die niedrigste
- * mögliche Oberkante gesucht, und der Zettel mit der insgesamt niedrigsten
- * Oberkante gewinnt den Platz. Das ist „freies Packen" im Sinn des Tickets —
- * die dringendste Aufgabe steht deshalb NICHT mehr zwingend oben; auf der Wand
- * gelten ohnehin alle fälligen Aufgaben als gleich dringend (→ CONTEXT.md,
+ * Innerhalb einer Gruppe wählt der Packer selbst, welcher Zettel als Nächstes
+ * kommt: der mit der insgesamt niedrigsten möglichen Oberkante. Die
+ * dringendste Aufgabe steht deshalb NICHT zwingend oben (→ CONTEXT.md,
  * „Stempel").
  *
- * **Der Tiebreak bei exaktem Gleichstand ist ein Hash der Aufgaben-Kennung
- * (`fnv1a`), NICHT die Position im Pool.** Bei nie erledigten Aufgaben ist
- * Gleichstand der Normalfall (`urgency = Infinity` für alle), und Poolposition
- * spiegelt die Eingabereihenfolge — also mittelbar die Store-Reihenfolge der
- * Aufgaben. Ein QC-Befund belegte das: eine einzige verschobene Aufgabe im
- * Store, sonst nichts geändert, bewegte 47 von 47 Zetteln. Mit dem
- * Hash-Tiebreak hängt das Ergebnis nur noch von der Menge der Zettel ab
- * (Kennung, Breite, Höhe, Gruppe) — nie von ihrer Reihenfolge.
+ * **Tiebreak bei exaktem Gleichstand ist ein Hash der Kennung (`fnv1a`), NICHT
+ * die Position im Pool.** Gleichstand ist bei nie erledigten Aufgaben der
+ * Normalfall, und die Poolposition spiegelt die Store-Reihenfolge — eine
+ * verschobene Aufgabe im Store bewegte sonst die ganze Wand. Das Ergebnis
+ * hängt nur von der Menge der Zettel ab, nie von ihrer Reihenfolge.
  *
- * **Weiche Gruppengrenze.** Zwischen zwei Gruppen gilt eine Untergrenze
- * (`floor`): kein Zettel der neuen Gruppe darf mit seiner sichtbaren Oberkante
- * SCHON VOR diesem Wert landen — sonst stünde er sichtbar oberhalb des
- * letzten Zettels der Vorgruppe, z. B. ein Projekt über einer fälligen
- * Aufgabe. `floor` wird nach jeder Gruppe auf das Maximum von `y` — die
- * tatsächlich GEZEICHNETE Oberkante, NACH dem y-Versatz — über ALLE Zettel
- * dieser Gruppe angehoben.
+ * **Weiche Gruppengrenze.** Kein Zettel einer Gruppe darf mit seiner
+ * sichtbaren Oberkante über `floor` landen — sonst stünde z. B. ein Projekt
+ * über einer fälligen Aufgabe. `floor` steigt nach jeder Gruppe auf das
+ * Maximum von `y` (die GEZEICHNETE Oberkante, nach dem y-Versatz) über ALLE
+ * Zettel der Gruppe — nicht auf den zuletzt platzierten: der Versatz bricht
+ * die Monotonie der geplanten Oberkanten. Innerhalb der Gruppe bleibt `floor`
+ * fest; so läuft eine Gruppe in die Reststreifen der vorigen, ohne je darüber
+ * zu landen. Erzwungen beim Suchen und am fertigen `y`, damit auch ein
+ * negativer Versatz die Garantie nicht unterläuft.
  *
- * Das ist bewusst nicht (mehr) „nur der zuletzt platzierte Zettel": zwar ist
- * die Folge der gewählten `bestTop`-Werte innerhalb einer Gruppe nachweislich
- * monoton, aber `bestTop` ist die GEPLANTE Oberkante vor dem y-Versatz
- * (`dy`, bis zu +1,5 px). Der Sprung von geplant zu gezeichnet bricht die
- * Monotonie: in Messungen war in rund 8 % der Gruppen nicht der zuletzt
- * platzierte Zettel der tiefste. Die Grenze muss deshalb aus derselben Größe
- * gebildet werden, die am Ende sichtbar ist — `y`, nicht `bestTop` — und über
- * das Maximum der ganzen Gruppe, nicht über die Platzierungsreihenfolge.
+ * **Waagerechte Luft** (`rowGapOf`): rechts neben einem gesetzten Zettel
+ * bleiben die Spalten bis zu diesem Abstand auf seiner Höhe blockiert —
+ * sonst reservierte nur `planNoteWidths` die Luft, und auf der Skyline
+ * stünden Nachbarn Kante an Kante.
  *
- * Innerhalb einer Gruppe gilt dieselbe `floor` für alle Zettel unverändert;
- * sie steigt erst beim Wechsel zur nächsten Gruppe. Genau das erlaubt einer
- * Gruppe, in den Reststreifen der vorigen hineinzulaufen (freie Spalten AUF
- * Höhe von `floor`), ohne je darüber zu landen.
+ * Absolute Positionierung statt Grid: ein Zettel muss aufklappen können,
+ * **ohne** dass seine Nachbarn mitwachsen. Positionen werden auf
+ * `[0, wallWidth − Breite]` geklemmt, auch gegen den Versatz.
  *
- * Die Untergrenze wird sowohl beim Suchen der Spalte als auch am fertigen
- * y-Wert erzwungen (`Math.max(floor, …)`) — Letzteres, damit auch der
- * y-Versatz (`jitterOf`) die Garantie nicht durch einen negativen Ausschlag
- * unterlaufen kann.
+ * **Linke Einrückung** (`indentOf`) nur in Spalte 0 und nicht aufgeklappt —
+ * mitten in einer Reihe risse sie ein Loch, statt die Kante aufzulockern.
  *
- * **Waagerechte Luft zum rechten Nachbarn** (`rowGapOf`, ein paar Pixel
- * Streuung, deterministisch, unabhängig von der Drehung): nach dem Setzen
- * eines Zettels bleiben die Spalten unmittelbar rechts von ihm bis zu diesem
- * Abstand auf derselben Höhe blockiert. Ein Zettel, der sich direkt daneben
- * (nicht darunter) einreihen will, muss diese Spalten meiden und rückt damit
- * um den reservierten Abstand ab. Ohne das reserviert nur `planNoteWidths`
- * die Luft — auf der Skyline selbst, wo tatsächlich positioniert wird, war
- * der gemessene Abstand vorher 0.
+ * **Vorgaben (`pins`).** Ein aufgeklappter Zettel bleibt liegen, wo er lag; die
+ * anderen weichen ihm aus. Die Funktion ist zustandslos, die Wand reicht die
+ * gemerkte Oberkante herein. Für einen vorgegebenen Zettel gilt:
  *
- * Grund für absolute Positionierung statt Grid: ein Zettel muss später
- * aufklappen und höher werden können, **ohne** dass seine Nachbarn mitwachsen.
- *
- * Positionen werden auf `[0, wallWidth − Breite]` geklemmt — kein Zettel ragt
- * über den Rand, auch nicht durch den Versatz.
- *
- * **Linke Einrückung** (`indentOf`, Karten-Redesign Ticket 00a): nur wenn ein
- * Zettel tatsächlich in der linken Spalte landet (`bestColumn === 0`) und
- * nicht aufgeklappt ist, kommt zum x-Jitter zusätzlich 0…12 px hinzu. Ein
- * Zettel, der irgendwo MITTEN in einer Reihe steht, bekommt keine Einrückung
- * — dort würde sie ein Loch in die Reihe reißen, statt nur die Kante
- * aufzulockern.
- *
- * **Vorgaben (`pins`, Ticket 13).** Ein aufgeklappter Zettel soll liegen
- * bleiben, wo er lag — die anderen weichen ihm aus, statt dass er sich einen
- * neuen Platz sucht. Diese Funktion ist zustandslos und kennt kein „vorher",
- * deshalb reicht die Wand die gemerkte Oberkante als Vorgabe herein. Für einen
- * vorgegebenen Zettel gilt:
- *
- * - Seine Oberkante ist gesetzt (`max(floor, …)`), er nimmt am Wettbewerb um
- *   die niedrigste Oberkante nicht teil und bekommt **keinen** y-Versatz —
- *   ein Versatz wäre eine Bewegung, und genau die soll ausbleiben.
- * - Die **weiche Gruppengrenze gilt weiter**: die Vorgabe wird nach unten gegen
- *   `floor` geklemmt, sonst stünde ein Projekt über einer fälligen Aufgabe.
- * - **Sie wird zusätzlich gegen die Unterkanten ihrer eigenen Spalten
- *   geklemmt** (`contentLine`). `floor` ist das Maximum der OBERKANTEN der
- *   Vorgruppe; ein hoher Zettel der Vorgruppe reicht weit darunter hinab und
- *   wäre für die Vorgabe sonst unsichtbar. Lassen sich „bleibt liegen" und
- *   „überlappt nicht" nicht zugleich einhalten, gewinnt „überlappt nicht" — die
- *   Vorgabe rutscht nach unten. Wo nichts im Weg ist, bleibt sie auf den Pixel
- *   liegen; geklemmt wird gegen echte Unterkanten, nicht gegen die Skyline mit
- *   ihrem Zierabstand.
- * - Er wirkt als **Sperrlinie**: nach seiner Platzierung liegt die Skyline in
- *   seinen eigenen Spalten auf seiner Unterkante und in allen übrigen mindestens
- *   auf seiner Oberkante. Kein danach gesetzter Zettel kann ihn überholen.
+ * - Seine Oberkante ist gesetzt, er bekommt **keinen** y-Versatz — ein Versatz
+ *   wäre genau die Bewegung, die ausbleiben soll.
+ * - Er wird nach unten gegen `floor` geklemmt und zusätzlich gegen die echten
+ *   Unterkanten seiner Spalten (`contentLine`), nicht gegen die Skyline mit
+ *   ihrem Zierabstand. Lassen sich „bleibt liegen" und „überlappt nicht" nicht
+ *   zugleich einhalten, gewinnt „überlappt nicht".
+ * - Er wirkt als **Sperrlinie**: danach liegt die Skyline in seinen Spalten auf
+ *   seiner Unterkante, in allen übrigen mindestens auf seiner Oberkante.
  * - **Wer vorher unter (oder neben) ihm lag, bleibt unter ihm.** Oberhalb der
- *   Vorgabe dürfen nur Zettel packen, deren `previousTop` echt kleiner ist als
- *   die Vorgabe, und auch die nur, wenn sie GANZ darüber passen. Ohne diese
- *   Bedingung würde der frei packende Rest in die Lücke rutschen, die der
- *   vorgegebene Zettel als schmaler Zettel hinterlassen hat — ein Zettel von
- *   unten stünde plötzlich oben.
- * - Waagerecht landet er an der linken Wandkante (Spalte 0, keine Einrückung).
- *   Für den einzigen Anwendungsfall — den aufgeklappten Zettel über die volle
- *   Wandbreite — ist das die einzig mögliche Stelle.
+ *   Vorgabe packen nur Zettel mit `previousTop` echt kleiner als die Vorgabe,
+ *   und nur, wenn sie GANZ darüber passen — sonst rutschte ein Zettel von unten
+ *   in die Lücke, die der vorgegebene Zettel als schmaler hinterlassen hat.
+ * - Waagerecht landet er in Spalte 0 ohne Einrückung — für den einzigen
+ *   Anwendungsfall, den wandbreiten aufgeklappten Zettel, die einzige Stelle.
  */
 export function packWall(
   notes: readonly WallNoteMetrics[],
@@ -882,55 +618,32 @@ export function packWall(
   pins: readonly WallPin[] = [],
 ): PackedWall {
   const columns = Math.max(1, Math.ceil(wallWidth / SKYLINE_RESOLUTION))
-  /**
-   * Das obere Polster für die überstehenden Befestigungen (Ticket 04).
-   *
-   * Aus den Zetteln gerechnet, die gleich gepackt werden — Breite und Neigung
-   * gehen beide ein, siehe `topPaddingFor`. Einmal vorab, weil der Wert die
-   * ganze Rechnung trägt und sich währenddessen nicht ändern darf.
-   */
+  /** Einmal vorab: der Wert trägt die ganze Rechnung und darf sich währenddessen nicht ändern. */
   const topPadding = topPaddingFor(notes)
-  // Die Skyline startet NICHT bei 0, sondern beim Polster für die
-  // Befestigungen (→ `topPadding`). Damit rechnet der ganze Packer von
-  // Anfang an in Wandkoordinaten MIT Polster: `height` bringt es mit, die
-  // Vorgaben (`pins`) und `previousTop` — beide stammen aus einem früheren
-  // Packergebnis — liegen im selben Bezugssystem, und niemand muss irgendwo
-  // etwas hinein- oder herausrechnen. Ein Versatz erst am Ausgang hätte genau
-  // diese Umrechnung am Eingang nach sich gezogen, mit einer Drift je Lauf,
-  // sobald man sie vergisst.
+  // Die Skyline startet beim Polster, nicht bei 0: der ganze Packer rechnet in
+  // Wandkoordinaten MIT Polster, und `pins` und `previousTop` — beide aus einem
+  // früheren Packergebnis — liegen im selben Bezugssystem. Ein Versatz erst am
+  // Ausgang verlangte eine Umrechnung am Eingang, mit Drift je Lauf, sobald
+  // man sie vergisst.
   const skyline = new Array<number>(columns).fill(topPadding)
   /**
-   * Die UNTERKANTEN des bereits Gesetzten, je Spalte — ohne den Abstand, den
-   * `skyline` zusätzlich führt (`gapOf` bzw. `EXPANDED_GAP`).
-   *
-   * Gebraucht wird sie ausschließlich, um eine Vorgabe nach unten zu klemmen
-   * (Ticket 13, QC-Befund 1). Gegen `skyline` zu klemmen wäre falsch: deren
-   * Abstand ist Zierde, kein Inhalt, und die Vorgabe würde um bis zu 15 px
-   * wandern, obwohl gar nichts überlappt. „Bleibt liegen" gilt weiter, solange
-   * nichts im Weg ist — nachgegeben wird nur gegen echte Überdeckung.
+   * Die UNTERKANTEN des Gesetzten je Spalte, ohne den Zierabstand der
+   * `skyline`. Damit wird eine Vorgabe geklemmt — gegen `skyline` wanderte sie
+   * bis zu 15 px, obwohl nichts überlappt.
    */
   const contentLine = new Array<number>(columns).fill(0)
   const placed: PackedNote[] = []
   /**
-   * Die fertigen Rechtecke des bereits Gesetzten — dieselbe Reihenfolge wie
-   * `placed`, nur mit Breite und Höhe dazu.
-   *
-   * Gebraucht für die **senkrechte Klemmung** in `place`: sie klemmt gegen die
-   * echten Rechtecke, nicht gegen `contentLine`. `contentLine` ist auf
-   * `SKYLINE_RESOLUTION` gerundet und meldet deshalb Berührung, wo in Wahrheit
-   * eine Lücke ist — jeder so verschobene Zettel kostet Wandhöhe, ohne dass er
-   * irgendetwas verdecken würde. Auf einer durch den Rand ohnehin schmaleren
-   * Wand ist das nicht zu verschenken.
-   *
-   * Ein paralleles Feld statt zusätzlicher Felder in `PackedNote`: die
-   * Schnittstelle nach außen bleibt unverändert, Breite und Höhe sind
-   * Rechenzwischenstand und keine Zusage an den Aufrufer.
+   * Die fertigen Rechtecke, parallel zu `placed` — für die senkrechte Klemmung
+   * in `place`. Nicht `contentLine`: die ist auf `SKYLINE_RESOLUTION` gerundet
+   * und meldet Berührung, wo eine Lücke ist. Eigenes Feld, weil Breite und Höhe
+   * keine Zusage an den Aufrufer sind.
    */
   const placedBoxes: Array<{ x: number; width: number; y: number; height: number }> = []
 
-  // Gruppen in Eingabereihenfolge sammeln, dann nach Gruppennummer aufsteigend
-  // abarbeiten (fällig → täglich → Projekt). Die Wand reicht die Zettel zwar
-  // bereits so sortiert herein, aber das ist keine Zusage dieser Funktion.
+  // Nach Gruppennummer aufsteigend abarbeiten (fällig → täglich → Projekt). Die
+  // Wand reicht die Zettel zwar bereits so sortiert herein, aber das ist keine
+  // Zusage dieser Funktion.
   const byGroup = new Map<number, WallNoteMetrics[]>()
   for (const note of notes) {
     const bucket = byGroup.get(note.group)
@@ -944,44 +657,23 @@ export function packWall(
   const pinnedTops = resolvePins(pins, (id) => heights.get(id))
 
   /**
-   * Weiche Untergrenze für die aktuell gepackte Gruppe, siehe Funktionskommentar.
-   *
-   * Startet auf dem Polster für die Befestigungen (→ `topPadding`), nicht
-   * auf 0. Die angehobene Skyline allein reicht dafür NICHT: `y` ist
-   * `max(floor, contentMax, top + dy)`, und der y-Versatz `dy` zieht bis zu
-   * 6,5 px nach oben — der oberste Zettel würde sich das Polster wieder
-   * abziehen und seine Befestigung stünde erneut über dem Kork. `floor` ist
-   * genau die Klemme, die das schon für die Gruppengrenze verhindert; die
-   * Oberkante der Wand ist derselbe Fall.
-   *
-   * Die Abstände der Zettel untereinander bleiben davon unberührt: schon vorher
-   * konnte der oberste Zettel seinen Aufwärtsversatz nicht nutzen (`max(0, …)`),
-   * das Bild ist also um genau das Polster verschoben, sonst identisch.
+   * Weiche Untergrenze der aktuellen Gruppe. Startet auf `topPadding`, nicht 0:
+   * die angehobene Skyline allein reicht NICHT, denn `dy` zieht bis zu 6,5 px
+   * nach oben, und die Befestigung des obersten Zettels stünde wieder über dem
+   * Kork.
    */
   let floor = topPadding
 
   /**
-   * Der waagerechte Versatz je Zettel, einmal gerechnet.
-   *
-   * `drawnBox` läuft im Suchlauf **je Kandidatenspalte** — ohne diesen Merker
-   * liefe `fnv1a` über jede Kennung einige hunderttausend Mal statt einmal.
-   * Der Merker ändert nichts am Ergebnis: beide Werte hängen ausschließlich an
-   * der Kennung.
-   *
-   * `indent` steht hier ohne die Bedingung `column === 0` — die kennt nur
-   * `drawnBox`, weil erst dort die Spalte feststeht.
+   * Waagerechter Versatz je Zettel, gemerkt: `drawnBox` läuft je
+   * Kandidatenspalte. `indent` gilt nur in Spalte 0 — das entscheidet
+   * `drawnBox`.
    */
   const offsetCache = new Map<string, { jitter: number; indent: number }>()
   const offsetsOf = (note: WallNoteMetrics, pinned: boolean) => {
-    // Ein aufgeklappter oder vorgegebener Zettel bekommt keinen Versatz.
-    //
-    // **`pinned` schaltet seit Ticket 14 auch den x-Jitter ab**, nicht mehr nur
-    // die Einrückung. Vorher bekam eine Vorgabe, die nicht zugleich aufgeklappt
-    // war, sehr wohl x-Jitter. Das war folgenlos, solange die Sperrlinie über
-    // die feste Spalte lief; seit sie über die GEZEICHNETE Position läuft,
-    // stünde sie um den Versatz daneben. Der einzige heutige Aufrufer setzt
-    // Vorgaben immer aufgeklappt und wandbreit — die Lücke war latent, nicht
-    // erreichbar. Sie ist jetzt zu.
+    // Ein aufgeklappter oder vorgegebener Zettel bekommt keinen Versatz — auch
+    // keinen x-Jitter: die Sperrlinie läuft über die GEZEICHNETE Position und
+    // stünde sonst um den Versatz neben dem Zettel.
     if (note.expanded || pinned) return { jitter: 0, indent: 0 }
     const hit = offsetCache.get(note.id)
     if (hit) return hit
@@ -992,22 +684,14 @@ export function packWall(
 
   /**
    * **Die einzige Stelle, die weiß, wo ein Zettel tatsächlich gezeichnet wird.**
+   * Suche, Reservierung und Zeichnung müssen denselben Kasten samt Versatz
+   * (`jitterOf` + `indentOf`) sehen — sonst ragt ein versetzter Zettel in
+   * Spalten, die niemand für ihn zurückgelegt hat.
    *
-   * Vor Ticket 14 stand der Versatz (`jitterOf` + `indentOf`) erst in `place` —
-   * gesucht und reserviert wurde über `bestColumn … bestColumn + span`,
-   * gezeichnet aber bei `bestColumn × SKYLINE_RESOLUTION + dx`. Die
-   * Reservierung kannte `dx` nicht: ein nach rechts versetzter Zettel ragte in
-   * Spalten, die niemand für ihn zurückgelegt hatte.
-   *
-   * **Deshalb liefert dieser Helfer die Spalten und wird VOR der Spaltensuche
-   * gerufen, nicht danach.** „Erst suchen, dann breiter reservieren" wäre zu
-   * wenig: ein Zettel mit negativem `dx` ragt nach **links** in eine Spalte,
-   * deren Skyline höher liegen kann als die gefundene Oberkante — er würde in
-   * seinen linken Nachbarn gezeichnet, obwohl rechts alles sauber reserviert
-   * ist. Die Suche muss den fertigen Kasten bewerten, nicht den geplanten.
-   *
-   * Keine Zirkularität, obwohl `indentOf` an der linken Spalte hängt: die
-   * Spalte kommt als Parameter herein, der Helfer entscheidet sie nicht.
+   * **Deshalb wird er VOR der Spaltensuche gerufen, nicht danach.** „Erst
+   * suchen, dann breiter reservieren" reicht nicht: ein Zettel mit negativem
+   * `dx` ragt nach **links** in eine Spalte, deren Skyline höher liegen kann —
+   * er würde in seinen linken Nachbarn gezeichnet.
    *
    * `colEnd` ist **exklusiv**.
    */
@@ -1043,69 +727,33 @@ export function packWall(
     const place = (note: WallNoteMetrics, column: number, top: number, pinned: boolean) => {
       // Dieselbe Rechnung wie im Suchlauf (`packFree`) — beide fragen
       // `drawnBox`. Weicht die eine von der anderen ab, reserviert der Packer
-      // wieder woanders, als er zeichnet; genau das war der Fehler vor
-      // Ticket 14.
+      // woanders, als er zeichnet.
       const { x, width, colStart, colEnd } = drawnBox(note, column, pinned)
       const dy = note.expanded || pinned ? 0 : jitterOf(note.id, 'y', 4) - 2.5
 
-      // Eine Vorgabe wird zusätzlich gegen die UNTERKANTEN ihrer eigenen
-      // Spalten geklemmt (Ticket 13, QC-Befund 1).
-      //
-      // `floor` allein trägt das nicht: die weiche Gruppengrenze ist das
-      // Maximum der OBERKANTEN der Vorgruppe (so gewollt, siehe
-      // Funktionskommentar). Ein hoher Zettel der Vorgruppe, der weit unter
-      // seine eigene Oberkante hinabreicht, ist für `floor` damit unsichtbar —
-      // eine Vorgabe auf dessen Höhe landete mitten in ihm. Belegt am
-      // Minimalfall: ein 400 px hoher Zettel in Gruppe 0, eine wandbreite
-      // Vorgabe mit `top = 0` in Gruppe 1 → 180 × 50 px Überlapp.
-      //
-      // Die Richtung ist vom Ticket entschieden: lassen sich „bleibt liegen"
-      // und „überlappt nicht" nicht gleichzeitig einhalten, gewinnt „überlappt
-      // nicht" — dieselbe Begründung, mit der schon `floor` die Vorgabe nach
-      // unten klemmt. Ein Zettel, der einen anderen verdeckt, ist schlimmer als
-      // einer, der ein Stück gewandert ist.
-      //
-      // Innerhalb der EIGENEN Gruppe ist die Klemmung wirkungslos: `packFree`
-      // hat vor der Vorgabe nur gesetzt, was GANZ über ihr passt
-      // (`noteTop + height + JITTER_DOWN_MAX <= limitTop`), also liegt
-      // `contentLine` dort ohnehin nicht tiefer. Sie greift genau dort, wo der
-      // Fehler saß: an der Gruppengrenze.
+      // Eine Vorgabe wird zusätzlich gegen die UNTERKANTEN ihrer Spalten
+      // geklemmt: `floor` ist das Maximum der OBERKANTEN der Vorgruppe, ein
+      // hoher Zettel dort ist für `floor` unsichtbar — die Vorgabe landete
+      // mitten in ihm. „Überlappt nicht" schlägt „bleibt liegen". Innerhalb der
+      // eigenen Gruppe ist das wirkungslos (`packFree` setzt vor der Vorgabe nur,
+      // was GANZ darüber passt); es greift an der Gruppengrenze.
       let clamped = top
       if (pinned) {
-        // Über die GEZEICHNETEN Spalten, nicht über `column … column + span`.
-        // Zöge man diese Schleife bei der Umstellung auf `drawnBox` nicht mit,
-        // klemmte die Vorgabe gegen fremde Spalten — exakt der QC-Befund aus
-        // Ticket 13 (199 Fälle, 28,9 px Überdeckung, zu klein gemeldete
-        // Wandhöhe). Heute ist eine Vorgabe stets wandbreit und beginnt bei
-        // Spalte 0, beide Bereiche wären also gleich; das ist eine Eigenschaft
-        // des einzigen Aufrufers, keine dieser Funktion.
+        // Über die GEZEICHNETEN Spalten, nicht über `column … column + span` —
+        // sonst klemmt die Vorgabe gegen fremde Spalten. Dass beide heute
+        // gleich sind (Vorgabe wandbreit ab Spalte 0), ist eine Eigenschaft des
+        // einzigen Aufrufers, keine dieser Funktion.
         for (let k = colStart; k < colEnd; k++) {
           if (contentLine[k] > clamped) clamped = contentLine[k]
         }
       }
 
-      // **Senkrechte Klemmung gegen die echten Rechtecke** (Ticket 14).
-      //
-      // `dy` liegt in [−6,5; +1,5], der Abstand darunter (`gapOf`) bei 2…15 px
-      // — der tatsächliche Abstand `gapOf + dy` konnte damit bis auf −4,5 px
-      // fallen, gemessen wurden −3,80 px. Der Zettel wird deshalb nach unten
-      // gegen die Unterkante jedes bereits gesetzten Zettels geklemmt, mit dem
-      // er sich waagerecht überschneidet. Ergebnis: **0 px Überlapp per
-      // Konstruktion**, und der Versatz bleibt überall dort stehen, wo er
-      // nichts anrichtet — kein Eingriff an `jitterOf`, keine verschobene Mitte.
-      //
-      // **Bewusst nicht gegen `contentLine`.** Die ist auf
-      // `SKYLINE_RESOLUTION` gerundet und schöbe Zettel nach unten, die sich
-      // gar nicht berühren; das zahlte sich in Wandhöhe (Zusage aus Ticket 02).
-      //
-      // Warum das reicht, damit am Ende KEIN Paar überlappt: jeder Zettel wird
-      // beim Setzen gegen alles Vorherige geklemmt, und die Klemmung schiebt
-      // ihn nur nach unten. Jedes Paar wird also genau einmal geprüft — beim
-      // Setzen des späteren der beiden.
-      //
-      // Die Klemmung kann `y` nur ANHEBEN, nie senken: die Skyline führt über
-      // denselben Spalten bereits `Unterkante + Abstand`, `top` liegt also
-      // ohnehin nicht darunter. Sie greift genau dann, wenn `dy` negativ ist.
+      // **Senkrechte Klemmung gegen die echten Rechtecke** (nicht gegen die
+      // gerundete `contentLine`, die kostete Wandhöhe). `gapOf + dy` kann bis
+      // −4,5 px fallen; deshalb nach unten gegen jeden gesetzten Zettel, mit dem
+      // er sich waagerecht überschneidet — **0 px Überlapp per Konstruktion**:
+      // jedes Paar wird beim Setzen des späteren geprüft, und die Klemmung
+      // schiebt nur nach unten. Sie greift nur bei negativem `dy`.
       let contentMax = 0
       for (const box of placedBoxes) {
         if (box.x >= x + width || x >= box.x + box.width) continue
@@ -1113,38 +761,19 @@ export function packWall(
         if (bottom > contentMax) contentMax = bottom
       }
 
-      // Auf `floor` geklemmt: der y-Versatz darf einen Zettel etwas anheben,
-      // aber niemals über die Untergrenze der Gruppe hinaus — sonst könnte der
-      // Jitter allein die Gruppengrenze unterlaufen. Für einen vorgegebenen
-      // Zettel ist das dieselbe Klemmung, nur ohne Versatz.
+      // Auf `floor` geklemmt, sonst unterliefe der Versatz die Gruppengrenze.
       const y = Math.max(floor, contentMax, clamped + dy)
 
       const vGap = note.expanded ? EXPANDED_GAP : gapOf(note.id)
       const bottom = y + note.height + vGap
-      // **Nie senken.** Beim freien Packen ist die Zuweisung unschädlich, weil
-      // `top` dort aus genau diesen Spalten stammt und `bottom` deshalb nicht
-      // darunterfallen kann. Bei einer Vorgabe kommt `top` von außen: eine
-      // Zuweisung senkte die Skyline und löschte damit die Kollision, die die
-      // Sperrlinie unten gerade festhalten soll — sie steht in den eigenen
-      // Spalten auf `bottom` und fände den Wert bereits überschrieben vor
-      // (Ticket 13, QC-Befund 1; die zu klein gemeldete `height` kam daher).
+      // **Nie senken.** Bei einer Vorgabe kommt `top` von außen; eine Zuweisung
+      // senkte die Skyline und löschte die Kollision, die die Sperrlinie
+      // festhalten soll (zu klein gemeldete `height`).
       //
-      // **Voraussetzung** dafür, dass die Zuweisung beim freien Packen
-      // unschädlich bleibt: `note.height + vGap` muss größer sein als der
-      // maximale Aufwärtsschub des y-Versatzes. Sonst dürfte `bottom` unter die
-      // Skyline fallen, und was vorher gesenkt wurde, bliebe jetzt stehen. Der
-      // kleinste Zettel im Bestand misst 71 px, `height + vGap` also mindestens
-      // 73 — Faktor 11. Wer Zettel unter ~10 px zulässt (oder `display:none`
-      // misst), muss hier nachdenken.
-      //
-      // Der Aufwärtsschub war bis Ticket 13 mit 6,5 px beziffert (der volle
-      // Ausschlag von `dy`) und mit „freies Packen bleibt bitidentisch, 0 von
-      // 5000 Wänden" belegt. **Beides gilt nicht mehr.** Die senkrechte
-      // Klemmung oben verkleinert den Aufwärtsschub — sie kann ihn nie
-      // vergrößern —, die Voraussetzung ist also weiter erfüllt, aber sie steht
-      // jetzt auf einer kleineren Zahl als 6,5. Und jedes `y` ändert sich durch
-      // die Klemmung: der alte Bit-Identitäts-Beleg ist hinfällig und durch den
-      // Vorgabe-Fuzz aus Ticket 14 ersetzt.
+      // **Voraussetzung**, dass beim freien Packen nichts sinkt: `note.height +
+      // vGap` muss größer sein als der Aufwärtsschub von `dy` (höchstens
+      // 6,5 px). Wer Zettel unter ~10 px zulässt (oder `display:none` misst),
+      // muss hier nachdenken.
       const face = y + note.height
       for (let k = colStart; k < colEnd; k++) {
         if (skyline[k] < bottom) skyline[k] = bottom
@@ -1152,31 +781,17 @@ export function packWall(
       }
 
       if (pinned) {
-        // Sperrlinie: in den eigenen Spalten steht die Skyline auf der
-        // Unterkante, in allen übrigen mindestens auf der Oberkante. Damit kann
-        // kein später gesetzter Zettel seitlich an ihm vorbei nach oben.
-        // Auch hier die GEZEICHNETEN Spalten — dieselbe Falle wie bei der
-        // `contentLine`-Klemmung oben: mit `column … column + span` stünde die
-        // Sperrlinie um den Versatz neben dem Zettel, den sie festhalten soll.
+        // Sperrlinie: kein später gesetzter Zettel kommt seitlich an ihm vorbei
+        // nach oben. Auch hier die GEZEICHNETEN Spalten, sonst stünde sie um den
+        // Versatz neben dem Zettel.
         for (let k = 0; k < columns; k++) {
           const barrier = k >= colStart && k < colEnd ? bottom : y
           if (skyline[k] < barrier) skyline[k] = barrier
         }
       } else if (!note.expanded) {
-        // Waagerechte Luft zum rechten Nachbarn reservieren (siehe
-        // Funktionskommentar): die Spalten direkt rechts vom Zettel bleiben bis
-        // zu `rowGapOf(note.id)` px auf derselben Höhe blockiert. Rechts vom
-        // GEZEICHNETEN Kasten, nicht rechts von der geplanten Spalte.
-        //
-        // **Ab der exakten rechten Kante gerechnet, nicht ab `colEnd`**
-        // (Ticket 14a-2). `colEnd + ceil(rowGap / SKYLINE_RESOLUTION)` rundet
-        // zweimal auf: einmal die Kante des Zettels, einmal den Abstand — bis zu
-        // ~7 px, die niemand bestellt hat. Bis Ticket 14 holte der Nachbar sie
-        // über negativen x-Versatz zurück; seit die Reservierung die gezeichnete
-        // Position kennt, kann er das nicht mehr, und der Aufschlag stand
-        // ungefiltert im Bild (gemessen: 63,8 % der Nachbarpaare über dem Ziel
-        // von 8…16 px, Median 17,61 px). Eine Rundung bleibt zwangsläufig — die
-        // Skyline kennt nur ganze Spalten.
+        // Waagerechte Luft rechts vom GEZEICHNETEN Kasten. **Ab der exakten
+        // rechten Kante, nicht ab `colEnd`**: zweimal aufrunden ergäbe bis zu
+        // ~7 px, die niemand bestellt hat.
         const marginEnd = Math.min(
           columns,
           Math.ceil((x + width + rowGapOf(note.id)) / SKYLINE_RESOLUTION),
@@ -1186,41 +801,27 @@ export function packWall(
         }
       }
 
-      // `z` ist hier nur ein Platzhalter — die Stapelreihenfolge wird NICHT
-      // aus der Packreihenfolge übernommen, sondern erst unten aus der
-      // fertigen Position vergeben (siehe „Stapelreihenfolge" nach der
-      // Schleife und `PackedNote.z`).
+      // `z` ist ein Platzhalter — vergeben wird es erst nach der Schleife aus
+      // der fertigen Position (→ `PackedNote.z`).
       placed.push({ id: note.id, x, y, z: 0 })
       placedBoxes.push({ x, width, y, height: note.height })
       // `y`, nicht die geplante Oberkante — siehe Funktionskommentar, „Weiche
-      // Gruppengrenze". Über die ganze Gruppe maximiert, nicht nur über den
-      // zuletzt platzierten Zettel.
+      // Gruppengrenze".
       groupFloor = Math.max(groupFloor, y)
     }
 
     /**
-     * Freies Packen aus `pool`, bis nichts mehr passt.
-     *
-     * `limitTop` ist die Oberkante der nächsten Vorgabe: nur was GANZ darüber
-     * passt und vorher auch schon darüber lag, kommt hier zum Zug. Ohne Vorgabe
-     * steht dort `Infinity`, dann ist die Bedingung wirkungslos und es packt wie
-     * vor Ticket 13.
-     *
-     * **„Passt darüber" wird je SPALTE geprüft, nicht je Zettel, und notfalls
-     * ohne Zierabstand** (Ticket 16): vorher wurde erst die niedrigste Spalte
-     * gewählt und der ganze Zettel verworfen, wenn genau die nicht passte —
-     * ein Zettel, der vorher über der Vorgabe lag, fiel dadurch komplett unter
-     * sie, obwohl in einer anderen Spalte rechnerisch Platz war. Details an
-     * `noteTier` in der Schleife.
+     * Freies Packen aus `pool`, bis nichts mehr passt. `limitTop` ist die
+     * Oberkante der nächsten Vorgabe (sonst `Infinity`): nur was GANZ darüber
+     * passt und schon vorher darüber lag, kommt zum Zug — geprüft je SPALTE
+     * und notfalls ohne Zierabstand (→ `noteTier`).
      */
     const packFree = (limitTop: number) => {
       const limited = limitTop !== Infinity
       for (;;) {
-        // Freies Packen: für jeden verbliebenen Zettel dieser Gruppe zuerst die
-        // beste EIGENE Spalte suchen. Gewählt wird danach der Zettel mit der
-        // insgesamt niedrigsten Oberkante — bei exaktem Gleichstand entscheidet
-        // ein Hash der Aufgaben-Kennung, nicht die Position im Pool (siehe
-        // Funktionskommentar, „Der Tiebreak…").
+        // Für jeden verbliebenen Zettel zuerst die beste EIGENE Spalte, danach
+        // der Zettel mit der niedrigsten Oberkante; Gleichstand entscheidet der
+        // Hash (→ Funktionskommentar, „Der Tiebreak…").
         let bestIndex = -1
         let bestColumn = 0
         let bestTop = Infinity
@@ -1228,80 +829,41 @@ export function packWall(
 
         for (let i = 0; i < pool.length; i++) {
           const note = pool[i]
-          // Wer vorher auf gleicher Höhe oder tiefer lag als die Vorgabe, darf
-          // nicht darüber. Ein Zettel ohne bekannte Vorgeschichte (neu an der
-          // Wand) darf.
+          // Wer vorher auf gleicher Höhe oder tiefer lag, darf nicht darüber; ein
+          // neuer Zettel darf.
           if (limited && (note.previousTop ?? -Infinity) >= limitTop - 0.001) continue
 
           let noteTop = Infinity
           let noteColumn = 0
-          // **Spaltenwahl vor einer Sperrlinie (Ticket 16).** Bewertet wird
-          // die Nähe der erreichbaren Oberkante zur ALTEN (`previousTop`),
-          // nicht die niedrigste Oberkante — und nur unter den Spalten, in
-          // denen der Zettel GANZ über die Sperrlinie passt. Ohne
-          // Vorgeschichte (neuer Zettel) zählt wie bisher die niedrigste
-          // Oberkante; ohne Sperrlinie (`limited` falsch) ändert sich nichts.
-          //
-          // Die WELCHER-Zettel-zuerst-Wahl (unten, „Der Tiebreak…") bleibt
-          // dagegen gierig nach niedrigster Oberkante. Eine Platzierung in der
-          // Reihenfolge der alten Oberkanten wurde erprobt und verworfen: sie
-          // bewegte in der Harness MEHR Zettel über der Vorgabe (2,4 statt
-          // 0,9 je Aufklappen) — ohne x-Vorgeschichte driften die Zettel
-          // seitlich, und die alte Anordnung entsteht doch nicht.
+          // **Spaltenwahl vor einer Sperrlinie:** unter den Spalten, in denen der
+          // Zettel GANZ darüber passt, die Nähe zur ALTEN Oberkante
+          // (`previousTop`); ohne Vorgeschichte die niedrigste. Welcher Zettel
+          // zuerst kommt, bleibt gierig nach niedrigster Oberkante
+          // (→ docs/pinnwand-layout.md).
           const prevTarget = limited ? note.previousTop : undefined
           let noteScore = Infinity
           /**
-           * Stufe der gefundenen Spalte (Ticket 16): 0 = passt samt Zierabstand
-           * (Skyline), 1 = passt nur ohne ihn (`contentLine`). Die Skyline
-           * führt unter jedem Zettel `gapOf` (2…15 px) Zierde; eine Lücke, in
-           * die der Zettel rechnerisch hineinpasst, nimmt ihn damit oft nicht
-           * mehr auf, und er fiele komplett unter die Sperrlinie. Die zweite
-           * Stufe sucht deshalb gegen die echten Unterkanten: lieber ohne
+           * Stufe der Spalte: 0 = passt samt Zierabstand (Skyline), 1 = nur
+           * gegen die echten Unterkanten (`contentLine`) — lieber ohne
            * Zierabstand über der Sperrlinie als ganz darunter. Überlappfrei
-           * bleibt beides — `place` klemmt ohnehin gegen die echten Rechtecke
-           * (`placedBoxes`), und die Marge für den y-Versatz
-           * (`JITTER_DOWN_MAX`) wird auch in Stufe 1 verlangt, damit die
-           * Sperrlinie selbst nicht nachrutscht.
+           * bleibt beides (`place` klemmt gegen `placedBoxes`), und
+           * `JITTER_DOWN_MAX` gilt auch in Stufe 1, damit die Sperrlinie nicht
+           * nachrutscht.
            */
           let noteTier = 2
-          // **Über ALLE Startspalten, nicht mehr `start + span <= columns`**
-          // (Ticket 16). Die alte Grenze stand mit der Begründung da, was
-          // darüber hinausginge, klemmte `drawnBox` ohnehin auf dieselbe
-          // rechte Kante — das stimmt nur für nichtnegativen x-Versatz: bei
-          // negativem `dx` liegt die gezeichnete Position um bis zu 5 px LINKS
-          // der Startspalte, und die letzten Startspalten vor der Wandkante
-          // ergeben dann noch ungeklemmte, NEUE Kandidatenpositionen. Belegt
-          // an einer Harness-Wand: eine 94 px hohe Lücke an der rechten Kante
-          // blieb unerreichbar, weil die einzige passende Startspalte hinter
-          // der alten Grenze lag, und der Zettel fiel unter die Sperrlinie.
-          // Hinter der Klemmung entstehen jetzt Duplikate derselben rechten
-          // Kante — die kosten nur Rechenzeit, keine neuen Positionen. Der
-          // Helfer `spanOf` ist damit entfallen; die Sperrlinie einer Vorgabe
-          // rechnet seit Ticket 14 ohnehin mit `colStart … colEnd` aus
-          // `drawnBox`.
+          // **Über ALLE Startspalten, nicht nur `start + span <= columns`**: bei
+          // negativem `dx` ergeben die letzten Startspalten noch NEUE Positionen
+          // an der rechten Kante. Die Duplikate dahinter kosten nur Rechenzeit.
           for (let start = 0; start < columns; start++) {
-            // Bewertet wird der Kasten, in dem der Zettel am Ende TATSÄCHLICH
-            // steht (`drawnBox`), nicht `start … start + span`. Das ist der
-            // Kern von Ticket 14: der Versatz muss vor der Wahl bekannt sein,
-            // sonst wird woanders reserviert als gezeichnet.
             const box = drawnBox(note, start, false)
             let top = floor
             for (let k = box.colStart; k < box.colEnd; k++) {
               if (skyline[k] > top) top = skyline[k]
             }
-            // Vor einer Sperrlinie zählen nur Spalten, in denen der Zettel
-            // GANZ über sie passt — samt der Strecke, die der y-Versatz ihn
-            // noch nach unten schieben kann (geprüft wird die geplante
-            // Oberkante, gezeichnet die verschobene). Der Ausschluss steht
-            // seit Ticket 16 HIER statt nach der Spaltenwahl: vorher wurde
-            // erst die niedrigste Spalte gewählt und dann der ganze Zettel
-            // verworfen, wenn genau diese nicht passte — obwohl eine andere,
-            // etwas tiefere Spalte noch über der Sperrlinie frei war.
+            // Ausschluss je Spalte (samt `JITTER_DOWN_MAX`), nicht nach der
+            // Spaltenwahl — so kommt eine etwas tiefere Spalte noch zum Zug.
             let tier = 0
             if (limited && top + note.height + JITTER_DOWN_MAX > limitTop) {
-              // Stufe 1 (Ticket 16, siehe `noteTier`): passt der Zettel ohne
-              // den Zierabstand der Skyline — gegen die echten Unterkanten
-              // (`contentLine`) — noch ganz über die Sperrlinie?
               let face = floor
               for (let k = box.colStart; k < box.colEnd; k++) {
                 if (contentLine[k] > face) face = contentLine[k]
@@ -1310,10 +872,7 @@ export function packWall(
               tier = 1
               top = face
             }
-            // Bewertung: vor einer Sperrlinie die Nähe zur ALTEN Oberkante
-            // (Ticket 16 — die alte Anordnung reproduzieren, statt sie neu zu
-            // würfeln), sonst und ohne Vorgeschichte die niedrigste Oberkante.
-            // Eine Spalte mit Zierabstand (Stufe 0) sticht jede ohne (Stufe 1).
+            // Stufe 0 sticht Stufe 1, danach entscheidet `score`.
             const score = prevTarget === undefined ? top : Math.abs(top - prevTarget)
             if (tier < noteTier || (tier === noteTier && score < noteScore - 0.001)) {
               noteTier = tier
@@ -1356,20 +915,14 @@ export function packWall(
     floor = groupFloor
   }
 
-  // Stapelreihenfolge (Ticket 11) — siehe `PackedNote.z`: kleineres `x`
-  // gewinnt, bei Gleichstand kleineres `y`, bei erneutem Gleichstand ein Hash
-  // der Aufgaben-Kennung statt der Position im Feld (dieselbe Begründung wie
-  // beim Tiebreak weiter oben, „Der Tiebreak…" — eine verschobene Aufgabe im
-  // Store-Feld darf den Stapel nicht ändern).
+  // Stapelreihenfolge (→ `PackedNote.z`): bei erneutem Gleichstand ein Hash
+  // statt der Position im Feld — eine verschobene Aufgabe im Store darf den
+  // Stapel nicht ändern.
   //
-  // Sortiert wird eine KOPIE (`sortedAsc`); mutiert werden die `z`-Felder der
-  // ORIGINAL-Objekte in `placed` — deren Reihenfolge im Array bleibt die
-  // Packreihenfolge, das ist unbeobachtbar, weil kein Aufrufer sich auf die
-  // Array-Reihenfolge verlässt (jeder Konsument liest `note.z`).
-  //
-  // `sortedAsc[0]` hat das kleinste `x` (bzw. `y`) und muss das HÖCHSTE `z`
-  // bekommen — deshalb rückwärts durchgezählt (`length − index`), nicht
-  // `index + 1`.
+  // Sortiert wird eine KOPIE; mutiert werden die `z`-Felder der Objekte in
+  // `placed`, deren Array-Reihenfolge die Packreihenfolge bleibt (jeder
+  // Konsument liest `note.z`). `sortedAsc[0]` muss das HÖCHSTE `z` bekommen —
+  // deshalb `length − index`.
   const sortedAsc = [...placed].sort((a, b) => {
     if (a.x !== b.x) return a.x - b.x
     if (a.y !== b.y) return a.y - b.y
@@ -1379,37 +932,26 @@ export function packWall(
     note.z = sortedAsc.length - index
   })
 
-  // Obergrenze, benannt statt gehofft: `z` reicht höchstens von 1 bis
-  // `placed.length`. Bei realistischen Haushaltsgrößen bleibt das um
-  // Größenordnungen unter den `z-index`-Werten, die `WallNote.vue` per
-  // `!important` für den gezogenen (800) bzw. lang gedrückten (810) Zettel
-  // reserviert — dorthin darf dieser Wert nicht reichen, sonst könnte ein
-  // ruhender Zettel einen aktiv gezogenen verdecken. `WallView.vue` nutzt
-  // zusätzlich 600…(600+n) für die Fluganimation, ebenfalls oberhalb dieses
-  // Bereichs.
-  // Ohne `Math.max(0, …)`: `skyline` hat immer mindestens eine Spalte
-  // (`columns` ist auf 1 geklemmt) und liegt nie unter ihrem Startwert
-  // `topPadding` — der eine 0 wäre unerreichbar und läse sich wie ein Schutz,
-  // den es nicht gibt. Die leere Wand kommt von selbst auf 0 heraus: ohne
-  // Zettel ist `topPadding` 0 und die Skyline unberührt.
+  // `z` reicht von 1 bis `placed.length` und muss unter den `z-index`-Werten
+  // bleiben, die `WallNote.vue` per `!important` für den gezogenen (800) bzw.
+  // lang gedrückten (810) Zettel reserviert, und unter 600…(600+n) der
+  // Fluganimation in `WallView.vue` — sonst verdeckt ein ruhender Zettel einen
+  // aktiv gezogenen.
+  // Ohne `Math.max(0, …)`: `skyline` hat immer mindestens eine Spalte und liegt
+  // nie unter `topPadding`; die leere Wand kommt von selbst auf 0 heraus.
   return { notes: placed, height: Math.max(...skyline) }
 }
 
 /**
- * Die zuletzt gepackte Wandhöhe — **modulweit**, nicht je Ansicht (Ticket 02).
+ * Die zuletzt gepackte Wandhöhe — **modulweit**, nicht je Ansicht.
  *
  * `WallView` läuft bewusst ohne `keep-alive` und wird bei jedem Reiterwechsel
- * neu montiert. Der Platzhalter vor dem ersten Packlauf braucht aber eine
- * Mindesthöhe, sonst springt die Seite in dem Moment, in dem die Zettel
- * erscheinen — und eine geschätzte Konstante ist immer nur für genau eine
- * Wandhöhe richtig, in die eine Richtung wächst die Seite, in die andere
- * schrumpft sie.
- *
- * Beim Reiterwechsel sind es dieselben Aufgaben und damit fast dieselbe Höhe.
- * Ein Wert, der die Ansicht überlebt, trifft sie also nahezu exakt, statt zu
- * raten. Der Zustand ist bewusst schlicht: er ist nur eine Gedächtnisstütze für
- * die Darstellung, nichts hängt fachlich daran, und ein falscher Wert kostet
- * höchstens den Sprung, den es ohne ihn ohnehin gäbe.
+ * neu montiert. Der Platzhalter vor dem ersten Packlauf braucht eine
+ * Mindesthöhe, sonst springt die Seite, wenn die Zettel erscheinen; eine
+ * geschätzte Konstante stimmt nur für genau eine Wandhöhe. Beim Reiterwechsel
+ * sind es dieselben Aufgaben, ein Wert, der die Ansicht überlebt, trifft also
+ * nahezu exakt. Ein falscher Wert kostet höchstens den Sprung, den es ohne ihn
+ * ohnehin gäbe.
  */
 let lastPackedHeight = 0
 

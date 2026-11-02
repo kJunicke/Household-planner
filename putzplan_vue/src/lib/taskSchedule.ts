@@ -11,7 +11,7 @@ import type { Task } from '@/types/Task'
 // Vokabular wie in CONTEXT.md: "dran" heißt offen und zu tun, "Fälligkeit" ist der
 // Countdown einer erledigten Aufgabe. Deshalb 'pending' für dran und 'upcoming' für
 // den laufenden Countdown — nicht umgekehrt.
-export type TaskScheduleStatus =
+type TaskScheduleStatus =
   | 'never-done' // dran, noch nie erledigt
   | 'overdue' // dran, Kadenz überschritten
   | 'pending' // dran, Kadenz noch nicht abgelaufen (manuell dreckig)
@@ -25,12 +25,6 @@ export type TaskSchedule = {
   daysUntilDue: number | null // null wenn keine Kadenz oder nie erledigt
   urgency: number // Sortierschlüssel, größer = dringender
   postponedUntil: string | null // ISO-Datum (YYYY-MM-DD), nur im Zustand 'postponed'
-}
-
-// Überfällig im Sinne der Anzeige: die Kadenz ist gerissen oder es gab sie nie.
-// Steht hier, damit Karte und Status-Zeile dieselbe Menge meinen.
-export function isOverdue(schedule: TaskSchedule): boolean {
-  return schedule.status === 'overdue' || schedule.status === 'never-done'
 }
 
 const MS_PER_DAY = 1000 * 60 * 60 * 24

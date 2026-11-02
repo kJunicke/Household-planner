@@ -4,7 +4,8 @@ import { supabase } from '@/lib/supabase'
 import type { Household, HouseholdMember } from '@/types/households'
 import { useAuthStore } from './authStore'
 import { useToastStore } from './toastStore'
-import { DEFAULT_MEMBER_COLOR, pickMemberColor } from '@/lib/memberColors'
+import { DEFAULT_MEMBER_COLOR } from '@/lib/memberColors'
+import { DISPLAY_NAME_MAX_LENGTH, HOUSEHOLD_NAME_MAX_LENGTH } from '@/lib/limits'
 import {
   DEFAULT_WEEKLY_GOAL_POINTS,
   effectiveWeekStartDay,
@@ -17,10 +18,31 @@ import {
   type PendingWeekStart,
 } from '@/lib/weekWindow'
 import type { RealtimeChannel } from '@supabase/supabase-js'
+import { createLatestRunGuard } from '@/lib/latestRun'
+import { onSessionEnd } from '@/lib/sessionEnd'
+import { isNetworkError } from '@/lib/optimistic'
+import {
+  clearCachedHousehold,
+  readCachedHousehold,
+  writeCachedHousehold,
+} from '@/lib/householdCache'
+
+/** `localStorage`, oder `null`, wo schon der Zugriff wirft (gesperrter Speicher). */
+const browserStorage = (): Storage | null => {
+  try {
+    return window.localStorage
+  } catch {
+    return null
+  }
+}
 
 /** Grenzen des Wochenziels — identisch zum CHECK auf `households`. */
 export const MIN_WEEKLY_GOAL_POINTS = 1
 export const MAX_WEEKLY_GOAL_POINTS = 1000
+
+/** Anzeigename beim Anlegen/Beitreten: lokaler Teil der E-Mail, gekürzt. */
+const defaultDisplayName = (email: string | undefined): string =>
+  (email?.split('@')[0] || 'Unbekannt').slice(0, DISPLAY_NAME_MAX_LENGTH)
 
 interface CompletionWithEffort {
   user_id: string
@@ -65,6 +87,36 @@ export const useHouseholdStore = defineStore('household', () => {
     ...optimisticWeeklyCompletions.value,
   ])
 
+  // Wartet nach einem Offline-Start auf das Netz, um den Haushalt frisch zu laden.
+  let onlineRetryHandler: (() => void) | null = null
+  const cancelOnlineRetry = () => {
+    if (!onlineRetryHandler) return
+    window.removeEventListener('online', onlineRetryHandler)
+    onlineRetryHandler = null
+  }
+
+  /**
+   * Netzfehler beim Laden: mit dem zuletzt bekannten Haushalt dieses Kontos
+   * weitermachen, statt den Router-Guard zur Einrichtung schicken zu lassen.
+   * Sobald das Netz zurück ist, wird frisch geladen. `false` = kein Cache.
+   */
+  const startFromCachedHousehold = (userId: string): boolean => {
+    const storage = browserStorage()
+    const cached = storage ? readCachedHousehold(storage, userId) : null
+    if (!cached) return false
+    currentHousehold.value = cached.household
+    householdMembers.value = cached.members
+    subscribeToHouseholdSettings()
+    if (!onlineRetryHandler) {
+      onlineRetryHandler = () => {
+        cancelOnlineRetry()
+        void loadUserHousehold()
+      }
+      window.addEventListener('online', onlineRetryHandler)
+    }
+    return true
+  }
+
   // Actions
   const loadUserHousehold = async () => {
     const authStore = useAuthStore()
@@ -74,22 +126,39 @@ export const useHouseholdStore = defineStore('household', () => {
       console.error('No user logged in')
       return
     }
+    const userId = authStore.user.id
+    // Endet die Sitzung, während die Antwort unterwegs ist, gehört sie einem
+    // Konto, das nicht mehr angemeldet ist — dann nichts mehr setzen.
+    const stillSameUser = () => authStore.user?.id === userId
 
     // 1. Finde household_member Eintrag für diesen User
     const { data: memberData, error: memberError } = await supabase
       .from('household_members')
       .select('*')
-      .eq('user_id', authStore.user.id)
+      .eq('user_id', userId)
       .maybeSingle()
+
+    if (!stillSameUser()) return
 
     if (memberError) {
       console.error('Error loading household member:', memberError)
+      if (isNetworkError(memberError) && startFromCachedHousehold(userId)) {
+        toastStore.showToast('Offline – zuletzt geladener Haushalt', 'info')
+        return
+      }
       toastStore.showToast('Fehler beim Laden des Haushalts', 'error')
       return
     }
 
     if (!memberData) {
       console.log('User has no household')
+      // Leeren, nicht stehen lassen: sonst behält ein Konto ohne Haushalt den
+      // des vorigen, und der Router-Guard lässt es nie zur Einrichtung.
+      unsubscribeFromHouseholdSettings()
+      currentHousehold.value = null
+      householdMembers.value = []
+      const storage = browserStorage()
+      if (storage) clearCachedHousehold(storage, userId)
       return
     }
 
@@ -100,17 +169,35 @@ export const useHouseholdStore = defineStore('household', () => {
       .eq('household_id', memberData.household_id)
       .single()
 
+    if (!stillSameUser()) return
+
     if (householdError) {
       console.error('Error loading household:', householdError)
+      if (isNetworkError(householdError) && startFromCachedHousehold(userId)) {
+        toastStore.showToast('Offline – zuletzt geladener Haushalt', 'info')
+        return
+      }
       toastStore.showToast('Fehler beim Laden des Haushalts', 'error')
       return
     }
 
+    cancelOnlineRetry()
     currentHousehold.value = householdData
     console.log('Loaded household:', householdData)
 
     // 3. Lade alle Mitglieder des Households
     await loadHouseholdMembers()
+    if (!stillSameUser() || !currentHousehold.value) return
+
+    // Leere Mitgliederliste heißt: deren Laden ist gescheitert (man ist selbst
+    // Mitglied). Dann den vorigen, vollständigen Cache nicht überschreiben.
+    const storage = browserStorage()
+    if (storage && householdMembers.value.length > 0) {
+      writeCachedHousehold(storage, userId, {
+        household: currentHousehold.value,
+        members: householdMembers.value,
+      })
+    }
 
     // 4. Änderungen der Haushalts-Einstellungen mitbekommen
     subscribeToHouseholdSettings()
@@ -130,12 +217,17 @@ export const useHouseholdStore = defineStore('household', () => {
     // `household_members` (Farbe, Name) kann sie zwischen zwei Ladevorgängen
     // still kippen. Beitrittsdatum ist die fachliche Ordnung; `user_id` ist
     // der Tiebreaker, falls `joined_at` fehlt oder zweimal gleich ist.
+    const householdId = currentHousehold.value.household_id
     const { data, error } = await supabase
       .from('household_members')
       .select('user_id, household_id, display_name, user_color')
-      .eq('household_id', currentHousehold.value.household_id)
+      .eq('household_id', householdId)
       .order('joined_at', { ascending: true, nullsFirst: true })
       .order('user_id', { ascending: true })
+
+    // Haushalt inzwischen gewechselt oder Sitzung beendet: die Antwort
+    // gehört nicht mehr zum angezeigten Haushalt.
+    if (currentHousehold.value?.household_id !== householdId) return
 
     if (error) {
       console.error('Error loading household members:', error)
@@ -146,32 +238,6 @@ export const useHouseholdStore = defineStore('household', () => {
 
     householdMembers.value = data || []
     console.log('Loaded household members:', data)
-  }
-
-  const updateMemberDisplayName = async (newName: string) => {
-    const authStore = useAuthStore()
-    const toastStore = useToastStore()
-
-    if (!authStore.user || !currentHousehold.value) {
-      return { success: false, error: 'Not logged in or no household' }
-    }
-
-    const { error } = await supabase
-      .from('household_members')
-      .update({ display_name: newName })
-      .eq('user_id', authStore.user.id)
-      .eq('household_id', currentHousehold.value.household_id)
-
-    if (error) {
-      console.error('Error updating display name:', error)
-      toastStore.showToast('Fehler beim Aktualisieren des Namens', 'error')
-      return { success: false, error: error.message }
-    }
-
-    // Update local state
-    await loadHouseholdMembers()
-    toastStore.showToast('Name aktualisiert', 'success', 3000)
-    return { success: true }
   }
 
   const updateMemberProfile = async (newName: string, newColor: string) => {
@@ -317,16 +383,24 @@ export const useHouseholdStore = defineStore('household', () => {
       console.error('Error promoting pending week start:', error)
       return
     }
-    if (data) currentHousehold.value = data
+    if (data && currentHousehold.value?.household_id === data.household_id) {
+      currentHousehold.value = data
+    }
   }
 
   /** Wochenstart, gegen den die geladenen Erledigungen gezogen wurden. */
   const loadedWeekStart = ref<string | null>(null)
 
+  // `force: true` startet Läufe parallel; ohne Schutz überschriebe eine
+  // später ankommende, ältere Antwort die Punkte der jüngeren Erledigung.
+  const weeklyLoadGuard = createLatestRunGuard()
+
   const runLoadWeeklyCompletions = async () => {
     if (!currentHousehold.value) return
+    const isLatest = weeklyLoadGuard.start()
 
     await promoteDueWeekStart()
+    if (!currentHousehold.value || !isLatest()) return
 
     const weekStart = currentWeekStart()
     loadedWeekStart.value = formatDayStamp(weekStart)
@@ -345,6 +419,8 @@ export const useHouseholdStore = defineStore('household', () => {
       )
       .eq('tasks.household_id', currentHousehold.value.household_id)
       .gte('completed_at', weekStart.toISOString())
+
+    if (!isLatest()) return
 
     if (error) {
       console.error('Error loading weekly completions:', error)
@@ -415,48 +491,6 @@ export const useHouseholdStore = defineStore('household', () => {
     })
 
     return pointsMap
-  })
-
-  // Anzahl heute (Kalendertag) im Haushalt abgeschlossener Aufgaben.
-  // Kooperative Momentum-Metrik fürs Putzen-Dashboard.
-  const todayCompletionsCount = computed(() => {
-    const now = new Date()
-    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate())
-    return effectiveWeeklyCompletions.value.filter((c) => new Date(c.completed_at) >= startOfToday)
-      .length
-  })
-
-  // Aktuelle User-Punkte diese Woche
-  const currentUserWeeklyPoints = computed(() => {
-    const authStore = useAuthStore()
-    if (!authStore.user) return 0
-    return weeklyPointsByUser.value.get(authStore.user.id) || 0
-  })
-
-  // Wöchentliche Rangliste — enthält **alle** Haushaltsmitglieder, auch solche
-  // ohne Punkte in dieser Woche. Wer führt, soll trotzdem sehen, wie viele Punkte
-  // die andere Person hat und welche Farbe sie trägt.
-  const weeklyRanking = computed(() => {
-    const authStore = useAuthStore()
-    if (!authStore.user) return []
-
-    const points = weeklyPointsByUser.value
-
-    return (
-      householdMembers.value
-        .map((member, index) => ({
-          userId: member.user_id,
-          name: member.display_name || 'Unbekannt',
-          color: member.user_color || '#4A90E2',
-          points: points.get(member.user_id) || 0,
-          isCurrentUser: member.user_id === authStore.user!.id,
-          order: index,
-        }))
-        // Punkte absteigend; bei Gleichstand die Mitgliederreihenfolge, damit
-        // die Liste nicht bei jeder Neuberechnung springt.
-        .sort((a, b) => b.points - a.points || a.order - b.order)
-        .map((entry, index) => ({ ...entry, rank: index + 1 }))
-    )
   })
 
   /**
@@ -561,6 +595,7 @@ export const useHouseholdStore = defineStore('household', () => {
       .maybeSingle()
 
     if (error || !data) return
+    if (currentHousehold.value?.household_id !== data.household_id) return
     currentHousehold.value = data
   }
 
@@ -644,33 +679,28 @@ export const useHouseholdStore = defineStore('household', () => {
       throw new Error('Not logged in')
     }
 
-    // 1. Create household (invite_code generated by Supabase)
-    const { data: householdData, error: householdError } = await supabase
-      .from('households')
-      .insert({ name })
-      .select()
-      .single()
-
-    if (householdError) {
-      console.error('Error creating household:', householdError)
-      toastStore.showToast('Fehler beim Erstellen des Haushalts', 'error')
-      throw new Error(householdError.message)
-    }
-
-    // 2. Add user as member with email as fallback display_name.
-    //    Creator is the first member → gets the first palette color.
-    const displayName = authStore.user.email?.split('@')[0] || 'Unbekannt'
-    const { error: memberError } = await supabase.from('household_members').insert({
-      household_id: householdData.household_id,
-      user_id: authStore.user.id,
-      display_name: displayName,
-      user_color: DEFAULT_MEMBER_COLOR,
+    // Haushalt und eigene Mitgliedschaft in einer Transaktion, serverseitig
+    // (RPC `create_household`, Migration 20261102120000). Ein direkter INSERT
+    // ist nach der Sicherheitsstufe 2 nicht mehr erlaubt. Der Gründer bekommt
+    // dort die erste Palettenfarbe (= DEFAULT_MEMBER_COLOR); der Code kommt
+    // aus dem Spalten-Default.
+    // Eine Funktion mit Rückgabetyp `households` (kein SETOF) liefert
+    // PostgREST als einzelnes Objekt, nicht als Array.
+    const { data, error: householdError } = await supabase.rpc('create_household', {
+      p_name: name.trim().slice(0, HOUSEHOLD_NAME_MAX_LENGTH),
+      p_display_name: defaultDisplayName(authStore.user.email),
     })
+    const householdData = data as Household | null
 
-    if (memberError) {
-      console.error('Error adding user to household:', memberError)
-      toastStore.showToast('Fehler beim Beitreten zum Haushalt', 'error')
-      throw new Error(memberError.message)
+    if (householdError || !householdData) {
+      console.error('Error creating household:', householdError)
+      toastStore.showToast(
+        householdError?.message === 'already_in_household'
+          ? 'Du bist bereits in einem Haushalt'
+          : 'Fehler beim Erstellen des Haushalts',
+        'error',
+      )
+      throw new Error(householdError?.message ?? 'create_household returned no row')
     }
 
     currentHousehold.value = householdData
@@ -699,39 +729,27 @@ export const useHouseholdStore = defineStore('household', () => {
       return false
     }
 
-    // 1. Find household by invite code
-    const { data: householdData, error: householdError } = await supabase
-      .from('households')
-      .select('*')
-      .eq('invite_code', inviteCode.toUpperCase())
-      .maybeSingle()
-
-    if (householdError || !householdData) {
-      console.error('Error finding household:', householdError)
-      toastStore.showToast('Ungültiger Einladungscode', 'error')
-      return false
-    }
-
-    // 2. Pick a color not yet used by existing members, so the new
-    //    member is visually distinct in avatars and charts.
-    const { data: existingMembers } = await supabase
-      .from('household_members')
-      .select('user_color')
-      .eq('household_id', householdData.household_id)
-    const memberColor = pickMemberColor((existingMembers || []).map((m) => m.user_color))
-
-    // 3. Add user as member with email as fallback display_name
-    const displayName = authStore.user.email?.split('@')[0] || 'Unbekannt'
-    const { error: memberError } = await supabase.from('household_members').insert({
-      household_id: householdData.household_id,
-      user_id: authStore.user.id,
-      display_name: displayName,
-      user_color: memberColor,
+    // Code prüfen und Mitgliedschaft anlegen — beides serverseitig (RPC
+    // `join_household`, Migration 20261102120000). Fremde Haushalte sind für
+    // Nicht-Mitglieder nicht lesbar, der Code ist der einzige Weg hinein.
+    // Die Farbe wählt die DB: erste im Haushalt noch freie Farbe aus
+    // MEMBER_COLORS (dort gespiegelt) — vor dem Beitritt sähe der Client die
+    // belegten Farben gar nicht.
+    const { data, error: joinError } = await supabase.rpc('join_household', {
+      p_invite_code: inviteCode.trim(),
+      p_display_name: defaultDisplayName(authStore.user.email),
     })
+    const householdData = data as Household | null
 
-    if (memberError) {
-      console.error('Error joining household:', memberError)
-      toastStore.showToast('Fehler beim Beitreten zum Haushalt', 'error')
+    if (joinError || !householdData) {
+      console.error('Error joining household:', joinError)
+      if (joinError?.message === 'invalid_invite_code') {
+        toastStore.showToast('Ungültiger Einladungscode', 'error')
+      } else if (joinError?.message === 'already_in_household') {
+        toastStore.showToast('Du bist bereits in einem Haushalt', 'error')
+      } else {
+        toastStore.showToast('Fehler beim Beitreten zum Haushalt', 'error')
+      }
       return false
     }
 
@@ -745,52 +763,32 @@ export const useHouseholdStore = defineStore('household', () => {
     return true
   }
 
-  const leaveHousehold = async () => {
-    const authStore = useAuthStore()
-    const toastStore = useToastStore()
-
-    if (!authStore.user) {
-      console.error('No user logged in')
-      toastStore.showToast('Fehler: Nicht angemeldet', 'error')
-      throw new Error('Not logged in')
-    }
-
-    if (!currentHousehold.value) {
-      toastStore.showToast('Fehler: Kein Haushalt vorhanden', 'error')
-      throw new Error('Not in a household')
-    }
-
-    // Delete household_member entry
-    const { error } = await supabase
-      .from('household_members')
-      .delete()
-      .eq('user_id', authStore.user.id)
-
-    if (error) {
-      console.error('Error leaving household:', error)
-      toastStore.showToast('Fehler beim Verlassen des Haushalts', 'error')
-      throw new Error(error.message)
-    }
-
-    // Clear state
+  // Session-Ende: alles, was an Konto und Haushalt hängt, weg — auch Kanal und
+  // Sichtbarkeits-Listener. In-flight-Ladevorgänge verwerfen ihre Antwort
+  // (Wächter oben), statt den alten Haushalt zurückzuschreiben.
+  onSessionEnd(({ userId }) => {
+    cancelOnlineRetry()
+    const storage = browserStorage()
+    if (storage) clearCachedHousehold(storage, userId)
     unsubscribeFromHouseholdSettings()
+    weeklyLoadGuard.invalidate()
+    inFlightWeeklyLoad = null
+    lastWeeklyLoadAt = 0
+    loadedWeekStart.value = null
     currentHousehold.value = null
     householdMembers.value = []
-    console.log('Left household')
-    toastStore.showToast('Haushalt verlassen', 'success', 3000)
-  }
+    weeklyCompletions.value = []
+    optimisticWeeklyCompletions.value = []
+  })
 
   return {
     currentHousehold,
     householdMembers,
     loadUserHousehold,
-    loadHouseholdMembers,
-    updateMemberDisplayName,
     updateMemberProfile,
     getCurrentMemberDisplayName,
     createHousehold,
     joinHousehold,
-    leaveHousehold,
     loadWeeklyCompletions,
     // Bewusst NICHT die rohe `weeklyCompletions` exportieren: wer sie statt
     // `effectiveWeeklyCompletions` benutzt, übersieht optimistische
@@ -798,21 +796,15 @@ export const useHouseholdStore = defineStore('household', () => {
     effectiveWeeklyCompletions,
     addOptimisticCompletion,
     removeOptimisticCompletion,
-    currentUserWeeklyPoints,
-    todayCompletionsCount,
-    weeklyRanking,
     weeklyContributions,
     weeklyTotalPoints,
     weeklyGoalPoints,
     weekStartDay,
     activeWeekStartDay,
-    pendingWeekStart,
     selectedWeekStartDay,
     updateWeeklyGoalSettings,
     weekStartEffectiveFrom,
     currentWeekStart,
     refreshHousehold,
-    subscribeToHouseholdSettings,
-    unsubscribeFromHouseholdSettings,
   }
 })

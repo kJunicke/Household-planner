@@ -4,11 +4,14 @@ import { useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/authStore'
 import { useHouseholdStore } from '../stores/householdStore'
 import { MEMBER_COLORS, DEFAULT_MEMBER_COLOR } from '../lib/memberColors'
-import { useDesignStore } from '../stores/designStore'
-import type { DesignMode } from '../lib/design'
 import { MIN_WEEKLY_GOAL_POINTS, MAX_WEEKLY_GOAL_POINTS } from '../stores/householdStore'
 import { WEEK_DAY_LABELS } from '../lib/weekWindow'
 import WeeklyGoalConfirmModal from './WeeklyGoalConfirmModal.vue'
+import LogoutConfirmModal from './LogoutConfirmModal.vue'
+import { useShoppingStore } from '../stores/shoppingStore'
+import { usePackingStore } from '../stores/packingStore'
+import { useTodoStore } from '../stores/todoStore'
+import { DISPLAY_NAME_MAX_LENGTH } from '@/lib/limits'
 
 const props = defineProps<{
   open: boolean
@@ -21,13 +24,6 @@ const emit = defineEmits<{
 const router = useRouter()
 const authStore = useAuthStore()
 const householdStore = useHouseholdStore()
-const designStore = useDesignStore()
-
-// Aussehen-Auswahl. Gilt nur für dieses Gerät, greift sofort ohne Neuladen.
-const designOptions: { value: DesignMode; label: string; hint: string }[] = [
-  { value: 'classic', label: 'Klassisch', hint: 'Das gewohnte Aussehen' },
-  { value: 'pinnwand', label: 'Pinnwand', hint: 'Kork, Papier und Tinte' },
-]
 
 const isEditingName = ref(false)
 const newDisplayName = ref('')
@@ -54,10 +50,34 @@ const copyInviteCode = async () => {
   }
 }
 
-const handleLogout = async () => {
+// Ungesendete Listen-Änderungen. Packliste und To-do werden dafür angelegt,
+// falls ihre Ansicht noch nicht offen war — das liest nur den localStorage.
+const shoppingStore = useShoppingStore()
+const packingStore = usePackingStore()
+const todoStore = useTodoStore()
+const pendingMutationCount = computed(
+  () =>
+    shoppingStore.pendingMutationCount +
+    packingStore.pendingMutationCount +
+    todoStore.pendingMutationCount,
+)
+const showLogoutConfirm = ref(false)
+// Stand beim Öffnen: sendet die Warteschlange währenddessen, spränge die Zahl
+// unter dem Lesen auf 0 und der Text widerspräche sich. Bestätigen meldet ab,
+// egal was inzwischen gesendet ist.
+const pendingAtOpen = ref(0)
+
+const logout = async () => {
+  showLogoutConfirm.value = false
   await authStore.logout()
   closeSidebar()
   router.push('/login')
+}
+
+const handleLogout = () => {
+  pendingAtOpen.value = pendingMutationCount.value
+  if (pendingAtOpen.value > 0) showLogoutConfirm.value = true
+  else void logout()
 }
 
 const startEditingName = () => {
@@ -300,6 +320,7 @@ const buildDate = __BUILD_DATE__
             <div v-else class="profile-edit">
               <input
                 v-model="newDisplayName"
+                :maxlength="DISPLAY_NAME_MAX_LENGTH"
                 type="text"
                 class="form-control mb-3"
                 placeholder="Dein Name"
@@ -380,32 +401,6 @@ const buildDate = __BUILD_DATE__
               <i class="bi bi-check-lg"></i> Wochenziel speichern
             </button>
           </section>
-
-          <!-- Aussehen Section -->
-          <section class="sidebar-section">
-            <h3>Aussehen</h3>
-            <div class="design-options">
-              <button
-                v-for="option in designOptions"
-                :key="option.value"
-                type="button"
-                class="design-option"
-                :class="{ selected: designStore.design === option.value }"
-                @click="designStore.setDesign(option.value)"
-              >
-                <span class="design-swatch" :class="`swatch-${option.value}`" />
-                <span class="design-text">
-                  <span class="design-label">{{ option.label }}</span>
-                  <span class="design-hint">{{ option.hint }}</span>
-                </span>
-                <i
-                  v-if="designStore.design === option.value"
-                  class="bi bi-check-lg design-check"
-                ></i>
-              </button>
-            </div>
-            <p class="design-note">Gilt nur für dieses Gerät.</p>
-          </section>
         </div>
 
         <!-- Footer with Logout -->
@@ -439,6 +434,13 @@ const buildDate = __BUILD_DATE__
       :effective-from="goalEffectiveFrom"
       @close="showGoalConfirm = false"
       @confirm="confirmGoalChange"
+    />
+
+    <LogoutConfirmModal
+      v-if="showLogoutConfirm"
+      :pending-count="pendingAtOpen"
+      @close="showLogoutConfirm = false"
+      @confirm="logout"
     />
   </Teleport>
 </template>
@@ -516,6 +518,7 @@ const buildDate = __BUILD_DATE__
 }
 
 .close-btn {
+  position: relative;
   background: none;
   border: none;
   font-size: 1.5rem;
@@ -528,6 +531,18 @@ const buildDate = __BUILD_DATE__
 
 .close-btn:hover {
   color: var(--color-text-primary);
+}
+
+/* Sichtbar kleiner, damit die Kopfzeile ihre Höhe behält; die Trefferfläche wächst
+   per Pseudo-Element auf 48px und bleibt im Innenabstand der Kopfzeile. */
+.close-btn::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: var(--touch-target-min, 48px);
+  height: var(--touch-target-min, 48px);
+  transform: translate(-50%, -50%);
 }
 
 /* Sidebar Content */
@@ -762,85 +777,6 @@ const buildDate = __BUILD_DATE__
 
 .goal-save {
   min-height: var(--touch-target-min);
-}
-
-/* Aussehen */
-.design-options {
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacing-sm);
-}
-
-.design-option {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-md);
-  width: 100%;
-  min-height: var(--touch-target-min);
-  padding: var(--spacing-sm) var(--spacing-md);
-  text-align: left;
-  background: var(--color-background);
-  border: 2px solid var(--color-border);
-  border-radius: var(--radius-md);
-  color: var(--color-text-primary);
-  cursor: pointer;
-  transition: all var(--transition-base);
-}
-
-.design-option:hover {
-  border-color: var(--color-border-hover);
-}
-
-.design-option.selected {
-  border-color: var(--color-primary);
-  background: var(--color-background-elevated);
-}
-
-.design-swatch {
-  width: 32px;
-  height: 32px;
-  flex-shrink: 0;
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--color-border);
-}
-
-.swatch-classic {
-  background: linear-gradient(135deg, #ffffff 0 50%, #4f46e5 50% 100%);
-}
-
-.swatch-pinnwand {
-  background: linear-gradient(135deg, #e7dcc8 0 50%, #fffdf6 50% 100%);
-  border-color: #241f1a;
-}
-
-.design-text {
-  display: flex;
-  flex-direction: column;
-  gap: 0.125rem;
-  flex: 1;
-  min-width: 0;
-}
-
-.design-label {
-  font-size: 0.9375rem;
-  font-weight: 600;
-}
-
-.design-hint {
-  font-size: 0.75rem;
-  color: var(--color-text-secondary);
-}
-
-.design-check {
-  color: var(--color-primary);
-  font-size: 1.125rem;
-  flex-shrink: 0;
-}
-
-.design-note {
-  margin: var(--spacing-sm) 0 0;
-  font-size: 0.75rem;
-  color: var(--color-text-secondary);
 }
 
 /* Sidebar Footer */

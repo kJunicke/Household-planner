@@ -98,6 +98,11 @@ Architekturentscheidungen: [docs/adr/](docs/adr/).
 - Technisch: `completed` wird gesetzt (bleibt alleinige Antwort auf „ist die Aufgabe dran"), das **Verschiebe-Datum** liegt in einer eigenen Spalte — nur Weckruf für den Cron, keine zweite Dranheits-Quelle. „Wieder dreckig" leert sie.
 - Nicht verfügbar bei täglichen Aufgaben (setzen sich nächtlich selbst zurück) und Projekten (durchgehend bearbeitbar, sammeln keine Überfällig-Tage).
 
+### Quick-Aufgabe
+- Etwas Erledigtes, das nicht an der Wand hing, nachträglich mit Titel und Punkten verbuchen — ohne Zettel.
+- Zählt wie jede Erledigung: Punkte ins Wochenziel, Eintrag in der Historie.
+- Technisch eine einmalige Aufgabe, die schon erledigt **und** gelöscht angelegt wird (`completed`, `deleted_at`), plus eine Erledigung mit `is_quick`. Deshalb nie als Zettel und nie unter **Erledigt**.
+
 ### Wochenziel
 - Punktzahl, die der Haushalt sich gemeinsam für eine Woche vornimmt; gehört dem Haushalt, jedes Mitglied darf sie ändern.
 - Gemessen gegen die Summe aller Erledigungen der laufenden Woche: **ein** Balken für alle, ein Farbsegment je Mitglied.
@@ -107,7 +112,7 @@ Architekturentscheidungen: [docs/adr/](docs/adr/).
   - geänderter Wochenstart erst ab nächster Woche — sonst verschwänden gesammelte Punkte scheinbar.
 
 ### Zettel
-- Eine einzelne Aufgabe im Pinnwand-Aussehen: ein Stück Papier an der Wand.
+- Eine einzelne Aufgabe auf der Pinnwand: ein Stück Papier an der Wand.
 - Das Papier trägt den Typ: wiederkehrend, täglich, einmalig und Projekt sehen unterschiedlich aus.
 - Immer **genau eine** Aufgabe; hat ein **Eselsohr** und lässt sich **abreißen**.
 
@@ -124,6 +129,20 @@ Architekturentscheidungen: [docs/adr/](docs/adr/).
 - Kategorie-Mutationen (anlegen, umbenennen, löschen, Einträge umhängen) laufen über dieselbe Offline-Warteschlange wie Einträge. Kollidiert beim Sync ein Name mit einer bereits bestehenden Zeile (zwei Geräte legen offline denselben Namen an, oder eine Umbenennung trifft eine vorhandene Kategorie), **verschmelzen** beide zu einer Zeile statt eines Fehlers.
 - Gilt gleichermaßen für Einkauf, Packliste und To-do — dieselbe Tabellenform, derselbe Vergleicher (`compareCategoryGroups`), unterschiedlich nur die Wortwahl der Oberfläche.
 
+### Besitzer (Warteschlange)
+- Konto **und** Haushalt, denen eine ungesendete Offline-Änderung gehört (`queueOwner`).
+- Gesendet wird nur, solange genau dieser Besitzer angemeldet ist; sonst wartet sie auf dem Gerät. Wer abmeldet, verliert nichts — derselbe Besitzer reicht sie beim nächsten Anmelden nach.
+- Sonst landete die Änderung mit der `household_id` des Nachfolgers in dessen Haushalt.
+
+### Altbestand (Warteschlange)
+- Ungesendete Offline-Änderungen ohne **Besitzer** — gespeichert, bevor Warteschlangen an Konto und Haushalt gebunden waren.
+- Übernommen wird er nur von einem Haushalt, dem jede darin genannte Liste gehört; sonst bleibt er unangetastet liegen.
+
+### Neuabgleich
+- Nach einem Durchlauf der Warteschlange den Stand einer Liste neu vom Server holen — wenn sie leer ist oder etwas verworfen wurde.
+- Zeilen mit noch wartender Änderung behalten ihren lokalen Stand; eine verworfene Änderung verschwindet dabei aus der Anzeige.
+- Ein Neuabgleich stößt selbst keinen Durchlauf an: der eben fertige hat alles versucht.
+
 ### Abreißen
 - Geste zum Erledigen: den Zettel am **Eselsohr** greifen und nach unten ziehen.
 - Fachlich dasselbe wie jede Erledigung — Punkte über die Edge Function `complete-task`, die Aufgabe verlässt „Jetzt dran".
@@ -137,7 +156,7 @@ Architekturentscheidungen: [docs/adr/](docs/adr/).
 ### Fetzen
 - Papierrest, der nach dem Abreißen unter der Wand hängen bleibt; trägt Titel und Punkte der Aufgabe.
 - Solange er hängt, ist die Erledigung widerrufbar → **Zurückkleben**.
-- Verfällt **nicht** von selbst: verschwindet erst beim Verlassen der Pinnwand, beim Umschalten des Aussehens oder beim Neuladen.
+- Verfällt **nicht** von selbst: verschwindet erst beim Verlassen der Pinnwand oder beim Neuladen.
 - Es hängt immer nur **einer** — ein neuer Abriss ersetzt den vorigen, der ältere ist damit endgültig.
 
 ### Zurückkleben

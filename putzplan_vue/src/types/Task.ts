@@ -59,6 +59,10 @@ export interface Task {
   // bedeutungslosen Wert. Deshalb steht sie hier ohne `| null` — wer sie an einer
   // Nicht-Projekt-Zeile liest, hat kein fehlendes Feld, sondern die falsche Frage.
   project_saying_index: number
+
+  // Soft-Delete: gesetzt = gelöscht. Löschen ist ein UPDATE, Quick-Aufgaben werden
+  // gleich gelöscht angelegt — eine Zeile mit gesetztem Wert gehört nie auf die Wand.
+  deleted_at: string | null
 }
 
 export interface TaskCompletion {

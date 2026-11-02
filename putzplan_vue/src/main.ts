@@ -1,23 +1,25 @@
 import 'bootstrap/dist/css/bootstrap.min.css'
-import 'bootstrap/dist/js/bootstrap.bundle.min.js'
 import './assets/main.css'
 
-import { createApp } from 'vue'
+import { createApp, watch } from 'vue'
 import { createPinia } from 'pinia'
 import router from './router'
 import { useAuthStore } from './stores/authStore'
 import { useHouseholdStore } from './stores/householdStore'
 import { useShoppingStore } from './stores/shoppingStore'
 import { useVisualViewportHeight } from './composables/useVisualViewportHeight'
-import { initializeDesign } from './lib/design'
 
 import App from './App.vue'
 
-// Das Attribut ist zu diesem Zeitpunkt schon vom Inline-Script im <head> von
-// index.html gesetzt (dort, weil das gebaute CSS render-blockierend ist und
-// dieses Modul deferred läuft). Der Aufruf hier normalisiert nur noch: ein
-// kaputter localStorage-Wert wird auf 'classic' zurückgesetzt.
-initializeDesign()
+// Schlüssel des früheren klassischen Aussehens wegräumen (Aussehen-Umschalter,
+// Kategorie-Filter). Gelesen werden sie nicht mehr; `data-design` steht fest
+// in index.html.
+try {
+  localStorage.removeItem('putzplan.design')
+  localStorage.removeItem('putzplan_active_category')
+} catch {
+  // localStorage gesperrt — dann liegt dort auch nichts
+}
 
 // Visual-Viewport-Höhe global bereitstellen (--visual-viewport-height).
 // Das geteilte Modal-Muster bemisst sich daran, damit die Bildschirmtastatur
@@ -32,9 +34,10 @@ app.use(createPinia())
 const authStore = useAuthStore()
 await authStore.initializeAuth()
 
+const householdStore = useHouseholdStore()
+
 // Load household after auth is initialized
 if (authStore.user) {
-  const householdStore = useHouseholdStore()
   await householdStore.loadUserHousehold()
 }
 
@@ -44,4 +47,25 @@ if (authStore.user) {
 useShoppingStore()
 
 app.use(router)
+
+// Endet die Sitzung von außen (anderer Tab, widerrufenes Token), räumen die
+// Stores über `onSessionEnd` auf — aber der Router-Guard läuft nur beim
+// Navigieren, die Ansicht bliebe leer stehen. Übernimmt ohne Abmeldung ein
+// anderes Konto, braucht es dessen Haushalt, sonst schickte der Guard es zur
+// Einrichtung. Eine normale Anmeldung (vorher niemand) erledigt LoginView.
+watch(
+  () => authStore.user?.id ?? null,
+  async (userId, previousUserId) => {
+    if (userId === null) {
+      const name = router.currentRoute.value.name
+      if (name !== 'login' && name !== 'register') await router.replace('/login')
+      return
+    }
+    if (previousUserId !== null) {
+      await householdStore.loadUserHousehold()
+      await router.replace('/')
+    }
+  },
+)
+
 app.mount('#app')

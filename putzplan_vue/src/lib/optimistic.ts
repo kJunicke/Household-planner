@@ -139,7 +139,10 @@ export interface OptimisticMutation<S> {
   commit: () => Promise<void>
   /** Rücknahme mit dem Schnappschuss aus `apply` und dem Fehler des Commits. */
   revert: (snapshot: S, error: unknown) => void | Promise<void>
-  /** Läuft nach erfolgreichem Commit, noch innerhalb der Buchführung. */
+  /**
+   * Läuft nach erfolgreichem Commit, noch innerhalb der Buchführung. Ein Fehler
+   * hier wird nur geloggt — er macht den bestätigten Commit nicht rückgängig.
+   */
   onSuccess?: () => void | Promise<void>
   /** Fehlerbehandlung (z.B. Toast). Läuft nach `revert`. */
   onError?: (error: unknown) => void
@@ -150,7 +153,7 @@ export interface OptimisticMutation<S> {
  * Hintergrund, `revert` bei Fehlschlag.
  *
  * Rückgabe ist `true`, sobald optimistisch angewendet wurde (der Aufrufer darf
- * dann schon Konfetti zünden), bzw. `false`, wenn `apply` abgebrochen hat.
+ * dann schon Rückmeldung geben), bzw. `false`, wenn `apply` abgebrochen hat.
  * Das Versprechen auf den Serverabschluss steckt in `settled` — nur nutzen, wenn
  * wirklich auf die Bestätigung gewartet werden muss.
  */
@@ -184,7 +187,14 @@ export function runOptimistic<S>(mutation: OptimisticMutation<S>): {
   const settled = enqueue(mutation.entityId, async () => {
     try {
       await mutation.commit()
-      await mutation.onSuccess?.()
+      // Eigenes `try`: der Server hat bestätigt. Liefe ein werfender Nachlader
+      // in den `catch` darunter, nähme `revert` eine geschehene Änderung lokal
+      // zurück — Punkte gebucht, Karte wieder offen, Rückgängig weg.
+      try {
+        await mutation.onSuccess?.()
+      } catch (onSuccessError) {
+        console.error('Optimistic onSuccess failed after confirmed commit:', onSuccessError)
+      }
       return true
     } catch (error) {
       console.error('Optimistic mutation failed:', error)
@@ -204,28 +214,9 @@ export function runOptimistic<S>(mutation: OptimisticMutation<S>): {
   return { applied: true, settled }
 }
 
-/**
- * Netzfehler? Dann ist ein Nachlade-SELECT sinnlos — er läuft in dieselben
- * Timeouts und lässt die Oberfläche sekundenlang widersprüchlich stehen.
- * supabase-js verpackt Netzfehler als `FunctionsFetchError`/`TypeError` mit
- * „Failed to fetch"; zusätzlich zählt ein offline gemeldeter Browser.
- */
-export function isNetworkError(error: unknown): boolean {
-  if (typeof navigator !== 'undefined' && navigator.onLine === false) return true
-  if (!error) return false
-
-  const name = (error as { name?: string }).name ?? ''
-  if (name === 'FunctionsFetchError' || name === 'AbortError' || name === 'TypeError') return true
-
-  const message = String((error as { message?: string }).message ?? error).toLowerCase()
-  return (
-    message.includes('failed to fetch') ||
-    message.includes('networkerror') ||
-    message.includes('network error') ||
-    message.includes('load failed') ||
-    message.includes('fetch failed')
-  )
-}
+// Hier ausgelagert, damit die Offline-Warteschlange dieselbe Einordnung nutzt,
+// ohne den Supabase-Client mitzuladen.
+export { isNetworkError } from './networkError'
 
 /**
  * Rücknahme-Vorlage aus `patchItem`: die betroffenen Zeilen frisch aus der DB
@@ -274,7 +265,7 @@ export async function revertRows<
   }
 }
 
-/** Nur für Diagnose/Tests im Browser. */
+/** @public — Diagnose in der Browserkonsole: ohne Importeur im Code. */
 export const optimisticDebug = {
   pendingCount,
   inFlight,

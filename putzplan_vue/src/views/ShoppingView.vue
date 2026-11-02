@@ -1,11 +1,7 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted, ref, computed, watch } from 'vue'
-import {
-  useShoppingStore,
-  categoryKey,
-  compareCategoryGroups,
-  type ShoppingCategoryGroup,
-} from '@/stores/shoppingStore'
+import { useShoppingStore, type ShoppingCategoryGroup } from '@/stores/shoppingStore'
+import { categoryKey, compareCategoryGroups } from '@/lib/categoryOrder'
 import { useHouseholdStore } from '@/stores/householdStore'
 import { useNetworkStatus } from '@/composables/useNetworkStatus'
 import { useGraceWindow } from '@/composables/useGraceWindow'
@@ -21,6 +17,7 @@ import ShoppingCategoryCreateModal from '@/components/ShoppingCategoryCreateModa
 import CategoryEditModal from '@/components/CategoryEditModal.vue'
 import CategoryCombobox from '@/components/CategoryCombobox.vue'
 import LongSheet from '@/components/LongSheet.vue'
+import { SHOPPING_ITEM_NAME_MAX_LENGTH } from '@/lib/limits'
 
 const shoppingStore = useShoppingStore()
 const householdStore = useHouseholdStore()
@@ -301,7 +298,10 @@ const selectSuggestion = (suggestion: string) => {
   handleAddItem()
 }
 
-const handleInputFocus = () => {
+// Auch beim Tippen öffnen, nicht nur beim Fokus: nach Enter oder einem
+// Vorschlag leert `resetTopBar()` die Liste, das Feld behält aber den Fokus —
+// ein Fokus-Ereignis kommt dann bis zum nächsten Feldwechsel nicht mehr.
+const openSuggestions = () => {
   showSuggestions.value = true
 }
 const handleInputBlur = () => {
@@ -328,6 +328,8 @@ const suggestionsFor = (group: ShoppingCategoryGroup): string[] => {
   return out
 }
 
+// Auch beim Tippen öffnen: ein Vorschlag schließt die Liste, das Feld behält
+// aber den Fokus — ein Fokus-Ereignis kommt bis zum nächsten Feldwechsel nicht.
 const onSectionAddFocus = (key: string) => {
   suggestFocusKey.value = key
 }
@@ -585,16 +587,20 @@ onUnmounted(() => {
           <div class="search-container">
             <div class="top-bar">
               <div class="top-name-wrap">
+                <!-- Nicht an `isLoading` sperren: `loadItems` läuft nach jedem Anlegen
+                   im Hintergrund. Ein gesperrtes Feld verliert den Fokus, und die
+                   Handytastatur klappt nach jedem Artikel zu. Das Anlegen selbst
+                   geht über die Warteschlange; das Nachladen behält temp-Zeilen. -->
                 <input
                   v-model="searchInput"
                   type="text"
                   class="top-name-input"
                   placeholder="Produkt hinzufügen…"
-                  maxlength="200"
+                  :maxlength="SHOPPING_ITEM_NAME_MAX_LENGTH"
                   @keyup.enter="handleAddItem"
-                  @focus="handleInputFocus"
+                  @input="openSuggestions"
+                  @focus="openSuggestions"
                   @blur="handleInputBlur"
-                  :disabled="shoppingStore.isLoading"
                 />
                 <div v-if="showSuggestions && suggestions.length > 0" class="suggestions-dropdown">
                   <div
@@ -643,7 +649,7 @@ onUnmounted(() => {
               <button
                 class="top-btn top-add"
                 @click="handleAddItem"
-                :disabled="!searchInput.trim() || shoppingStore.isLoading"
+                :disabled="!searchInput.trim()"
                 title="Hinzufügen"
               >
                 <i class="bi bi-plus-lg"></i>
@@ -772,8 +778,9 @@ onUnmounted(() => {
                           :placeholder="
                             group.isUncategorized ? '+ hinzufügen…' : `+ zu ${group.label}…`
                           "
-                          maxlength="200"
+                          :maxlength="SHOPPING_ITEM_NAME_MAX_LENGTH"
                           @focus="onSectionAddFocus(group.key)"
+                          @input="onSectionAddFocus(group.key)"
                           @blur="onSectionAddBlur"
                           @keyup.enter="handleSectionAdd(group)"
                         />
@@ -938,7 +945,6 @@ onUnmounted(() => {
     :category="editingCategory.name"
     :item-count="editingCategory.count"
     :purchased-count="editingCategory.purchasedCount"
-    variants
     @rename="handleCategoryRename"
     @delete="handleCategoryDelete"
     @close="editingCategory = null"
@@ -960,7 +966,7 @@ onUnmounted(() => {
       <div class="modal-content" @click.stop>
         <div class="modal-header">
           <h5 class="modal-title">Neue Einkaufsliste</h5>
-          <button class="btn-close" @click="closeCreateListModal"></button>
+          <button class="btn-close" @click="closeCreateListModal" aria-label="Schließen"></button>
         </div>
         <div class="modal-body">
           <input
@@ -1076,14 +1082,18 @@ onUnmounted(() => {
 }
 
 /* Einzeilig bis hinunter zu 360 px: die festen Knöpfe behalten ihre Trefferfläche,
-   Produktfeld und Kategorie teilen sich den Rest — die Kategorie gibt zuerst nach. */
+   Produktfeld und Kategorie teilen sich den Rest — der Name gibt zuerst nach,
+   die Kategorie hält ihre Mindestbreite (Begründung in `ListAddBar.vue`). */
 .top-bar {
   display: flex;
   align-items: center;
   gap: 4px;
+  /* Bezugsrahmen der Namensvorschläge ist die ganze Leiste, nicht das
+     Namensfeld: das Feld allein ist auf schmalen Telefonen zu schmal, um
+     Vorschläge lesbar darunter zu zeigen. */
+  position: relative;
 }
 .top-name-wrap {
-  position: relative;
   flex: 1 1 40%;
   min-width: 0;
 }
@@ -1195,6 +1205,13 @@ onUnmounted(() => {
   text-align: left;
   font-size: var(--font-base);
   color: var(--color-text-primary);
+  /* Ein langer Name ohne Leerzeichen bricht um, statt das Dropdown seitlich
+     scrollbar zu machen. */
+  overflow-wrap: anywhere;
+  /* Die Liste ist eine Spalten-Flexbox mit `max-height`: ohne `0` staucht sie
+     umgebrochene Einträge unter ihre Inhaltshöhe, und der Text läuft in den
+     nächsten Eintrag. Überlauf gehört dem Bildlauf der Liste. */
+  flex-shrink: 0;
 }
 .suggestion-item:last-child {
   border-bottom: none;
@@ -1227,10 +1244,9 @@ onUnmounted(() => {
 }
 
 /* ---- Category Section ----
-   Etappe 2: die Sektions-Box entfällt vollständig — kein Rahmen, kein
-   Hintergrund, kein Innenabstand. Die Kategorie wird nur noch durch ihre
-   Kopfzeile auf dem Seitenhintergrund und den größeren Abstand nach unten
-   gegen die nächste abgegrenzt. */
+   Keine Sektions-Box — kein Rahmen, kein Hintergrund, kein Innenabstand.
+   Die Kategorie wird nur durch ihre Kopfzeile auf dem Seitenhintergrund und
+   den größeren Abstand nach unten gegen die nächste abgegrenzt. */
 .cat-section {
   margin-bottom: 8px;
   scroll-margin-top: 72px;
@@ -1429,9 +1445,11 @@ onUnmounted(() => {
   align-items: center;
   gap: 4px;
   padding: 0;
+  /* Vorschläge über die ganze Zeile statt nur über das Eingabefeld —
+     wie bei der oberen Leiste. */
+  position: relative;
 }
 .add-input-wrap {
-  position: relative;
   flex: 1;
   min-width: 0;
 }

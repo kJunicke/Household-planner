@@ -12,26 +12,29 @@ import {
   compareCategoryGroups,
   buildCategoryOptions,
 } from '@/lib/categoryOrder'
+import { pendingCategoryIds, runQueuePass, type QueuePassResult } from '@/lib/queueRetry'
+import { keepPendingLocal } from '@/lib/rowMerge'
+import { withStatus } from '@/lib/networkError'
+import {
+  legacyListsBelong,
+  ownedKey,
+  queueOwner,
+  readOwnedQueue,
+  removeFromOwnedQueue,
+  removeKeysWithPrefix,
+  writeOwnedQueue,
+} from '@/lib/queueStorage'
 import { useHouseholdStore } from './householdStore'
 import { useAuthStore } from './authStore'
 import { useToastStore } from './toastStore'
 import { registerSyncSource } from '@/composables/useSyncStatus'
+import { onSessionEnd } from '@/lib/sessionEnd'
 import type { RealtimeChannel } from '@supabase/supabase-js'
 
 // localStorage Keys
 const STORAGE_KEY_ITEMS = 'shopping_items_cache'
 const STORAGE_KEY_QUEUE = 'shopping_mutation_queue'
 const MAX_RETRIES = 5
-
-// Schlüssel, Normalisierung und Reihenfolge liegen seit Etappe 2 in
-// `@/lib/categoryOrder` — geteilt mit Packliste und To-do. Der Einkauf reicht sie
-// unverändert weiter, damit `ShoppingView.vue` weiter aus dem Store importiert.
-export {
-  UNCATEGORIZED,
-  normalizeCategoryName,
-  categoryKey,
-  compareCategoryGroups,
-} from '@/lib/categoryOrder'
 
 export interface ShoppingCategoryGroup {
   /** Real category label, or null for the Unkategorisiert bucket. */
@@ -68,17 +71,28 @@ export const useShoppingStore = defineStore('shopping', () => {
   // localStorage Helpers
   // ============================================================================
 
+  // Cache und Warteschlange hängen an Nutzer + Haushalt (siehe lib/queueStorage).
+  const storageOwner = computed(() =>
+    queueOwner(useAuthStore().user?.id, useHouseholdStore().currentHousehold?.household_id),
+  )
+
   const saveItemsToCache = () => {
+    const owner = storageOwner.value
+    if (!owner) return
     try {
-      localStorage.setItem(STORAGE_KEY_ITEMS, JSON.stringify(items.value))
+      const key = ownedKey(STORAGE_KEY_ITEMS, owner)
+      if (items.value.length === 0) localStorage.removeItem(key)
+      else localStorage.setItem(key, JSON.stringify(items.value))
     } catch (error) {
       console.error('Failed to save items to cache:', error)
     }
   }
 
   const loadItemsFromCache = () => {
+    const owner = storageOwner.value
+    if (!owner) return
     try {
-      const cached = localStorage.getItem(STORAGE_KEY_ITEMS)
+      const cached = localStorage.getItem(ownedKey(STORAGE_KEY_ITEMS, owner))
       if (cached) {
         items.value = JSON.parse(cached)
         console.log('📦 Loaded items from cache:', items.value.length)
@@ -88,21 +102,26 @@ export const useShoppingStore = defineStore('shopping', () => {
     }
   }
 
-  const saveQueueToStorage = () => {
+  const saveQueueToStorage = (owner = storageOwner.value) => {
+    if (!owner) return
     try {
-      localStorage.setItem(STORAGE_KEY_QUEUE, JSON.stringify(mutationQueue.value))
+      writeOwnedQueue(localStorage, STORAGE_KEY_QUEUE, owner, mutationQueue.value)
     } catch (error) {
       console.error('Failed to save queue to storage:', error)
     }
   }
 
   const loadQueueFromStorage = () => {
+    const owner = storageOwner.value
     try {
-      const cached = localStorage.getItem(STORAGE_KEY_QUEUE)
-      if (cached) {
-        mutationQueue.value = JSON.parse(cached)
-        console.log('📦 Loaded mutation queue from storage:', mutationQueue.value.length)
-      }
+      // Ein Altbestand ohne Besitzer nur, wenn seine Listen die dieses
+      // Haushalts sind. `loadItems` liest nach `loadLists` erneut.
+      mutationQueue.value = owner
+        ? readOwnedQueue(localStorage, STORAGE_KEY_QUEUE, owner, (legacy) =>
+            legacyListsBelong(legacy, new Set(lists.value.map((l) => l.list_id))),
+          )
+        : []
+      console.log('📦 Loaded mutation queue from storage:', mutationQueue.value.length)
     } catch (error) {
       console.error('Failed to load queue from storage:', error)
     }
@@ -111,14 +130,23 @@ export const useShoppingStore = defineStore('shopping', () => {
   // Offline-Queue sofort aus dem localStorage herstellen — ein reiner
   // Lesevorgang ohne Netzwerk. Dadurch kennt der Sync-Indikator im Header
   // unsynchronisierte Änderungen auch dann, wenn die Einkaufsansicht in dieser
-  // Sitzung noch nicht geöffnet wurde.
-  loadQueueFromStorage()
+  // Sitzung noch nicht geöffnet wurde. Wechselt der Besitzer (Abmelden,
+  // anderes Konto, anderer Haushalt), wird die bisherige Warteschlange unter
+  // ihrem Besitzer gesichert und die des neuen geladen.
+  watch(
+    storageOwner,
+    (owner, previous) => {
+      if (previous) saveQueueToStorage(previous)
+      loadQueueFromStorage()
+    },
+    { immediate: true },
+  )
 
   // Auto-save items to cache on change
   watch(items, saveItemsToCache, { deep: true })
 
   // Auto-save queue to storage on change
-  watch(mutationQueue, saveQueueToStorage, { deep: true })
+  watch(mutationQueue, () => saveQueueToStorage(), { deep: true })
 
   // ============================================================================
   // Getters (computed)
@@ -127,16 +155,6 @@ export const useShoppingStore = defineStore('shopping', () => {
   const currentListItems = computed(() => {
     if (!currentListId.value) return []
     return items.value.filter((item) => item.list_id === currentListId.value)
-  })
-
-  const unpurchasedItems = computed(() => {
-    return currentListItems.value
-      .filter((item) => !item.purchased)
-      .sort((a, b) => {
-        if (a.is_priority && !b.is_priority) return -1
-        if (!a.is_priority && b.is_priority) return 1
-        return a.name.localeCompare(b.name)
-      })
   })
 
   const purchasedItems = computed(() => {
@@ -232,10 +250,11 @@ export const useShoppingStore = defineStore('shopping', () => {
   )
 
   const hasPendingMutations = computed(() => mutationQueue.value.length > 0)
+  /** Für die Warnung vor dem Abmelden: wie viel noch nicht beim Server ist. */
+  const pendingMutationCount = computed(() => mutationQueue.value.length)
 
-  // Der Sync-Indikator im Header liest über diese Anmeldung mit. Der Einkauf ist
-  // heute die einzige Quelle mit Offline-Queue; weitere Stores melden sich später
-  // genauso an, ohne dass der Header sie kennen muss.
+  // Der Sync-Indikator im Header liest über diese Anmeldung mit, ohne die Stores
+  // zu kennen; Packliste und To-do melden sich über `createMutationQueue` an.
   registerSyncSource('shopping', { hasPending: hasPendingMutations, isSyncing })
 
   // ============================================================================
@@ -251,10 +270,6 @@ export const useShoppingStore = defineStore('shopping', () => {
     }
     mutationQueue.value.push(queueItem)
     console.log('📝 Added to queue:', queueItem)
-  }
-
-  const removeFromQueue = (queueId: string) => {
-    mutationQueue.value = mutationQueue.value.filter((m) => m.queueId !== queueId)
   }
 
   // ============================================================================
@@ -338,13 +353,26 @@ export const useShoppingStore = defineStore('shopping', () => {
   /**
    * Nach dem Sync die optimistische Kategorienzeile durch die echte ersetzen und
    * alle noch wartenden Mutationen auf die neue ID umbiegen.
+   *
+   * Der Name bleibt der lokale: offline anlegen und sofort umbenennen lässt ein
+   * `update` in der Warteschlange, während der Server hier noch mit dem
+   * angelegten Namen antwortet. Mit `real.name` spränge die Zeile zurück — und
+   * bliebe so, wenn der Sync vor dem wartenden Update abreißt.
+   *
+   * Fehlt die temp-Zeile lokal, wurde sie offline schon wieder gelöscht; das
+   * `delete` wartet hinter diesem `create`. Dann die echte Zeile nicht zeigen,
+   * nur die Warteschlange umbiegen, damit das `delete` die echte ID trifft.
    */
   const reconcileTempCategory = (tempId: string, real: ShoppingCategory) => {
-    const realExists = categories.value.some((c) => c.category_id === real.category_id)
-    categories.value = categories.value.filter(
-      (c) => c.category_id !== tempId && (!realExists || c.category_id !== real.category_id),
-    )
-    categories.value.push(real)
+    const localRow = categories.value.find((c) => c.category_id === tempId)
+
+    if (localRow) {
+      const realExists = categories.value.some((c) => c.category_id === real.category_id)
+      categories.value = categories.value.filter(
+        (c) => c.category_id !== tempId && (!realExists || c.category_id !== real.category_id),
+      )
+      categories.value.push({ ...real, name: localRow.name })
+    }
 
     for (const m of mutationQueue.value) {
       if (m.payload.categoryId === tempId) m.payload.categoryId = real.category_id
@@ -363,7 +391,7 @@ export const useShoppingStore = defineStore('shopping', () => {
     if (mutation.operation === 'create') {
       const listId = mutation.payload.listId!
       const name = mutation.payload.name!
-      const { data, error } = await supabase
+      const { data, error, status } = await supabase
         .from('shopping_categories')
         .insert({
           household_id: householdStore.currentHousehold!.household_id,
@@ -375,7 +403,7 @@ export const useShoppingStore = defineStore('shopping', () => {
         .single()
 
       if (error) {
-        if (error.code !== '23505') throw error
+        if (error.code !== '23505') throw withStatus(error, status)
         const { data: existing } = await supabase
           .from('shopping_categories')
           .select('*')
@@ -391,124 +419,178 @@ export const useShoppingStore = defineStore('shopping', () => {
     }
 
     if (mutation.operation === 'update') {
-      const { error } = await supabase
+      const { error, status } = await supabase
         .from('shopping_categories')
         .update(mutation.payload.updates!)
         .eq('category_id', categoryId!)
-      if (error && error.code !== '23505') throw error
+      if (error && error.code !== '23505') throw withStatus(error, status)
+      if (error) {
+        // Der neue Name gehört schon einer anderen Zeile dieser Liste:
+        // verschmelzen. Die Produkte folgen dem Namen über ihre eigenen
+        // wartenden Mutationen; die umbenannte Zeile bliebe sonst auf dem
+        // Server unter dem alten Namen stehen und käme beim Neuabgleich als
+        // leere Kategorie zurück.
+        const { error: deleteError, status: deleteStatus } = await supabase
+          .from('shopping_categories')
+          .delete()
+          .eq('category_id', categoryId!)
+        if (deleteError) throw withStatus(deleteError, deleteStatus)
+        categories.value = categories.value.filter((c) => c.category_id !== categoryId)
+      }
       return true
     }
 
-    const { error } = await supabase
+    const { error, status } = await supabase
       .from('shopping_categories')
       .delete()
       .eq('category_id', categoryId!)
-    if (error) throw error
+    if (error) throw withStatus(error, status)
     return true
   }
 
+  /**
+   * Eine wartende Mutation ausführen. `false` heißt „liegen lassen, kein
+   * Fehlversuch"; einen Wurf ordnet `runQueuePass` ein (Netzfehler zählen nicht).
+   */
   const processMutation = async (mutation: PendingMutation): Promise<boolean> => {
     const householdStore = useHouseholdStore()
 
-    try {
-      if (mutation.payload.entity === 'category') {
-        // Noch eine temp-ID heißt: das zugehörige Anlegen steht in derselben
-        // Warteschlange und ist noch nicht durch. In der Queue lassen, ohne einen
-        // Fehlversuch zu zählen — das Anlegen biegt die ID gleich um.
-        if (mutation.payload.categoryId?.startsWith('temp_')) return false
-        const ok = await processCategoryMutation(mutation)
-        console.log('✅ Synced category mutation:', mutation.operation, mutation.payload)
-        return ok
-      }
-
-      if (mutation.operation === 'create') {
-        const { data, error } = await supabase
-          .from('shopping_items')
-          .insert({
-            name: mutation.payload.name!,
-            household_id: householdStore.currentHousehold!.household_id,
-            list_id: mutation.payload.listId!,
-            category: mutation.payload.category ?? null,
-            quantity: mutation.payload.quantity ?? 1,
-          })
-          .select()
-          .single()
-
-        if (error) throw error
-
-        // Temp-ID chaining: swap the optimistic temp row for the real one and
-        // rewrite any already-queued follow-up mutations (toggle/edit/delete of
-        // an item created while offline) to the freshly-minted real id.
-        const tempId = mutation.payload.tempId
-        if (tempId && data) reconcileTempId(tempId, data as ShoppingItem)
-      } else if (mutation.operation === 'update') {
-        const { error } = await supabase
-          .from('shopping_items')
-          .update(mutation.payload.updates!)
-          .eq('shopping_item_id', mutation.payload.itemId!)
-
-        if (error) throw error
-      } else if (mutation.operation === 'delete') {
-        const { error } = await supabase
-          .from('shopping_items')
-          .delete()
-          .eq('shopping_item_id', mutation.payload.itemId!)
-
-        if (error) throw error
-      }
-
-      console.log('✅ Synced mutation:', mutation.operation, mutation.payload)
-      return true
-    } catch (error) {
-      console.error('❌ Failed to sync mutation:', mutation, error)
-      mutation.lastError = error instanceof Error ? error.message : String(error)
-      mutation.retries++
-      return false
+    if (mutation.payload.entity === 'category') {
+      // Noch eine temp-ID heißt: das zugehörige Anlegen steht in derselben
+      // Warteschlange und ist noch nicht durch. In der Queue lassen, ohne einen
+      // Fehlversuch zu zählen — das Anlegen biegt die ID gleich um.
+      if (mutation.payload.categoryId?.startsWith('temp_')) return false
+      const ok = await processCategoryMutation(mutation)
+      console.log('✅ Synced category mutation:', mutation.operation, mutation.payload)
+      return ok
     }
+
+    if (mutation.operation === 'create') {
+      const { data, error, status } = await supabase
+        .from('shopping_items')
+        .insert({
+          name: mutation.payload.name!,
+          household_id: householdStore.currentHousehold!.household_id,
+          list_id: mutation.payload.listId!,
+          category: mutation.payload.category ?? null,
+          quantity: mutation.payload.quantity ?? 1,
+        })
+        .select()
+        .single()
+
+      if (error) throw withStatus(error, status)
+
+      // Temp-ID chaining: swap the optimistic temp row for the real one and
+      // rewrite any already-queued follow-up mutations (toggle/edit/delete of
+      // an item created while offline) to the freshly-minted real id.
+      const tempId = mutation.payload.tempId
+      if (tempId && data) reconcileTempId(tempId, data as ShoppingItem)
+    } else if (mutation.operation === 'update') {
+      const { error, status } = await supabase
+        .from('shopping_items')
+        .update(mutation.payload.updates!)
+        .eq('shopping_item_id', mutation.payload.itemId!)
+
+      if (error) throw withStatus(error, status)
+    } else if (mutation.operation === 'delete') {
+      const { error, status } = await supabase
+        .from('shopping_items')
+        .delete()
+        .eq('shopping_item_id', mutation.payload.itemId!)
+
+      if (error) throw withStatus(error, status)
+    }
+
+    console.log('✅ Synced mutation:', mutation.operation, mutation.payload)
+    return true
   }
 
+  /** Aufgegebene Anlagen bekommen nie eine echte ID — ihre temp-Zeilen müssen weg. */
+  const dropDiscardedTempRows = (discarded: PendingMutation[]) => {
+    const tempItems = new Set(discarded.map((m) => m.payload.tempId).filter(Boolean))
+    const tempCats = new Set(discarded.map((m) => m.payload.tempCategoryId).filter(Boolean))
+    if (tempItems.size) items.value = items.value.filter((i) => !tempItems.has(i.shopping_item_id))
+    if (tempCats.size)
+      categories.value = categories.value.filter((c) => !tempCats.has(c.category_id))
+  }
+
+  // Läuft gerade der Neuabgleich nach einem Durchlauf? Dann stößt `loadItems`
+  // keinen weiteren an: der eben fertige hat alles versucht, ein sofortiger
+  // zweiter wiederholte nur dieselben Fehlschläge samt Meldung.
+  let reconciling = false
+  // Trifft der Neuabgleich auf ein laufendes Laden, ist es meist genau das, das
+  // den Durchlauf angestoßen hat — es kennt den Stand nach dem Verwerfen nicht.
+  // Ohne Nachholen bliebe die verworfene Änderung stehen, als wäre sie gespeichert.
+  let reconcileRequested = false
+
   const syncMutations = async () => {
-    if (isSyncing.value || mutationQueue.value.length === 0) return
+    const owner = storageOwner.value
+    if (!owner || isSyncing.value || mutationQueue.value.length === 0) return
 
     console.log('🔄 Starting sync of', mutationQueue.value.length, 'mutations...')
     isSyncing.value = true
 
     const toastStore = useToastStore()
-    const failedMutations: PendingMutation[] = []
-
-    for (const mutation of mutationQueue.value) {
-      if (mutation.retries >= MAX_RETRIES) {
-        console.warn('⚠️ Max retries reached for mutation:', mutation)
-        failedMutations.push(mutation)
-        continue
-      }
-
-      const success = await processMutation(mutation)
-
-      if (success) {
-        removeFromQueue(mutation.queueId)
-      } else {
-        failedMutations.push(mutation)
-      }
+    let result: QueuePassResult
+    try {
+      result = await runQueuePass({
+        current: () => mutationQueue.value,
+        process: processMutation,
+        remove: (ids) => {
+          // Hat das Abmelden die Anfrage überholt, liegt die Warteschlange
+          // schon gesichert unter dem alten Besitzer — dort streichen.
+          if (storageOwner.value === owner) {
+            mutationQueue.value = mutationQueue.value.filter((m) => !ids.includes(m.queueId))
+            return
+          }
+          try {
+            removeFromOwnedQueue(localStorage, STORAGE_KEY_QUEUE, owner, ids)
+          } catch (error) {
+            console.error('Failed to update stored queue:', error)
+          }
+        },
+        maxRetries: MAX_RETRIES,
+        shouldStop: () => storageOwner.value !== owner,
+      })
+    } finally {
+      isSyncing.value = false
     }
+    if (storageOwner.value !== owner) return
 
-    isSyncing.value = false
-
-    if (failedMutations.length > 0) {
-      console.warn('⚠️ Some mutations failed to sync:', failedMutations.length)
+    if (result.serverNotice) {
+      toastStore.showToast('Server antwortet nicht – Änderungen warten', 'info', 4000)
+    }
+    if (result.discarded.length > 0) {
+      console.warn('🗑️ Gave up on mutations:', result.discarded)
+      dropDiscardedTempRows(result.discarded)
       toastStore.showToast(
-        `${failedMutations.length} Änderung(en) konnten nicht synchronisiert werden`,
+        `${result.discarded.length} Änderung(en) ließen sich nicht speichern und wurden verworfen`,
+        'error',
+        5000,
+      )
+    } else if (result.failed > 0) {
+      console.warn('⚠️ Some mutations failed to sync:', result.failed)
+      toastStore.showToast(
+        `${result.failed} Änderung(en) konnten nicht synchronisiert werden`,
         'error',
         3000,
       )
-    } else if (mutationQueue.value.length === 0) {
+    } else if (!result.interrupted && mutationQueue.value.length === 0) {
       console.log('✅ All mutations synced successfully')
       toastStore.showToast('Einkaufsliste synchronisiert', 'success', 2000)
     }
 
-    if (mutationQueue.value.length === 0) {
-      await loadItems()
-      await loadCategories()
+    // Auch nach einem Verwerfen, wenn noch anderes wartet: der optimistische
+    // Stand der verworfenen Änderung bliebe sonst stehen, als wäre sie
+    // gespeichert. Wartende Zeilen behalten dabei ihren lokalen Stand.
+    if (mutationQueue.value.length === 0 || result.discarded.length > 0) {
+      reconciling = true
+      try {
+        await loadItems()
+        await loadCategories()
+      } finally {
+        reconciling = false
+      }
     }
   }
 
@@ -644,9 +726,12 @@ export const useShoppingStore = defineStore('shopping', () => {
   const loadItems = async () => {
     console.log('Loading shopping items...')
 
-    loadItemsFromCache()
+    // Nicht im Neuabgleich: der Cache wird erst im nächsten Tick gespeichert
+    // und trüge die eben verworfenen temp-Zeilen noch.
+    if (!reconciling) loadItemsFromCache()
 
     if (isLoading.value) {
+      if (reconciling) reconcileRequested = true
       console.log('Already loading shopping items, skipping...')
       return
     }
@@ -673,15 +758,15 @@ export const useShoppingStore = defineStore('shopping', () => {
       // items whose mutation is still queued keep their local (optimistic) copy,
       // and temp rows for not-yet-synced creates are preserved. Prevents a
       // concurrent reload (e.g. from another op's sync) from reverting a toggle
-      // that hasn't reached the DB yet.
-      const rows = data || []
+      // that hasn't reached the DB yet. A pending delete keeps the row away.
       const pendingIds = new Set(
         mutationQueue.value.map((m) => m.payload.itemId).filter(Boolean) as string[],
       )
-      const merged = rows.map((row) =>
-        pendingIds.has(row.shopping_item_id)
-          ? (items.value.find((i) => i.shopping_item_id === row.shopping_item_id) ?? row)
-          : row,
+      const merged = keepPendingLocal(
+        (data || []) as ShoppingItem[],
+        items.value,
+        pendingIds,
+        (i) => i.shopping_item_id,
       )
       const tempRows = items.value.filter((i) => i.shopping_item_id.startsWith('temp_'))
       items.value = [...merged, ...tempRows]
@@ -689,7 +774,7 @@ export const useShoppingStore = defineStore('shopping', () => {
 
       loadQueueFromStorage()
 
-      if (mutationQueue.value.length > 0) {
+      if (mutationQueue.value.length > 0 && !reconciling) {
         await syncMutations()
       }
     } catch (error) {
@@ -699,6 +784,17 @@ export const useShoppingStore = defineStore('shopping', () => {
       }
     } finally {
       isLoading.value = false
+    }
+
+    if (reconcileRequested) {
+      reconcileRequested = false
+      // Als Neuabgleich, damit er keinen Durchlauf anstößt — sonst eine Schleife.
+      reconciling = true
+      try {
+        await loadItems()
+      } finally {
+        reconciling = false
+      }
     }
   }
 
@@ -804,10 +900,11 @@ export const useShoppingStore = defineStore('shopping', () => {
       return false
     }
 
+    // `is_priority` bleibt stehen: Wer versehentlich abhakt und zurückholt, soll
+    // den Stern wiederhaben. Gekaufte zeigen ihn ohnehin nicht (ShoppingView).
     const now = new Date().toISOString()
     updateItemOptimistic(itemId, {
       purchased: true,
-      is_priority: false,
       times_purchased: item.times_purchased + 1,
       last_purchased_at: now,
       last_purchased_by: authStore.user.id,
@@ -819,7 +916,6 @@ export const useShoppingStore = defineStore('shopping', () => {
         itemId,
         updates: {
           purchased: true,
-          is_priority: false,
           times_purchased: item.times_purchased + 1,
           last_purchased_at: now,
           last_purchased_by: authStore.user.id,
@@ -884,9 +980,19 @@ export const useShoppingStore = defineStore('shopping', () => {
 
       if (error) throw error
 
-      // Noch nicht synchronisierte Zeilen überleben den Neuabgleich.
+      // Noch nicht synchronisierte Zeilen überleben den Neuabgleich, und eine
+      // wartende Umbenennung oder Löschung wird nicht vom Serverstand
+      // überschrieben.
       const pending = categories.value.filter((c) => c.category_id.startsWith('temp_'))
-      categories.value = [...(data ?? []), ...pending]
+      categories.value = [
+        ...keepPendingLocal(
+          (data ?? []) as ShoppingCategory[],
+          categories.value,
+          pendingCategoryIds(mutationQueue.value),
+          (c) => c.category_id,
+        ),
+        ...pending,
+      ]
     } catch (error) {
       console.error('Error loading shopping categories:', error)
     }
@@ -1058,6 +1164,10 @@ export const useShoppingStore = defineStore('shopping', () => {
 
     const hhId = householdStore.currentHousehold.household_id
 
+    // DELETE läuft je Tabelle über ein eigenes, ungefiltertes Abo: Das alte
+    // Zeilenbild trägt nur den Primärschlüssel, ein household_id-Filter verwirft
+    // das Ereignis, und ein fremd gelöschter Artikel bliebe hier stehen. Ein
+    // DELETE aus einem anderen Haushalt trifft lokal keine ID und ändert nichts.
     realtimeCategoriesChannel = supabase
       .channel(`shopping-categories-changes-${Date.now()}`)
       .on(
@@ -1083,11 +1193,14 @@ export const useShoppingStore = defineStore('shopping', () => {
             const index = categories.value.findIndex((c) => c.category_id === row.category_id)
             if (index !== -1) categories.value[index] = row
           }
-
-          if (payload.eventType === 'DELETE') {
-            const row = payload.old as ShoppingCategory
-            categories.value = categories.value.filter((c) => c.category_id !== row.category_id)
-          }
+        },
+      )
+      .on(
+        'postgres_changes',
+        { event: 'DELETE', schema: 'public', table: 'shopping_categories' },
+        (payload) => {
+          const row = payload.old as Pick<ShoppingCategory, 'category_id'>
+          categories.value = categories.value.filter((c) => c.category_id !== row.category_id)
         },
       )
       .subscribe()
@@ -1114,18 +1227,26 @@ export const useShoppingStore = defineStore('shopping', () => {
 
           if (payload.eventType === 'UPDATE') {
             const updatedItem = payload.new as ShoppingItem
+            // Wartet für die Zeile noch eine eigene Mutation, ist das Echo älter
+            // als der lokale Stand (schnell „gekauft" und wieder „zurück"). Den
+            // Serverstand holt der Neuabgleich, sobald die Warteschlange leer ist.
+            if (mutationQueue.value.some((m) => m.payload.itemId === updatedItem.shopping_item_id))
+              return
             const index = items.value.findIndex(
               (i) => i.shopping_item_id === updatedItem.shopping_item_id,
             )
             if (index !== -1) items.value[index] = updatedItem
           }
-
-          if (payload.eventType === 'DELETE') {
-            const deletedItem = payload.old as ShoppingItem
-            items.value = items.value.filter(
-              (i) => i.shopping_item_id !== deletedItem.shopping_item_id,
-            )
-          }
+        },
+      )
+      .on(
+        'postgres_changes',
+        { event: 'DELETE', schema: 'public', table: 'shopping_items' },
+        (payload) => {
+          const deletedItem = payload.old as Pick<ShoppingItem, 'shopping_item_id'>
+          items.value = items.value.filter(
+            (i) => i.shopping_item_id !== deletedItem.shopping_item_id,
+          )
         },
       )
       .subscribe()
@@ -1155,14 +1276,17 @@ export const useShoppingStore = defineStore('shopping', () => {
             const index = lists.value.findIndex((l) => l.list_id === updatedList.list_id)
             if (index !== -1) lists.value[index] = updatedList
           }
-
-          if (payload.eventType === 'DELETE') {
-            const deletedList = payload.old as ShoppingList
-            lists.value = lists.value.filter((l) => l.list_id !== deletedList.list_id)
-            items.value = items.value.filter((i) => i.list_id !== deletedList.list_id)
-            if (currentListId.value === deletedList.list_id) {
-              currentListId.value = lists.value[0]?.list_id ?? null
-            }
+        },
+      )
+      .on(
+        'postgres_changes',
+        { event: 'DELETE', schema: 'public', table: 'shopping_lists' },
+        (payload) => {
+          const deletedList = payload.old as Pick<ShoppingList, 'list_id'>
+          lists.value = lists.value.filter((l) => l.list_id !== deletedList.list_id)
+          items.value = items.value.filter((i) => i.list_id !== deletedList.list_id)
+          if (currentListId.value === deletedList.list_id) {
+            currentListId.value = lists.value[0]?.list_id ?? null
           }
         },
       )
@@ -1184,6 +1308,32 @@ export const useShoppingStore = defineStore('shopping', () => {
     }
   }
 
+  /**
+   * Läuft beim Session-Ende (Abmelden, SIGNED_OUT, Kontowechsel). Leert, was der nächste
+   * Nutzer auf diesem Gerät sonst sähe: Artikel, Listen, Kategorien, Abos und
+   * den Artikel-Cache im localStorage.
+   *
+   * Die Offline-Warteschlange bleibt bewusst stehen — Ungesendetes wäre sonst
+   * still verloren. Sie liegt unter Nutzer + Haushalt und läuft erst wieder,
+   * wenn derselbe Nutzer im selben Haushalt angemeldet ist; aus dem Speicher
+   * verschwindet sie von selbst, sobald `authStore.user` oder der Haushalt
+   * wechselt. Deshalb fasst diese Funktion sie nicht an: vor dem Abmelden
+   * aufgerufen, würde ein Leeren die gesicherte Warteschlange überschreiben.
+   */
+  const resetForSessionEnd = () => {
+    unsubscribeFromItems()
+    items.value = []
+    lists.value = []
+    categories.value = []
+    currentListId.value = null
+    try {
+      removeKeysWithPrefix(localStorage, STORAGE_KEY_ITEMS)
+    } catch (error) {
+      console.error('Failed to clear item cache:', error)
+    }
+  }
+  onSessionEnd(resetForSessionEnd)
+
   // ============================================================================
   // Return - Public API
   // ============================================================================
@@ -1196,9 +1346,9 @@ export const useShoppingStore = defineStore('shopping', () => {
     isSyncing,
     categories,
     hasPendingMutations,
+    pendingMutationCount,
     currentListItems,
     currentListCategories,
-    unpurchasedItems,
     purchasedItems,
     itemsByCategory,
     purchasedPerCategory,

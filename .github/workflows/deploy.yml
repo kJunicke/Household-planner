@@ -27,13 +27,25 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'
           cache: 'npm'
           cache-dependency-path: putzplan_vue/package-lock.json
 
       - name: Install dependencies
         working-directory: ./putzplan_vue
         run: npm ci
+
+      - name: Lint (nur prüfend, ohne --fix)
+        working-directory: ./putzplan_vue
+        run: npm run lint:check
+
+      - name: Ungenutzte Exporte und Abhängigkeiten (knip)
+        working-directory: ./putzplan_vue
+        run: npm run knip
+
+      - name: Unit-Tests (reine Logik)
+        working-directory: ./putzplan_vue
+        run: npm test
 
       - name: Create .env file with Supabase credentials
         working-directory: ./putzplan_vue

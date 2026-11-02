@@ -153,10 +153,29 @@
   align-items: center;
   justify-content: center;
   transition: color var(--transition-base);
+  /* Bootstrap dimmt auf `.5` — damit fiele `--color-text-secondary` auf Papier unter
+     den Mindestkontrast für Bedienelemente (3:1). Den Zustand „gesperrt" (`.25`)
+     setzt Bootstrap mit höherer Spezifität und bleibt. */
+  opacity: 1;
+}
+
+/* Das × zeichnet der Knopf selbst — `<button class="btn-close" aria-label="Schließen">`
+   bleibt leer. Bootstraps Hintergrundgrafik ist oben abgeschaltet; die Maske färbt das
+   Kreuz in `currentColor`, damit es der Textfarbe (und :hover) folgt. */
+.btn-close::before {
+  --close-x-icon: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath d='M.293.293a1 1 0 0 1 1.414 0L8 6.586 14.293.293a1 1 0 1 1 1.414 1.414L9.414 8l6.293 6.293a1 1 0 0 1-1.414 1.414L8 9.414l-6.293 6.293a1 1 0 0 1-1.414-1.414L6.586 8 .293 1.707a1 1 0 0 1 0-1.414'/%3e%3c/svg%3e");
+  content: '';
+  width: 1rem;
+  height: 1rem;
+  background-color: currentColor;
+  -webkit-mask: var(--close-x-icon) center / contain no-repeat;
+  mask: var(--close-x-icon) center / contain no-repeat;
 }
 
 .btn-close:hover {
   color: var(--color-text-primary);
+  /* Bootstraps `:hover` (`.75`) hat dieselbe Spezifität und hellte sonst auf. */
+  opacity: 1;
 }
 
 /* Mobile optimizations for modals */
@@ -187,7 +206,7 @@
 
 /* ============================================
    PAGE CONTAINER PATTERN
-   Used in: CleaningView, HistoryView, StatsView
+   Used in: HistoryView, StatsView
    ============================================ */
 .page-container {
   min-height: 100vh;
@@ -197,7 +216,7 @@
 
 /* ============================================
    SECTION TITLES
-   Used in: CleaningView, HistoryView, Header
+   Used in: HistoryView, Header
    Note: Typography (font-size, weight, color) from base.css
    ============================================ */
 .section-title {
@@ -233,38 +252,6 @@
    ============================================ */
 .form-group {
   margin-bottom: var(--spacing-lg);
-}
-
-/* ============================================
-   ICON BUTTON UTILITIES
-   Touch-friendly (48px Minimum - Android Standard)
-   ============================================ */
-.btn-icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
-  background: transparent;
-  color: var(--color-text-secondary);
-  cursor: pointer;
-  transition: all var(--transition-base);
-  flex-shrink: 0;
-  padding: 0;
-  width: var(--touch-target-min);
-  height: var(--touch-target-min);
-  min-width: var(--touch-target-min);
-  min-height: var(--touch-target-min);
-}
-
-.btn-icon:hover {
-  background: var(--color-background);
-  color: var(--color-primary);
-  border-color: var(--color-primary);
-}
-
-.btn-icon i {
-  font-size: var(--font-lg);
 }
 
 /* Ghost delete button: neutral by default so per-row trash icons don't

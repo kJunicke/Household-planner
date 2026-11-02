@@ -13,6 +13,7 @@
 import { computed, ref, watch } from 'vue'
 import CategoryCombobox from '@/components/CategoryCombobox.vue'
 import type { CategoryOption } from '@/types/CategoryOption'
+import { SHOPPING_ITEM_NAME_MAX_LENGTH } from '@/lib/limits'
 
 const props = withDefaults(
   defineProps<{
@@ -101,7 +102,10 @@ const selectSuggestion = (suggestion: string) => {
   handleAdd()
 }
 
-const handleInputFocus = () => {
+// Auch beim Tippen öffnen, nicht nur beim Fokus: nach Enter oder einem
+// Vorschlag leert `reset()` die Liste, das Feld behält aber den Fokus — ein
+// Fokus-Ereignis kommt dann bis zum nächsten Feldwechsel nicht mehr.
+const openSuggestions = () => {
   showSuggestions.value = true
 }
 // Der Klick auf einen Vorschlag kommt nach dem Blur — deshalb erst verzögert
@@ -122,10 +126,11 @@ const handleInputBlur = () => {
           type="text"
           class="top-name-input"
           :placeholder="placeholder"
-          maxlength="200"
+          :maxlength="SHOPPING_ITEM_NAME_MAX_LENGTH"
           :disabled="disabled"
           @keyup.enter="handleAdd"
-          @focus="handleInputFocus"
+          @input="openSuggestions"
+          @focus="openSuggestions"
           @blur="handleInputBlur"
         />
         <div v-if="showSuggestions && suggestions.length > 0" class="suggestions-dropdown">
@@ -198,14 +203,18 @@ const handleInputBlur = () => {
 }
 
 /* Einzeilig bis hinunter zu 360 px: die festen Knöpfe behalten ihre Trefferfläche,
-   Namensfeld und Kategorie teilen sich den Rest — die Kategorie gibt zuerst nach. */
+   Namensfeld und Kategorie teilen sich den Rest — der Name gibt zuerst nach
+   (Begründung an `.top-combo`). */
 .top-bar {
   display: flex;
   align-items: center;
   gap: 4px;
+  /* Bezugsrahmen der Namensvorschläge ist die ganze Leiste, nicht das
+     Namensfeld: das Feld allein ist auf schmalen Telefonen zu schmal, um
+     Vorschläge lesbar darunter zu zeigen. */
+  position: relative;
 }
 .top-name-wrap {
-  position: relative;
   flex: 1 1 40%;
   min-width: 0;
 }
@@ -223,13 +232,12 @@ const handleInputBlur = () => {
   outline: none;
   border-color: var(--color-primary);
 }
-/* 96px ist gemessen, nicht geraten: von der Aussenbreite gehen Rahmen (4),
-   Polsterung (12), Farbpunkt samt Abstand (11) und der Leeren-Knopf (15) ab —
-   bei den alten `min-width: 64px` blieben fuer das Eingabefeld selbst 28px, und
-   `QC-Kosmetik` und `QC-Kosmetika` sahen beide wie `QC-K…` aus (Befund F3).
-   Die Schranke greift ab rund 400px Leistenbreite; darueber teilen sich Name
-   und Kategorie weiter nach Anteil. Der Name gibt jetzt zuerst nach — ein
-   halber Eintragsname ist lesbar, ein halber Kategoriename verwechselbar. */
+/* Von der Aussenbreite gehen Rahmen (4), Polsterung (12), Farbpunkt samt Abstand
+   (11) und der Leeren-Knopf (15) ab; mit 96px bleibt dem Eingabefeld genug, um
+   ähnliche Kategorien (`Kosmetik`/`Kosmetika`) zu unterscheiden. Die Schranke
+   greift ab rund 400px Leistenbreite; darüber teilen sich Name und Kategorie
+   nach Anteil. Der Name gibt zuerst nach — ein halber Eintragsname ist lesbar,
+   ein halber Kategoriename verwechselbar. */
 .top-combo {
   flex: 1 1 30%;
   min-width: 96px;
@@ -325,6 +333,13 @@ const handleInputBlur = () => {
   text-align: left;
   font-size: var(--font-base);
   color: var(--color-text-primary);
+  /* Ein langer Name ohne Leerzeichen bricht um, statt das Dropdown seitlich
+     scrollbar zu machen. */
+  overflow-wrap: anywhere;
+  /* Die Liste ist eine Spalten-Flexbox mit `max-height`: ohne `0` staucht sie
+     umgebrochene Einträge unter ihre Inhaltshöhe, und der Text läuft in den
+     nächsten Eintrag. Überlauf gehört dem Bildlauf der Liste. */
+  flex-shrink: 0;
 }
 .suggestion-item:last-child {
   border-bottom: none;

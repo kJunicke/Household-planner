@@ -82,7 +82,7 @@ const getMemberName = (userId: string) => {
       <div class="modal-content settlement-modal" @click.stop>
         <div class="modal-header">
           <h5 class="modal-title">Neuer Ausgleich</h5>
-          <button class="btn-close" @click="emit('close')"></button>
+          <button class="btn-close" @click="emit('close')" aria-label="Schließen"></button>
         </div>
 
         <div class="modal-body">

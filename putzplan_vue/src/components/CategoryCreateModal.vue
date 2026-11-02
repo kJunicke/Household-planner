@@ -17,7 +17,7 @@ import type { CategoryOption } from '@/types/CategoryOption'
 import type { ImportSource } from '@/types/CategoryImport'
 
 /** Eintrag einer Liste, so wie diese Maske ihn braucht — listentypunabhängig. */
-export interface PickableItem {
+interface PickableItem {
   id: string
   name: string
   quantity: number
@@ -140,7 +140,7 @@ const submit = () => {
       <div class="modal-content" @click.stop>
         <div class="modal-header">
           <h5 class="modal-title">Kategorie anlegen</h5>
-          <button class="btn-close" @click="emit('close')"></button>
+          <button class="btn-close" @click="emit('close')" aria-label="Schließen"></button>
         </div>
 
         <div class="modal-body">

@@ -1,4 +1,4 @@
-import { ref, computed } from 'vue'
+import { ref } from 'vue'
 import { defineStore } from 'pinia'
 import type { Task, TaskCompletion, EnrichedCompletion } from '@/types/Task'
 import { supabase } from '@/lib/supabase'
@@ -15,6 +15,11 @@ import {
   runOptimistic,
   serializeMutation,
 } from '@/lib/optimistic'
+import { createLatestRunner } from '@/lib/latestRun'
+import { createJoinReloadGate } from '@/lib/joinReload'
+import { mergeLoadedRows, type ChangeDuringLoad } from '@/lib/rowMerge'
+import { collectKeysetPages } from '@/lib/keysetPages'
+import { onSessionEnd } from '@/lib/sessionEnd'
 
 /**
  * Optimistische Completion: trägt eine Client-Kennung, weil die `completion_id`
@@ -22,6 +27,13 @@ import {
  * darüber, statt ihn zu duplizieren.
  */
 type OptimisticCompletion = TaskCompletion & { clientMutationId: string }
+
+/**
+ * Seitengröße beim Blättern durch `task_completions` = `max_rows` von
+ * PostgREST (1000): größer kappt der Server ohnehin, kleiner kostet nur
+ * Anfragen.
+ */
+const COMPLETIONS_PAGE = 1000
 
 const isOptimistic = (c: TaskCompletion | EnrichedCompletion): c is OptimisticCompletion =>
   'clientMutationId' in c
@@ -93,6 +105,10 @@ export const useTaskStore = defineStore('tasks', () => {
 
   // Realtime subscription channel (wird in subscribe() initialisiert)
   let realtimeChannel: RealtimeChannel | null = null
+  let tasksVisibilityHandler: (() => void) | null = null
+  // Je Abo neu (→ `subscribeToTasks`); die Ladeläufe melden ihren Start.
+  let tasksJoinGate: ReturnType<typeof createJoinReloadGate> | null = null
+  let totalsJoinGate: ReturnType<typeof createJoinReloadGate> | null = null
 
   // Aufgaben, deren Abschluss gerade beim Server liegt — Doppel-Tap-Schutz,
   // siehe completeTask.
@@ -113,6 +129,14 @@ export const useTaskStore = defineStore('tasks', () => {
   // holen, die er selbst geschrieben hat. Der Schutz bleibt für alle anderen
   // Quellen (Realtime, fremde Reloads) bis zur Freigabe bestehen.
   let pendingBypass = new Set<string>()
+
+  // Realtime-Meldungen, die eintreffen, während `runLoadTasks` auf sein SELECT
+  // wartet. Sie können neuer sein als dessen Momentaufnahme und werden beim
+  // Mergen bevorzugt (→ `mergeLoadedRows`). `null` = gerade kein Ladevorgang.
+  let tasksChangedDuringLoad: Map<string, ChangeDuringLoad<Task>> | null = null
+  const noteTaskChange = (taskId: string, change: ChangeDuringLoad<Task>) => {
+    tasksChangedDuringLoad?.set(taskId, change)
+  }
 
   const loadTasks = (bypassIds: string[] = []): Promise<void> => {
     for (const id of bypassIds) pendingBypass.add(id)
@@ -155,23 +179,34 @@ export const useTaskStore = defineStore('tasks', () => {
     }
 
     isLoading.value = true
+    const changedDuringLoad = new Map<string, ChangeDuringLoad<Task>>()
+    tasksChangedDuringLoad = changedDuringLoad
 
     try {
+      const householdId = householdStore.currentHousehold.household_id
+      tasksJoinGate?.loadStarted()
       // Nur aktive Tasks laden (deleted_at IS NULL = nicht soft-deleted)
       const { data: tasksData, error: tasksError } = await supabase
         .from('tasks')
         .select('*')
-        .eq('household_id', householdStore.currentHousehold.household_id)
+        .eq('household_id', householdId)
         .is('deleted_at', null)
 
+      // Sitzung beendet oder Haushalt gewechselt, während die Antwort
+      // unterwegs war: sie gehört nicht mehr auf diese Wand.
+      if (householdStore.currentHousehold?.household_id !== householdId) return
       if (tasksError) throw tasksError
 
-      // Echo-Schutz: Zeilen, deren Mutation gerade unterwegs ist, behalten
-      // ihren optimistischen Zustand — sonst springt die Karte kurz zurück,
-      // weil der Server die Änderung noch nicht geschrieben hat.
-      tasks.value = (tasksData || []).map((row: Task) => {
-        if (bypass.has(row.task_id) || !isInFlight(row.task_id)) return row
-        return tasks.value.find((t) => t.task_id === row.task_id) ?? row
+      // Mergen statt ersetzen: eine fremde Änderung, die während des SELECT
+      // per Realtime kam, ist neuer als dessen Antwort. Echo-Schutz: Zeilen,
+      // deren eigene Mutation gerade unterwegs ist, behalten ihren
+      // optimistischen Zustand — sonst springt die Karte kurz zurück.
+      tasks.value = mergeLoadedRows({
+        loaded: (tasksData || []) as Task[],
+        current: tasks.value,
+        keyOf: (t) => t.task_id,
+        keepLocal: (id) => !bypass.has(id) && isInFlight(id),
+        changedDuringLoad,
       })
       console.log('Loaded tasks:', tasks.value)
       // Completions werden NICHT hier geladen - fetchCompletions() ist dafür zuständig
@@ -180,13 +215,14 @@ export const useTaskStore = defineStore('tasks', () => {
       console.error('Error loading tasks:', error)
       toastStore.showToast('Fehler beim Laden der Aufgaben', 'error')
     } finally {
+      if (tasksChangedDuringLoad === changedDuringLoad) tasksChangedDuringLoad = null
       isLoading.value = false
     }
   }
 
   // COMPLETE - Task als erledigt markieren (via Edge Function), optimistisch.
   //
-  // Die Karte bewegt sich sofort und der Aufrufer darf sofort Konfetti zünden;
+  // Die Karte bewegt sich sofort und der Aufrufer darf sofort Rückmeldung geben;
   // Edge Function und Reloads laufen im Hintergrund. Der Rückgabewert sagt
   // deshalb nur „lokal angewendet", nicht „serverseitig bestätigt".
   //
@@ -348,18 +384,23 @@ export const useTaskStore = defineStore('tasks', () => {
       },
 
       onSuccess: async () => {
-        // Reloads im Hintergrund — der Nutzer hat sein Konfetti längst.
+        // Reloads im Hintergrund — der Nutzer hat seine Rückmeldung längst.
         // Die eigenen Zeilen dürfen den Echo-Schutz umgehen, er selbst
         // bleibt gegen spät eintreffende Realtime-Echos bestehen.
-        await loadTasks(touchedIds)
-        await householdStore.loadWeeklyCompletions({ force: true })
-        // Erst NACH dem Reload entfernen, sonst zählt die Woche kurz doppelt
-        // bzw. fällt die Erledigung kurz aus dem Ranking.
-        householdStore.removeOptimisticCompletion(clientMutationId)
-        // Die echte Completion holen und die optimistische ERSETZEN, statt
-        // sie nur zu löschen — sonst verschwindet der Eintrag ersatzlos,
-        // wenn das Realtime-Echo ausbleibt.
-        await replaceOptimisticCompletion(clientMutationId, taskId, userId)
+        try {
+          await loadTasks(touchedIds)
+          await householdStore.loadWeeklyCompletions({ force: true })
+        } finally {
+          // Erst NACH dem Reload entfernen, sonst zählt die Woche kurz doppelt
+          // bzw. fällt die Erledigung kurz aus dem Ranking. Im `finally`: wirft
+          // ein Nachlader, bliebe die optimistische Zeile neben der bestätigten
+          // stehen und die Woche zählte die Erledigung dauerhaft doppelt.
+          householdStore.removeOptimisticCompletion(clientMutationId)
+          // Die echte Completion holen und die optimistische ERSETZEN, statt
+          // sie nur zu löschen — sonst verschwindet der Eintrag ersatzlos,
+          // wenn das Realtime-Echo ausbleibt.
+          await replaceOptimisticCompletion(clientMutationId, taskId, userId)
+        }
         // Das Projekt-Abzeichen zieht hier NICHT nach — das tut die
         // ERSTE Zeile des Realtime-INSERT-Zweiges, absichtlich vor allen
         // frühen `return`. Genau dieser Aufruf hier stand einmal an
@@ -410,7 +451,7 @@ export const useTaskStore = defineStore('tasks', () => {
       }
     }
 
-    // Bewusst NICHT awaiten: Konfetti hängt an der Aktion, nicht am Server.
+    // Bewusst NICHT awaiten: die Rückmeldung hängt an der Aktion, nicht am Server.
     return applied
   }
 
@@ -663,12 +704,8 @@ export const useTaskStore = defineStore('tasks', () => {
     undoTickets.delete(taskId)
   }
 
-  /** Gibt es für diese Aufgabe noch ein offenes Rückgängig-Fenster? */
-  const canUndoCompletion = (taskId: string) => undoTickets.has(taskId)
-
   /**
-   * ZURÜCKKLEBEN — die jüngste eigene Erledigung dieser Aufgabe zurücknehmen
-   * (Pinnwand-Redesign, Etappe 4, Ticket 11).
+   * ZURÜCKKLEBEN — die jüngste eigene Erledigung dieser Aufgabe zurücknehmen.
    *
    * **Was „rückgängig" auf Datenebene heißt.** `task_completions` ist
    * append-only und die einzige Quelle der Punkte. Beides gilt weiter — aber
@@ -1023,7 +1060,7 @@ export const useTaskStore = defineStore('tasks', () => {
   }
 
   // REALTIME - Subscribe zu Änderungen an tasks & task_completions
-  // Muss manuell aufgerufen werden (z.B. in HomeView.onMounted)
+  // Muss manuell aufgerufen werden (z.B. in WallView.onMounted)
   const subscribeToTasks = () => {
     const householdStore = useHouseholdStore()
 
@@ -1033,9 +1070,11 @@ export const useTaskStore = defineStore('tasks', () => {
     }
 
     // Alte Subscription cleanup (falls vorhanden)
-    if (realtimeChannel) {
-      supabase.removeChannel(realtimeChannel)
-    }
+    unsubscribeFromTasks()
+    const tasksGate = createJoinReloadGate()
+    const totalsGate = createJoinReloadGate()
+    tasksJoinGate = tasksGate
+    totalsJoinGate = totalsGate
 
     console.log(
       '🔴 Subscribing to tasks for household:',
@@ -1059,6 +1098,13 @@ export const useTaskStore = defineStore('tasks', () => {
           // INSERT - Neuer Task wurde erstellt
           if (payload.eventType === 'INSERT') {
             const newTask = payload.new as Task
+            // Quick-Aufgaben kommen gleich gelöscht an; ohne diese Prüfung
+            // stünden sie als „Erledigt"-Zettel auf der Wand.
+            if (newTask.deleted_at) {
+              noteTaskChange(newTask.task_id, { kind: 'remove' })
+              return
+            }
+            noteTaskChange(newTask.task_id, { kind: 'upsert', row: newTask })
             // Nur hinzufügen wenn nicht schon vorhanden (Race Condition vermeiden)
             if (!tasks.value.find((t) => t.task_id === newTask.task_id)) {
               tasks.value.push(newTask)
@@ -1068,10 +1114,19 @@ export const useTaskStore = defineStore('tasks', () => {
           // UPDATE - Task wurde geändert
           if (payload.eventType === 'UPDATE') {
             const updatedTask = payload.new as Task
+            // Löschen ist ein UPDATE auf `deleted_at`. Vor dem Echo-Schutz:
+            // eine gelöschte Zeile darf auch eine laufende Mutation nicht
+            // auf der Wand halten.
+            if (updatedTask.deleted_at) {
+              noteTaskChange(updatedTask.task_id, { kind: 'remove' })
+              tasks.value = tasks.value.filter((t) => t.task_id !== updatedTask.task_id)
+              return
+            }
             // Echo-Schutz: eine Zeile, deren eigene Mutation gerade
             // unterwegs ist, wird nicht überschrieben — sonst springt
             // der optimistische Zustand kurz zurück.
             if (isInFlight(updatedTask.task_id)) return
+            noteTaskChange(updatedTask.task_id, { kind: 'upsert', row: updatedTask })
             const index = tasks.value.findIndex((t) => t.task_id === updatedTask.task_id)
             if (index !== -1) {
               tasks.value[index] = updatedTask
@@ -1081,10 +1136,20 @@ export const useTaskStore = defineStore('tasks', () => {
           // DELETE - Task wurde gelöscht
           if (payload.eventType === 'DELETE') {
             const deletedTask = payload.old as Task
+            noteTaskChange(deletedTask.task_id, { kind: 'remove' })
             tasks.value = tasks.value.filter((t) => t.task_id !== deletedTask.task_id)
           }
         },
       )
+      // Hartes DELETE ungefiltert: ohne REPLICA IDENTITY FULL trägt es nur den
+      // PK, der household_id-Filter oben verwirft es. Die App löscht weich
+      // (UPDATE, siehe oben); das hier fängt Löschungen außerhalb der App.
+      // Fremde PKs treffen nichts.
+      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'tasks' }, (payload) => {
+        const deletedTask = payload.old as Pick<Task, 'task_id'>
+        noteTaskChange(deletedTask.task_id, { kind: 'remove' })
+        tasks.value = tasks.value.filter((t) => t.task_id !== deletedTask.task_id)
+      })
       .on(
         'postgres_changes',
         {
@@ -1163,6 +1228,13 @@ export const useTaskStore = defineStore('tasks', () => {
 
         if (status === 'SUBSCRIBED') {
           console.log('✅ Successfully subscribed to tasks and completions')
+          // Nachladen bei jedem Beitritt außer dem ersten nach einem schon
+          // gestarteten Erstlauf (Regel und Preis → `createJoinReloadGate`).
+          // Ein Nachladen dort hängte an `loadTasks` einen zweiten SELECT, auf
+          // den die Wand mitwartet, und ein neuer Summen-Lauf liefe ihr unter
+          // dem ersten Packen hindurch — doppelte Anfragen und ein Layoutsprung.
+          if (tasksGate.joined()) void loadTasks()
+          if (totalsGate.joined()) refreshProjectEffortTotals()
         } else if (status === 'CHANNEL_ERROR') {
           console.error('❌ Channel subscription error')
         } else if (status === 'TIMED_OUT') {
@@ -1171,15 +1243,31 @@ export const useTaskStore = defineStore('tasks', () => {
           console.warn('⚠️ Channel was closed')
         }
       })
+
+    // iOS und Android frieren eine PWA im Hintergrund ein; bis die Realtime-
+    // Verbindung den Abriss bemerkt und neu beitritt, vergehen Sekunden bis
+    // Minuten. Sichtbarwerden ist der frühere Anlass zum Nachladen.
+    tasksVisibilityHandler = () => {
+      if (document.visibilityState !== 'visible') return
+      void loadTasks()
+      refreshProjectEffortTotals()
+    }
+    document.addEventListener('visibilitychange', tasksVisibilityHandler)
   }
 
   // REALTIME - Unsubscribe von Änderungen
-  // Muss beim Component Cleanup aufgerufen werden (z.B. HomeView.onUnmounted)
+  // Muss beim Component Cleanup aufgerufen werden (z.B. WallView.onUnmounted)
   const unsubscribeFromTasks = () => {
+    tasksJoinGate = null
+    totalsJoinGate = null
     if (realtimeChannel) {
       console.log('🔴 Unsubscribing from tasks')
       supabase.removeChannel(realtimeChannel)
       realtimeChannel = null
+    }
+    if (tasksVisibilityHandler) {
+      document.removeEventListener('visibilitychange', tasksVisibilityHandler)
+      tasksVisibilityHandler = null
     }
   }
 
@@ -1231,11 +1319,23 @@ export const useTaskStore = defineStore('tasks', () => {
 
     // JOIN task_completions → tasks (via task_id)
     // Mit Soft Delete bleiben Tasks erhalten → JOIN funktioniert immer
-    // Filterung über user_id für Household-Zugehörigkeit
-    const { data, error } = await supabase
-      .from('task_completions')
-      .select(
-        `
+    // Filterung über user_id für Household-Zugehörigkeit, dazu der Haushalt
+    // am Inner Join: sonst zählten Erledigungen anderer Haushalte mit gegen
+    // jede Seite.
+    //
+    // ALLE Zeilen, geblättert: PostgREST kappt jede Antwort bei `max_rows`
+    // (1000), und die Bilanz im Ausgleich rechnet über die ganze Historie —
+    // ohne Blättern fielen die ältesten Erledigungen still weg. Geblättert wird über den PK (Keyset, → `collectKeysetPages`), sortiert
+    // für die Ansichten erst danach.
+    const householdId = householdStore.currentHousehold.household_id
+    let data
+    try {
+      data = await collectKeysetPages(
+        async (after) => {
+          let query = supabase
+            .from('task_completions')
+            .select(
+              `
                 completion_id,
                 completed_at,
                 user_id,
@@ -1243,21 +1343,38 @@ export const useTaskStore = defineStore('tasks', () => {
                 effort_override,
                 completion_note,
                 is_quick,
-                tasks (
+                tasks!inner (
                     title,
                     household_id,
                     deleted_at
                 )
             `,
+            )
+            .eq('tasks.household_id', householdId)
+            .in('user_id', householdUserIds)
+            .order('completion_id', { ascending: true })
+            .limit(COMPLETIONS_PAGE)
+          if (after !== null) query = query.gt('completion_id', after)
+          const { data: page, error } = await query
+          if (error) throw error
+          return page ?? []
+        },
+        (row) => row.completion_id as string,
       )
-      .in('user_id', householdUserIds)
-      .order('completed_at', { ascending: false })
-
-    if (error) {
+    } catch (error) {
       console.error('Error fetching completions:', error)
       toastStore.showToast('Fehler beim Laden der Historie', 'error')
       return []
     }
+    if (householdStore.currentHousehold?.household_id !== householdId) return []
+
+    // Neueste zuerst, wie es Historie und Übersicht erwarten. Gleichstand über
+    // den PK, damit die Reihenfolge nicht von der Seitengrenze abhängt.
+    data.sort((a, b) => {
+      const diff = Date.parse(b.completed_at) - Date.parse(a.completed_at)
+      if (diff !== 0) return diff
+      return a.completion_id < b.completion_id ? 1 : a.completion_id > b.completion_id ? -1 : 0
+    })
 
     // Filtere auf aktuellen Household
     const filteredData = data.filter((completion) => {
@@ -1313,16 +1430,25 @@ export const useTaskStore = defineStore('tasks', () => {
     const toastStore = useToastStore()
     isLoading.value = true
 
-    const { error } = await supabase
+    // `.select()` liefert die tatsächlich gelöschten Zeilen zurück. Die
+    // DELETE-Policy erlaubt nur eigene Erledigungen; bei einer fremden löscht
+    // die DB still 0 Zeilen, ohne Fehler — das darf nicht als Erfolg gelten.
+    const { data, error } = await supabase
       .from('task_completions')
       .delete()
       .eq('completion_id', completionId)
+      .select('completion_id')
 
     isLoading.value = false
 
     if (error) {
       console.error('Error deleting completion:', error)
       toastStore.showToast('Fehler beim Löschen des Eintrags', 'error')
+      return false
+    }
+
+    if (!data || data.length === 0) {
+      toastStore.showToast('Nur eigene Einträge lassen sich löschen', 'error')
       return false
     }
 
@@ -1403,89 +1529,17 @@ export const useTaskStore = defineStore('tasks', () => {
   }
 
   // SUBTASKS - Helper für Self-Referencing Tasks
-  // Parent Tasks = tasks ohne parent_task_id
-  const parentTasks = computed(() => tasks.value.filter((t) => t.parent_task_id === null))
-
   // Subtasks für eine bestimmte Parent Task holen (sortiert nach order_index)
   const getSubtasks = (parentTaskId: string) =>
     tasks.value
       .filter((t) => t.parent_task_id === parentTaskId)
       .sort((a, b) => a.order_index - b.order_index)
 
-  // RESET SUBTASKS - Setze alle Subtasks einer Parent Task auf uncompleted
-  const resetSubtasks = async (parentTaskId: string) => {
-    const toastStore = useToastStore()
-    const subtasks = getSubtasks(parentTaskId)
-
-    if (subtasks.length === 0) {
-      return true
-    }
-
-    const subtaskIds = subtasks.map((s) => s.task_id)
-
-    const { error } = await supabase
-      .from('tasks')
-      .update({ completed: false })
-      .in('task_id', subtaskIds)
-
-    if (error) {
-      console.error('Error resetting subtasks:', error)
-      toastStore.showToast('Fehler beim Zurücksetzen der Unteraufgaben', 'error')
-      return false
-    }
-
-    // Reload tasks vom Backend (Source of Truth)
-    await loadTasks()
-    return true
-  }
-
-  // PROJECTS - Complete a project permanently
-  const completeProject = async (projectId: string) => {
-    const toastStore = useToastStore()
-    isLoading.value = true
-
-    const { error } = await supabase
-      .from('tasks')
-      .update({
-        completed: true,
-        last_completed_at: new Date().toISOString(),
-      })
-      .eq('task_id', projectId)
-
-    isLoading.value = false
-
-    if (error) {
-      console.error('Error completing project:', error)
-      toastStore.showToast('Fehler beim Abschließen des Projekts', 'error')
-      return false
-    }
-
-    // Reload tasks vom Backend (Source of Truth)
-    await loadTasks()
-    toastStore.showToast('Projekt abgeschlossen', 'success', 3000)
-    return true
-  }
-
-  // PROJECTS - Calculate total effort contributed to a project from subtask completions
-  const getProjectEffort = (projectId: string): number => {
-    const subtasks = getSubtasks(projectId)
-    const subtaskIds = subtasks.map((s) => s.task_id)
-
-    // Sum up effort from all completions of project subtasks
-    // UNIFIED SOLUTION: Use effort_override (ALWAYS set, Single Source of Truth)
-    return completions.value
-      .filter((c) => subtaskIds.includes(c.task_id))
-      .reduce((total, completion) => {
-        return total + completion.effort_override
-      }, 0)
-  }
-
   /**
    * Punktesummen der Projekte — **unabhängig von `completions`**.
    *
-   * `getProjectEffort()` oben rechnet aus `completions.value`. Das trägt nur
-   * im klassischen Aussehen, das seine Erledigungen selbst lädt; die Pinnwand
-   * lädt gar keine (`WallView.onMounted`: `loadTasks` + `subscribeToTasks` +
+   * Aus `completions.value` ginge es nicht: die Pinnwand lädt keine
+   * (`WallView.onMounted`: `loadTasks` + `subscribeToTasks` +
    * `loadWeeklyCompletions`), und die Wochenliste liegt ohnehin im
    * `householdStore` und deckt nur die laufende Woche ab. Ein Projekt sammelt
    * über Monate. Deshalb eine eigene, schmale Abfrage.
@@ -1498,15 +1552,26 @@ export const useTaskStore = defineStore('tasks', () => {
   const projectEffortTotals = ref<Record<string, number>>({})
 
   // Erst wenn die Wand die Summen einmal geholt hat, hält `refreshProjectEffortTotals`
-  // sie nach. Ohne diese Sperre feuerte das klassische Aussehen bei jeder
-  // Erledigung zwei überflüssige Abfragen — es rechnet aus `completions`.
+  // sie nach. Ohne diese Sperre feuerten Erledigungen und Löschungen auf den
+  // anderen Routen Abfragen, deren Ergebnis niemand liest.
   let projectEffortTotalsActive = false
 
-  const loadProjectEffortTotals = async (): Promise<void> => {
+  // Jeder Realtime-INSERT stößt einen mehrseitigen Lauf an. Ohne Schutz setzte
+  // der zuletzt FERTIGE Lauf die Summen, nicht der zuletzt gestartete. Und die
+  // Wand wartet vor dem ersten Packen auf die Summen: überholt ein neuerer Lauf
+  // den, auf den sie wartet, wartet sie bis zu dessen Ende mit.
+  const projectTotalsRunner = createLatestRunner((isLatest) => fetchProjectEffortTotals(isLatest))
+
+  const loadProjectEffortTotals = (): Promise<void> => {
+    if (!useHouseholdStore().currentHousehold) return Promise.resolve()
+    projectEffortTotalsActive = true
+    return projectTotalsRunner.run()
+  }
+
+  const fetchProjectEffortTotals = async (isLatest: () => boolean): Promise<void> => {
     const householdStore = useHouseholdStore()
     if (!householdStore.currentHousehold) return
-
-    projectEffortTotalsActive = true
+    totalsJoinGate?.loadStarted()
 
     // Schritt 1: alle Unteraufgaben des Haushalts mit ihrem Elternteil.
     //
@@ -1519,6 +1584,7 @@ export const useTaskStore = defineStore('tasks', () => {
       .eq('household_id', householdStore.currentHousehold.household_id)
       .not('parent_task_id', 'is', null)
 
+    if (!isLatest()) return
     if (subtaskError) {
       // Stehenlassen statt auf 0 setzen: eine falsche 0 sieht aus wie ein
       // Projekt ohne Arbeit und niemand liest sie als Fehler.
@@ -1544,54 +1610,53 @@ export const useTaskStore = defineStore('tasks', () => {
     //
     // - `CHUNK` teilt die `in`-Liste, damit die URL nicht zu lang wird.
     //   Das begrenzt die Zahl der ABGEFRAGTEN IDs, nicht die der Zeilen.
-    // - `PAGE` blättert die Antwort. PostgREST deckelt jede Antwort bei
-    //   `max_rows` (`supabase/config.toml`: 1000). Eine Scheibe mit 150
-    //   Unteraufgaben kann in einem gewachsenen Haushalt weit mehr als 1000
-    //   Erledigungen tragen — ohne Blättern fiele der Rest weg, die Summe
-    //   wäre zu NIEDRIG und niemand sähe einen Fehler.
+    // - `COMPLETIONS_PAGE` blättert die Antwort über den PK (Keyset, →
+    //   `collectKeysetPages`). PostgREST deckelt jede Antwort bei `max_rows`
+    //   (`supabase/config.toml`: 1000). Eine Scheibe mit 150 Unteraufgaben
+    //   kann in einem gewachsenen Haushalt weit mehr als 1000 Erledigungen
+    //   tragen — ohne Blättern fiele der Rest weg, die Summe wäre zu NIEDRIG
+    //   und niemand sähe einen Fehler. Keyset statt Offset: eine zwischen
+    //   zwei Seiten eingefügte oder zurückgeklebte Erledigung verschöbe beim
+    //   Offset die Grenze, eine Zeile zählte doppelt oder gar nicht.
     const CHUNK = 150
-    const PAGE = 1000
     for (let i = 0; i < subtaskIds.length; i += CHUNK) {
       const chunk = subtaskIds.slice(i, i + CHUNK)
 
-      let offset = 0
-      for (;;) {
-        const { data: completionRows, error: completionError } = await supabase
-          .from('task_completions')
-          .select('task_id, effort_override')
-          .in('task_id', chunk)
-          // Ohne feste Ordnung ist Blättern sinnlos: PostgREST gibt
-          // die Zeilen sonst in beliebiger Reihenfolge zurück, und
-          // zwischen zwei Seiten darf sie sich ändern. Dieselbe Zeile
-          // käme dann doppelt oder gar nicht — die Summe wäre still
-          // falsch, genau der Fehler, gegen den das Blättern hier
-          // überhaupt gebaut ist. `completion_id` ist der PK, also
-          // eindeutig und damit eine vollständige Ordnung.
-          .order('completion_id')
-          .range(offset, offset + PAGE - 1)
+      let rows: Pick<TaskCompletion, 'completion_id' | 'task_id' | 'effort_override'>[]
+      try {
+        rows = await collectKeysetPages(
+          async (after) => {
+            let query = supabase
+              .from('task_completions')
+              .select('completion_id, task_id, effort_override')
+              .in('task_id', chunk)
+              .order('completion_id', { ascending: true })
+              .limit(COMPLETIONS_PAGE)
+            if (after !== null) query = query.gt('completion_id', after)
+            const { data, error } = await query
+            if (error) throw error
+            return (data ?? []) as Pick<
+              TaskCompletion,
+              'completion_id' | 'task_id' | 'effort_override'
+            >[]
+          },
+          (row) => row.completion_id,
+        )
+      } catch (completionError) {
+        if (!isLatest()) return
+        console.error('Error loading completions for project effort totals:', completionError)
+        return
+      }
+      if (!isLatest()) return
 
-        if (completionError) {
-          console.error('Error loading completions for project effort totals:', completionError)
-          return
-        }
-
-        const rows = (completionRows ?? []) as Pick<TaskCompletion, 'task_id' | 'effort_override'>[]
-        for (const row of rows) {
-          const parentId = parentOf.get(row.task_id)
-          if (!parentId) continue
-          totals[parentId] = (totals[parentId] ?? 0) + (row.effort_override ?? 0)
-        }
-
-        // Abbruch erst bei einer LEEREN Seite, und weitergezählt wird
-        // um das, was wirklich kam. `rows.length < PAGE` wäre falsch,
-        // sobald `max_rows` unter `PAGE` liegt: der Server kürzte dann
-        // jede Seite, die erste Runde sähe wie die letzte aus und der
-        // Rest fiele still weg.
-        if (rows.length === 0) break
-        offset += rows.length
+      for (const row of rows) {
+        const parentId = parentOf.get(row.task_id)
+        if (!parentId) continue
+        totals[parentId] = (totals[parentId] ?? 0) + (row.effort_override ?? 0)
       }
     }
 
+    if (!isLatest()) return
     projectEffortTotals.value = totals
   }
 
@@ -1611,20 +1676,47 @@ export const useTaskStore = defineStore('tasks', () => {
    * abziehen; das Abzeichen bliebe nach dem Zurückkleben zu hoch, und
    * **niemand sähe einen Fehler**.
    */
+  // Entprellt: mehrere Erledigungen kurz hintereinander (Checkliste, fremde
+  // Geräte, ungefilterte DELETEs aller Haushalte) ergeben einen Lauf statt vieler.
+  const PROJECT_TOTALS_DEBOUNCE_MS = 300
+  let projectTotalsTimer: ReturnType<typeof setTimeout> | null = null
+
   const refreshProjectEffortTotals = () => {
     if (!projectEffortTotalsActive) return
-    void loadProjectEffortTotals()
+    if (projectTotalsTimer !== null) clearTimeout(projectTotalsTimer)
+    projectTotalsTimer = setTimeout(() => {
+      projectTotalsTimer = null
+      if (projectEffortTotalsActive) void loadProjectEffortTotals()
+    }, PROJECT_TOTALS_DEBOUNCE_MS)
   }
 
   /**
    * Gegenstück zu `loadProjectEffortTotals()`: die Wand meldet sich beim
-   * Verlassen ab. Ohne das feuerte das klassische Aussehen, sobald es einmal
-   * die Wand gesehen hat, bei jeder Erledigung Abfragen für Summen, die
-   * niemand mehr liest — es rechnet aus `completions`.
+   * Verlassen ab. Ohne das feuerten die anderen Routen, sobald die Wand
+   * einmal offen war, bei jeder Erledigung Abfragen für Summen, die niemand
+   * mehr liest.
    */
   const stopProjectEffortTotals = () => {
     projectEffortTotalsActive = false
+    if (projectTotalsTimer !== null) {
+      clearTimeout(projectTotalsTimer)
+      projectTotalsTimer = null
+    }
   }
+
+  // Session-Ende: Kanal, Sichtbarkeits-Listener und alle Daten des Haushalts
+  // weg. Laufende Ladevorgänge prüfen nach ihrem `await` den Haushalt und
+  // verwerfen dann ihre Antwort.
+  onSessionEnd(() => {
+    unsubscribeFromTasks()
+    stopProjectEffortTotals()
+    projectTotalsRunner.invalidate()
+    tasks.value = []
+    completions.value = []
+    projectEffortTotals.value = {}
+    undoTickets.clear()
+    pendingBypass = new Set<string>()
+  })
 
   // Return - was andere Komponenten verwenden können
   return {
@@ -1635,7 +1727,6 @@ export const useTaskStore = defineStore('tasks', () => {
     completeTask,
     undoCompletion,
     discardUndoTicket,
-    canUndoCompletion,
     markAsDirty,
     cycleEmphasisLevel,
     postponeTask,
@@ -1650,16 +1741,11 @@ export const useTaskStore = defineStore('tasks', () => {
     deleteCompletion,
     deleteAllCompletions,
     // Subtasks
-    parentTasks,
     getSubtasks,
-    resetSubtasks,
     // Projects
-    completeProject,
-    getProjectEffort,
     projectEffortTotals,
     loadProjectEffortTotals,
     getProjectEffortTotal,
-    refreshProjectEffortTotals,
     stopProjectEffortTotals,
   }
 })

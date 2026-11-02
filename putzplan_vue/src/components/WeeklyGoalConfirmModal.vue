@@ -55,7 +55,7 @@ const transitionWeekDays = computed(() =>
       <div class="modal-content" @click.stop>
         <div class="modal-header">
           <h3 class="modal-title">Wochenziel ändern?</h3>
-          <button class="btn-close" @click="emit('close')" aria-label="Schließen">×</button>
+          <button class="btn-close" @click="emit('close')" aria-label="Schließen"></button>
         </div>
 
         <div class="modal-body">

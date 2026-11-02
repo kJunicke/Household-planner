@@ -1,12 +1,11 @@
 <script setup lang="ts">
 /**
- * Die Erledigt-Liste unter der Wand (Pinnwand-Redesign, Etappe 5, Ticket 04).
+ * Die Erledigt-Liste unter der Wand.
  *
  * Erledigte Aufgaben hängen nicht an der Wand — sie kosten dort den Überblick
  * über das, was noch offen ist. Sie stehen darunter als kompakter Streifen:
  * eine Zeile je Aufgabe, Titel durchgestrichen, Personenfarbe als Punkt,
- * Uhrzeit rechts. Aufbau und Reihenfolge sind die des klassischen
- * Erledigt-Tabs (`useTaskBoard.completedTasks`), nur in der neuen Formsprache.
+ * Uhrzeit rechts. Die Reihenfolge kommt aus `useTaskBoard.completedTasks`.
  *
  * **„wieder dreckig" gehört hierher**, nicht an den Zettel: es betrifft
  * ausschließlich erledigte Aufgaben.
@@ -15,19 +14,12 @@
  * `completed = true` —, tragen aber statt einer Uhrzeit das Kennzeichen
  * „verschoben auf …". Sie hat niemand erledigt; eine Uhrzeit wäre gelogen.
  *
- * **Der Bearbeiten-Stift (Ticket 04)** öffnet je Zeile dasselbe
- * Bearbeiten-Fenster wie am Zettel (`TaskEditModal`) — bewusst dieselbe
- * Komponente und dieselbe Verdrahtung wie in `WallNote.vue`, nicht ein
- * zweites, reduziertes Menü. Eine erledigte Aufgabe ist dafür kein
- * Sonderfall: Typ, Kadenz, Zuweisen, Unteraufgaben und Löschen bietet
- * `TaskEditModal` unverändert an. **Ausgenommen ist Verschieben** — dort
- * kennt `TaskEditModal` `task.completed` sehr wohl (s. Kommentar dort,
- * QC-Befund 1): die Aktion räumt eine noch offene Aufgabe aus dem Weg, an
- * einer bereits erledigten holt sie die nächste Fälligkeit teils um Monate zu
- * früh zurück. Am Zettel bleibt der Weg unangetastet, weil eine Aufgabe dort
- * ohnehin immer `!completed` ist.
- * Es gibt genau EIN Ziel-Task für alle vier Folgedialoge gleichzeitig
- * (`targetTaskId`), weil ohnehin immer nur eine Zeile bearbeitet wird.
+ * **Der Bearbeiten-Stift** öffnet je Zeile dasselbe Bearbeiten-Fenster wie am
+ * Zettel (`TaskEditModal`) — bewusst dieselbe Komponente und dieselbe
+ * Verdrahtung wie in `WallNote.vue`, nicht ein zweites, reduziertes Menü.
+ * **Ausgenommen ist Verschieben** — dort kennt `TaskEditModal` `task.completed`
+ * sehr wohl (s. Kommentar dort): an einer bereits erledigten Aufgabe holte es
+ * die nächste Fälligkeit teils um Monate zu früh zurück.
  */
 import { computed, ref } from 'vue'
 import type { Task } from '@/types/Task'
@@ -102,20 +94,15 @@ const formatStamp = (iso: string): string => {
 
 /**
  * Kompakte Variante des Verschiebe-Kennzeichens: nur Pfeil + Tag.Monat, ohne
- * Wortlaut und ohne Wochentag (QC-Befund 3, Ticket 04, dritte Runde).
- * `formatPostponeDate` (Zeitplan-Modul) bleibt dafür unangetastet — Toast,
- * Dialogvorschau und klassische Karte haben Platz für die lange Form
- * „Donnerstag, 20.08." und behalten sie.
+ * Wortlaut und ohne Wochentag. `formatPostponeDate` (Zeitplan-Modul) behält
+ * die lange Form für Toast und Dialogvorschau.
  *
- * **Warum hier kein Wort mehr, nicht einmal „verschoben auf":** die Zeile
- * sieht man schon an ihrer eigenen Klasse (`done-row--postponed`) anders —
- * kein Durchstreichen, neutraler Punkt statt Personenfarbe. Der Wortlaut
- * wiederholte nur eine Aussage, die die Zeile bereits optisch trifft; das
- * Datum ist die einzige Information, die sonst nirgends steht.
+ * **Warum kein Wort, nicht einmal „verschoben auf":** die Zeile sieht man an
+ * ihrer Klasse (`done-row--postponed`) schon anders — kein Durchstreichen,
+ * neutraler Punkt. Das Datum ist die einzige Information, die sonst nirgends
+ * steht.
  *
- * **Warum das nötig ist — die vollständige Rechnung, `.done-row` = 370 px
- * bei 390 px Viewport (die erste Fassung dieses Kommentars hatte die beiden
- * Bedienknöpfe vergessen und kam auf falsche 223 px für den Titel):**
+ * **Warum die Kurzform nötig ist** (`.done-row` = 370 px bei 390 px Viewport):
  *
  *   370 = 8 (Padding links) + 10 (Punkt) + 8 + Titel + 8 + Text + 8
  *       + 48 (Stift) + 8 + 48 (wieder dreckig)
@@ -123,21 +110,12 @@ const formatStamp = (iso: string): string => {
  * Fest belegt sind 146 px, für Titel UND rechten Text bleiben zusammen
  * 224 px. `.stamp` steht auf `flex: none` (Absicht, s. dort) — der Text
  * bekommt IMMER seine volle Breite, der Titel den Rest. Mit „verschoben auf
- * 27.08." (139,3 px gemessen) blieben dem Titel nur rund 85 px übrig, und
- * JEDE verschobene Zeile wurde gekappt, auch kurze Titel wie
- * „Final-Effort-Test" (braucht 116 px, bekam 85). Mit nur `→ 27.08.` (grob
- * 55 px) bleiben rund 169 px für den Titel — spürbar mehr als die 186,7 px
- * einer gewöhnlichen Zeile sind zwar nicht erreicht, aber nah genug, dass die
- * meisten Titel wieder vollständig stehen. Der fehlende Platz ist genau der,
- * den der neue Bearbeiten-Stift aus Ticket 04 kostet — das hier ist also die
- * Gegenbuchung dazu, keine Kosmetik.
+ * 27.08." (~139 px) blieben dem Titel rund 85 px, und jede verschobene Zeile
+ * wäre gekappt; mit `→ 27.08.` (~55 px) bleiben rund 169 px.
  *
- * **Zeichen `→` (U+2192 RIGHTWARDS ARROW), nicht ein Icon-Font-Glyph:** es
- * ist gewöhnlicher Text, kein `<i class="bi …">`, und muss deshalb in der
- * Font-Stack von `base.css` (Inter, dann System-/Fallback-Sans) darstellbar
- * sein. Ist es — dasselbe Zeichen steht schon als echter Template-Text in
- * `SettlementView.vue` (`settlement-title`, „von → nach"), also im selben
- * Font-Stack bereits im Einsatz und nicht neu riskiert.
+ * **Zeichen `→` (U+2192), kein Icon-Font-Glyph:** gewöhnlicher Text, muss also
+ * im Font-Stack von `base.css` darstellbar sein — ist es, `SettlementView.vue`
+ * nutzt dasselbe Zeichen.
  *
  * `schedule.postponedUntil` ist bereits `YYYY-MM-DD` (siehe `scheduleOf`) —
  * String-Zerlegung statt `Date`, damit hier keine Zeitzonen-Fallstricke
@@ -155,8 +133,7 @@ const rows = computed((): DoneRow[] =>
 
     /**
      * Verschoben wird angezeigt, sobald `postponed_until` gesetzt ist —
-     * unabhängig von `task_completions` (Rücknahme von QC-Befund 2,
-     * Ticket 04, zweite Runde).
+     * unabhängig von `task_completions`.
      *
      * **`task.completed` taugt hier NICHT als Unterscheidung**, weil
      * `taskStore.postponeTask` es bei JEDER Verschiebung selbst auf `true`
@@ -165,11 +142,10 @@ const rows = computed((): DoneRow[] =>
      * Eine verschobene Aufgabe ist damit *per Definition* `completed = true`;
      * das Feld sieht bei „wirklich erledigt" und „verschoben" gleich aus.
      * Dieselbe Ununterscheidbarkeit gilt beim SCHREIBEN, nicht nur hier beim
-     * Lesen — siehe der Kommentar zu `showPostpone` in `TaskEditModal.vue`
-     * (QC-Befund 1/2, Ticket 04).
+     * Lesen — siehe der Kommentar zu `showPostpone` in `TaskEditModal.vue`.
      *
-     * **Warum nicht zusätzlich `task_completions` befragen (erster Versuch,
-     * zurückgenommen):** ein Verlaufseintrag beantwortet nur „hat es JE eine
+     * **Warum nicht zusätzlich `task_completions` befragen:** ein
+     * Verlaufseintrag beantwortet nur „hat es JE eine
      * Erledigung gegeben", nicht „gilt die noch". *wieder dreckig* widerruft
      * genau diese Erledigung (`markAsDirty`: `completed = false`), lässt den
      * Verlaufseintrag aber stehen — er ist append-only, Single Source of
@@ -178,18 +154,14 @@ const rows = computed((): DoneRow[] =>
      * Eine Prüfung auf „Verlaufseintrag dieser Woche vorhanden" trifft dann
      * fälschlich zu und schluckt „verschoben auf …" restlos — das Datum wäre
      * im UI nirgends mehr erreichbar, für einen alltäglichen Ablauf, nicht
-     * für einen Randfall. Das ist schlimmer als das Problem, gegen das die
-     * Prüfung gebaut war.
+     * für einen Randfall.
      *
-     * **Warum die einfache Bedingung jetzt wieder richtig ist:** seit
-     * `TaskEditModal.showPostpone` das Verschieben an einer wirklich
-     * erledigten Aufgabe sperrt (`!completed`-Zweig dort), lässt sich der
-     * Fehlerfall „erledigt UND zusätzlich verschoben" gar nicht mehr NEU
-     * erzeugen. Ab jetzt gilt: wo `postponed_until` steht, wurde von *dran*
-     * aus verschoben. Die kaputten Zeilen, die QC-Befund 2 ursprünglich
-     * auslösten, sind Altdaten aus der Zeit vor dieser Sperre — Altdaten
-     * gehören in den Daten bereinigt (z. B. per „wieder dreckig"), nicht in
-     * der Anzeige wegargumentiert.
+     * **Warum die einfache Bedingung reicht:** `TaskEditModal.showPostpone`
+     * sperrt das Verschieben an einer wirklich erledigten Aufgabe
+     * (`!completed`-Zweig dort); „erledigt UND verschoben" lässt sich nicht
+     * neu erzeugen. Wo `postponed_until` steht, wurde von *dran* aus
+     * verschoben. Altdaten dieser Art gehören in den Daten bereinigt (z. B. per
+     * „wieder dreckig"), nicht in der Anzeige wegargumentiert.
      */
     if (schedule.status === 'postponed' && schedule.postponedUntil) {
       // Punkt bleibt neutral. Er beantwortet „wer hat das gemacht" — eine
@@ -221,8 +193,8 @@ const rows = computed((): DoneRow[] =>
  *
  * **ACHTUNG — der Schutz hängt allein an der `if`-Zeile unten, nicht am
  * `:disabled` im Template.** Vue schreibt das Attribut erst im nächsten Tick;
- * der QC hat gemessen, dass `btn.disabled` nach dem ersten, zweiten *und*
- * dritten synchronen Klick noch `false` war. `:disabled` ist hier reine Optik.
+ * `btn.disabled` ist nach dem ersten, zweiten *und* dritten synchronen Klick
+ * noch `false`. `:disabled` ist hier reine Optik.
  *
  * Daraus folgt: die Sperre MUSS synchron vor dem ersten `await` gesetzt
  * werden. Wer davor ein `await` einschiebt (eine Rückfrage, ein Nachladen,
@@ -245,11 +217,9 @@ const markDirty = async (taskId: string) => {
   }
 }
 
-// --- Bearbeiten und seine Folgedialoge --------------------------------------
-// Dieselbe Verdrahtung wie in `WallNote.vue` — bewusst kopiert, nicht
-// wiederverwendet: es gibt hier keine geteilte Basis, an der eine künftige
-// Änderung an EINER Stelle beide Wege treffen würde, aber die Vollständigkeit
-// (Confirm, Delete, Assign, Subtasks, Postpone) ist Bedingung des Tickets.
+// Bearbeiten und Folgedialoge: dieselbe Verdrahtung wie in `WallNote.vue`,
+// bewusst kopiert — es gibt keine geteilte Basis. Wer dort etwas ändert,
+// ändert es hier mit (Confirm, Delete, Assign, Subtasks, Postpone).
 //
 // `targetTaskId` statt eines Tasks je Zeile: es ist ohnehin immer nur eine
 // Zeile gleichzeitig in Bearbeitung, und `props.tasks` bleibt reaktiv — ändert
@@ -343,17 +313,13 @@ const handlePostponeConfirm = async (targetDate: string) => {
         v-for="row in rows"
         :key="row.task.task_id"
         class="done-row"
+        :data-task-id="row.task.task_id"
         :class="{ 'done-row--postponed': row.postponed }"
         :style="row.color ? { '--dot': row.color } : undefined"
       >
         <span class="dot" aria-hidden="true"></span>
         <span class="done-title">{{ row.task.title }}</span>
         <span class="stamp">{{ row.stamp }}</span>
-        <!-- Derselbe Weg wie am Zettel: EIN Bearbeiten-Stift, kein reduziertes
-             Erledigt-Menü. Öffnet dasselbe `TaskEditModal` mit vollem
-             Funktionsumfang (Typ, Kadenz, Zuweisen, Unteraufgaben, Verschieben,
-             Löschen), unabhängig davon, ob die Zeile „erledigt" oder
-             „verschoben" zeigt. -->
         <button class="ctrl edit" title="Aufgabe bearbeiten" @click="openEdit(row.task.task_id)">
           <i class="bi bi-pencil" aria-hidden="true"></i>
         </button>
@@ -434,7 +400,7 @@ const handlePostponeConfirm = async (targetDate: string) => {
    jeder Titellänge gleich dicht bleiben. `calc(touch-target-min + 1px)` statt
    einer eigenen Zahl: die Trennlinie unten ist 1 px stark, und das Maß der
    Bedienelemente (`.ctrl`, s.u.) muss aus demselben Wert kommen wie hier —
-   sonst laufen beide beim nächsten Anfassen wieder auseinander (Ticket 04). */
+   sonst laufen beide beim nächsten Anfassen wieder auseinander. */
 .done-row {
   display: flex;
   align-items: center;
@@ -461,21 +427,7 @@ const handlePostponeConfirm = async (targetDate: string) => {
 
 /* `min-width: 0` ist Pflicht: ohne sie ist die Mindestbreite eines
    Flex-Kindes seine Inhaltsbreite, das Kürzen greift nicht und der lange
-   Titel drückt stattdessen Stempel und Knöpfe aus der Zeile.
-
-   **Zurückgenommener Zwischenstand (QC-Befund 3, Ticket 04, zweite Runde):**
-   hier stand testweise `flex: 1 1 auto; min-width: 72px`, mit `.stamp` auf
-   `flex: 0 1 auto; max-width: 45%` als Gegenstück. Gemessen bei 390 px
-   (`.done-row` = 370 px) griff KEINE der beiden neuen Regeln in irgendeiner
-   Zeile: der kürzeste gemessene Titel brauchte bereits 101,8 px (über der
-   72-px-Grenze), und `verschoben auf 27.08.` braucht rund 139 px (unter dem
-   45-%-Deckel von 166,5 px). Gerettet hat den Titel allein das Entfernen von
-   `flex: none` am Stempel — und genau das war der neue Schaden: Flexbox
-   schrumpft proportional zur Basisbreite, der längere Text (der Stempel)
-   verlor dadurch IMMER mehr als der kürzere (der Titel), bis „verschoben auf
-   27.08." in 10 von 19 Zeilen zur unlesbaren Ellipse zerfiel — schlechter als
-   der Ausgangszustand, wo der Stempel immer vollständig stand. Beide Regeln
-   sind deshalb zurück auf ihren ursprünglichen Stand. */
+   Titel drückt stattdessen Stempel und Knöpfe aus der Zeile. */
 .done-title {
   flex: 1;
   min-width: 0;
@@ -494,17 +446,11 @@ const handlePostponeConfirm = async (targetDate: string) => {
   text-decoration: none;
 }
 
-/* Von 11 auf 13 px — dieselbe Begründung wie am Titel.
-
-   `flex: none` bleibt bewusst: der Stempel/Text behält IMMER seine volle
-   Breite, der Titel bekommt den Rest (`.done-title` oben). Nicht wieder am
-   Flex-Verhalten drehen — das war der Fehlversuch der zweiten Runde
-   (s. Kommentar an `.done-title`). Die vollständige Platzrechnung (146 px
-   fest belegt, 224 px für Titel + Text zusammen) und warum bei der
-   ausgeschriebenen Form „verschoben auf 27.08." (139,3 px) trotzdem JEDE
-   verschobene Zeile gekappt wurde, steht bei `formatPostponeStamp` — deshalb
-   dort nur noch `→ 27.08.` (grob 55 px statt 139). Diese Kurzform ist die
-   Lösung, nicht ein Deckel oder Schrumpfen hier. */
+/* `flex: none` bleibt bewusst: der Stempel/Text behält IMMER seine volle
+   Breite, der Titel bekommt den Rest. Nicht am Flex-Verhalten drehen: Flexbox
+   schrumpft proportional zur Basisbreite, der längere Stempel verlöre immer
+   mehr als der Titel und zerfiele zur Ellipse. Platzrechnung und Lösung
+   (Kurzform `→ 27.08.`) stehen bei `formatPostponeStamp`. */
 .stamp {
   flex: none;
   font-size: 13px;
@@ -530,8 +476,7 @@ const handlePostponeConfirm = async (targetDate: string) => {
    Knopf ragte oben und unten je 0,5 px darüber hinaus; die unteren 0,5 px
    lägen im Band der nächsten Zeile, und deren Knopf gewänne als späteres
    Geschwisterelement das Hit-Testing — ein Tipp auf den unteren Rand setzte
-   dann die FALSCHE Aufgabe wieder auf dran (an der Vorgängerversion mit fixer
-   Höhe vom QC nachgewiesen, s. Git-Historie dieser Datei). `stretch` bindet
+   dann die FALSCHE Aufgabe wieder auf dran. `stretch` bindet
    die Höhe an den Inhaltsbereich und kann deshalb nicht wieder
    auseinanderlaufen, wenn sich Zeilenhöhe oder Linienstärke ändern.
    Prüfen lässt sich das nur durch Abtasten der Ecken, nicht durch Ansehen —

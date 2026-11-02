@@ -1,7 +1,7 @@
 // Pending Mutation Type für Offline-Sync Queue
 // Beschreibt eine Operation die noch nicht mit Supabase synchronisiert wurde
 
-export type MutationOperation = 'create' | 'update' | 'delete'
+type MutationOperation = 'create' | 'update' | 'delete'
 
 export interface PendingMutation {
   // Eindeutige ID für Queue-Item (timestamp + random)
@@ -30,6 +30,12 @@ export interface PendingMutation {
 
   // Metadaten für Retry-Logik
   timestamp: number // Unix timestamp
-  retries: number // Anzahl bisheriger Versuche
+  retries: number // Anzahl gezählter Fehlversuche (Netzfehler zählen nie, 5xx in `serverRetries`)
   lastError?: string // Fehler vom letzten Versuch
+  /** Zeitpunkt des letzten gezählten Fehlversuchs — schnell aufeinanderfolgende zählen einmal. */
+  lastFailedAt?: number
+  /** Gezählte Serverfehler 5xx — eigenes, langsames Budget (siehe `judgeFailure`). */
+  serverRetries?: number
+  /** Zeitpunkt des letzten gezählten Serverfehlers. */
+  lastServerFailedAt?: number
 }

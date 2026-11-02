@@ -1,11 +1,10 @@
 import { computed, toValue, type MaybeRefOrGetter } from 'vue'
 import type { Task } from '@/types/Task'
-import { scheduleOf, isOverdue } from '@/lib/taskSchedule'
+import { scheduleOf } from '@/lib/taskSchedule'
 
 /**
  * Auswahl und Reihenfolge der Aufgaben — die eine Antwort auf „welche Aufgaben sind
- * dran und in welcher Reihenfolge". Putzen-Screen und Pinnwand benutzen dieselbe
- * Quelle, damit beide Ansichten nicht auseinanderlaufen.
+ * dran und in welcher Reihenfolge".
  *
  * Ob eine Aufgabe dran ist, entscheidet allein `tasks.completed` aus der Datenbank
  * (→ docs/adr/0001-completed-ist-zustand-keine-ableitung.md). Hier wird nichts
@@ -14,7 +13,7 @@ import { scheduleOf, isOverdue } from '@/lib/taskSchedule'
  * Der Dringlichkeitswert kommt unverändert aus `scheduleOf()` — es gibt bewusst
  * keine zweite Berechnung.
  *
- * Bewusst NICHT hier: Kategorie-Filter, Suche und alles andere, was zur Bedienung
+ * Bewusst NICHT hier: Suche und alles andere, was zur Bedienung
  * einer bestimmten View gehört. Das Composable kennt nur die Aufgabenliste, die es
  * hereingereicht bekommt, und ist damit ohne View benutzbar.
  */
@@ -23,7 +22,7 @@ import { scheduleOf, isOverdue } from '@/lib/taskSchedule'
 // Aufgaben Infinity ist und Infinity - Infinity = NaN einen Komparator zerstört.
 // Gleichstand ergibt 0 — Array.prototype.sort ist stabil, die Eingabereihenfolge
 // aus dem Store bleibt damit der Tiebreak.
-export const byUrgency = (a: Task, b: Task): number => {
+const byUrgency = (a: Task, b: Task): number => {
   const ua = scheduleOf(a).urgency
   const ub = scheduleOf(b).urgency
   return ua === ub ? 0 : ub - ua
@@ -32,20 +31,8 @@ export const byUrgency = (a: Task, b: Task): number => {
 // "Jetzt dran": jede offene wiederkehrende Aufgabe.
 // Die Kadenz-Grenze wird hier NICHT ausgewertet. Damit erscheint auch eine manuell
 // als "wieder dreckig" markierte Aufgabe hier, obwohl ihr Intervall noch läuft.
-export const isPending = (task: Task): boolean =>
+const isPending = (task: Task): boolean =>
   task.task_type === 'recurring' && !task.completed && task.parent_task_id === null
-
-/**
- * Wie viele dieser Aufgaben ihre Kadenz wirklich gerissen haben.
- *
- * Bewusst eine freie Funktion und **keine** fertige Zahl im Rückgabewert von
- * `useTaskBoard`: welche Menge gezählt wird, hängt von der Ansicht ab (der
- * Putzen-Screen zählt nur die durch den Kategorie-Filter sichtbaren Aufgaben). Zwei
- * gleichnamige Zähler auf unterschiedlicher Basis wären eine Falle — so muss jede
- * Ansicht ihre Menge sichtbar benennen.
- */
-export const countOverdue = (tasks: readonly Task[]): number =>
-  tasks.filter((task) => isOverdue(scheduleOf(task))).length
 
 /**
  * Alle Listen sind `readonly`: Konsumenten teilen sich dieselbe Array-Instanz aus dem
@@ -107,25 +94,10 @@ export function useTaskBoard(tasks: MaybeRefOrGetter<Task[]>) {
     return [...nonProjects, ...projects]
   })
 
-  /**
-   * Offener Rückstand für die Status-Zeile. Daily-Aufgaben sind immer sichtbar und
-   * setzen sich täglich zurück → sie zählen hier nicht mit.
-   */
-  const openTasksCount = computed(
-    (): number =>
-      toValue(tasks).filter(
-        (task) =>
-          !task.completed &&
-          task.parent_task_id === null &&
-          (task.task_type === 'recurring' || task.task_type === 'one-time'),
-      ).length,
-  )
-
   return {
     pendingTasks,
     dailyTasks,
     projectTasks,
     completedTasks,
-    openTasksCount,
   }
 }

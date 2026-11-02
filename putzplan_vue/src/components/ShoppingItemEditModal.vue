@@ -3,6 +3,7 @@ import { ref } from 'vue'
 import type { ShoppingItem } from '@/types/ShoppingItem'
 import type { CategoryOption } from '@/types/CategoryOption'
 import CategoryCombobox from './CategoryCombobox.vue'
+import { SHOPPING_ITEM_NAME_MAX_LENGTH } from '@/lib/limits'
 
 const props = defineProps<{
   item: ShoppingItem
@@ -42,7 +43,7 @@ const stepQty = (delta: number) => {
       <div class="modal-content" @click.stop>
         <div class="modal-header">
           <h5 class="modal-title">Artikel bearbeiten</h5>
-          <button class="btn-close" @click="emit('close')"></button>
+          <button class="btn-close" @click="emit('close')" aria-label="Schließen"></button>
         </div>
 
         <div class="modal-body">
@@ -52,7 +53,7 @@ const stepQty = (delta: number) => {
               v-model="name"
               type="text"
               class="form-control"
-              maxlength="200"
+              :maxlength="SHOPPING_ITEM_NAME_MAX_LENGTH"
               @keyup.enter="handleSave"
               autofocus
             />

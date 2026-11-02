@@ -63,8 +63,8 @@ const onKeydown = (e: KeyboardEvent) => {
 </template>
 
 <style scoped>
-/* Dieselbe schlanke Karte wie die Einzelzeile (Etappe 2) — der
-   Aufklapp-Mechanismus bleibt unverändert, nur die Darstellung zieht nach.
+/* Dieselbe schlanke Karte wie die Einzelzeile; der Aufklapp-Mechanismus
+   ist davon unberührt.
    Klassenname bewusst nicht `card`: Bootstrap lädt nach den Scoped Styles. */
 .fold-row {
   display: flex;

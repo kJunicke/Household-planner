@@ -3,10 +3,32 @@ import { ref } from 'vue'
 import { supabase } from '@/lib/supabase'
 import { defineStore } from 'pinia'
 import { useToastStore } from './toastStore'
+import { endSession } from '@/lib/sessionEnd'
 
 export const useAuthStore = defineStore('auth', () => {
   const user = ref<User | null>(null)
   const session = ref<Session | null>(null)
+
+  /**
+   * Setzt `user`/`session` aus einer Supabase-Sitzung (Listener und logout).
+   * Wechselt dabei das Konto oder endet es, räumen zuerst alle Stores und
+   * Kanäle auf — sonst erbt das nächste Konto im selben Tab Haushalt, Aufgaben
+   * und Abos des vorigen. Idempotent: ein zweiter Aufruf mit demselben Konto
+   * tut nichts.
+   */
+  function applySession(newSession: Session | null) {
+    const previousUserId = user.value?.id ?? null
+    const nextUserId = newSession?.user?.id ?? null
+    if (previousUserId !== null && previousUserId !== nextUserId) {
+      endSession({ userId: previousUserId })
+      // Kein `removeAllChannels()` als Kehrbesen: realtime-js trennt danach
+      // bedingungslos den Socket und reißt damit auch die Kanäle ab, die das
+      // neue Konto gleich anlegt. Jeder Store mit Kanal meldet ihn in seinem
+      // `onSessionEnd` selbst per `removeChannel` ab.
+    }
+    session.value = newSession
+    user.value = newSession?.user ?? null
+  }
 
   async function login(email: string, password: string) {
     const toastStore = useToastStore()
@@ -34,8 +56,7 @@ export const useAuthStore = defineStore('auth', () => {
       return
     }
 
-    user.value = null
-    session.value = null
+    applySession(null)
     toastStore.showToast('Erfolgreich abgemeldet', 'success', 3000)
   }
 
@@ -71,8 +92,7 @@ export const useAuthStore = defineStore('auth', () => {
     if (!authListenerRegistered) {
       authListenerRegistered = true
       supabase.auth.onAuthStateChange((_event, newSession) => {
-        session.value = newSession
-        user.value = newSession?.user ?? null
+        applySession(newSession)
       })
     }
   }

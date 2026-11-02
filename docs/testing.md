@@ -65,6 +65,7 @@ Typfehler in `WallNote.vue` als „tsc sauber" gemeldet; er lag nicht daran, das
 übersehen hätte, sondern daran, dass er das Gate nie ausgeführt hat.
 
 ```
+cd putzplan_vue
 npx vue-tsc --noEmit -p tsconfig.app.json
 ```
 
@@ -118,6 +119,7 @@ darüber, welche Fassung läuft, und das Versagen ist **still**: es sieht aus wi
 ein Logikfehler. Hier lief eine Function einmal monatelang in einer alten Fassung.
 
 ```
+cd putzplan_vue
 npx supabase functions deploy <name>
 npx supabase functions list
 ```

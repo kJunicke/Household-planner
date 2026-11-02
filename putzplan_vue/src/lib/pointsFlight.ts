@@ -1,8 +1,8 @@
 /**
  * Der Punkteflug (Pinnwand-Redesign, Etappe 4).
  *
- * Beim Abreißen fliegt der Punktwert sichtbar in die Statusleiste. Das ersetzt
- * das Konfetti: es zeigt nicht nur „geschafft", sondern **wohin** es zählt.
+ * Beim Abreißen fliegt der Punktwert sichtbar in die Statusleiste. Er zeigt
+ * nicht nur „geschafft", sondern **wohin** es zählt.
  *
  * **Warum das Ziel zur Flugzeit gesucht wird und nicht gespeichert ist:** die
  * Leiste klebt oben (`position: sticky`). Ihre Lage im Dokument ändert sich mit

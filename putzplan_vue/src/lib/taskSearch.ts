@@ -1,16 +1,11 @@
 import type { Task } from '@/types/Task'
 
 /**
- * Suche über alle Aufgaben — dieselbe Relevanzregel, die der Putzen-Screen im
- * Such-Overlay benutzt, nur als reine Funktion herausgezogen, damit die
- * Pinnwand sie mitbenutzen kann, ohne `CleaningView` anzufassen.
- *
- * `CleaningView` hat die Logik noch inline; sie darf im Zuge dieses Redesigns
- * nicht verändert werden. Fällt der alte View später weg, ist diese Datei die
- * verbleibende Quelle.
+ * Suche über alle Aufgaben — die Relevanzregel des Such-Overlays der Pinnwand,
+ * als reine Funktion.
  */
 
-export type SearchCategory = 'daily' | 'recurring' | 'project' | 'completed'
+type SearchCategory = 'daily' | 'recurring' | 'project' | 'completed'
 
 export interface TaskSearchResult {
   task: Task
