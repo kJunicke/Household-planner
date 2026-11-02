@@ -186,7 +186,7 @@ export const useTaskStore = defineStore('tasks', () => {
 
   // COMPLETE - Task als erledigt markieren (via Edge Function), optimistisch.
   //
-  // Die Karte bewegt sich sofort und der Aufrufer darf sofort Konfetti zünden;
+  // Die Karte bewegt sich sofort und der Aufrufer darf sofort Rückmeldung geben;
   // Edge Function und Reloads laufen im Hintergrund. Der Rückgabewert sagt
   // deshalb nur „lokal angewendet", nicht „serverseitig bestätigt".
   //
@@ -348,7 +348,7 @@ export const useTaskStore = defineStore('tasks', () => {
       },
 
       onSuccess: async () => {
-        // Reloads im Hintergrund — der Nutzer hat sein Konfetti längst.
+        // Reloads im Hintergrund — der Nutzer hat seine Rückmeldung längst.
         // Die eigenen Zeilen dürfen den Echo-Schutz umgehen, er selbst
         // bleibt gegen spät eintreffende Realtime-Echos bestehen.
         await loadTasks(touchedIds)
@@ -410,7 +410,7 @@ export const useTaskStore = defineStore('tasks', () => {
       }
     }
 
-    // Bewusst NICHT awaiten: Konfetti hängt an der Aktion, nicht am Server.
+    // Bewusst NICHT awaiten: die Rückmeldung hängt an der Aktion, nicht am Server.
     return applied
   }
 

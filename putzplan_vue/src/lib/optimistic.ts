@@ -150,7 +150,7 @@ export interface OptimisticMutation<S> {
  * Hintergrund, `revert` bei Fehlschlag.
  *
  * Rückgabe ist `true`, sobald optimistisch angewendet wurde (der Aufrufer darf
- * dann schon Konfetti zünden), bzw. `false`, wenn `apply` abgebrochen hat.
+ * dann schon Rückmeldung geben), bzw. `false`, wenn `apply` abgebrochen hat.
  * Das Versprechen auf den Serverabschluss steckt in `settled` — nur nutzen, wenn
  * wirklich auf die Bestätigung gewartet werden muss.
  */
