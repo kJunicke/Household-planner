@@ -3,6 +3,7 @@ import { onMounted, onUnmounted, ref } from 'vue'
 import { useNotesStore } from '@/stores/notesStore'
 import { useHouseholdStore } from '@/stores/householdStore'
 import type { Note } from '@/types/Note'
+import { NOTE_CONTENT_MAX_LENGTH } from '@/lib/limits'
 
 const notesStore = useNotesStore()
 const householdStore = useHouseholdStore()
@@ -95,7 +96,7 @@ onUnmounted(() => {
         <div class="input-group">
           <textarea
             v-model="newNoteContent"
-            maxlength="10000"
+            :maxlength="NOTE_CONTENT_MAX_LENGTH"
             class="form-control"
             placeholder="Neue Notiz schreiben..."
             rows="2"
@@ -170,7 +171,7 @@ onUnmounted(() => {
                 v-model="editContent"
                 class="form-control"
                 rows="3"
-                maxlength="10000"
+                :maxlength="NOTE_CONTENT_MAX_LENGTH"
               ></textarea>
               <div class="edit-actions mt-2">
                 <button class="btn btn-sm btn-secondary" @click="cancelEditing">Abbrechen</button>

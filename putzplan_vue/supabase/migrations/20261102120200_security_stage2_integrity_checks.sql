@@ -1,7 +1,7 @@
 -- =================================================================
--- SECURITY STUFE 2b — Querbezüge (B10, nur der kleine Teil)
+-- SECURITY STUFE 2b — Querbezüge (nur der kleine Teil)
 -- =================================================================
--- Rollout: security-rollout.md, Schritt 4. Unabhängig von 20261102120100,
+-- Dritte Stufe. Unabhängig von 20261102120100,
 -- aber erst danach ausrollen (eine Stufe nach der anderen prüfen).
 -- Das heutige Frontend ist nicht betroffen: es weist nur Mitglieder zu,
 -- gleicht nur zwischen Mitgliedern aus und setzt settlements.created_at nie.

@@ -5,6 +5,7 @@ import type { Household, HouseholdMember } from '@/types/households'
 import { useAuthStore } from './authStore'
 import { useToastStore } from './toastStore'
 import { DEFAULT_MEMBER_COLOR } from '@/lib/memberColors'
+import { DISPLAY_NAME_MAX_LENGTH, HOUSEHOLD_NAME_MAX_LENGTH } from '@/lib/limits'
 import {
   DEFAULT_WEEKLY_GOAL_POINTS,
   effectiveWeekStartDay,
@@ -22,13 +23,9 @@ import type { RealtimeChannel } from '@supabase/supabase-js'
 export const MIN_WEEKLY_GOAL_POINTS = 1
 export const MAX_WEEKLY_GOAL_POINTS = 1000
 
-/** Längengrenzen — identisch zu den CHECKs aus 20261102120000 (B8). */
-export const MAX_HOUSEHOLD_NAME_LENGTH = 100
-export const MAX_DISPLAY_NAME_LENGTH = 50
-
 /** Anzeigename beim Anlegen/Beitreten: lokaler Teil der E-Mail, gekürzt. */
 const defaultDisplayName = (email: string | undefined): string =>
-  (email?.split('@')[0] || 'Unbekannt').slice(0, MAX_DISPLAY_NAME_LENGTH)
+  (email?.split('@')[0] || 'Unbekannt').slice(0, DISPLAY_NAME_MAX_LENGTH)
 
 interface CompletionWithEffort {
   user_id: string
@@ -601,7 +598,7 @@ export const useHouseholdStore = defineStore('household', () => {
     // Eine Funktion mit Rückgabetyp `households` (kein SETOF) liefert
     // PostgREST als einzelnes Objekt, nicht als Array.
     const { data, error: householdError } = await supabase.rpc('create_household', {
-      p_name: name.trim().slice(0, MAX_HOUSEHOLD_NAME_LENGTH),
+      p_name: name.trim().slice(0, HOUSEHOLD_NAME_MAX_LENGTH),
       p_display_name: defaultDisplayName(authStore.user.email),
     })
     const householdData = data as Household | null

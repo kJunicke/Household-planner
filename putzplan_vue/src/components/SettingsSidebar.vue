@@ -9,6 +9,7 @@ import type { DesignMode } from '../lib/design'
 import { MIN_WEEKLY_GOAL_POINTS, MAX_WEEKLY_GOAL_POINTS } from '../stores/householdStore'
 import { WEEK_DAY_LABELS } from '../lib/weekWindow'
 import WeeklyGoalConfirmModal from './WeeklyGoalConfirmModal.vue'
+import { DISPLAY_NAME_MAX_LENGTH } from '@/lib/limits'
 
 const props = defineProps<{
   open: boolean
@@ -300,7 +301,7 @@ const buildDate = __BUILD_DATE__
             <div v-else class="profile-edit">
               <input
                 v-model="newDisplayName"
-                maxlength="50"
+                :maxlength="DISPLAY_NAME_MAX_LENGTH"
                 type="text"
                 class="form-control mb-3"
                 placeholder="Dein Name"

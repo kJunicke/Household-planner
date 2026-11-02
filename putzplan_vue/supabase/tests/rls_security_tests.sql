@@ -6,7 +6,7 @@
 -- am Ende immer zurück. Jeder bestandene Fall meldet eine NOTICE „ok …“.
 --
 -- Prüft den Endstand NACH 20261102120000, 20261102120100 und
--- 20261102120200 (security-rollout).
+-- 20261102120200 (alle drei Security-Stufen).
 --
 -- Ausführen — NIE gegen Prod (legt Test-User in auth.users an; zwar mit
 -- ROLLBACK, aber trotzdem nicht):
@@ -87,7 +87,7 @@ BEGIN
   BEGIN
     PERFORM join_household('FALSCH12', 'C');
     RAISE EXCEPTION 'FAILED 04: falscher Code akzeptiert';
-  EXCEPTION WHEN no_data_found THEN
+  EXCEPTION WHEN raise_exception THEN
     IF SQLERRM <> 'invalid_invite_code' THEN RAISE EXCEPTION 'FAILED 04: Meldung %', SQLERRM; END IF;
     RAISE NOTICE 'ok 04: falscher Code → invalid_invite_code';
   END;

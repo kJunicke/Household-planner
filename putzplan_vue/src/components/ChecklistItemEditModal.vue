@@ -3,6 +3,7 @@ import { ref } from 'vue'
 import CategoryCombobox from '@/components/CategoryCombobox.vue'
 import type { ChecklistItem } from '@/types/Checklist'
 import type { CategoryOption } from '@/types/CategoryOption'
+import { SHOPPING_ITEM_NAME_MAX_LENGTH } from '@/lib/limits'
 
 const props = defineProps<{
   item: ChecklistItem
@@ -52,7 +53,7 @@ const stepQty = (delta: number) => {
               v-model="name"
               type="text"
               class="form-control"
-              maxlength="200"
+              :maxlength="SHOPPING_ITEM_NAME_MAX_LENGTH"
               @keyup.enter="handleSave"
               autofocus
             />

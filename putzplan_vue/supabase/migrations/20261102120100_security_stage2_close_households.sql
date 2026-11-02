@@ -2,7 +2,7 @@
 -- SECURITY STUFE 2 (schließend) — Haushalte nur für Mitglieder,
 -- Beitritt nur per RPC, kein hartes DELETE auf tasks/households
 -- =================================================================
--- Rollout: security-rollout.md, Schritt 3. NUR ausrollen, wenn
+-- Zweite Stufe. Erst anwenden, wenn das Frontend die RPCs nutzt, also wenn
 --   (1) 20261102120000 in Prod angewandt ist und
 --   (2) das Frontend mit create_household/join_household-RPC live ist.
 -- Vorher angewandt, brechen Anlegen und Beitreten im alten Frontend
@@ -15,7 +15,7 @@
 SET search_path = public, pg_temp;
 
 -- -----------------------------------------------------------------
--- 1. households: nur das eigene Haus ist lesbar (B1 / Ticket 01)
+-- 1. households: nur das eigene Haus ist lesbar
 -- -----------------------------------------------------------------
 -- Ausdruck wie die übrigen households-Policies in Prod. Die Unterabfrage auf
 -- household_members läuft unter deren SELECT-Policy, die über die
@@ -38,7 +38,7 @@ USING (
 -- Anlegen nur noch über create_household() (SECURITY DEFINER).
 DROP POLICY IF EXISTS "Users can create households" ON public.households;
 
--- Ticket 07 / B2: kein Mitglied löscht den Haushalt (DELETE kaskadiert auf
+-- Kein Mitglied löscht den Haushalt (DELETE kaskadiert auf
 -- alles). Das Frontend ruft households.delete() nirgends auf.
 DROP POLICY IF EXISTS "Users can delete their household" ON public.households;
 
@@ -66,7 +66,7 @@ GRANT UPDATE (display_name, user_color) ON public.household_members TO authentic
 -- Verlassen (DELETE der eigenen Zeile) bleibt unverändert erlaubt.
 
 -- -----------------------------------------------------------------
--- 3. tasks: kein hartes DELETE (B2)
+-- 3. tasks: kein hartes DELETE
 -- -----------------------------------------------------------------
 -- Das Frontend löscht nur weich (deleted_at, taskStore.deleteTask). In Prod
 -- hängt task_completions.task_id mit ON DELETE SET NULL an tasks: ein hartes

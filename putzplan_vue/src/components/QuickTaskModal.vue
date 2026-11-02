@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
+import { COMPLETION_NOTE_MAX_LENGTH, TASK_TITLE_MAX_LENGTH } from '@/lib/limits'
 
 interface Props {
   initialTitle?: string
@@ -21,8 +22,13 @@ interface Emits {
 const props = defineProps<Props>()
 const emit = defineEmits<Emits>()
 
+// Der Suchbegriff wird als Titel übernommen; `maxlength` kürzt nur Getipptes,
+// nicht einen vorbelegten Wert — deshalb hier auf die Titel-Grenze kürzen.
+const titleFromSearch = (query: string | undefined): string =>
+  (query ?? '').slice(0, TASK_TITLE_MAX_LENGTH)
+
 const formData = ref({
-  title: props.initialTitle || '',
+  title: titleFromSearch(props.initialTitle),
   effort: 1 as 1 | 2 | 3 | 4 | 5,
   note: '',
 })
@@ -31,7 +37,7 @@ watch(
   () => props.initialTitle,
   (newVal) => {
     if (newVal) {
-      formData.value.title = newVal
+      formData.value.title = titleFromSearch(newVal)
     }
   },
   { immediate: true },
@@ -74,7 +80,7 @@ const handleClose = () => {
               <input
                 type="text"
                 v-model="formData.title"
-                maxlength="200"
+                :maxlength="TASK_TITLE_MAX_LENGTH"
                 placeholder="z.B. Müll rausgebracht"
                 class="form-control"
                 :disabled="isLoading"
@@ -96,7 +102,7 @@ const handleClose = () => {
               <label class="form-label">Notiz (optional)</label>
               <textarea
                 v-model="formData.note"
-                maxlength="1000"
+                :maxlength="COMPLETION_NOTE_MAX_LENGTH"
                 placeholder="z.B. Details zur Aufgabe"
                 class="form-control"
                 rows="2"

@@ -2,7 +2,7 @@
 -- SECURITY STUFE 1 (additiv) — RPCs für Anlegen/Beitreten, Grants,
 -- Längenlimits, Typwechsel-Sperre
 -- =================================================================
--- Rollout: security-rollout.md, Schritt 1. Diese Datei ist so geschnitten,
+-- Erste von drei Stufen; wird VOR dem Frontend-Deploy angewandt. So geschnitten,
 -- dass das Frontend von VOR der Umstellung weiter funktioniert: sie legt nur
 -- an und entzieht nur Rechte, die kein Client braucht. Die schließenden
 -- Policies kommen in 20261102120100 — erst NACH dem Frontend-Deploy.
@@ -18,7 +18,7 @@
 SET search_path = public, pg_temp;
 
 -- -----------------------------------------------------------------
--- 1. invite_code eindeutig (B1 / Ticket 01)
+-- 1. invite_code eindeutig
 -- -----------------------------------------------------------------
 -- Ohne UNIQUE legt ein Angreifer einen Haushalt mit fremdem Code an, und der
 -- Beitritt per Code trifft zwei Zeilen. In Prod existiert der Constraint
@@ -50,7 +50,7 @@ BEGIN
 END $$;
 
 -- -----------------------------------------------------------------
--- 2. RPC create_household (B1)
+-- 2. RPC create_household
 -- -----------------------------------------------------------------
 -- Legt Haushalt und eigene Mitgliedschaft in EINER Transaktion an. Nötig,
 -- weil nach Stufe 2 weder households noch household_members ein Client-INSERT
@@ -59,6 +59,8 @@ END $$;
 --
 -- Fehler als feste, maschinenlesbare Meldungen (Frontend vergleicht darauf):
 --   not_authenticated · invalid_household_name · already_in_household
+-- SQLSTATE: fachliche Fehler P0001 bzw. 22023 (PostgREST → HTTP 400),
+-- not_authenticated 42501. Nicht P0002: das wäre HTTP 500.
 --
 -- Farbe des Gründers: erste Palettenfarbe, gespiegelt aus
 -- src/lib/memberColors.ts (MEMBER_COLORS[0]).
@@ -106,12 +108,13 @@ END;
 $$;
 
 -- -----------------------------------------------------------------
--- 3. RPC join_household (B1 / Ticket 01)
+-- 3. RPC join_household
 -- -----------------------------------------------------------------
 -- Einziger Weg in einen fremden Haushalt: prüft den Code serverseitig.
 -- Ein falscher Code verrät nichts über andere Haushalte.
 --
 -- Fehler: not_authenticated · already_in_household · invalid_invite_code
+-- (die beiden fachlichen als P0001 → HTTP 400, wie bei create_household).
 --
 -- Farbe: erste Palettenfarbe, die im Haushalt noch frei ist; sind alle
 -- vergeben, zyklisch nach Anzahl der belegten Farben. Palette gespiegelt aus
@@ -148,7 +151,7 @@ BEGIN
   -- FOR UPDATE: zwei gleichzeitige Beitritte wählen ihre Farbe nacheinander.
   SELECT * INTO v_house FROM public.households WHERE invite_code = v_code FOR UPDATE;
   IF NOT FOUND THEN
-    RAISE EXCEPTION 'invalid_invite_code' USING ERRCODE = 'P0002';
+    RAISE EXCEPTION 'invalid_invite_code' USING ERRCODE = 'P0001';
   END IF;
 
   SELECT coalesce(array_agg(DISTINCT upper(m.user_color)), ARRAY[]::text[]) INTO v_used
@@ -181,7 +184,7 @@ GRANT EXECUTE ON FUNCTION public.create_household(text, text) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.join_household(text, text) TO authenticated;
 
 -- -----------------------------------------------------------------
--- 4. B3 — SECURITY-DEFINER-Funktionen nicht mehr per /rpc erreichbar
+-- 4. SECURITY-DEFINER-Funktionen nicht mehr per /rpc erreichbar
 -- -----------------------------------------------------------------
 -- Der Cron-Job läuft als postgres (Eigentümer) und braucht kein GRANT.
 REVOKE EXECUTE ON FUNCTION public.reset_recurring_tasks() FROM PUBLIC, anon, authenticated;
@@ -208,18 +211,18 @@ $$;
 REVOKE EXECUTE ON FUNCTION public.get_user_household_id(uuid) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.get_user_household_id(uuid) TO authenticated;
 
--- Kleinkram aus B3: fester search_path am INVOKER-Trigger, und der
+-- Dazu: fester search_path am INVOKER-Trigger, und der
 -- notes-Trigger braucht keine Definer-Rechte (setzt nur NEW.updated_at).
 ALTER FUNCTION public.remove_priority_on_purchase() SET search_path = public, pg_temp;
 ALTER FUNCTION public.update_notes_updated_at() SECURITY INVOKER;
 
 -- -----------------------------------------------------------------
--- 5. B8 / Ticket 03 — Längenlimits
+-- 5. Längenlimits
 -- -----------------------------------------------------------------
 -- NOT VALID: gilt sofort für neue und geänderte Zeilen, Bestandsdaten
 -- brechen die Migration nicht. Danach VALIDATE; schlägt das fehl, bleibt der
 -- Constraint NOT VALID stehen (NOTICE) — in Prod waren es 0 Verstöße.
--- Die Frontend-Grenzen (maxlength) sind dieselben Zahlen.
+-- Die Frontend-Grenzen (maxlength, src/lib/limits.ts) sind dieselben Zahlen.
 DO $$
 DECLARE
   r record;
@@ -249,7 +252,7 @@ BEGIN
 END $$;
 
 -- -----------------------------------------------------------------
--- 6. B13 / Ticket 16 — Typwechsel und Punktemodus in der DB absichern
+-- 6. Typwechsel und Punktemodus in der DB absichern
 -- -----------------------------------------------------------------
 -- (a) `project` ist kein Wechselziel und keine Wechselquelle — die UI sperrt
 --     das schon (TaskEditModal), jetzt auch die DB. Ein umgestelltes Projekt
@@ -301,7 +304,7 @@ CREATE TRIGGER trg_guard_task_type
   FOR EACH ROW
   EXECUTE FUNCTION public.guard_task_type();
 
--- B11 (Indizes): bewusst nicht. Prod hat 4 Haushalte, die fehlenden Indizes
+-- Fehlende Indizes: bewusst nicht. Prod hat 4 Haushalte, die fehlenden Indizes
 -- sind dort nicht messbar. Kommt mit dem Umbau auf current_household_id().
 
 -- =================================================================

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { Task } from '@/types/Task'
 import { ref, computed } from 'vue'
+import { TASK_TITLE_MAX_LENGTH } from '@/lib/limits'
 
 interface Props {
   parentTask: Task
@@ -166,7 +167,7 @@ const handleDeleteSubtask = (subtaskId: string) => {
                 type="text"
                 class="form-control"
                 v-model="newSubtaskTitle"
-                maxlength="200"
+                :maxlength="TASK_TITLE_MAX_LENGTH"
                 placeholder="Name der Unteraufgabe"
                 @keyup.enter="handleAddSubtask"
               />

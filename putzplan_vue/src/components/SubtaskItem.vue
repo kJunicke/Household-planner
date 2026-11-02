@@ -5,6 +5,7 @@ import { ref, computed } from 'vue'
 import TaskCompletionModal from './TaskCompletionModal.vue'
 import ProjectWorkModal from './ProjectWorkModal.vue'
 import confetti from 'canvas-confetti'
+import { TASK_TITLE_MAX_LENGTH } from '@/lib/limits'
 
 interface Props {
   task: Task // Subtask (has parent_task_id)
@@ -117,7 +118,7 @@ const handleProjectWork = async (effort: number, note: string) => {
       <input
         type="text"
         v-model="editForm.title"
-        maxlength="200"
+        :maxlength="TASK_TITLE_MAX_LENGTH"
         class="form-control form-control-sm"
         placeholder="Subtask Name"
       />

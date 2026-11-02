@@ -13,6 +13,7 @@
 import { computed, ref, watch } from 'vue'
 import CategoryCombobox from '@/components/CategoryCombobox.vue'
 import type { CategoryOption } from '@/types/CategoryOption'
+import { SHOPPING_ITEM_NAME_MAX_LENGTH } from '@/lib/limits'
 
 const props = withDefaults(
   defineProps<{
@@ -122,7 +123,7 @@ const handleInputBlur = () => {
           type="text"
           class="top-name-input"
           :placeholder="placeholder"
-          maxlength="200"
+          :maxlength="SHOPPING_ITEM_NAME_MAX_LENGTH"
           :disabled="disabled"
           @keyup.enter="handleAdd"
           @focus="handleInputFocus"

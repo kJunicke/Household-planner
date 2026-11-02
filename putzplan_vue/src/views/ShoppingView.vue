@@ -17,6 +17,7 @@ import ShoppingCategoryCreateModal from '@/components/ShoppingCategoryCreateModa
 import CategoryEditModal from '@/components/CategoryEditModal.vue'
 import CategoryCombobox from '@/components/CategoryCombobox.vue'
 import LongSheet from '@/components/LongSheet.vue'
+import { SHOPPING_ITEM_NAME_MAX_LENGTH } from '@/lib/limits'
 
 const shoppingStore = useShoppingStore()
 const householdStore = useHouseholdStore()
@@ -586,7 +587,7 @@ onUnmounted(() => {
                   type="text"
                   class="top-name-input"
                   placeholder="Produkt hinzufügen…"
-                  maxlength="200"
+                  :maxlength="SHOPPING_ITEM_NAME_MAX_LENGTH"
                   @keyup.enter="handleAddItem"
                   @focus="handleInputFocus"
                   @blur="handleInputBlur"
@@ -768,7 +769,7 @@ onUnmounted(() => {
                           :placeholder="
                             group.isUncategorized ? '+ hinzufügen…' : `+ zu ${group.label}…`
                           "
-                          maxlength="200"
+                          :maxlength="SHOPPING_ITEM_NAME_MAX_LENGTH"
                           @focus="onSectionAddFocus(group.key)"
                           @blur="onSectionAddBlur"
                           @keyup.enter="handleSectionAdd(group)"
