@@ -1082,7 +1082,8 @@ onUnmounted(() => {
 }
 
 /* Einzeilig bis hinunter zu 360 px: die festen Knöpfe behalten ihre Trefferfläche,
-   Produktfeld und Kategorie teilen sich den Rest — die Kategorie gibt zuerst nach. */
+   Produktfeld und Kategorie teilen sich den Rest — der Name gibt zuerst nach,
+   die Kategorie hält ihre Mindestbreite (Begründung in `ListAddBar.vue`). */
 .top-bar {
   display: flex;
   align-items: center;

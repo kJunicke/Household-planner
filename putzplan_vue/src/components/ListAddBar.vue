@@ -203,7 +203,8 @@ const handleInputBlur = () => {
 }
 
 /* Einzeilig bis hinunter zu 360 px: die festen Knöpfe behalten ihre Trefferfläche,
-   Namensfeld und Kategorie teilen sich den Rest — die Kategorie gibt zuerst nach. */
+   Namensfeld und Kategorie teilen sich den Rest — der Name gibt zuerst nach
+   (Begründung an `.top-combo`). */
 .top-bar {
   display: flex;
   align-items: center;
@@ -231,13 +232,12 @@ const handleInputBlur = () => {
   outline: none;
   border-color: var(--color-primary);
 }
-/* 96px ist gemessen, nicht geraten: von der Aussenbreite gehen Rahmen (4),
-   Polsterung (12), Farbpunkt samt Abstand (11) und der Leeren-Knopf (15) ab —
-   bei den alten `min-width: 64px` blieben fuer das Eingabefeld selbst 28px, und
-   `QC-Kosmetik` und `QC-Kosmetika` sahen beide wie `QC-K…` aus (Befund F3).
-   Die Schranke greift ab rund 400px Leistenbreite; darueber teilen sich Name
-   und Kategorie weiter nach Anteil. Der Name gibt jetzt zuerst nach — ein
-   halber Eintragsname ist lesbar, ein halber Kategoriename verwechselbar. */
+/* Von der Aussenbreite gehen Rahmen (4), Polsterung (12), Farbpunkt samt Abstand
+   (11) und der Leeren-Knopf (15) ab; mit 96px bleibt dem Eingabefeld genug, um
+   ähnliche Kategorien (`Kosmetik`/`Kosmetika`) zu unterscheiden. Die Schranke
+   greift ab rund 400px Leistenbreite; darüber teilen sich Name und Kategorie
+   nach Anteil. Der Name gibt zuerst nach — ein halber Eintragsname ist lesbar,
+   ein halber Kategoriename verwechselbar. */
 .top-combo {
   flex: 1 1 30%;
   min-width: 96px;
