@@ -1075,6 +1075,17 @@ watch(
 // und ein Scrollen davor könnte die Scroll-Wiederherstellung des Browsers
 // zurücksetzen.
 let jumpTargetId: string | null = null
+let jumpPulse: Animation | null = null
+
+/**
+ * Stapelhöhe des Zettels, solange sein Sprung-Ring pulsiert: über allen ruhenden
+ * (1…n) und fliegenden (600 + z) Zetteln, damit kein Nachbar den Ring verdeckt;
+ * unter dem gezogenen bzw. lang gedrückten Zettel (800/810, `WallNote.vue`) und
+ * unter Navigation (900), Header samt Statusleiste (950), FAB (1000) und
+ * Such-Overlay (1010). Die Wand bildet keinen eigenen Stapelkontext — die Zettel
+ * konkurrieren direkt mit diesen Ebenen.
+ */
+const JUMP_PULSE_Z = '799'
 
 const jumpToResult = (taskId: string) => {
   jumpTargetId = taskId
@@ -1099,10 +1110,18 @@ function revealJumpTarget() {
       const accent = getComputedStyle(document.documentElement).getPropertyValue('--pw-accent')
       const ring = `3px solid ${accent.trim()}`
       const offset = note ? '4px' : '-3px'
-      el.animate(
+      // Der z-index reist IN der Animation mit, nicht als Inline-Style: den
+      // Inline-Wert schreibt `relayout` (und `animateMoves`) bei jedem Lauf neu.
+      // Die Animation liegt in der Kaskade darüber und lässt ihn unberührt — beim
+      // Ende, beim Abbruch und beim nächsten Sprung gilt deshalb wieder genau der
+      // Wert, den die Wand zuletzt gesetzt hat. Ein gemerkter Altwert wäre nach
+      // einem Packlauf während des Pulses veraltet.
+      const lift = note ? { zIndex: JUMP_PULSE_Z } : {}
+      jumpPulse?.cancel()
+      jumpPulse = el.animate(
         [
-          { outline: ring, outlineOffset: offset },
-          { outline: '3px solid transparent', outlineOffset: offset },
+          { outline: ring, outlineOffset: offset, ...lift },
+          { outline: '3px solid transparent', outlineOffset: offset, ...lift },
         ],
         { duration: 500, iterations: 4, easing: 'ease-in', delay: reduceMotion ? 0 : 250 },
       )
