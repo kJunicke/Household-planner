@@ -48,11 +48,6 @@ export interface ChecklistItem {
   created_by: string | null
 }
 
-// Der Sentinel lebt in der geteilten Bibliothek (Einkauf und Checkliste bilden
-// Sektionsschlüssel gleich); hier nur weitergereicht, damit `packingStore` ihn
-// wie bisher exportieren kann.
-export { UNCATEGORIZED } from '@/lib/categoryOrder'
-
 /**
  * Eine Sektion der Checkliste. Erfüllt `OrderableCategoryGroup` aus
  * `@/lib/categoryOrder` ohne Adapter — deshalb `doneCount` (nicht `packedCount`)

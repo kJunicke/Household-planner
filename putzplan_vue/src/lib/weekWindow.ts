@@ -17,7 +17,7 @@
  */
 
 /** Wochenstart als JS-Wochentag: 0 = Sonntag … 6 = Samstag. */
-export const DEFAULT_WEEK_START_DAY = 1 // Montag
+const DEFAULT_WEEK_START_DAY = 1 // Montag
 
 /** Ersatz-Wochenziel, solange der Haushalt keins gesetzt hat (oder die Spalte fehlt). */
 export const DEFAULT_WEEKLY_GOAL_POINTS = 30
@@ -34,7 +34,7 @@ export const normalizeWeekStartDay = (value: number | null | undefined): number 
  * Lokale Mitternacht des letzten `weekStartDay`, der nicht in der Zukunft liegt.
  * Fällt `now` selbst auf den Wochenstart, ist es dessen Mitternacht.
  */
-export const startOfWeek = (now: Date, weekStartDay: number): Date => {
+const startOfWeek = (now: Date, weekStartDay: number): Date => {
   const day = normalizeWeekStartDay(weekStartDay)
   const start = new Date(now.getFullYear(), now.getMonth(), now.getDate())
   const diff = (start.getDay() - day + 7) % 7
@@ -169,7 +169,7 @@ export const formatWeekStartDate = (date: Date): string =>
   `${WEEK_DAY_LABELS[date.getDay()]}, ${formatGermanDate(date)}`
 
 /** „19.08.2026" */
-export const formatGermanDate = (date: Date): string => {
+const formatGermanDate = (date: Date): string => {
   const day = `${date.getDate()}`.padStart(2, '0')
   const month = `${date.getMonth() + 1}`.padStart(2, '0')
   return `${day}.${month}.${date.getFullYear()}`

@@ -1,7 +1,7 @@
 // Pending Mutation Type für Offline-Sync Queue
 // Beschreibt eine Operation die noch nicht mit Supabase synchronisiert wurde
 
-export type MutationOperation = 'create' | 'update' | 'delete'
+type MutationOperation = 'create' | 'update' | 'delete'
 
 export interface PendingMutation {
   // Eindeutige ID für Queue-Item (timestamp + random)

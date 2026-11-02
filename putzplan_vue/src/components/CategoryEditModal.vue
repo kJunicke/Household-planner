@@ -6,7 +6,7 @@ import { categoryColor } from '@/lib/categoryColor'
  * Wortwahl der Löschvarianten. Der Standard ist der Einkauf, weil er diese
  * Maske zuerst hatte; Packliste und To-do reichen ihre eigenen Wörter durch.
  */
-export interface CategoryEditWording {
+interface CategoryEditWording {
   /** Einzahl eines Eintrags: „Produkt" / „Gegenstand" / „Eintrag". */
   itemOne: string
   /** Mehrzahl: „Produkte" / „Gegenstände" / „Einträge". */
@@ -37,16 +37,10 @@ const props = withDefaults(
      * Varianten ihre Zuordnung, zählen also gegen „leer".
      */
     purchasedCount?: number
-    /**
-     * Beide Löschvarianten anbieten und eine leere Kategorie ohne Rückfrage
-     * löschen. Einkauf, Packliste und To-do setzen das seit Etappe 2 alle
-     * gleich; der Standardwert `false` bleibt nur für Aufrufer ohne Angabe.
-     */
-    variants?: boolean
     /** Fehlt → heutige Einkaufs-Texte. */
     wording?: Partial<CategoryEditWording>
   }>(),
-  { variants: false, purchasedCount: 0, wording: undefined },
+  { purchasedCount: 0, wording: undefined },
 )
 
 const w = computed<CategoryEditWording>(() => ({
@@ -75,7 +69,6 @@ const affectedCount = computed(() =>
 
 const emit = defineEmits<{
   rename: [oldName: string, newName: string]
-  /** withItems nur im Varianten-Modus gesetzt. */
   delete: [category: string, withItems: boolean]
   close: []
 }>()
@@ -92,7 +85,7 @@ const handleRename = () => {
 /** Leer heißt: nichts zu verlieren — dann ist die Rückfrage nur im Weg. */
 const onDeleteClick = () => {
   const isEmpty = props.itemCount === 0 && props.purchasedCount === 0
-  if (props.variants && isEmpty) emit('delete', props.category, false)
+  if (isEmpty) emit('delete', props.category, false)
   else showDeleteConfirm.value = true
 }
 </script>
@@ -132,8 +125,8 @@ const onDeleteClick = () => {
             <i class="bi bi-trash me-1"></i> Löschen
           </button>
 
-          <!-- Varianten-Modus: beide Wege ausdrücklich benannt, mit konkreter Zahl. -->
-          <div v-else-if="variants" class="delete-variants me-auto">
+          <!-- Beide Wege ausdrücklich benannt, mit konkreter Zahl. -->
+          <div v-else class="delete-variants me-auto">
             <button class="btn btn-sm btn-outline-danger" @click="emit('delete', category, false)">
               Nur Kategorie löschen
               <small class="d-block text-muted">
@@ -166,24 +159,8 @@ const onDeleteClick = () => {
             </button>
           </div>
 
-          <div v-else class="delete-confirm me-auto">
-            <span class="text-danger me-2">
-              {{
-                itemCount > 0
-                  ? `Kategorie + ${itemCount} ${noun(itemCount)} löschen?`
-                  : 'Kategorie löschen?'
-              }}
-            </span>
-            <button class="btn btn-sm btn-danger me-1" @click="emit('delete', category, true)">
-              Ja
-            </button>
-            <button class="btn btn-sm btn-secondary" @click="showDeleteConfirm = false">
-              Abbrechen
-            </button>
-          </div>
-
           <!-- Während der Löschfrage keine zweite Entscheidung danebenstellen. -->
-          <template v-if="!(variants && showDeleteConfirm)">
+          <template v-if="!showDeleteConfirm">
             <button class="btn btn-secondary" @click="emit('close')">Abbrechen</button>
             <button
               class="btn btn-primary"
@@ -220,11 +197,5 @@ const onDeleteClick = () => {
 }
 .delete-variants small {
   font-size: var(--font-xs);
-}
-.delete-confirm {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 4px;
 }
 </style>

@@ -15,7 +15,7 @@
  */
 
 /** FNV-1a, 32 Bit. Klein, schnell, gut gestreut — kryptografisch irrelevant. */
-export function fnv1a(input: string): number {
+function fnv1a(input: string): number {
   let hash = 2166136261
   for (let i = 0; i < input.length; i++) {
     hash ^= input.charCodeAt(i)
@@ -54,7 +54,7 @@ export function jitterOf(taskId: string, key: string, range: number): number {
 }
 
 /** Abstand unter einem Zettel: 2 … 15 px. */
-export function gapOf(taskId: string): number {
+function gapOf(taskId: string): number {
   return 2 + (fnv1a(`${taskId}#gap`) % 14)
 }
 
@@ -86,7 +86,7 @@ export function kindOfTaskType(taskType: string): WallNoteKind {
  * Komposita; ein alltägliches wie „Dunstabzugshaubenfilter" (23 Zeichen)
  * bleibt deutlich unter der vollen Wandbreite.
  */
-export const MAX_WIDTH_RATIO = 0.45
+const MAX_WIDTH_RATIO = 0.45
 
 /**
  * Waagerechter Abstand, den der Reihenplaner (`planNoteWidths`) zwischen einem
@@ -114,7 +114,7 @@ const ROW_GAP_JITTER = 4
  * x-/y-Versatz (`jitterOf` mit den Schlüsseln `x`/`y`) — sie muss von der
  * Drehung unabhängig sein.
  */
-export function rowGapOf(taskId: string): number {
+function rowGapOf(taskId: string): number {
   return ROW_GAP_BASE + jitterOf(taskId, 'hgap', ROW_GAP_JITTER)
 }
 
@@ -132,7 +132,7 @@ export function rowGapOf(taskId: string): number {
 const LEFT_INDENT_MAX = 12
 
 /** Einrückung dieses Zettels: 0…`LEFT_INDENT_MAX`, deterministisch aus der `task_id`. */
-export function indentOf(taskId: string): number {
+function indentOf(taskId: string): number {
   return fnv1a(`${taskId}#indent`) % (LEFT_INDENT_MAX + 1)
 }
 
@@ -203,7 +203,7 @@ const EXPANDED_GAP = 8
  * „Boden", „Lampen"), zwei der Regelfall. Fällt ein Titel zu lang aus, verteilt
  * die Zeile ihn auf zwei Zeilen; falsch wird nur die Dichte, nie die Lesbarkeit.
  */
-export const SUBTASK_C3_MAX_TITLE = 12
+const SUBTASK_C3_MAX_TITLE = 12
 
 export function subtaskColumns(titles: readonly string[]): 2 | 3 {
   if (titles.length === 0) return 2
@@ -388,7 +388,7 @@ export function planNoteWidths(
   return plan
 }
 
-export interface PackedNote {
+interface PackedNote {
   id: string
   x: number
   y: number
@@ -468,12 +468,7 @@ type FastenerAnchor = 'center' | 'left' | 'right'
  * Kopplung deshalb durch Kommentare an BEIDEN Enden: die CSS-Regeln in
  * `WallNote.vue` (`.zettel`, `.pin`, `.tape`, `.clip`) verweisen hierher.
  *
- * **Nicht enthalten:** `.pw-tape` aus `pinnwand.css` (62 × 20 px, `top: -10px`)
- * hätte den größten Überstand von allen, ist aber **toter Code** — die Klasse
- * kommt in keinem Markup vor, nur die gleichnamige CSS-Variable wird benutzt.
- * Sollte sie je in Gebrauch kommen, gehört sie in diese Tabelle.
- *
- * **Ebenfalls nicht enthalten: Schlagschatten** (alle werfen nach unten) und
+ * **Nicht enthalten: Schlagschatten** (alle werfen nach unten) und
  * die zusätzlichen Neigungen der Griff-Zustände (`.zettel--tearing` u. a., bis
  * +9 deg).
  *

@@ -23,7 +23,7 @@ import { scheduleOf, isOverdue } from '@/lib/taskSchedule'
 // Aufgaben Infinity ist und Infinity - Infinity = NaN einen Komparator zerstört.
 // Gleichstand ergibt 0 — Array.prototype.sort ist stabil, die Eingabereihenfolge
 // aus dem Store bleibt damit der Tiebreak.
-export const byUrgency = (a: Task, b: Task): number => {
+const byUrgency = (a: Task, b: Task): number => {
   const ua = scheduleOf(a).urgency
   const ub = scheduleOf(b).urgency
   return ua === ub ? 0 : ub - ua
@@ -32,7 +32,7 @@ export const byUrgency = (a: Task, b: Task): number => {
 // "Jetzt dran": jede offene wiederkehrende Aufgabe.
 // Die Kadenz-Grenze wird hier NICHT ausgewertet. Damit erscheint auch eine manuell
 // als "wieder dreckig" markierte Aufgabe hier, obwohl ihr Intervall noch läuft.
-export const isPending = (task: Task): boolean =>
+const isPending = (task: Task): boolean =>
   task.task_type === 'recurring' && !task.completed && task.parent_task_id === null
 
 /**

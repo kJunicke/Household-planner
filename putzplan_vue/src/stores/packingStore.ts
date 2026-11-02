@@ -18,6 +18,3 @@ export const usePackingStore = createChecklistStore({
     syncSuccess: 'Packliste synchronisiert',
   },
 })
-
-export { UNCATEGORIZED } from '@/types/Checklist'
-export type { CategoryGroup } from '@/types/Checklist'

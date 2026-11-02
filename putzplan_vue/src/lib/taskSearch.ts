@@ -10,7 +10,7 @@ import type { Task } from '@/types/Task'
  * verbleibende Quelle.
  */
 
-export type SearchCategory = 'daily' | 'recurring' | 'project' | 'completed'
+type SearchCategory = 'daily' | 'recurring' | 'project' | 'completed'
 
 export interface TaskSearchResult {
   task: Task

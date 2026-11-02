@@ -1,4 +1,4 @@
-import { ref, computed } from 'vue'
+import { ref } from 'vue'
 import { defineStore } from 'pinia'
 import type { Task, TaskCompletion, EnrichedCompletion } from '@/types/Task'
 import { supabase } from '@/lib/supabase'
@@ -662,9 +662,6 @@ export const useTaskStore = defineStore('tasks', () => {
   const discardUndoTicket = (taskId: string) => {
     undoTickets.delete(taskId)
   }
-
-  /** Gibt es für diese Aufgabe noch ein offenes Rückgängig-Fenster? */
-  const canUndoCompletion = (taskId: string) => undoTickets.has(taskId)
 
   /**
    * ZURÜCKKLEBEN — die jüngste eigene Erledigung dieser Aufgabe zurücknehmen
@@ -1403,9 +1400,6 @@ export const useTaskStore = defineStore('tasks', () => {
   }
 
   // SUBTASKS - Helper für Self-Referencing Tasks
-  // Parent Tasks = tasks ohne parent_task_id
-  const parentTasks = computed(() => tasks.value.filter((t) => t.parent_task_id === null))
-
   // Subtasks für eine bestimmte Parent Task holen (sortiert nach order_index)
   const getSubtasks = (parentTaskId: string) =>
     tasks.value
@@ -1436,33 +1430,6 @@ export const useTaskStore = defineStore('tasks', () => {
 
     // Reload tasks vom Backend (Source of Truth)
     await loadTasks()
-    return true
-  }
-
-  // PROJECTS - Complete a project permanently
-  const completeProject = async (projectId: string) => {
-    const toastStore = useToastStore()
-    isLoading.value = true
-
-    const { error } = await supabase
-      .from('tasks')
-      .update({
-        completed: true,
-        last_completed_at: new Date().toISOString(),
-      })
-      .eq('task_id', projectId)
-
-    isLoading.value = false
-
-    if (error) {
-      console.error('Error completing project:', error)
-      toastStore.showToast('Fehler beim Abschließen des Projekts', 'error')
-      return false
-    }
-
-    // Reload tasks vom Backend (Source of Truth)
-    await loadTasks()
-    toastStore.showToast('Projekt abgeschlossen', 'success', 3000)
     return true
   }
 
@@ -1635,7 +1602,6 @@ export const useTaskStore = defineStore('tasks', () => {
     completeTask,
     undoCompletion,
     discardUndoTicket,
-    canUndoCompletion,
     markAsDirty,
     cycleEmphasisLevel,
     postponeTask,
@@ -1650,16 +1616,13 @@ export const useTaskStore = defineStore('tasks', () => {
     deleteCompletion,
     deleteAllCompletions,
     // Subtasks
-    parentTasks,
     getSubtasks,
     resetSubtasks,
     // Projects
-    completeProject,
     getProjectEffort,
     projectEffortTotals,
     loadProjectEffortTotals,
     getProjectEffortTotal,
-    refreshProjectEffortTotals,
     stopProjectEffortTotals,
   }
 })
