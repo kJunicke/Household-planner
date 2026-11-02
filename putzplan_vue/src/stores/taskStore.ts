@@ -1092,6 +1092,14 @@ export const useTaskStore = defineStore('tasks', () => {
           }
         },
       )
+      // Hartes DELETE ungefiltert: ohne REPLICA IDENTITY FULL trägt es nur den
+      // PK, der household_id-Filter oben verwirft es. Die App löscht weich
+      // (UPDATE, siehe oben); das hier fängt Löschungen außerhalb der App.
+      // Fremde PKs treffen nichts.
+      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'tasks' }, (payload) => {
+        const deletedTask = payload.old as Pick<Task, 'task_id'>
+        tasks.value = tasks.value.filter((t) => t.task_id !== deletedTask.task_id)
+      })
       .on(
         'postgres_changes',
         {

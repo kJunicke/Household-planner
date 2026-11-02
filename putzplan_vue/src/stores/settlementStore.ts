@@ -228,6 +228,18 @@ export const useSettlementStore = defineStore('settlement', () => {
           }
         },
       )
+      // DELETE ungefiltert: ohne REPLICA IDENTITY FULL trägt das Ereignis nur
+      // den PK, der household_id-Filter oben verwirft es — ein fremd
+      // gelöschter Ausgleich zählte sonst weiter in die Bilanz. Fremde PKs
+      // treffen nichts, das Entfernen ist dann ein No-op.
+      .on(
+        'postgres_changes',
+        { event: 'DELETE', schema: 'public', table: 'settlements' },
+        (payload) => {
+          const s = payload.old as Pick<Settlement, 'settlement_id'>
+          settlements.value = settlements.value.filter((x) => x.settlement_id !== s.settlement_id)
+        },
+      )
       .subscribe()
   }
 

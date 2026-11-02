@@ -217,6 +217,14 @@ export const useNotesStore = defineStore('notes', () => {
           }
         },
       )
+      // DELETE ungefiltert: ohne REPLICA IDENTITY FULL trägt das Ereignis nur
+      // den PK, der household_id-Filter oben verwirft es — fremd gelöschte
+      // Notizen blieben stehen. Fremde PKs treffen nichts, das Entfernen ist
+      // dann ein No-op.
+      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'notes' }, (payload) => {
+        const deletedNote = payload.old as Pick<Note, 'note_id'>
+        notes.value = notes.value.filter((n) => n.note_id !== deletedNote.note_id)
+      })
       .subscribe((status) => {
         console.log('Notes realtime subscription status:', status)
       })
