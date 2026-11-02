@@ -1,7 +1,7 @@
 import 'bootstrap/dist/css/bootstrap.min.css'
 import './assets/main.css'
 
-import { createApp } from 'vue'
+import { createApp, watch } from 'vue'
 import { createPinia } from 'pinia'
 import router from './router'
 import { useAuthStore } from './stores/authStore'
@@ -34,9 +34,10 @@ app.use(createPinia())
 const authStore = useAuthStore()
 await authStore.initializeAuth()
 
+const householdStore = useHouseholdStore()
+
 // Load household after auth is initialized
 if (authStore.user) {
-  const householdStore = useHouseholdStore()
   await householdStore.loadUserHousehold()
 }
 
@@ -46,4 +47,25 @@ if (authStore.user) {
 useShoppingStore()
 
 app.use(router)
+
+// Endet die Sitzung von außen (anderer Tab, widerrufenes Token), räumen die
+// Stores über `onSessionEnd` auf — aber der Router-Guard läuft nur beim
+// Navigieren, die Ansicht bliebe leer stehen. Übernimmt ohne Abmeldung ein
+// anderes Konto, braucht es dessen Haushalt, sonst schickte der Guard es zur
+// Einrichtung. Eine normale Anmeldung (vorher niemand) erledigt LoginView.
+watch(
+  () => authStore.user?.id ?? null,
+  async (userId, previousUserId) => {
+    if (userId === null) {
+      const name = router.currentRoute.value.name
+      if (name !== 'login' && name !== 'register') await router.replace('/login')
+      return
+    }
+    if (previousUserId !== null) {
+      await householdStore.loadUserHousehold()
+      await router.replace('/')
+    }
+  },
+)
+
 app.mount('#app')

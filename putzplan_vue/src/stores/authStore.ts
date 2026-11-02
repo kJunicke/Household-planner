@@ -3,10 +3,39 @@ import { ref } from 'vue'
 import { supabase } from '@/lib/supabase'
 import { defineStore } from 'pinia'
 import { useToastStore } from './toastStore'
+import { endSession } from '@/lib/sessionEnd'
 
 export const useAuthStore = defineStore('auth', () => {
   const user = ref<User | null>(null)
   const session = ref<Session | null>(null)
+
+  // Unterscheidet beim Session-Ende den Abmelde-Knopf von einer Abmeldung von
+  // außen; `signOut` meldet SIGNED_OUT, bevor sein Promise auflöst.
+  let loggingOut = false
+
+  /**
+   * Setzt `user`/`session` aus einer Supabase-Sitzung (Listener und logout).
+   * Wechselt dabei das Konto oder endet es, räumen zuerst alle Stores und
+   * Kanäle auf — sonst erbt das nächste Konto im selben Tab Haushalt, Aufgaben
+   * und Abos des vorigen. Idempotent: ein zweiter Aufruf mit demselben Konto
+   * tut nichts.
+   */
+  function applySession(newSession: Session | null) {
+    const previousUserId = user.value?.id ?? null
+    const nextUserId = newSession?.user?.id ?? null
+    if (previousUserId !== null && previousUserId !== nextUserId) {
+      endSession({
+        userId: previousUserId,
+        reason: nextUserId !== null ? 'user-changed' : loggingOut ? 'logout' : 'signed-out',
+      })
+      // Kehrbesen nach den Stores: auch Kanäle von Stores, die sich nicht
+      // selbst abmelden. Ein Kanal des alten Kontos liefe sonst mit dessen
+      // Haushaltsfilter weiter.
+      void supabase.removeAllChannels()
+    }
+    session.value = newSession
+    user.value = newSession?.user ?? null
+  }
 
   async function login(email: string, password: string) {
     const toastStore = useToastStore()
@@ -26,7 +55,10 @@ export const useAuthStore = defineStore('auth', () => {
   }
   async function logout() {
     const toastStore = useToastStore()
-    const { error } = await supabase.auth.signOut()
+    loggingOut = true
+    const { error } = await supabase.auth.signOut().finally(() => {
+      loggingOut = false
+    })
 
     if (error) {
       console.error('Logout error:', error.message)
@@ -34,8 +66,7 @@ export const useAuthStore = defineStore('auth', () => {
       return
     }
 
-    user.value = null
-    session.value = null
+    applySession(null)
     toastStore.showToast('Erfolgreich abgemeldet', 'success', 3000)
   }
 
@@ -71,8 +102,7 @@ export const useAuthStore = defineStore('auth', () => {
     if (!authListenerRegistered) {
       authListenerRegistered = true
       supabase.auth.onAuthStateChange((_event, newSession) => {
-        session.value = newSession
-        user.value = newSession?.user ?? null
+        applySession(newSession)
       })
     }
   }

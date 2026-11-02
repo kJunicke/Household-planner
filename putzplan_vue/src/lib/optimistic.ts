@@ -139,7 +139,10 @@ export interface OptimisticMutation<S> {
   commit: () => Promise<void>
   /** Rücknahme mit dem Schnappschuss aus `apply` und dem Fehler des Commits. */
   revert: (snapshot: S, error: unknown) => void | Promise<void>
-  /** Läuft nach erfolgreichem Commit, noch innerhalb der Buchführung. */
+  /**
+   * Läuft nach erfolgreichem Commit, noch innerhalb der Buchführung. Ein Fehler
+   * hier wird nur geloggt — er macht den bestätigten Commit nicht rückgängig.
+   */
   onSuccess?: () => void | Promise<void>
   /** Fehlerbehandlung (z.B. Toast). Läuft nach `revert`. */
   onError?: (error: unknown) => void
@@ -184,7 +187,14 @@ export function runOptimistic<S>(mutation: OptimisticMutation<S>): {
   const settled = enqueue(mutation.entityId, async () => {
     try {
       await mutation.commit()
-      await mutation.onSuccess?.()
+      // Eigenes `try`: der Server hat bestätigt. Liefe ein werfender Nachlader
+      // in den `catch` darunter, nähme `revert` eine geschehene Änderung lokal
+      // zurück — Punkte gebucht, Karte wieder offen, Rückgängig weg.
+      try {
+        await mutation.onSuccess?.()
+      } catch (onSuccessError) {
+        console.error('Optimistic onSuccess failed after confirmed commit:', onSuccessError)
+      }
       return true
     } catch (error) {
       console.error('Optimistic mutation failed:', error)

@@ -15,6 +15,10 @@ import {
   runOptimistic,
   serializeMutation,
 } from '@/lib/optimistic'
+import { createLatestRunGuard } from '@/lib/latestRun'
+import { mergeLoadedRows, type ChangeDuringLoad } from '@/lib/rowMerge'
+import { collectKeysetPages } from '@/lib/keysetPages'
+import { onSessionEnd } from '@/lib/sessionEnd'
 
 /**
  * Optimistische Completion: trägt eine Client-Kennung, weil die `completion_id`
@@ -93,6 +97,7 @@ export const useTaskStore = defineStore('tasks', () => {
 
   // Realtime subscription channel (wird in subscribe() initialisiert)
   let realtimeChannel: RealtimeChannel | null = null
+  let tasksVisibilityHandler: (() => void) | null = null
 
   // Aufgaben, deren Abschluss gerade beim Server liegt — Doppel-Tap-Schutz,
   // siehe completeTask.
@@ -113,6 +118,14 @@ export const useTaskStore = defineStore('tasks', () => {
   // holen, die er selbst geschrieben hat. Der Schutz bleibt für alle anderen
   // Quellen (Realtime, fremde Reloads) bis zur Freigabe bestehen.
   let pendingBypass = new Set<string>()
+
+  // Realtime-Meldungen, die eintreffen, während `runLoadTasks` auf sein SELECT
+  // wartet. Sie können neuer sein als dessen Momentaufnahme und werden beim
+  // Mergen bevorzugt (→ `mergeLoadedRows`). `null` = gerade kein Ladevorgang.
+  let tasksChangedDuringLoad: Map<string, ChangeDuringLoad<Task>> | null = null
+  const noteTaskChange = (taskId: string, change: ChangeDuringLoad<Task>) => {
+    tasksChangedDuringLoad?.set(taskId, change)
+  }
 
   const loadTasks = (bypassIds: string[] = []): Promise<void> => {
     for (const id of bypassIds) pendingBypass.add(id)
@@ -155,23 +168,33 @@ export const useTaskStore = defineStore('tasks', () => {
     }
 
     isLoading.value = true
+    const changedDuringLoad = new Map<string, ChangeDuringLoad<Task>>()
+    tasksChangedDuringLoad = changedDuringLoad
 
     try {
+      const householdId = householdStore.currentHousehold.household_id
       // Nur aktive Tasks laden (deleted_at IS NULL = nicht soft-deleted)
       const { data: tasksData, error: tasksError } = await supabase
         .from('tasks')
         .select('*')
-        .eq('household_id', householdStore.currentHousehold.household_id)
+        .eq('household_id', householdId)
         .is('deleted_at', null)
 
+      // Sitzung beendet oder Haushalt gewechselt, während die Antwort
+      // unterwegs war: sie gehört nicht mehr auf diese Wand.
+      if (householdStore.currentHousehold?.household_id !== householdId) return
       if (tasksError) throw tasksError
 
-      // Echo-Schutz: Zeilen, deren Mutation gerade unterwegs ist, behalten
-      // ihren optimistischen Zustand — sonst springt die Karte kurz zurück,
-      // weil der Server die Änderung noch nicht geschrieben hat.
-      tasks.value = (tasksData || []).map((row: Task) => {
-        if (bypass.has(row.task_id) || !isInFlight(row.task_id)) return row
-        return tasks.value.find((t) => t.task_id === row.task_id) ?? row
+      // Mergen statt ersetzen: eine fremde Änderung, die während des SELECT
+      // per Realtime kam, ist neuer als dessen Antwort. Echo-Schutz: Zeilen,
+      // deren eigene Mutation gerade unterwegs ist, behalten ihren
+      // optimistischen Zustand — sonst springt die Karte kurz zurück.
+      tasks.value = mergeLoadedRows({
+        loaded: (tasksData || []) as Task[],
+        current: tasks.value,
+        keyOf: (t) => t.task_id,
+        keepLocal: (id) => !bypass.has(id) && isInFlight(id),
+        changedDuringLoad,
       })
       console.log('Loaded tasks:', tasks.value)
       // Completions werden NICHT hier geladen - fetchCompletions() ist dafür zuständig
@@ -180,6 +203,7 @@ export const useTaskStore = defineStore('tasks', () => {
       console.error('Error loading tasks:', error)
       toastStore.showToast('Fehler beim Laden der Aufgaben', 'error')
     } finally {
+      if (tasksChangedDuringLoad === changedDuringLoad) tasksChangedDuringLoad = null
       isLoading.value = false
     }
   }
@@ -1030,9 +1054,7 @@ export const useTaskStore = defineStore('tasks', () => {
     }
 
     // Alte Subscription cleanup (falls vorhanden)
-    if (realtimeChannel) {
-      supabase.removeChannel(realtimeChannel)
-    }
+    unsubscribeFromTasks()
 
     console.log(
       '🔴 Subscribing to tasks for household:',
@@ -1056,6 +1078,13 @@ export const useTaskStore = defineStore('tasks', () => {
           // INSERT - Neuer Task wurde erstellt
           if (payload.eventType === 'INSERT') {
             const newTask = payload.new as Task
+            // Quick-Aufgaben kommen gleich gelöscht an; ohne diese Prüfung
+            // stünden sie als „Erledigt"-Zettel auf der Wand.
+            if (newTask.deleted_at) {
+              noteTaskChange(newTask.task_id, { kind: 'remove' })
+              return
+            }
+            noteTaskChange(newTask.task_id, { kind: 'upsert', row: newTask })
             // Nur hinzufügen wenn nicht schon vorhanden (Race Condition vermeiden)
             if (!tasks.value.find((t) => t.task_id === newTask.task_id)) {
               tasks.value.push(newTask)
@@ -1065,10 +1094,19 @@ export const useTaskStore = defineStore('tasks', () => {
           // UPDATE - Task wurde geändert
           if (payload.eventType === 'UPDATE') {
             const updatedTask = payload.new as Task
+            // Löschen ist ein UPDATE auf `deleted_at`. Vor dem Echo-Schutz:
+            // eine gelöschte Zeile darf auch eine laufende Mutation nicht
+            // auf der Wand halten.
+            if (updatedTask.deleted_at) {
+              noteTaskChange(updatedTask.task_id, { kind: 'remove' })
+              tasks.value = tasks.value.filter((t) => t.task_id !== updatedTask.task_id)
+              return
+            }
             // Echo-Schutz: eine Zeile, deren eigene Mutation gerade
             // unterwegs ist, wird nicht überschrieben — sonst springt
             // der optimistische Zustand kurz zurück.
             if (isInFlight(updatedTask.task_id)) return
+            noteTaskChange(updatedTask.task_id, { kind: 'upsert', row: updatedTask })
             const index = tasks.value.findIndex((t) => t.task_id === updatedTask.task_id)
             if (index !== -1) {
               tasks.value[index] = updatedTask
@@ -1078,10 +1116,20 @@ export const useTaskStore = defineStore('tasks', () => {
           // DELETE - Task wurde gelöscht
           if (payload.eventType === 'DELETE') {
             const deletedTask = payload.old as Task
+            noteTaskChange(deletedTask.task_id, { kind: 'remove' })
             tasks.value = tasks.value.filter((t) => t.task_id !== deletedTask.task_id)
           }
         },
       )
+      // Hartes DELETE ungefiltert: ohne REPLICA IDENTITY FULL trägt es nur den
+      // PK, der household_id-Filter oben verwirft es. Die App löscht weich
+      // (UPDATE, siehe oben); das hier fängt Löschungen außerhalb der App.
+      // Fremde PKs treffen nichts.
+      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'tasks' }, (payload) => {
+        const deletedTask = payload.old as Pick<Task, 'task_id'>
+        noteTaskChange(deletedTask.task_id, { kind: 'remove' })
+        tasks.value = tasks.value.filter((t) => t.task_id !== deletedTask.task_id)
+      })
       .on(
         'postgres_changes',
         {
@@ -1160,6 +1208,11 @@ export const useTaskStore = defineStore('tasks', () => {
 
         if (status === 'SUBSCRIBED') {
           console.log('✅ Successfully subscribed to tasks and completions')
+          // Bei JEDEM Beitritt nachladen, auch dem ersten: Ereignisse zwischen
+          // einem SELECT und dem Beitritt kommen nie an, und nach einem
+          // Verbindungsabriss (Funkloch, Standby) fehlt alles dazwischen.
+          void loadTasks()
+          refreshProjectEffortTotals()
         } else if (status === 'CHANNEL_ERROR') {
           console.error('❌ Channel subscription error')
         } else if (status === 'TIMED_OUT') {
@@ -1168,6 +1221,16 @@ export const useTaskStore = defineStore('tasks', () => {
           console.warn('⚠️ Channel was closed')
         }
       })
+
+    // iOS und Android frieren eine PWA im Hintergrund ein; bis die Realtime-
+    // Verbindung den Abriss bemerkt und neu beitritt, vergehen Sekunden bis
+    // Minuten. Sichtbarwerden ist der frühere Anlass zum Nachladen.
+    tasksVisibilityHandler = () => {
+      if (document.visibilityState !== 'visible') return
+      void loadTasks()
+      refreshProjectEffortTotals()
+    }
+    document.addEventListener('visibilitychange', tasksVisibilityHandler)
   }
 
   // REALTIME - Unsubscribe von Änderungen
@@ -1177,6 +1240,10 @@ export const useTaskStore = defineStore('tasks', () => {
       console.log('🔴 Unsubscribing from tasks')
       supabase.removeChannel(realtimeChannel)
       realtimeChannel = null
+    }
+    if (tasksVisibilityHandler) {
+      document.removeEventListener('visibilitychange', tasksVisibilityHandler)
+      tasksVisibilityHandler = null
     }
   }
 
@@ -1228,11 +1295,26 @@ export const useTaskStore = defineStore('tasks', () => {
 
     // JOIN task_completions → tasks (via task_id)
     // Mit Soft Delete bleiben Tasks erhalten → JOIN funktioniert immer
-    // Filterung über user_id für Household-Zugehörigkeit
-    const { data, error } = await supabase
-      .from('task_completions')
-      .select(
-        `
+    // Filterung über user_id für Household-Zugehörigkeit, dazu der Haushalt
+    // am Inner Join: sonst zählten Erledigungen anderer Haushalte mit gegen
+    // jede Seite.
+    //
+    // ALLE Zeilen, geblättert: PostgREST kappt jede Antwort bei `max_rows`
+    // (1000), und die Bilanz im Ausgleich rechnet über die ganze Historie —
+    // ohne Blättern fielen die ältesten Erledigungen still weg. Seitengröße =
+    // `max_rows`: größer kappt der Server ohnehin, kleiner kostet nur Anfragen.
+    // Geblättert wird über den PK (Keyset, → `collectKeysetPages`), sortiert
+    // für die Ansichten erst danach.
+    const householdId = householdStore.currentHousehold.household_id
+    const PAGE = 1000
+    let data
+    try {
+      data = await collectKeysetPages(
+        async (after) => {
+          let query = supabase
+            .from('task_completions')
+            .select(
+              `
                 completion_id,
                 completed_at,
                 user_id,
@@ -1240,21 +1322,38 @@ export const useTaskStore = defineStore('tasks', () => {
                 effort_override,
                 completion_note,
                 is_quick,
-                tasks (
+                tasks!inner (
                     title,
                     household_id,
                     deleted_at
                 )
             `,
+            )
+            .eq('tasks.household_id', householdId)
+            .in('user_id', householdUserIds)
+            .order('completion_id', { ascending: true })
+            .limit(PAGE)
+          if (after !== null) query = query.gt('completion_id', after)
+          const { data: page, error } = await query
+          if (error) throw error
+          return page ?? []
+        },
+        (row) => row.completion_id as string,
       )
-      .in('user_id', householdUserIds)
-      .order('completed_at', { ascending: false })
-
-    if (error) {
+    } catch (error) {
       console.error('Error fetching completions:', error)
       toastStore.showToast('Fehler beim Laden der Historie', 'error')
       return []
     }
+    if (householdStore.currentHousehold?.household_id !== householdId) return []
+
+    // Neueste zuerst, wie es Historie und Übersicht erwarten. Gleichstand über
+    // den PK, damit die Reihenfolge nicht von der Seitengrenze abhängt.
+    data.sort((a, b) => {
+      const diff = Date.parse(b.completed_at) - Date.parse(a.completed_at)
+      if (diff !== 0) return diff
+      return a.completion_id < b.completion_id ? 1 : a.completion_id > b.completion_id ? -1 : 0
+    })
 
     // Filtere auf aktuellen Household
     const filteredData = data.filter((completion) => {
@@ -1436,11 +1535,16 @@ export const useTaskStore = defineStore('tasks', () => {
   // anderen Routen Abfragen, deren Ergebnis niemand liest.
   let projectEffortTotalsActive = false
 
+  // Jeder Realtime-INSERT stößt einen mehrseitigen Lauf an. Ohne Schutz setzte
+  // der zuletzt FERTIGE Lauf die Summen, nicht der zuletzt gestartete.
+  const projectTotalsGuard = createLatestRunGuard()
+
   const loadProjectEffortTotals = async (): Promise<void> => {
     const householdStore = useHouseholdStore()
     if (!householdStore.currentHousehold) return
 
     projectEffortTotalsActive = true
+    const isLatest = projectTotalsGuard.start()
 
     // Schritt 1: alle Unteraufgaben des Haushalts mit ihrem Elternteil.
     //
@@ -1453,6 +1557,7 @@ export const useTaskStore = defineStore('tasks', () => {
       .eq('household_id', householdStore.currentHousehold.household_id)
       .not('parent_task_id', 'is', null)
 
+    if (!isLatest()) return
     if (subtaskError) {
       // Stehenlassen statt auf 0 setzen: eine falsche 0 sieht aus wie ein
       // Projekt ohne Arbeit und niemand liest sie als Fehler.
@@ -1504,6 +1609,7 @@ export const useTaskStore = defineStore('tasks', () => {
           .order('completion_id')
           .range(offset, offset + PAGE - 1)
 
+        if (!isLatest()) return
         if (completionError) {
           console.error('Error loading completions for project effort totals:', completionError)
           return
@@ -1526,6 +1632,7 @@ export const useTaskStore = defineStore('tasks', () => {
       }
     }
 
+    if (!isLatest()) return
     projectEffortTotals.value = totals
   }
 
@@ -1545,9 +1652,18 @@ export const useTaskStore = defineStore('tasks', () => {
    * abziehen; das Abzeichen bliebe nach dem Zurückkleben zu hoch, und
    * **niemand sähe einen Fehler**.
    */
+  // Entprellt: mehrere Erledigungen kurz hintereinander (Checkliste, fremde
+  // Geräte, ungefilterte DELETEs aller Haushalte) ergeben einen Lauf statt vieler.
+  const PROJECT_TOTALS_DEBOUNCE_MS = 300
+  let projectTotalsTimer: ReturnType<typeof setTimeout> | null = null
+
   const refreshProjectEffortTotals = () => {
     if (!projectEffortTotalsActive) return
-    void loadProjectEffortTotals()
+    if (projectTotalsTimer !== null) clearTimeout(projectTotalsTimer)
+    projectTotalsTimer = setTimeout(() => {
+      projectTotalsTimer = null
+      if (projectEffortTotalsActive) void loadProjectEffortTotals()
+    }, PROJECT_TOTALS_DEBOUNCE_MS)
   }
 
   /**
@@ -1558,7 +1674,25 @@ export const useTaskStore = defineStore('tasks', () => {
    */
   const stopProjectEffortTotals = () => {
     projectEffortTotalsActive = false
+    if (projectTotalsTimer !== null) {
+      clearTimeout(projectTotalsTimer)
+      projectTotalsTimer = null
+    }
   }
+
+  // Session-Ende: Kanal, Sichtbarkeits-Listener und alle Daten des Haushalts
+  // weg. Laufende Ladevorgänge prüfen nach ihrem `await` den Haushalt und
+  // verwerfen dann ihre Antwort.
+  onSessionEnd(() => {
+    unsubscribeFromTasks()
+    stopProjectEffortTotals()
+    projectTotalsGuard.invalidate()
+    tasks.value = []
+    completions.value = []
+    projectEffortTotals.value = {}
+    undoTickets.clear()
+    pendingBypass = new Set<string>()
+  })
 
   // Return - was andere Komponenten verwenden können
   return {

@@ -7,6 +7,7 @@ import { useAuthStore } from './authStore'
 import { useToastStore } from './toastStore'
 import { useTaskStore } from './taskStore'
 import type { RealtimeChannel } from '@supabase/supabase-js'
+import { onSessionEnd } from '@/lib/sessionEnd'
 
 interface CompletionForBalance {
   user_id: string
@@ -228,6 +229,18 @@ export const useSettlementStore = defineStore('settlement', () => {
           }
         },
       )
+      // DELETE ungefiltert: ohne REPLICA IDENTITY FULL trägt das Ereignis nur
+      // den PK, der household_id-Filter oben verwirft es — ein fremd
+      // gelöschter Ausgleich zählte sonst weiter in die Bilanz. Fremde PKs
+      // treffen nichts, das Entfernen ist dann ein No-op.
+      .on(
+        'postgres_changes',
+        { event: 'DELETE', schema: 'public', table: 'settlements' },
+        (payload) => {
+          const s = payload.old as Pick<Settlement, 'settlement_id'>
+          settlements.value = settlements.value.filter((x) => x.settlement_id !== s.settlement_id)
+        },
+      )
       .subscribe()
   }
 
@@ -237,6 +250,13 @@ export const useSettlementStore = defineStore('settlement', () => {
       realtimeChannel = null
     }
   }
+
+  // Session-Ende: Ausgleiche und Bilanz gehören dem nächsten Konto nicht.
+  onSessionEnd(() => {
+    unsubscribe()
+    settlements.value = []
+    completions.value = []
+  })
 
   // ============================================================================
   // Public API
