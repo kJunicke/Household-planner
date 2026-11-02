@@ -1578,9 +1578,23 @@ const handleCreateQuickTask = async (data: {
 }
 
 .search-overlay-close {
+  position: relative;
   width: 44px;
   height: 44px;
   font-size: 1.4rem;
+}
+
+/* Trefffläche 48px, ohne die Kopfzeile höher zu machen. Sie ragt je 2px über
+   den Knopf — links bleibt sie damit im Abstand zur Hülle und erreicht die
+   Fläche des Lösch-× nicht. */
+.search-overlay-close::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: var(--touch-target-min, 48px);
+  height: var(--touch-target-min, 48px);
+  transform: translate(-50%, -50%);
 }
 
 .search-overlay-actions {
