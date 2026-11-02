@@ -22,6 +22,7 @@ const task = (title: string, overrides: Partial<Task> = {}): Task => ({
   subtask_points_mode: 'bonus',
   emphasis_level: 0,
   project_saying_index: 0,
+  deleted_at: null,
   ...overrides,
 })
 

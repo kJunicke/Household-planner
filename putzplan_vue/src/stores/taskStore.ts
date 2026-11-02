@@ -1056,6 +1056,9 @@ export const useTaskStore = defineStore('tasks', () => {
           // INSERT - Neuer Task wurde erstellt
           if (payload.eventType === 'INSERT') {
             const newTask = payload.new as Task
+            // Quick-Aufgaben kommen gleich gelöscht an; ohne diese Prüfung
+            // stünden sie als „Erledigt"-Zettel auf der Wand.
+            if (newTask.deleted_at) return
             // Nur hinzufügen wenn nicht schon vorhanden (Race Condition vermeiden)
             if (!tasks.value.find((t) => t.task_id === newTask.task_id)) {
               tasks.value.push(newTask)
@@ -1065,6 +1068,13 @@ export const useTaskStore = defineStore('tasks', () => {
           // UPDATE - Task wurde geändert
           if (payload.eventType === 'UPDATE') {
             const updatedTask = payload.new as Task
+            // Löschen ist ein UPDATE auf `deleted_at`. Vor dem Echo-Schutz:
+            // eine gelöschte Zeile darf auch eine laufende Mutation nicht
+            // auf der Wand halten.
+            if (updatedTask.deleted_at) {
+              tasks.value = tasks.value.filter((t) => t.task_id !== updatedTask.task_id)
+              return
+            }
             // Echo-Schutz: eine Zeile, deren eigene Mutation gerade
             // unterwegs ist, wird nicht überschrieben — sonst springt
             // der optimistische Zustand kurz zurück.
