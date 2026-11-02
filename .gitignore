@@ -1,22 +1,15 @@
 # Dependencies
 node_modules/
 
-# Environment variables
-# CRITICAL: NEVER remove .env from gitignore!
-# Contains SUPABASE_ACCESS_TOKEN with full admin rights
+# Environment variables — NIEMALS aus der .gitignore entfernen!
+# Root-.env: GITHUB_PAT; putzplan_vue/.env: Supabase-Zugang inkl. SUPABASE_ACCESS_TOKEN
 .env
 .env.local
 .env.*.local
 
-# Claude Code local settings (contains personal file paths)
-# Note: Git is configured to use GitHub noreply email (kJunicke@users.noreply.github.com)
+# Claude Code: lokale Einstellungen und Agenten-Worktrees
 .claude/settings.local.json
-
-# Playwright MCP screenshots and test artifacts
-.playwright-mcp/
+.claude/worktrees/
 
 # Lokaler Issue-Tracker (Specs & Tickets, siehe docs/agents/tracker.md)
 .scratch/
-
-# Handoff-Dokumente (lokal, nicht versioniert)
-handoffs/

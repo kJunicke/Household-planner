@@ -1,39 +1,12 @@
-# putzplan
+# Putzplan
 
-This template should help get you started developing with Vue 3 in Vite.
+Vue 3 + Supabase, PWA für einen Zwei-Personen-Haushalt: Putzplan mit Punkten, Pinnwand, Listen.
+Alle Befehle in diesem Ordner (`putzplan_vue/`):
 
-## Recommended IDE Setup
+- `npm run dev` — Dev-Server
+- `npm run build` — Typprüfung + Build nach `dist/` (Pflicht vor jedem Push)
+- `npm run type-check` — nur Typprüfung (`vue-tsc`)
+- `npx supabase functions deploy complete-task` — Edge Function deployen (`db push` tut das nicht)
 
-[VSCode](https://code.visualstudio.com/) + [Volar](https://marketplace.visualstudio.com/items?itemName=Vue.volar) (and disable Vetur).
-
-## Type Support for `.vue` Imports in TS
-
-TypeScript cannot handle type information for `.vue` imports by default, so we replace the `tsc` CLI with `vue-tsc` for type checking. In editors, we need [Volar](https://marketplace.visualstudio.com/items?itemName=Vue.volar) to make the TypeScript language service aware of `.vue` types.
-
-## Customize configuration
-
-See [Vite Configuration Reference](https://vite.dev/config/).
-
-## Project Setup
-
-```sh
-npm install
-```
-
-### Compile and Hot-Reload for Development
-
-```sh
-npm run dev
-```
-
-### Type-Check, Compile and Minify for Production
-
-```sh
-npm run build
-```
-
-### Lint with [ESLint](https://eslint.org/)
-
-```sh
-npm run lint
-```
+Deploy: Push auf `main` → GitHub Actions (`.github/workflows/deploy.yml`) → GitHub Pages.
+Projektregeln und Doku: `../CLAUDE.md`.

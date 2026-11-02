@@ -84,9 +84,11 @@ Wand packt trotzdem **nicht** neu: `layoutSignature` kennt weder `emphasis_level
 `project_saying_index`. Das ist genau die Zusage dieses ADR — beim Stempeln bewegt sich
 nichts.
 
-**Alle Zahlen dieses Nachtrags stammen aus einer Messung, die als eigene Notiz vorliegt:**
-`.scratch/ueberstempeln-bedienung/MESSUNG-breitensprung-05-09-2026.md` (Aufbau, Methode,
-Messender, und was dabei **nicht** reproduzierbar war). Ohne sie stünden sie nur hier.
+**Herkunft aller Zahlen dieses Nachtrags:** gemessen am 05.09.2026 vom unabhängigen QC
+(nicht von der bauenden Instanz), echter Tap `0 → 1 → 2 → 0` auf `QC03-PROJ-NOSUB`,
+Wandbreite 469 px (gemessene Werte) bzw. 374 px (rechnerischer schlimmster Fall). Methode:
+die vier Ecken der Stempellage mit ihrem eigenen `transform` (Versatz + Neigung) gerechnet
+und gegen `getBoundingClientRect` des Stifts gestellt, nicht der achsenparallele Rahmen.
 
 **Der Preis dafür ist neu und gehört benannt.** Der Zettel behält seine gepackte Breite, der
 Stempel darin wird breiter, und der Abstand zur 44-px-Trefffläche des Stifts schrumpft.
