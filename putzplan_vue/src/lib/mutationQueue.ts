@@ -41,8 +41,16 @@ export interface MutationQueueOptions {
    * temp-Zeilen wegräumen, die nie eine echte ID bekommen.
    */
   onDiscarded?: (discarded: PendingMutation[]) => void
-  /** Läuft, wenn die Warteschlange leer synchronisiert wurde (Neuabgleich laden). */
-  onDrained?: () => Promise<void> | void
+  /**
+   * Neuabgleich vom Server. Läuft, wenn ein Durchlauf die Warteschlange
+   * geleert hat — und auch, wenn er etwas verworfen hat, obwohl noch anderes
+   * wartet: sonst bliebe der optimistische Stand der verworfenen Änderung
+   * stehen, als wäre sie gespeichert. Währenddessen meldet `isReconciling()`
+   * true: ein Nachlader soll dann keinen weiteren Durchlauf anstoßen — der
+   * eben fertige hat alles versucht, ein sofortiger zweiter wiederholte nur
+   * dieselben Fehlschläge samt Meldung.
+   */
+  reconcile?: () => Promise<void> | void
   successToast?: string // z. B. 'Packliste synchronisiert'
   maxRetries?: number // Standard 5
 }
@@ -58,6 +66,8 @@ export interface MutationQueue {
   sync(): Promise<void>
   /** Item-IDs mit wartender Mutation (für den Neuabgleich in loadItems). */
   pendingItemIds(): Set<string>
+  /** true, solange `reconcile` nach einem Durchlauf läuft. */
+  isReconciling(): boolean
 }
 
 export function createMutationQueue(opts: MutationQueueOptions): MutationQueue {
@@ -65,6 +75,7 @@ export function createMutationQueue(opts: MutationQueueOptions): MutationQueue {
 
   const queue = ref<PendingMutation[]>([])
   const isSyncing = ref(false)
+  let reconciling = false
   const hasPending = computed(() => queue.value.length > 0)
 
   const owner = computed(opts.owner)
@@ -177,10 +188,24 @@ export function createMutationQueue(opts: MutationQueueOptions): MutationQueue {
       toastStore.showToast(opts.successToast, 'success', 2000)
     }
 
-    if (queue.value.length === 0) {
-      await opts.onDrained?.()
+    if (queue.value.length === 0 || result.discarded.length > 0) {
+      reconciling = true
+      try {
+        await opts.reconcile?.()
+      } finally {
+        reconciling = false
+      }
     }
   }
 
-  return { queue, hasPending, isSyncing, add, rewrite, sync, pendingItemIds }
+  return {
+    queue,
+    hasPending,
+    isSyncing,
+    add,
+    rewrite,
+    sync,
+    pendingItemIds,
+    isReconciling: () => reconciling,
+  }
 }

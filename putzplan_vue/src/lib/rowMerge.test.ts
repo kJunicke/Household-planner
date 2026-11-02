@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { mergeLoadedRows, type ChangeDuringLoad } from './rowMerge'
+import { keepPendingLocal, mergeLoadedRows, type ChangeDuringLoad } from './rowMerge'
 
 interface Row {
   id: string
@@ -99,5 +99,27 @@ describe('mergeLoadedRows', () => {
     merge(loaded, current, [['a', { kind: 'remove' }]])
     expect(loaded).toEqual([row('a', 1)])
     expect(current).toEqual([row('a', 2)])
+  })
+})
+
+describe('keepPendingLocal', () => {
+  const r = (id: string, v: number) => ({ id, v })
+  const key = (x: { id: string }) => x.id
+
+  it('ohne wartende Mutation gewinnt der Server', () => {
+    expect(keepPendingLocal([r('a', 1)], [r('a', 2)], new Set(), key)).toEqual([r('a', 1)])
+  })
+
+  it('eine wartende Änderung behält ihren lokalen Stand', () => {
+    expect(keepPendingLocal([r('a', 1), r('b', 1)], [r('a', 2)], new Set(['a']), key)).toEqual([
+      r('a', 2),
+      r('b', 1),
+    ])
+  })
+
+  it('ein wartendes Löschen holt die Zeile nicht zurück', () => {
+    expect(keepPendingLocal([r('a', 1), r('b', 1)], [r('b', 1)], new Set(['a']), key)).toEqual([
+      r('b', 1),
+    ])
   })
 })

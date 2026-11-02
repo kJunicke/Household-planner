@@ -7,6 +7,7 @@ import {
   dependentsOf,
   isTransientError,
   judgeFailure,
+  pendingCategoryIds,
   runQueuePass,
   type QueuePassIO,
 } from './queueRetry'
@@ -200,5 +201,17 @@ describe('runQueuePass', () => {
     const result = await runQueuePass(h.io)
     expect(result.interrupted).toBe(true)
     expect(h.queue()).toEqual([second])
+  })
+})
+
+describe('pendingCategoryIds', () => {
+  it('nur Kategorie-Mutationen, nur echte und temp-IDs mit Ziel', () => {
+    const queue = [
+      mutation({ payload: { entity: 'category', categoryId: 'c1', updates: { name: 'Bad' } } }),
+      mutation({ operation: 'delete', payload: { entity: 'category', categoryId: 'c2' } }),
+      mutation({ operation: 'create', payload: { entity: 'category', tempCategoryId: 'temp_1' } }),
+      mutation({ payload: { itemId: 'i1', categoryId: 'c3' } }),
+    ]
+    expect([...pendingCategoryIds(queue)].sort()).toEqual(['c1', 'c2'])
   })
 })

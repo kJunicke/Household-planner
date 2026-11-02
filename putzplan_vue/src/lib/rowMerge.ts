@@ -53,3 +53,29 @@ export function mergeLoadedRows<T>(options: {
 
   return result
 }
+
+/**
+ * Neuabgleich, während noch Mutationen warten: Zeilen mit wartender Mutation
+ * behalten ihren lokalen (optimistischen) Stand, sonst nähme der Serverstand
+ * eine Änderung zurück, die noch gar nicht angekommen ist. Fehlt eine solche
+ * Zeile lokal, wartet ihr Löschen — sie darf nicht zurückkommen.
+ */
+export function keepPendingLocal<T>(
+  loaded: readonly T[],
+  current: readonly T[],
+  pendingIds: ReadonlySet<string>,
+  keyOf: (row: T) => string,
+): T[] {
+  if (pendingIds.size === 0) return [...loaded]
+  const currentById = new Map(current.map((row) => [keyOf(row), row]))
+  const result: T[] = []
+  for (const row of loaded) {
+    const id = keyOf(row)
+    if (!pendingIds.has(id)) result.push(row)
+    else {
+      const local = currentById.get(id)
+      if (local !== undefined) result.push(local)
+    }
+  }
+  return result
+}

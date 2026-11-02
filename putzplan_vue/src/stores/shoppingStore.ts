@@ -12,7 +12,8 @@ import {
   compareCategoryGroups,
   buildCategoryOptions,
 } from '@/lib/categoryOrder'
-import { runQueuePass, type QueuePassResult } from '@/lib/queueRetry'
+import { pendingCategoryIds, runQueuePass, type QueuePassResult } from '@/lib/queueRetry'
+import { keepPendingLocal } from '@/lib/rowMerge'
 import { withStatus } from '@/lib/networkError'
 import {
   ownedKey,
@@ -507,6 +508,11 @@ export const useShoppingStore = defineStore('shopping', () => {
       categories.value = categories.value.filter((c) => !tempCats.has(c.category_id))
   }
 
+  // Läuft gerade der Neuabgleich nach einem Durchlauf? Dann stößt `loadItems`
+  // keinen weiteren an: der eben fertige hat alles versucht, ein sofortiger
+  // zweiter wiederholte nur dieselben Fehlschläge samt Meldung.
+  let reconciling = false
+
   const syncMutations = async () => {
     const owner = storageOwner.value
     if (!owner || isSyncing.value || mutationQueue.value.length === 0) return
@@ -561,9 +567,17 @@ export const useShoppingStore = defineStore('shopping', () => {
       toastStore.showToast('Einkaufsliste synchronisiert', 'success', 2000)
     }
 
-    if (mutationQueue.value.length === 0) {
-      await loadItems()
-      await loadCategories()
+    // Auch nach einem Verwerfen, wenn noch anderes wartet: der optimistische
+    // Stand der verworfenen Änderung bliebe sonst stehen, als wäre sie
+    // gespeichert. Wartende Zeilen behalten dabei ihren lokalen Stand.
+    if (mutationQueue.value.length === 0 || result.discarded.length > 0) {
+      reconciling = true
+      try {
+        await loadItems()
+        await loadCategories()
+      } finally {
+        reconciling = false
+      }
     }
   }
 
@@ -699,7 +713,9 @@ export const useShoppingStore = defineStore('shopping', () => {
   const loadItems = async () => {
     console.log('Loading shopping items...')
 
-    loadItemsFromCache()
+    // Nicht im Neuabgleich: der Cache wird erst im nächsten Tick gespeichert
+    // und trüge die eben verworfenen temp-Zeilen noch.
+    if (!reconciling) loadItemsFromCache()
 
     if (isLoading.value) {
       console.log('Already loading shopping items, skipping...')
@@ -728,15 +744,15 @@ export const useShoppingStore = defineStore('shopping', () => {
       // items whose mutation is still queued keep their local (optimistic) copy,
       // and temp rows for not-yet-synced creates are preserved. Prevents a
       // concurrent reload (e.g. from another op's sync) from reverting a toggle
-      // that hasn't reached the DB yet.
-      const rows = data || []
+      // that hasn't reached the DB yet. A pending delete keeps the row away.
       const pendingIds = new Set(
         mutationQueue.value.map((m) => m.payload.itemId).filter(Boolean) as string[],
       )
-      const merged = rows.map((row) =>
-        pendingIds.has(row.shopping_item_id)
-          ? (items.value.find((i) => i.shopping_item_id === row.shopping_item_id) ?? row)
-          : row,
+      const merged = keepPendingLocal(
+        (data || []) as ShoppingItem[],
+        items.value,
+        pendingIds,
+        (i) => i.shopping_item_id,
       )
       const tempRows = items.value.filter((i) => i.shopping_item_id.startsWith('temp_'))
       items.value = [...merged, ...tempRows]
@@ -744,7 +760,7 @@ export const useShoppingStore = defineStore('shopping', () => {
 
       loadQueueFromStorage()
 
-      if (mutationQueue.value.length > 0) {
+      if (mutationQueue.value.length > 0 && !reconciling) {
         await syncMutations()
       }
     } catch (error) {
@@ -939,9 +955,19 @@ export const useShoppingStore = defineStore('shopping', () => {
 
       if (error) throw error
 
-      // Noch nicht synchronisierte Zeilen überleben den Neuabgleich.
+      // Noch nicht synchronisierte Zeilen überleben den Neuabgleich, und eine
+      // wartende Umbenennung oder Löschung wird nicht vom Serverstand
+      // überschrieben.
       const pending = categories.value.filter((c) => c.category_id.startsWith('temp_'))
-      categories.value = [...(data ?? []), ...pending]
+      categories.value = [
+        ...keepPendingLocal(
+          (data ?? []) as ShoppingCategory[],
+          categories.value,
+          pendingCategoryIds(mutationQueue.value),
+          (c) => c.category_id,
+        ),
+        ...pending,
+      ]
     } catch (error) {
       console.error('Error loading shopping categories:', error)
     }

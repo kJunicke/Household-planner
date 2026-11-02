@@ -148,3 +148,12 @@ export async function runQueuePass(io: QueuePassIO): Promise<QueuePassResult> {
 
   return result
 }
+
+/** Kategorie-Zeilen mit wartender Umbenennung oder Löschung (für den Neuabgleich). */
+export function pendingCategoryIds(queue: readonly PendingMutation[]): Set<string> {
+  const ids = new Set<string>()
+  for (const m of queue) {
+    if (m.payload.entity === 'category' && m.payload.categoryId) ids.add(m.payload.categoryId)
+  }
+  return ids
+}

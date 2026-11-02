@@ -13,6 +13,8 @@ import {
   orphanSortOrder,
 } from '@/lib/categoryOrder'
 import { createMutationQueue } from '@/lib/mutationQueue'
+import { keepPendingLocal } from '@/lib/rowMerge'
+import { pendingCategoryIds } from '@/lib/queueRetry'
 import { withStatus } from '@/lib/networkError'
 import { queueOwner } from '@/lib/queueStorage'
 import { supabase } from '@/lib/supabase'
@@ -91,7 +93,7 @@ export function createChecklistStore(config: ChecklistStoreConfig) {
         const temps = new Set(discarded.map((m) => m.payload.tempCategoryId).filter(Boolean))
         categories.value = categories.value.filter((c) => !temps.has(c.category_id))
       },
-      onDrained: async () => {
+      reconcile: async () => {
         await loadItems()
         await loadCategories()
       },
@@ -628,9 +630,19 @@ export function createChecklistStore(config: ChecklistStoreConfig) {
 
         if (error) throw error
 
-        // Noch nicht synchronisierte Zeilen überleben den Neuabgleich.
+        // Noch nicht synchronisierte Zeilen überleben den Neuabgleich, und
+        // eine wartende Umbenennung oder Löschung wird nicht vom Serverstand
+        // überschrieben.
         const pending = categories.value.filter((c) => c.category_id.startsWith('temp_'))
-        categories.value = [...(data ?? []), ...pending]
+        categories.value = [
+          ...keepPendingLocal(
+            (data ?? []) as CategoryRow[],
+            categories.value,
+            pendingCategoryIds(queue.queue.value),
+            (c) => c.category_id,
+          ),
+          ...pending,
+        ]
       } catch (error) {
         console.error(`Error loading ${categoriesTable}:`, error)
       }
@@ -977,15 +989,11 @@ export function createChecklistStore(config: ChecklistStoreConfig) {
         // Einträge mit wartender Mutation behalten ihre lokale (optimistische)
         // Kopie: sonst nimmt ein Neuabgleich eine Änderung zurück, die noch gar
         // nicht in der Datenbank angekommen ist.
+        // Fehlt die Zeile lokal, wartet ihr Löschen — sie bleibt weg.
         const rows = (data || []) as ChecklistItem[]
-        const pendingIds = queue.pendingItemIds()
-        items.value = rows.map((row) =>
-          pendingIds.has(row.item_id)
-            ? (items.value.find((i) => i.item_id === row.item_id) ?? row)
-            : row,
-        )
+        items.value = keepPendingLocal(rows, items.value, queue.pendingItemIds(), (i) => i.item_id)
 
-        if (queue.hasPending.value) await queue.sync()
+        if (queue.hasPending.value && !queue.isReconciling()) await queue.sync()
       } catch (error) {
         console.error(`Error loading ${itemsTable}:`, error)
         toastStore.showToast(labels.loadItemsError, 'error')
