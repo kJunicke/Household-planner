@@ -274,7 +274,7 @@ export async function revertRows<
   }
 }
 
-/** Nur für Diagnose/Tests im Browser. */
+/** @public — Diagnose in der Browserkonsole: ohne Importeur im Code. */
 export const optimisticDebug = {
   pendingCount,
   inFlight,

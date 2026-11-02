@@ -39,6 +39,10 @@ jobs:
         working-directory: ./putzplan_vue
         run: npm run lint:check
 
+      - name: Ungenutzte Exporte und Abhängigkeiten (knip)
+        working-directory: ./putzplan_vue
+        run: npm run knip
+
       - name: Unit-Tests (reine Logik)
         working-directory: ./putzplan_vue
         run: npm test

@@ -30,7 +30,11 @@
 
 import type { Task } from '@/types/Task'
 
-/** Die harte Grenze: der Stempel geht in die Zettelbreite ein. */
+/**
+ * Die harte Grenze: der Stempel geht in die Zettelbreite ein.
+ *
+ * @public — Diagnose in der Browserkonsole (mit `findOverlongProjectPhrases`).
+ */
 export const PROJECT_PHRASE_MAX_LENGTH = 10
 
 /**
@@ -40,6 +44,8 @@ export const PROJECT_PHRASE_MAX_LENGTH = 10
  * berechnete Fälligkeit und ist abgeschafft — als Projektspruch wiederverwendet würde es
  * die eine Bedeutung mit der anderen verwechselbar machen. `SOFORT`, `GLEICH` und
  * `AB HEUTE` bleiben dagegen drin: sie klingen nach Frist, meinen aber einen Vorsatz.
+ *
+ * @public — Diagnose in der Browserkonsole: die Liste zum Nachsehen.
  */
 export const PROJECT_PHRASES: readonly string[] = [
   'BAUSTELLE',
@@ -150,6 +156,8 @@ export const PROJECT_PHRASES: readonly string[] = [
  * Bewusst eine Funktion und kein Kommentar „ist geprüft": ein Beispiel beweist nichts,
  * und die Liste ist ausdrücklich zum Ergänzen gedacht. Aufrufbar aus der Konsole des
  * ferngesteuerten Tabs, ohne Test-Framework.
+ *
+ * @public — Diagnose in der Browserkonsole: ohne Importeur im Code.
  */
 export function findOverlongProjectPhrases(): string[] {
   return PROJECT_PHRASES.filter((phrase) => phrase.length > PROJECT_PHRASE_MAX_LENGTH)
