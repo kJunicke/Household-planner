@@ -13,6 +13,7 @@ import {
   orphanSortOrder,
 } from '@/lib/categoryOrder'
 import { createMutationQueue } from '@/lib/mutationQueue'
+import { queueOwner } from '@/lib/queueStorage'
 import { supabase } from '@/lib/supabase'
 import { useHouseholdStore } from './householdStore'
 import { useAuthStore } from './authStore'
@@ -80,6 +81,8 @@ export function createChecklistStore(config: ChecklistStoreConfig) {
 
     const queue = createMutationQueue({
       storageKey: `${config.storeId}_mutation_queue`,
+      owner: () =>
+        queueOwner(useAuthStore().user?.id, useHouseholdStore().currentHousehold?.household_id),
       syncSourceKey: config.storeId,
       process: (m) => processMutation(m),
       onDiscarded: (discarded) => {
@@ -1280,6 +1283,20 @@ export function createChecklistStore(config: ChecklistStoreConfig) {
       }
     }
 
+    /**
+     * Beim Session-Ende aufrufen (Abmelden, SIGNED_OUT): Listen, Einträge,
+     * Kategorien und Abos leeren, damit der nächste Nutzer nichts davon sieht.
+     * Die Warteschlange bleibt unter Nutzer + Haushalt gespeichert und verlässt
+     * den Speicher von selbst, sobald der Besitzer wechselt.
+     */
+    const resetForSessionEnd = () => {
+      unsubscribe()
+      lists.value = []
+      items.value = []
+      categories.value = []
+      currentListId.value = null
+    }
+
     // ==========================================================================
     // Public API
     // ==========================================================================
@@ -1325,6 +1342,7 @@ export function createChecklistStore(config: ChecklistStoreConfig) {
       subscribe,
       unsubscribe,
       syncMutations: queue.sync,
+      resetForSessionEnd,
     }
   })
 }

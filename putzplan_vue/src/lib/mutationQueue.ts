@@ -16,12 +16,18 @@ import type { PendingMutation } from '@/types/PendingMutation'
 import { registerSyncSource } from '@/composables/useSyncStatus'
 import { useToastStore } from '@/stores/toastStore'
 import { runQueuePass, type QueuePassResult } from './queueRetry'
+import { readOwnedQueue, removeFromOwnedQueue, writeOwnedQueue } from './queueStorage'
 
 const DEFAULT_MAX_RETRIES = 5
 
 export interface MutationQueueOptions {
-  /** localStorage-Schlüssel, z. B. 'packing_mutation_queue'. */
+  /** localStorage-Schlüssel, z. B. 'packing_mutation_queue'; gespeichert wird je Besitzer. */
   storageKey: string
+  /**
+   * Besitzer der Warteschlange (`queueOwner(userId, householdId)`), reaktiv
+   * gelesen. null = niemand angemeldet: nichts laden, nichts abspielen.
+   */
+  owner: () => string | null
   /** Schlüssel für registerSyncSource — eine Quelle je Store ('packing', 'todo'). */
   syncSourceKey: string
   /**
@@ -61,28 +67,38 @@ export function createMutationQueue(opts: MutationQueueOptions): MutationQueue {
   const isSyncing = ref(false)
   const hasPending = computed(() => queue.value.length > 0)
 
-  const saveToStorage = () => {
+  const owner = computed(opts.owner)
+
+  const saveToStorage = (key = owner.value) => {
+    if (!key) return
     try {
-      localStorage.setItem(opts.storageKey, JSON.stringify(queue.value))
+      writeOwnedQueue(localStorage, opts.storageKey, key, queue.value)
     } catch (error) {
       console.error('Failed to save queue to storage:', error)
     }
   }
 
   const loadFromStorage = () => {
+    const key = owner.value
     try {
-      const cached = localStorage.getItem(opts.storageKey)
-      if (cached) {
-        queue.value = JSON.parse(cached)
-        console.log('📦 Loaded mutation queue from storage:', opts.storageKey, queue.value.length)
-      }
+      queue.value = key ? readOwnedQueue(localStorage, opts.storageKey, key) : []
+      console.log('📦 Loaded mutation queue from storage:', opts.storageKey, queue.value.length)
     } catch (error) {
       console.error('Failed to load queue from storage:', error)
     }
   }
 
-  loadFromStorage()
-  watch(queue, saveToStorage, { deep: true })
+  // Wechselt der Besitzer, die bisherige Warteschlange unter ihm sichern und
+  // die des neuen laden — nie die eines anderen Nutzers abspielen.
+  watch(
+    owner,
+    (_key, previous) => {
+      if (previous) saveToStorage(previous)
+      loadFromStorage()
+    },
+    { immediate: true },
+  )
+  watch(queue, () => saveToStorage(), { deep: true })
 
   registerSyncSource(opts.syncSourceKey, { hasPending, isSyncing })
 
@@ -107,7 +123,8 @@ export function createMutationQueue(opts: MutationQueueOptions): MutationQueue {
 
   const sync = async () => {
     if (!navigator.onLine) return
-    if (isSyncing.value || queue.value.length === 0) return
+    const key = owner.value
+    if (!key || isSyncing.value || queue.value.length === 0) return
 
     console.log('🔄 Starting sync of', queue.value.length, 'mutations...')
     isSyncing.value = true
@@ -119,13 +136,26 @@ export function createMutationQueue(opts: MutationQueueOptions): MutationQueue {
         current: () => queue.value,
         process: opts.process,
         remove: (ids) => {
-          queue.value = queue.value.filter((m) => !ids.includes(m.queueId))
+          if (owner.value === key) {
+            queue.value = queue.value.filter((m) => !ids.includes(m.queueId))
+            return
+          }
+          // Das Abmelden hat die Anfrage überholt; die Warteschlange liegt schon
+          // gesichert unter dem alten Besitzer — dort streichen, sonst läuft sie
+          // beim nächsten Login ein zweites Mal.
+          try {
+            removeFromOwnedQueue(localStorage, opts.storageKey, key, ids)
+          } catch (error) {
+            console.error('Failed to update stored queue:', error)
+          }
         },
         maxRetries,
+        shouldStop: () => owner.value !== key,
       })
     } finally {
       isSyncing.value = false
     }
+    if (owner.value !== key) return
 
     if (result.discarded.length > 0) {
       console.warn('🗑️ Gave up on mutations:', result.discarded)

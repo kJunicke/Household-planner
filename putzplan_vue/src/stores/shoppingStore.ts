@@ -13,6 +13,14 @@ import {
   buildCategoryOptions,
 } from '@/lib/categoryOrder'
 import { runQueuePass, type QueuePassResult } from '@/lib/queueRetry'
+import {
+  ownedKey,
+  queueOwner,
+  readOwnedQueue,
+  removeFromOwnedQueue,
+  removeKeysWithPrefix,
+  writeOwnedQueue,
+} from '@/lib/queueStorage'
 import { useHouseholdStore } from './householdStore'
 import { useAuthStore } from './authStore'
 import { useToastStore } from './toastStore'
@@ -59,17 +67,28 @@ export const useShoppingStore = defineStore('shopping', () => {
   // localStorage Helpers
   // ============================================================================
 
+  // Cache und Warteschlange hängen an Nutzer + Haushalt (siehe lib/queueStorage).
+  const storageOwner = computed(() =>
+    queueOwner(useAuthStore().user?.id, useHouseholdStore().currentHousehold?.household_id),
+  )
+
   const saveItemsToCache = () => {
+    const owner = storageOwner.value
+    if (!owner) return
     try {
-      localStorage.setItem(STORAGE_KEY_ITEMS, JSON.stringify(items.value))
+      const key = ownedKey(STORAGE_KEY_ITEMS, owner)
+      if (items.value.length === 0) localStorage.removeItem(key)
+      else localStorage.setItem(key, JSON.stringify(items.value))
     } catch (error) {
       console.error('Failed to save items to cache:', error)
     }
   }
 
   const loadItemsFromCache = () => {
+    const owner = storageOwner.value
+    if (!owner) return
     try {
-      const cached = localStorage.getItem(STORAGE_KEY_ITEMS)
+      const cached = localStorage.getItem(ownedKey(STORAGE_KEY_ITEMS, owner))
       if (cached) {
         items.value = JSON.parse(cached)
         console.log('📦 Loaded items from cache:', items.value.length)
@@ -79,21 +98,20 @@ export const useShoppingStore = defineStore('shopping', () => {
     }
   }
 
-  const saveQueueToStorage = () => {
+  const saveQueueToStorage = (owner = storageOwner.value) => {
+    if (!owner) return
     try {
-      localStorage.setItem(STORAGE_KEY_QUEUE, JSON.stringify(mutationQueue.value))
+      writeOwnedQueue(localStorage, STORAGE_KEY_QUEUE, owner, mutationQueue.value)
     } catch (error) {
       console.error('Failed to save queue to storage:', error)
     }
   }
 
   const loadQueueFromStorage = () => {
+    const owner = storageOwner.value
     try {
-      const cached = localStorage.getItem(STORAGE_KEY_QUEUE)
-      if (cached) {
-        mutationQueue.value = JSON.parse(cached)
-        console.log('📦 Loaded mutation queue from storage:', mutationQueue.value.length)
-      }
+      mutationQueue.value = owner ? readOwnedQueue(localStorage, STORAGE_KEY_QUEUE, owner) : []
+      console.log('📦 Loaded mutation queue from storage:', mutationQueue.value.length)
     } catch (error) {
       console.error('Failed to load queue from storage:', error)
     }
@@ -102,14 +120,23 @@ export const useShoppingStore = defineStore('shopping', () => {
   // Offline-Queue sofort aus dem localStorage herstellen — ein reiner
   // Lesevorgang ohne Netzwerk. Dadurch kennt der Sync-Indikator im Header
   // unsynchronisierte Änderungen auch dann, wenn die Einkaufsansicht in dieser
-  // Sitzung noch nicht geöffnet wurde.
-  loadQueueFromStorage()
+  // Sitzung noch nicht geöffnet wurde. Wechselt der Besitzer (Abmelden,
+  // anderes Konto, anderer Haushalt), wird die bisherige Warteschlange unter
+  // ihrem Besitzer gesichert und die des neuen geladen.
+  watch(
+    storageOwner,
+    (owner, previous) => {
+      if (previous) saveQueueToStorage(previous)
+      loadQueueFromStorage()
+    },
+    { immediate: true },
+  )
 
   // Auto-save items to cache on change
   watch(items, saveItemsToCache, { deep: true })
 
   // Auto-save queue to storage on change
-  watch(mutationQueue, saveQueueToStorage, { deep: true })
+  watch(mutationQueue, () => saveQueueToStorage(), { deep: true })
 
   // ============================================================================
   // Getters (computed)
@@ -477,7 +504,8 @@ export const useShoppingStore = defineStore('shopping', () => {
   }
 
   const syncMutations = async () => {
-    if (isSyncing.value || mutationQueue.value.length === 0) return
+    const owner = storageOwner.value
+    if (!owner || isSyncing.value || mutationQueue.value.length === 0) return
 
     console.log('🔄 Starting sync of', mutationQueue.value.length, 'mutations...')
     isSyncing.value = true
@@ -489,13 +517,25 @@ export const useShoppingStore = defineStore('shopping', () => {
         current: () => mutationQueue.value,
         process: processMutation,
         remove: (ids) => {
-          mutationQueue.value = mutationQueue.value.filter((m) => !ids.includes(m.queueId))
+          // Hat das Abmelden die Anfrage überholt, liegt die Warteschlange
+          // schon gesichert unter dem alten Besitzer — dort streichen.
+          if (storageOwner.value === owner) {
+            mutationQueue.value = mutationQueue.value.filter((m) => !ids.includes(m.queueId))
+            return
+          }
+          try {
+            removeFromOwnedQueue(localStorage, STORAGE_KEY_QUEUE, owner, ids)
+          } catch (error) {
+            console.error('Failed to update stored queue:', error)
+          }
         },
         maxRetries: MAX_RETRIES,
+        shouldStop: () => storageOwner.value !== owner,
       })
     } finally {
       isSyncing.value = false
     }
+    if (storageOwner.value !== owner) return
 
     if (result.discarded.length > 0) {
       console.warn('🗑️ Gave up on mutations:', result.discarded)
@@ -1213,6 +1253,31 @@ export const useShoppingStore = defineStore('shopping', () => {
     }
   }
 
+  /**
+   * Beim Session-Ende aufrufen (Abmelden, SIGNED_OUT). Leert, was der nächste
+   * Nutzer auf diesem Gerät sonst sähe: Artikel, Listen, Kategorien, Abos und
+   * den Artikel-Cache im localStorage.
+   *
+   * Die Offline-Warteschlange bleibt bewusst stehen — Ungesendetes wäre sonst
+   * still verloren. Sie liegt unter Nutzer + Haushalt und läuft erst wieder,
+   * wenn derselbe Nutzer im selben Haushalt angemeldet ist; aus dem Speicher
+   * verschwindet sie von selbst, sobald `authStore.user` oder der Haushalt
+   * wechselt. Deshalb fasst diese Funktion sie nicht an: vor dem Abmelden
+   * aufgerufen, würde ein Leeren die gesicherte Warteschlange überschreiben.
+   */
+  const resetForSessionEnd = () => {
+    unsubscribeFromItems()
+    items.value = []
+    lists.value = []
+    categories.value = []
+    currentListId.value = null
+    try {
+      removeKeysWithPrefix(localStorage, STORAGE_KEY_ITEMS)
+    } catch (error) {
+      console.error('Failed to clear item cache:', error)
+    }
+  }
+
   // ============================================================================
   // Return - Public API
   // ============================================================================
@@ -1250,5 +1315,6 @@ export const useShoppingStore = defineStore('shopping', () => {
     subscribeToItems,
     unsubscribeFromItems,
     syncMutations,
+    resetForSessionEnd,
   }
 })
