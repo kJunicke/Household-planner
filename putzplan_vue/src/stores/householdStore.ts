@@ -17,6 +17,7 @@ import {
   type PendingWeekStart,
 } from '@/lib/weekWindow'
 import type { RealtimeChannel } from '@supabase/supabase-js'
+import { createLatestRunGuard } from '@/lib/latestRun'
 
 /** Grenzen des Wochenziels — identisch zum CHECK auf `households`. */
 export const MIN_WEEKLY_GOAL_POINTS = 1
@@ -297,8 +298,13 @@ export const useHouseholdStore = defineStore('household', () => {
   /** Wochenstart, gegen den die geladenen Erledigungen gezogen wurden. */
   const loadedWeekStart = ref<string | null>(null)
 
+  // `force: true` startet Läufe parallel; ohne Schutz überschriebe eine
+  // später ankommende, ältere Antwort die Punkte der jüngeren Erledigung.
+  const weeklyLoadGuard = createLatestRunGuard()
+
   const runLoadWeeklyCompletions = async () => {
     if (!currentHousehold.value) return
+    const isLatest = weeklyLoadGuard.start()
 
     await promoteDueWeekStart()
 
@@ -319,6 +325,8 @@ export const useHouseholdStore = defineStore('household', () => {
       )
       .eq('tasks.household_id', currentHousehold.value.household_id)
       .gte('completed_at', weekStart.toISOString())
+
+    if (!isLatest()) return
 
     if (error) {
       console.error('Error loading weekly completions:', error)

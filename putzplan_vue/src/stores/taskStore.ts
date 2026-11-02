@@ -15,6 +15,7 @@ import {
   runOptimistic,
   serializeMutation,
 } from '@/lib/optimistic'
+import { createLatestRunGuard } from '@/lib/latestRun'
 
 /**
  * Optimistische Completion: trägt eine Client-Kennung, weil die `completion_id`
@@ -1445,11 +1446,16 @@ export const useTaskStore = defineStore('tasks', () => {
   // anderen Routen Abfragen, deren Ergebnis niemand liest.
   let projectEffortTotalsActive = false
 
+  // Jeder Realtime-INSERT stößt einen mehrseitigen Lauf an. Ohne Schutz setzte
+  // der zuletzt FERTIGE Lauf die Summen, nicht der zuletzt gestartete.
+  const projectTotalsGuard = createLatestRunGuard()
+
   const loadProjectEffortTotals = async (): Promise<void> => {
     const householdStore = useHouseholdStore()
     if (!householdStore.currentHousehold) return
 
     projectEffortTotalsActive = true
+    const isLatest = projectTotalsGuard.start()
 
     // Schritt 1: alle Unteraufgaben des Haushalts mit ihrem Elternteil.
     //
@@ -1462,6 +1468,7 @@ export const useTaskStore = defineStore('tasks', () => {
       .eq('household_id', householdStore.currentHousehold.household_id)
       .not('parent_task_id', 'is', null)
 
+    if (!isLatest()) return
     if (subtaskError) {
       // Stehenlassen statt auf 0 setzen: eine falsche 0 sieht aus wie ein
       // Projekt ohne Arbeit und niemand liest sie als Fehler.
@@ -1513,6 +1520,7 @@ export const useTaskStore = defineStore('tasks', () => {
           .order('completion_id')
           .range(offset, offset + PAGE - 1)
 
+        if (!isLatest()) return
         if (completionError) {
           console.error('Error loading completions for project effort totals:', completionError)
           return
@@ -1535,6 +1543,7 @@ export const useTaskStore = defineStore('tasks', () => {
       }
     }
 
+    if (!isLatest()) return
     projectEffortTotals.value = totals
   }
 
@@ -1554,9 +1563,18 @@ export const useTaskStore = defineStore('tasks', () => {
    * abziehen; das Abzeichen bliebe nach dem Zurückkleben zu hoch, und
    * **niemand sähe einen Fehler**.
    */
+  // Entprellt: mehrere Erledigungen kurz hintereinander (Checkliste, fremde
+  // Geräte, ungefilterte DELETEs aller Haushalte) ergeben einen Lauf statt vieler.
+  const PROJECT_TOTALS_DEBOUNCE_MS = 300
+  let projectTotalsTimer: ReturnType<typeof setTimeout> | null = null
+
   const refreshProjectEffortTotals = () => {
     if (!projectEffortTotalsActive) return
-    void loadProjectEffortTotals()
+    if (projectTotalsTimer !== null) clearTimeout(projectTotalsTimer)
+    projectTotalsTimer = setTimeout(() => {
+      projectTotalsTimer = null
+      if (projectEffortTotalsActive) void loadProjectEffortTotals()
+    }, PROJECT_TOTALS_DEBOUNCE_MS)
   }
 
   /**
@@ -1567,6 +1585,10 @@ export const useTaskStore = defineStore('tasks', () => {
    */
   const stopProjectEffortTotals = () => {
     projectEffortTotalsActive = false
+    if (projectTotalsTimer !== null) {
+      clearTimeout(projectTotalsTimer)
+      projectTotalsTimer = null
+    }
   }
 
   // Return - was andere Komponenten verwenden können
