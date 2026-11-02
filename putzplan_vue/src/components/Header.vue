@@ -36,9 +36,9 @@ import { useElementHeightVar } from '../composables/useElementHeightVar'
  * jeder Route mit — inklusive ihrer Papier-Optik im klassischen Aussehen, das
  * ist gewollt (siehe Kommentar in `WallStatusBar.vue`).
  *
- * Die Rangliste ist ersatzlos entfernt (siehe Ticket 08).
- * `householdStore.weeklyRanking` wird dadurch nirgends mehr gelesen; ob der
- * Store-Wert bleibt oder entfällt, ist laut Ticket bewusst offen (TODO.md).
+ * Die Rangliste ist ersatzlos entfernt (siehe Ticket 08), der Store-Wert
+ * `weeklyRanking` ebenfalls (Backlog-Ticket 50). Laut Glossar (Wochenziel)
+ * gibt es ausdrücklich keine Rangliste — auch nicht künftig.
  *
  * Das „Putzplan"-Logo stand ursprünglich links neben der Rangliste und sollte
  * laut Ticket 08 ganz entfallen — der Nutzer hat das nach dem ersten Umbau

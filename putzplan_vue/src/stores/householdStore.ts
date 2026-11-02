@@ -433,32 +433,6 @@ export const useHouseholdStore = defineStore('household', () => {
     return weeklyPointsByUser.value.get(authStore.user.id) || 0
   })
 
-  // Wöchentliche Rangliste — enthält **alle** Haushaltsmitglieder, auch solche
-  // ohne Punkte in dieser Woche. Wer führt, soll trotzdem sehen, wie viele Punkte
-  // die andere Person hat und welche Farbe sie trägt.
-  const weeklyRanking = computed(() => {
-    const authStore = useAuthStore()
-    if (!authStore.user) return []
-
-    const points = weeklyPointsByUser.value
-
-    return (
-      householdMembers.value
-        .map((member, index) => ({
-          userId: member.user_id,
-          name: member.display_name || 'Unbekannt',
-          color: member.user_color || '#4A90E2',
-          points: points.get(member.user_id) || 0,
-          isCurrentUser: member.user_id === authStore.user!.id,
-          order: index,
-        }))
-        // Punkte absteigend; bei Gleichstand die Mitgliederreihenfolge, damit
-        // die Liste nicht bei jeder Neuberechnung springt.
-        .sort((a, b) => b.points - a.points || a.order - b.order)
-        .map((entry, index) => ({ ...entry, rank: index + 1 }))
-    )
-  })
-
   /**
    * Beiträge zum gemeinsamen Wochenziel — die Datengrundlage der Statusleiste.
    *
@@ -800,7 +774,6 @@ export const useHouseholdStore = defineStore('household', () => {
     removeOptimisticCompletion,
     currentUserWeeklyPoints,
     todayCompletionsCount,
-    weeklyRanking,
     weeklyContributions,
     weeklyTotalPoints,
     weeklyGoalPoints,
