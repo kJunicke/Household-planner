@@ -99,6 +99,8 @@ export function createChecklistStore(config: ChecklistStoreConfig) {
     })
 
     const hasPendingMutations = queue.hasPending
+    /** Für die Warnung vor dem Abmelden: wie viel noch nicht beim Server ist. */
+    const pendingMutationCount = computed(() => queue.queue.value.length)
     const isSyncing = queue.isSyncing
 
     // ==========================================================================
@@ -1320,6 +1322,7 @@ export function createChecklistStore(config: ChecklistStoreConfig) {
       isLoading,
       isSyncing,
       hasPendingMutations,
+      pendingMutationCount,
       currentList,
       currentListItems,
       currentListCategories,

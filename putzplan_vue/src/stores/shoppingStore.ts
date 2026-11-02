@@ -242,6 +242,8 @@ export const useShoppingStore = defineStore('shopping', () => {
   )
 
   const hasPendingMutations = computed(() => mutationQueue.value.length > 0)
+  /** Für die Warnung vor dem Abmelden: wie viel noch nicht beim Server ist. */
+  const pendingMutationCount = computed(() => mutationQueue.value.length)
 
   // Der Sync-Indikator im Header liest über diese Anmeldung mit. Der Einkauf ist
   // heute die einzige Quelle mit Offline-Queue; weitere Stores melden sich später
@@ -1293,6 +1295,7 @@ export const useShoppingStore = defineStore('shopping', () => {
     isSyncing,
     categories,
     hasPendingMutations,
+    pendingMutationCount,
     currentListItems,
     currentListCategories,
     purchasedItems,

@@ -7,6 +7,10 @@ import { MEMBER_COLORS, DEFAULT_MEMBER_COLOR } from '../lib/memberColors'
 import { MIN_WEEKLY_GOAL_POINTS, MAX_WEEKLY_GOAL_POINTS } from '../stores/householdStore'
 import { WEEK_DAY_LABELS } from '../lib/weekWindow'
 import WeeklyGoalConfirmModal from './WeeklyGoalConfirmModal.vue'
+import LogoutConfirmModal from './LogoutConfirmModal.vue'
+import { useShoppingStore } from '../stores/shoppingStore'
+import { usePackingStore } from '../stores/packingStore'
+import { useTodoStore } from '../stores/todoStore'
 import { DISPLAY_NAME_MAX_LENGTH } from '@/lib/limits'
 
 const props = defineProps<{
@@ -46,10 +50,29 @@ const copyInviteCode = async () => {
   }
 }
 
-const handleLogout = async () => {
+// Ungesendete Listen-Änderungen. Packliste und To-do werden dafür angelegt,
+// falls ihre Ansicht noch nicht offen war — das liest nur den localStorage.
+const shoppingStore = useShoppingStore()
+const packingStore = usePackingStore()
+const todoStore = useTodoStore()
+const pendingMutationCount = computed(
+  () =>
+    shoppingStore.pendingMutationCount +
+    packingStore.pendingMutationCount +
+    todoStore.pendingMutationCount,
+)
+const showLogoutConfirm = ref(false)
+
+const logout = async () => {
+  showLogoutConfirm.value = false
   await authStore.logout()
   closeSidebar()
   router.push('/login')
+}
+
+const handleLogout = () => {
+  if (pendingMutationCount.value > 0) showLogoutConfirm.value = true
+  else void logout()
 }
 
 const startEditingName = () => {
@@ -406,6 +429,13 @@ const buildDate = __BUILD_DATE__
       :effective-from="goalEffectiveFrom"
       @close="showGoalConfirm = false"
       @confirm="confirmGoalChange"
+    />
+
+    <LogoutConfirmModal
+      v-if="showLogoutConfirm"
+      :pending-count="pendingMutationCount"
+      @close="showLogoutConfirm = false"
+      @confirm="logout"
     />
   </Teleport>
 </template>
