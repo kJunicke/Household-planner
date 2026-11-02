@@ -519,6 +519,10 @@ export const useShoppingStore = defineStore('shopping', () => {
   // keinen weiteren an: der eben fertige hat alles versucht, ein sofortiger
   // zweiter wiederholte nur dieselben Fehlschläge samt Meldung.
   let reconciling = false
+  // Trifft der Neuabgleich auf ein laufendes Laden, ist es meist genau das, das
+  // den Durchlauf angestoßen hat — es kennt den Stand nach dem Verwerfen nicht.
+  // Ohne Nachholen bliebe die verworfene Änderung stehen, als wäre sie gespeichert.
+  let reconcileRequested = false
 
   const syncMutations = async () => {
     const owner = storageOwner.value
@@ -728,6 +732,7 @@ export const useShoppingStore = defineStore('shopping', () => {
     if (!reconciling) loadItemsFromCache()
 
     if (isLoading.value) {
+      if (reconciling) reconcileRequested = true
       console.log('Already loading shopping items, skipping...')
       return
     }
@@ -780,6 +785,17 @@ export const useShoppingStore = defineStore('shopping', () => {
       }
     } finally {
       isLoading.value = false
+    }
+
+    if (reconcileRequested) {
+      reconcileRequested = false
+      // Als Neuabgleich, damit er keinen Durchlauf anstößt — sonst eine Schleife.
+      reconciling = true
+      try {
+        await loadItems()
+      } finally {
+        reconciling = false
+      }
     }
   }
 
