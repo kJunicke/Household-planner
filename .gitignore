@@ -15,7 +15,7 @@ node_modules/
 # Playwright MCP screenshots and test artifacts
 .playwright-mcp/
 
-# Lokaler Issue-Tracker (Specs & Tickets, siehe docs/agents/issue-tracker.md)
+# Lokaler Issue-Tracker (Specs & Tickets, siehe docs/agents/tracker.md)
 .scratch/
 
 # Handoff-Dokumente (lokal, nicht versioniert)
