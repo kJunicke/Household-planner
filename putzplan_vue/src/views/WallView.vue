@@ -1,11 +1,6 @@
 <script setup lang="ts">
 /**
- * Die Pinnwand (Pinnwand-Redesign, Etappe 2).
- *
- * Eigene Komponente **neben** `CleaningView`, nicht dessen Umbau: `HomeView`
- * entscheidet anhand der Aussehen-Einstellung, welche der beiden gerendert
- * wird. Beide arbeiten auf denselben Stores und derselben Auswahl
- * (`useTaskBoard`), damit ein Umschalten nichts verliert.
+ * Die Pinnwand — der Putzen-Screen der Route `/`.
  *
  * Es gibt keine Kategorie-Chipleiste und keine Überschriften. Die drei Gruppen
  * fällig → täglich → Projekt bestimmen zwar die grobe Leserichtung von oben
@@ -1396,8 +1391,8 @@ onMounted(async () => {
 
 onUnmounted(() => {
   taskStore.unsubscribeFromTasks()
-  // Ohne die Abmeldung zöge der Store die Projekt-Summen auch im klassischen
-  // Aussehen weiter nach, wo sie niemand liest.
+  // Ohne die Abmeldung zöge der Store die Projekt-Summen auch auf den anderen
+  // Routen weiter nach, wo sie niemand liest.
   taskStore.stopProjectEffortTotals()
   resizeObserver?.disconnect()
   // Sonst liefe die Frame-Leiter eines vertagten Laufs an der ausgehängten

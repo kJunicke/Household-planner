@@ -8,33 +8,14 @@ import BrandLogo from './BrandLogo.vue'
 import { useElementHeightVar } from '../composables/useElementHeightVar'
 
 /**
- * BEWUSSTE AUSNAHME VOM AUSSEHEN-SCHALTER (Ticket 08 „Header überall gleich").
- *
- * Jede andere Ansicht/Komponente richtet ihr Aussehen nach dem
- * `data-design`-Attribut am Wurzelelement (→ designStore, src/lib/design.ts):
- * klassisch oder Pinnwand. DIESER Header nicht. Er zeigt in beiden Aussehen
- * und auf jeder Route dieselbe Papier-Optik — deshalb greift sein `<style>`
- * unten direkt auf die ungegateten `--pw-*`-Rohtoken aus `base.css` zu statt
- * auf die (gegateten) `--color-*`-Token, die je nach Aussehen umspringen.
- * Das gilt auch für VORDERGRUNDFARBEN, nicht nur für Fläche/Rahmen: `color`
- * wird unten explizit auf `--pw-ink` gesetzt, weil sonst die geerbte
- * `--color-text-primary` vom `<body>` durchschlägt (die IST gegated) — genau
- * dieselbe Falle steckte in `SyncIndicator` (`--color-primary`/
- * `--color-warning-dark`) und ist dort direkt behoben (`SyncIndicator.vue`
- * benutzt jetzt selbst ungegatete Farben), weil die Komponente ausschließlich
- * hier im Header eingesetzt wird — dieselbe Ausnahme gilt also für sie mit.
- *
- * Das ist kein Bug und keine vergessene `[data-design]`-Klammer — wer das
- * hier "repariert", hebt eine Absicht auf, die der Nutzer in der
- * Grilling-Session vom 18.08.2026 zweimal ausdrücklich bestätigt hat:
- * „In beiden Aussehen und in allen Views sieht der Header gleich aus."
- * Siehe .scratch/pinnwand-ausbau/issues/08-header-ueberall-gleich.md.
- *
- * Die Wochenziel-Leiste (`WallStatusBar`) gehört zu dieser Ausnahme: sie war
- * bis Ticket 08 ein Pinnwand-Exklusiv unterhalb des Headers und ausschließlich
- * auf der Wand sichtbar. Jetzt ist sie hier eingebettet und läuft dadurch auf
- * jeder Route mit — inklusive ihrer Papier-Optik im klassischen Aussehen, das
- * ist gewollt (siehe Kommentar in `WallStatusBar.vue`).
+ * Der Header greift im `<style>` direkt auf die `--pw-*`-Rohtoken aus
+ * `base.css` zu, nicht auf die `--color-*`-Token. Das stammt aus der Zeit des
+ * Aussehen-Umschalters (Ticket 08 „Header überall gleich"), als die
+ * `--color-*`-Token je nach Aussehen umsprangen. Seit dem Abriss gibt es nur
+ * noch die Pinnwand; das Zusammenführen der Token-Sätze steht noch aus.
+ * `color` wird explizit auf `--pw-ink` gesetzt, damit nicht die geerbte
+ * `--color-text-primary` vom `<body>` durchschlägt — dieselbe Regel gilt für
+ * `SyncIndicator`, der nur hier im Header sitzt.
  *
  * Die Rangliste ist ersatzlos entfernt (siehe Ticket 08), der Store-Wert
  * `weeklyRanking` ebenfalls (Backlog-Ticket 50). Laut Glossar (Wochenziel)
@@ -93,7 +74,7 @@ onMounted(async () => {
 
 <style scoped>
 /* Direkt die `--pw-*`-Rohtoken statt `--color-*` — siehe Kommentar oben im
-   Script: das ist die bewusste Papier-Ausnahme vom Aussehen-Schalter. `color`
+   Script. `color`
    ist Absicht, nicht Zierde: ohne ihn erbt jedes Kind (u. a. `WallStatusBar`s
    Zahlen, falls sie mal keinen eigenen `color` setzen) die gegatete
    `--color-text-primary` vom Body. */
@@ -104,17 +85,9 @@ onMounted(async () => {
   color: var(--pw-ink);
   position: sticky;
   top: 0;
-  /* QC-Runde 2: 100 war zu niedrig in die andere Richtung. `CategoryNav.vue`
-     bekam ein `top: var(--app-header-height)` (rastet jetzt UNTER dem Header
-     ein, siehe Kommentar dort) — dadurch überlappen sich beide im Ruhezustand
-     nicht mehr, aber ein z-index braucht es trotzdem als zweite Sicherung
-     (z. B. für den kurzen Moment, bevor `useElementHeightVar` die Variable
-     zum ersten Mal schreibt, oder bei einer Größenänderung der Leiste). 950
-     liegt bewusst zwischen `CategoryNav`s 850 (der Header soll im Zweifel
-     GEWINNEN, nicht verdeckt werden) und den Sidebar-/Modal-Ebenen ab 1040
+  /* Über dem Seiteninhalt, aber unter den Sidebar-/Modal-Ebenen ab 1040
      (`SettingsSidebar.vue`) — der Header darf nicht über Modals/Overlays
-     liegen. Nicht wieder auf 900 ziehen: das war der Wert, der in Runde 1
-     `CategoryNav` verdeckt hat (siehe Git-Historie dieses Kommentars). */
+     liegen. */
   z-index: 950;
 }
 
