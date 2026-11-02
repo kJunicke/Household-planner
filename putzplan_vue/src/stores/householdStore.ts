@@ -19,6 +19,21 @@ import {
 import type { RealtimeChannel } from '@supabase/supabase-js'
 import { createLatestRunGuard } from '@/lib/latestRun'
 import { onSessionEnd } from '@/lib/sessionEnd'
+import { isNetworkError } from '@/lib/optimistic'
+import {
+  clearCachedHousehold,
+  readCachedHousehold,
+  writeCachedHousehold,
+} from '@/lib/householdCache'
+
+/** `localStorage`, oder `null`, wo schon der Zugriff wirft (gesperrter Speicher). */
+const browserStorage = (): Storage | null => {
+  try {
+    return window.localStorage
+  } catch {
+    return null
+  }
+}
 
 /** Grenzen des Wochenziels — identisch zum CHECK auf `households`. */
 export const MIN_WEEKLY_GOAL_POINTS = 1
@@ -67,6 +82,36 @@ export const useHouseholdStore = defineStore('household', () => {
     ...optimisticWeeklyCompletions.value,
   ])
 
+  // Wartet nach einem Offline-Start auf das Netz, um den Haushalt frisch zu laden.
+  let onlineRetryHandler: (() => void) | null = null
+  const cancelOnlineRetry = () => {
+    if (!onlineRetryHandler) return
+    window.removeEventListener('online', onlineRetryHandler)
+    onlineRetryHandler = null
+  }
+
+  /**
+   * Netzfehler beim Laden: mit dem zuletzt bekannten Haushalt dieses Kontos
+   * weitermachen, statt den Router-Guard zur Einrichtung schicken zu lassen.
+   * Sobald das Netz zurück ist, wird frisch geladen. `false` = kein Cache.
+   */
+  const startFromCachedHousehold = (userId: string): boolean => {
+    const storage = browserStorage()
+    const cached = storage ? readCachedHousehold(storage, userId) : null
+    if (!cached) return false
+    currentHousehold.value = cached.household
+    householdMembers.value = cached.members
+    subscribeToHouseholdSettings()
+    if (!onlineRetryHandler) {
+      onlineRetryHandler = () => {
+        cancelOnlineRetry()
+        void loadUserHousehold()
+      }
+      window.addEventListener('online', onlineRetryHandler)
+    }
+    return true
+  }
+
   // Actions
   const loadUserHousehold = async () => {
     const authStore = useAuthStore()
@@ -92,6 +137,10 @@ export const useHouseholdStore = defineStore('household', () => {
 
     if (memberError) {
       console.error('Error loading household member:', memberError)
+      if (isNetworkError(memberError) && startFromCachedHousehold(userId)) {
+        toastStore.showToast('Offline – zuletzt geladener Haushalt', 'info')
+        return
+      }
       toastStore.showToast('Fehler beim Laden des Haushalts', 'error')
       return
     }
@@ -103,6 +152,8 @@ export const useHouseholdStore = defineStore('household', () => {
       unsubscribeFromHouseholdSettings()
       currentHousehold.value = null
       householdMembers.value = []
+      const storage = browserStorage()
+      if (storage) clearCachedHousehold(storage, userId)
       return
     }
 
@@ -117,15 +168,31 @@ export const useHouseholdStore = defineStore('household', () => {
 
     if (householdError) {
       console.error('Error loading household:', householdError)
+      if (isNetworkError(householdError) && startFromCachedHousehold(userId)) {
+        toastStore.showToast('Offline – zuletzt geladener Haushalt', 'info')
+        return
+      }
       toastStore.showToast('Fehler beim Laden des Haushalts', 'error')
       return
     }
 
+    cancelOnlineRetry()
     currentHousehold.value = householdData
     console.log('Loaded household:', householdData)
 
     // 3. Lade alle Mitglieder des Households
     await loadHouseholdMembers()
+    if (!stillSameUser() || !currentHousehold.value) return
+
+    // Leere Mitgliederliste heißt: deren Laden ist gescheitert (man ist selbst
+    // Mitglied). Dann den vorigen, vollständigen Cache nicht überschreiben.
+    const storage = browserStorage()
+    if (storage && householdMembers.value.length > 0) {
+      writeCachedHousehold(storage, userId, {
+        household: currentHousehold.value,
+        members: householdMembers.value,
+      })
+    }
 
     // 4. Änderungen der Haushalts-Einstellungen mitbekommen
     subscribeToHouseholdSettings()
@@ -711,7 +778,10 @@ export const useHouseholdStore = defineStore('household', () => {
   // Session-Ende: alles, was an Konto und Haushalt hängt, weg — auch Kanal und
   // Sichtbarkeits-Listener. In-flight-Ladevorgänge verwerfen ihre Antwort
   // (Wächter oben), statt den alten Haushalt zurückzuschreiben.
-  onSessionEnd(() => {
+  onSessionEnd(({ userId }) => {
+    cancelOnlineRetry()
+    const storage = browserStorage()
+    if (storage) clearCachedHousehold(storage, userId)
     unsubscribeFromHouseholdSettings()
     weeklyLoadGuard.invalidate()
     inFlightWeeklyLoad = null
