@@ -23,16 +23,6 @@ const STORAGE_KEY_ITEMS = 'shopping_items_cache'
 const STORAGE_KEY_QUEUE = 'shopping_mutation_queue'
 const MAX_RETRIES = 5
 
-// Schlüssel, Normalisierung und Reihenfolge liegen seit Etappe 2 in
-// `@/lib/categoryOrder` — geteilt mit Packliste und To-do. Der Einkauf reicht sie
-// unverändert weiter, damit `ShoppingView.vue` weiter aus dem Store importiert.
-export {
-  UNCATEGORIZED,
-  normalizeCategoryName,
-  categoryKey,
-  compareCategoryGroups,
-} from '@/lib/categoryOrder'
-
 export interface ShoppingCategoryGroup {
   /** Real category label, or null for the Unkategorisiert bucket. */
   category: string | null

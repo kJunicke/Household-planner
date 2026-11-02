@@ -160,7 +160,7 @@ const { graceIds, markGrace, clearGrace, clearAllGrace } = useGraceWindow(6000)
  * — die Kopfzeile zeigt ihn sofort an, sonst widerspricht sie 6s lang dem
  * Gesamtfortschritt (`store.overallProgress`), der ebenfalls roh zählt.
  */
-export interface DisplayCategoryGroup extends CategoryGroup {
+interface DisplayCategoryGroup extends CategoryGroup {
   rawDoneCount: number
 }
 
@@ -907,7 +907,6 @@ onUnmounted(() => {
   <!-- Kategorie bearbeiten / löschen -->
   <CategoryEditModal
     v-if="editingCategory"
-    variants
     :category="editingCategory.name"
     :item-count="editingCategory.count"
     :purchased-count="editingCategory.doneCount"

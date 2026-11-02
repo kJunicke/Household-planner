@@ -1,11 +1,7 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted, ref, computed, watch } from 'vue'
-import {
-  useShoppingStore,
-  categoryKey,
-  compareCategoryGroups,
-  type ShoppingCategoryGroup,
-} from '@/stores/shoppingStore'
+import { useShoppingStore, type ShoppingCategoryGroup } from '@/stores/shoppingStore'
+import { categoryKey, compareCategoryGroups } from '@/lib/categoryOrder'
 import { useHouseholdStore } from '@/stores/householdStore'
 import { useNetworkStatus } from '@/composables/useNetworkStatus'
 import { useGraceWindow } from '@/composables/useGraceWindow'
@@ -938,7 +934,6 @@ onUnmounted(() => {
     :category="editingCategory.name"
     :item-count="editingCategory.count"
     :purchased-count="editingCategory.purchasedCount"
-    variants
     @rename="handleCategoryRename"
     @delete="handleCategoryDelete"
     @close="editingCategory = null"

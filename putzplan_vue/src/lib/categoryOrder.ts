@@ -8,7 +8,7 @@ import type { CategoryRow } from '@/types/CategoryRow'
 import type { CategoryOption } from '@/types/CategoryOption'
 
 /** Sentinel key for the "Unkategorisiert" bucket (items with category === null). */
-export const UNCATEGORIZED = '__uncategorized__'
+const UNCATEGORIZED = '__uncategorized__'
 
 /** Namensvergleich wie der eindeutige Index aus der Migration: getrimmt, case-insensitiv. */
 export const normalizeCategoryName = (name: string) => name.trim().toLowerCase()

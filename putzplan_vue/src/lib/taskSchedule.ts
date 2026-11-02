@@ -11,7 +11,7 @@ import type { Task } from '@/types/Task'
 // Vokabular wie in CONTEXT.md: "dran" heißt offen und zu tun, "Fälligkeit" ist der
 // Countdown einer erledigten Aufgabe. Deshalb 'pending' für dran und 'upcoming' für
 // den laufenden Countdown — nicht umgekehrt.
-export type TaskScheduleStatus =
+type TaskScheduleStatus =
   | 'never-done' // dran, noch nie erledigt
   | 'overdue' // dran, Kadenz überschritten
   | 'pending' // dran, Kadenz noch nicht abgelaufen (manuell dreckig)

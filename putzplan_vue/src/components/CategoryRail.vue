@@ -2,7 +2,7 @@
 import { computed } from 'vue'
 import { categoryColor } from '@/lib/categoryColor'
 
-export interface RailGroup {
+interface RailGroup {
   key: string
   label: string
   category: string | null

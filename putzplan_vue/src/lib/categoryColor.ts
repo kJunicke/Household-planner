@@ -16,7 +16,7 @@ const PALETTE = [
 ]
 
 /** Muted grey for the always-present "Unkategorisiert" bucket. */
-export const UNCATEGORIZED_COLOR = '#94a3b8'
+const UNCATEGORIZED_COLOR = '#94a3b8'
 
 /**
  * Deterministic category label → palette color.

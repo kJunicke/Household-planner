@@ -31,7 +31,7 @@ export interface HistoryDayPerson {
 }
 
 /** Eine Completion, die für sich allein steht. */
-export interface HistorySingleRow {
+interface HistorySingleRow {
   kind: 'entry'
   id: string
   sortTime: number
