@@ -1077,9 +1077,12 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   gap: 4px;
+  /* Bezugsrahmen der Namensvorschläge ist die ganze Leiste, nicht das
+     Namensfeld: bei 360 px hatte das Feld Platz für rund elf Zeichen, die
+     Vorschläge darunter waren entsprechend gequetscht. */
+  position: relative;
 }
 .top-name-wrap {
-  position: relative;
   flex: 1 1 40%;
   min-width: 0;
 }
@@ -1191,6 +1194,9 @@ onUnmounted(() => {
   text-align: left;
   font-size: var(--font-base);
   color: var(--color-text-primary);
+  /* Ein langer Name ohne Leerzeichen bricht um, statt das Dropdown seitlich
+     scrollbar zu machen. */
+  overflow-wrap: anywhere;
 }
 .suggestion-item:last-child {
   border-bottom: none;
@@ -1425,9 +1431,11 @@ onUnmounted(() => {
   align-items: center;
   gap: 4px;
   padding: 0;
+  /* Vorschläge über die ganze Zeile statt nur über das Eingabefeld —
+     wie bei der oberen Leiste. */
+  position: relative;
 }
 .add-input-wrap {
-  position: relative;
   flex: 1;
   min-width: 0;
 }

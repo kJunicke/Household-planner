@@ -1408,12 +1408,14 @@ onUnmounted(() => {
   align-items: center;
   gap: 4px;
   padding: 0;
+  /* Vorschläge über die ganze Zeile statt nur über das Eingabefeld —
+     wie bei der oberen Leiste. */
+  position: relative;
 }
 .add-ghost-box {
   display: none;
 }
 .add-input-wrap {
-  position: relative;
   flex: 1;
   min-width: 0;
 }
@@ -1459,6 +1461,9 @@ onUnmounted(() => {
   color: var(--color-text-primary);
   cursor: pointer;
   transition: background-color 0.15s;
+  /* Ein langer Name ohne Leerzeichen bricht um, statt das Dropdown seitlich
+     scrollbar zu machen. */
+  overflow-wrap: anywhere;
 }
 .suggestion-item:last-child {
   border-bottom: none;
