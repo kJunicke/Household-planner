@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * Ein Zettel an der Pinnwand (Pinnwand-Redesign, Etappe 2).
+ * Ein Zettel an der Pinnwand.
  *
  * Der Zettel bestimmt sein Aussehen selbst, aber **nicht seinen Platz**: Breite,
  * Position und Stapelreihenfolge setzt `WallView` per DOM, weil die Höhe erst
@@ -8,40 +8,25 @@
  * außen freigegeben.
  *
  * Bewusst nicht hier:
- * - kein Name, keine Initialen, kein Badge — die Zuständigkeit ist allein die
- *   farbige Umrandung in `household_members.user_color`
+ * - kein Name, keine Initialen, kein Badge — die Zuständigkeit trägt allein die
+ *   Befestigung (→ CONTEXT.md „Befestigung")
  * - keine Kategorie, keine Überschrift — der Typ ist am Papier und an der
  *   Befestigung erkennbar (Reißzwecke / Klebeband / Büroklammern)
- * - nur EIN sichtbarer Knopf: Bearbeiten. Die bis zu sieben Icon-Buttons der
- *   alten Karte entfallen; die Folgedialoge des Bearbeiten-Modals bleiben aber
- *   vollständig erreichbar.
- * - der Fetzen zum Zurückkleben (Ticket 11).
+ * - nur EIN sichtbarer Knopf: Bearbeiten; dessen Folgedialoge bleiben
+ *   vollständig erreichbar
+ * - der Fetzen zum Zurückkleben (`useTornScrap`)
  *
- * **Der Long-Press** auf der Zettelfläche (Ticket 10) blendet alle vier
- * Richtungen beschriftet ein: oben verschieben, unten erledigen, links
- * zuweisen, rechts erledigen mit angepasstem Aufwand. Die Geste steckt in
- * `useDirectionPress`, die Beschriftung in `WallDirectionMenu`.
+ * Gesten: Long-Press auf der Fläche öffnet den Kranz (`useDirectionPress`,
+ * Beschriftung in `WallDirectionMenu`), der Zug am Eselsohr reißt ab
+ * (`useTearGesture`). **Projekte sind die Ausnahme von beidem:** kein Kranz —
+ * beim Halten hebt sich nur der Zettel —, beide Gesten nach unten öffnen das
+ * `ProjectWorkModal`, es entsteht kein Fetzen; die anderen Richtungen tun
+ * nichts, alles Weitere läuft über den Bearbeiten-Stift.
  *
- * **Das Eselsohr** unten rechts ist der Abreiß-Griff (Ticket 09): von dort aus
- * nach unten ziehen erledigt die Aufgabe, sofort und ohne vorheriges langes
- * Drücken. Die Geste selbst steckt in `useTearGesture`.
- *
- * **Projekte sind die Ausnahme von beidem** (Ticket 03). Sie werden nie fertig,
- * sondern beackert: beide Gesten nach unten öffnen dort das
- * `ProjectWorkModal`, der Zettel bleibt hängen, es entsteht kein Fetzen. Einen
- * Richtungskranz bekommen sie gar nicht — beim Halten hebt sich nur der Zettel
- * („ich höre zu"), ohne Beschriftung und ohne Schleier; die anderen drei
- * Richtungen tun nichts. Alles Weitere (zuweisen, Aufwand,
- * verschieben, löschen) läuft dort über den Bearbeiten-Stift.
- *
- * **Antippen der Fläche** klappt die Unteraufgaben auf — aber nur bei einem
- * Zettel, der welche hat. Ein Zettel ohne Unteraufgaben reagiert auf ein
- * Antippen gar nicht; dort gibt es nur den Bearbeiten-Knopf.
- *
- * Wo er hinkommt, entscheidet der Zettel weiterhin nicht selbst: das Aufklappen
- * wird nur **gemeldet** (`toggle`), den Zustand hält `WallView`. Sie muss ihn
- * kennen, bevor sie packt — ein aufgeklappter Zettel bekommt die volle
- * Wandbreite, und die Zettel darunter müssen dafür weichen.
+ * Antippen der Fläche klappt die Unteraufgaben auf — nur, wenn es welche gibt.
+ * Das Aufklappen wird nur **gemeldet** (`toggle`), den Zustand hält `WallView`:
+ * sie muss ihn vor dem Packen kennen, weil ein aufgeklappter Zettel die volle
+ * Wandbreite bekommt.
  */
 import { computed, ref, watch } from 'vue'
 import type { Task } from '@/types/Task'
@@ -65,31 +50,22 @@ const props = defineProps<{
   task: Task
   expanded?: boolean
   /**
-   * Karten-Redesign (Ticket 00a): der Punktwert steht oben rechts statt in
-   * der Fußzeile. Die Wand entscheidet das, nicht der Zettel — nur sie misst
-   * während des Layout-Laufs, ob die Fußzeile sonst breiter als der Titel
-   * wäre (→ `WallView`, `relayout`).
+   * Punktwert oben rechts statt in der Fußzeile. Das entscheidet die Wand, weil
+   * nur sie beim Packen misst, ob die Fußzeile sonst breiter als der Titel wäre
+   * (→ `WallView`, `relayout`).
    *
-   * **Bewusst ein Prop, keine per `classList` gesetzte Klasse.** Eine Klasse,
-   * die `WallView` direkt ans DOM schreibt, überlebt kein Vue-Update: Vue
-   * ersetzt `className` bei jedem Patch komplett aus dem berechneten
-   * Klassen-Array, unregelmäßig und unabhängig davon, ob sich an DIESEM
-   * Zettel gerade etwas geändert hat. Über ein Prop bleibt die Entscheidung
-   * dagegen Teil des von Vue selbst verwalteten Zustands.
+   * **Bewusst ein Prop, keine per `classList` gesetzte Klasse:** Vue ersetzt
+   * `className` bei jedem Patch komplett aus dem berechneten Klassen-Array —
+   * eine von außen ans DOM geschriebene Klasse überlebt kein Update.
    */
   metaTop?: boolean
 }>()
 /**
  * `gesture-start` / `gesture-end`: solange der Finger auf diesem Zettel eine
- * Geste ausführt — Ziehen am Eselsohr (Ticket 09) **oder** langes Drücken mit
- * Richtungen (Ticket 10) —, darf ihn ein Neupacken der Wand nicht gleichzeitig
- * durch die Gegend fliegen lassen: sonst kämpfen die FLIP-Animation und der
- * Finger um dasselbe `transform`, und der Richtungskranz verlöre seinen
- * Bezugspunkt. Die Wand merkt sich die ID und lässt genau diesen Zettel aus,
- * wie sie es beim angetippten Zettel schon tut.
- *
- * Bewusst nicht „tear": beide Gesten melden hier, und ein Name, der nur die
- * eine nennt, wäre für die andere schlicht falsch.
+ * Geste ausführt (Eselsohr **oder** Long-Press), lässt die Wand ihn beim
+ * Neupacken aus — sonst kämpfen FLIP-Animation und Finger um dasselbe
+ * `transform`, und der Kranz verlöre seinen Bezugspunkt. Bewusst nicht „tear",
+ * weil beide Gesten hier melden.
  */
 const emit = defineEmits<{
   (e: 'toggle', taskId: string): void
@@ -111,7 +87,7 @@ const isProject = computed(() => props.task.task_type === 'project')
 
 const subtasks = computed(() => {
   const all = taskStore.getSubtasks(props.task.task_id)
-  // "Am Projekt arbeiten" ist Buchhaltung, kein Zettel — wie in der alten Karte.
+  // "Am Projekt arbeiten" ist Buchhaltung, kein Zettel.
   return isProject.value ? all.filter((s) => s.title !== 'Am Projekt arbeiten') : all
 })
 
@@ -121,22 +97,14 @@ const hasSubtasks = computed(() => subtasks.value.length > 0)
 /**
  * **Ein täglicher Zettel hat keinen Fortschritt — das ist Absicht, kein Bug.**
  *
- * An einem `daily`-Elternteil ist als Punktmodus ausschließlich `bonus`
- * erlaubt, und `bonus`-Unteraufgaben sind dort als *wiederholbare
- * eigenständige Belohnungen* modelliert: sie werden nie zurückgesetzt, weil der
- * Elternteil nie „fertig" wird. Genau deshalb setzt `taskStore.completeTask`
- * bei ihnen `completed` NICHT (siehe dort: `isChecklistSubtask ||
- * task.task_type !== 'daily'`).
+ * An einem `daily`-Elternteil sind Unteraufgaben nur `bonus`: wiederholbare
+ * Belohnungen, die nie zurückgesetzt werden, weil der Elternteil nie „fertig"
+ * wird. `taskStore.completeTask` setzt bei ihnen `completed` deshalb NICHT
+ * (`isChecklistSubtask || task.task_type !== 'daily'`). Wer das „repariert",
+ * bekommt ein dauerhaft durchgestrichenes Zettelchen und ein ewiges `7 / 7`.
  *
- * Wer das für einen Fehler hält und „repariert", bekommt ein Zettelchen, das
- * für immer durchgestrichen bleibt, und ein `7 / 7`, das bis in alle Ewigkeit
- * dasteht. Das ist schlechter als der Ist-Zustand.
- *
- * Die Folge für diesen Zettel: **kein Fortschrittszähler und kein
- * Durchstreichen.** „3 / 7" hieße „noch vier übrig" — bei wiederholbaren
- * Belohnungen gibt es kein Übrig. Die Zettelchen bleiben dauerhaft abreißbar;
- * dass ein Abreißen angekommen ist, sagt eine kurze Rückmeldung
- * (`recentlyTorn`) und nichts Bleibendes.
+ * Darum hier kein Fortschrittszähler und kein Durchstreichen. Dass ein Abreißen
+ * angekommen ist, sagt nur die kurze Rückmeldung `recentlyTorn`.
  */
 const tracksProgress = computed(() => props.task.task_type !== 'daily')
 
@@ -150,15 +118,13 @@ const columns = computed(() => subtaskColumns(subtasks.value.map((s) => s.title)
  * passiert; das Aufklappen selbst gehört der Wand, weil sie neu packen muss.
  */
 const onSurfaceTap = () => {
-  // Den nachlaufenden Klick eines Long-Press sieht diese Stelle nie: ihn fängt
-  // `useDirectionPress` in der Einfangphase am Fenster ab, bevor er irgendein
-  // Ziel erreicht. Hier steht deshalb bewusst KEINE zweite Schluckstelle —
-  // zwei Stellen, die dasselbe abräumen, wären eine zu viel.
+  // Den nachlaufenden Klick eines Long-Press fängt `useDirectionPress` schon in
+  // der Einfangphase am Fenster ab — hier bewusst KEINE zweite Schluckstelle.
   if (!hasSubtasks.value) return
   emit('toggle', props.task.task_id)
 }
 
-// --- Abreißen (Etappe 4 / Ticket 09) ----------------------------------------
+// --- Abreißen ----------------------------------------------------------------
 
 /**
  * Der Griff des Zettels selbst braucht eine ID, weil das Gesten-Composable
@@ -174,18 +140,11 @@ const NOTE_HANDLE = '#note'
  *
  * Bewusst dieselbe Rechnung wie `estimateCompletionEffort` im Store: der Balken
  * wächst um genau diesen Wert, also müssen die fliegende Zahl UND die Zahl in
- * der Fußzeile dieselbe sein.
+ * der Fußzeile dieselbe sein. Der ungekürzte `tasks.effort` verspräche bei
+ * erledigten `deduct`-Unteraufgaben Punkte, die nie fliegen — eine Zahl am
+ * Zettel ist ein Versprechen.
  *
- * **Hier lag ein Fehler, und er war teuer.** Die Fußzeile zeigte vorher den
- * ungekürzten `tasks.effort`. Der QC hat den Fall nachgestellt: „Badezimmer
- * putzen", `effort 1`, eine erledigte `deduct`-Unteraufgabe — die Fußzeile
- * versprach „1 P", geflogen ist nichts, die Statusleiste stand vor und nach dem
- * Abriss auf 11, und die Datenbank schrieb `effort_override 0`. App, Flug und
- * Datenbank waren einig; allein der Zettel log. Eine Zahl am Zettel ist ein
- * Versprechen — sie muss die sein, die gleich fliegt.
- *
- * Verbindlich rechnet weiterhin die Edge Function; das hier ist die Schätzung
- * fürs Auge, wie im Store auch.
+ * Verbindlich rechnet die Edge Function; das hier ist die Schätzung fürs Auge.
  */
 const effectivePoints = computed(() => {
   const deductSum = taskStore
@@ -196,16 +155,10 @@ const effectivePoints = computed(() => {
 })
 
 /**
- * Was am Sticker steht.
- *
- * Bei allen anderen Zetteln ist das die Zahl, die beim Abreißen gleich fliegt
- * (→ `effectivePoints`). **Ein Projekt hat keine feste Punktzahl mehr** — sie
- * wird bei jedem Arbeitseintrag neu gewählt. Dort steht stattdessen, wie viele
- * Punkte das Projekt bis jetzt verschlungen hat: die Summe aller Erledigungen
- * seiner Unteraufgaben, aus `taskStore.projectEffortTotals`.
- *
- * Bewusst NICHT aus `taskStore.completions`: die sind an der Wand leer — die
- * Zahl stünde dauerhaft auf 0.
+ * Was am Sticker steht: sonst die Zahl, die beim Abreißen fliegt
+ * (→ `effectivePoints`). **Ein Projekt hat keine feste Punktzahl** — dort steht,
+ * wie viele Punkte es bis jetzt verschlungen hat (`taskStore.projectEffortTotals`).
+ * Bewusst NICHT aus `taskStore.completions`: die sind an der Wand leer.
  *
  * Klassenname `.points` und Platz im `.corner` bleiben, weil
  * `WallView.relayout` genau danach misst.
@@ -215,14 +168,9 @@ const displayPoints = computed(() =>
 )
 
 /**
- * Was im Sticker STEHT.
- *
- * Bei allen Zetteln außer Projekten unverändert die rohe Zahl. **Nur das
- * Projekt-Abzeichen klemmt bei `999+`** (Ticket 03-3): vier Stellen sprengen
- * die 34 px, und ein Projekt jenseits von 999 Punkten hat die Aussage ohnehin
- * gemacht. Die Klemme gilt ausschließlich für die ANZEIGE — die Stufe rechnet
- * weiter mit `displayPoints` (siehe `badgeStage`), sonst fiele ein Projekt mit
- * 1500 Punkten auf die Stufe von 999.
+ * Was im Sticker STEHT. **Nur das Projekt-Abzeichen klemmt bei `999+`:** vier
+ * Stellen sprengen die 34 px. Die Klemme gilt nur der ANZEIGE — die Stufe rechnet
+ * mit `displayPoints` (siehe `badgeStage`), sonst fiele 1500 auf die Stufe von 999.
  */
 const pointsLabel = computed(() =>
   isProject.value && displayPoints.value > 999 ? '999+' : String(displayPoints.value),
@@ -230,14 +178,12 @@ const pointsLabel = computed(() =>
 
 /**
  * Stufe des Projekt-Abzeichens: 1–5 über den Bändern 0–9, 10–24, 25–49,
- * 50–99, ab 100. Die Bänder sind gesetzt, nicht gemessen (Ticket 03).
+ * 50–99, ab 100 (gesetzt, nicht gemessen).
  *
- * **Bewusst eigene Klassen (`points--b1…b5`) statt `points--s0…s5`.** Die
- * Sticker-Stufen sind die PUNKTZAHL einer Aufgabe (Kreis 1 … Stern 5); ein
- * Projekt mit 21 verschlungenen Punkten bekäme über `Math.min(5, …)` den
- * goldenen Fünf-Punkte-Stern und läse sich als „5 Punkte" statt „Stufe 5".
- * Getrennte Klassen, getrenntes Bild: Sticker sind aufgeklebte Formen,
- * Abzeichen ist eine Siegelmarke mit umlaufender Skala.
+ * **Bewusst eigene Klassen (`points--b1…b5`) statt `points--s0…s5`:** die
+ * Sticker-Stufen sind die PUNKTZAHL einer Aufgabe; ein Projekt mit 21 Punkten
+ * bekäme über `Math.min(5, …)` den Fünf-Punkte-Stern und läse sich als
+ * „5 Punkte" statt „Stufe 5".
  */
 const badgeStage = computed(() => {
   const p = displayPoints.value
@@ -249,13 +195,10 @@ const badgeStage = computed(() => {
 })
 
 /**
- * Klassen am Sticker. Projekte bekommen das Abzeichen (Grundform, Stufe,
- * Passung), alle anderen den unveränderten Punkte-Sticker.
- *
- * `points--fitN` steuert nur die Schriftgröße nach der STELLENZAHL. Ohne sie
- * läge dreistellig bei 14,3 px über der freien Innenfläche des Abzeichens; die
- * Fläche selbst bleibt bei allen Stufen 34 × 34 px (der Sticker wächst bei
- * `points--s5` auf 39,1 px — das Abzeichen tut das bewusst NICHT).
+ * Projekte bekommen das Abzeichen (Grundform, Stufe, Passung), alle anderen den
+ * Punkte-Sticker. `points--fitN` setzt die Schriftgröße nach der Stellenzahl,
+ * sonst liefe dreistellig über die Innenfläche. Die Fläche bleibt bei allen
+ * Stufen 34 × 34 px — anders als der Sticker, der bei `points--s5` wächst.
  */
 const pointsShapeClass = computed(() => {
   if (!isProject.value) return `points--s${Math.min(5, Math.max(0, displayPoints.value))}`
@@ -267,9 +210,8 @@ const pointsShapeClass = computed(() => {
 })
 
 /**
- * Nur dort gesetzt, wo die Klemme etwas verschweigt. Bei einem Abzeichen, das
- * `23` zeigt, wäre „Bisher verschlungene Punkte: 23" die sichtbare Zahl noch
- * einmal — ein Titel, der nichts hinzufügt, ist einer zu viel.
+ * Nur dort gesetzt, wo die Klemme etwas verschweigt — sonst wiederholte der
+ * Titel nur die sichtbare Zahl.
  */
 const pointsTitle = computed(() =>
   isProject.value && displayPoints.value > 999
@@ -278,31 +220,23 @@ const pointsTitle = computed(() =>
 )
 
 /**
- * Startpunkt des Punkteflugs: die Mitte des Griffs in **Fensterkoordinaten**.
- *
- * Das Rechteck eines geneigten Zettels ist größer als der Zettel selbst — seine
- * Ecken liegen außerhalb. Für den Startpunkt spielt das keine Rolle: die
- * **Mitte** des Rechtecks ist auch bei jeder Drehung die Mitte des Elements,
- * und ein Startpunkt ist ohnehin nur der Anfang einer Zierbewegung, keine
- * Trefferprüfung. Wer hier später eine Ecke bräuchte, müsste rechnen.
+ * Startpunkt des Punkteflugs: die Mitte des Griffs in Fensterkoordinaten. Das
+ * Rechteck eines geneigten Zettels ist größer als der Zettel, seine Mitte aber
+ * dieselbe — wer eine Ecke bräuchte, müsste rechnen.
  */
 const centerOf = (el: HTMLElement) => {
   const rect = el.getBoundingClientRect()
   return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 }
 }
 
-// --- Projekte: arbeiten statt abreißen (Ticket 03) --------------------------
+// --- Projekte: arbeiten statt abreißen ---------------------------------------
 
 /**
- * Ein Projekt wird nie fertig, es wird beackert. **Beide** Gesten nach unten —
- * der Zug am Eselsohr und der Long-Press-Zug — landen deshalb im selben
- * `ProjectWorkModal`. Kein Erledigen, kein Fetzen, kein Verschwinden vom Board.
- *
- * Die beiden Wege können sich nicht gegenseitig auslösen und auch nicht zwei
- * Einträge erzeugen: der Long-Press startet auf dem Eselsohr gar nicht erst
- * (`isPressControl`), und selbst wenn beide dasselbe `showProjectWorkModal`
- * setzten, ist es ein einzelner Zustand — gebucht wird ohnehin erst im Fenster,
- * mit Pflichtauswahl und Pflichtnotiz.
+ * Ein Projekt wird nie fertig, es wird beackert: **beide** Gesten nach unten
+ * landen im selben `ProjectWorkModal` — kein Erledigen, kein Fetzen. Doppelt
+ * auslösen geht nicht: der Long-Press startet nicht auf dem Eselsohr
+ * (`isPressControl`), das Modal ist ein einzelner Zustand, und gebucht wird
+ * erst im Fenster.
  */
 const showProjectWorkModal = ref(false)
 const isLoggingWork = ref(false)
@@ -321,10 +255,9 @@ const projectWorkSubtaskId = computed(() => {
 })
 
 /**
- * Ein Altbestands-Projekt ohne diese Unteraufgabe (angelegt, bevor der Store
- * sie automatisch mitanlegte) bekommt **kein** Fenster: es hätte nichts, worauf
- * es buchen könnte, und ein Bestätigen liefe ins Leere. Stilles Nachlegen aus
- * einer Geste heraus wäre eine Datenänderung, die niemand angefordert hat.
+ * Ein Altbestands-Projekt ohne diese Unteraufgabe bekommt **kein** Fenster: es
+ * hätte nichts, worauf es buchen könnte. Stilles Nachlegen aus einer Geste
+ * heraus wäre eine Datenänderung, die niemand angefordert hat.
  */
 const openProjectWork = () => {
   if (!projectWorkSubtaskId.value) {
@@ -335,17 +268,13 @@ const openProjectWork = () => {
 }
 
 /**
- * Buchen. Punkte und Notiz gehen an die Work-Unteraufgabe — die Punkte laufen
- * damit ins Wochenziel wie bei jeder Erledigung.
+ * Buchen auf die Work-Unteraufgabe — die Punkte laufen ins Wochenziel wie bei
+ * jeder Erledigung. Rückmeldung ist der Punkteflug, **kein Toast**. **Kein
+ * `markAsDirty`**: die Unteraufgabe ist an der Wand ausgeblendet, und ein
+ * Zurücksetzen von hier wäre eine zweite Wahrheit neben dem Store.
  *
- * Die Rückmeldung ist der Punkteflug plus das Bestätigungsfenster, das ja schon
- * dastand. **Kein Toast** deshalb. **Kein `markAsDirty`**: die
- * Work-Unteraufgabe ist an der Wand ohnehin ausgeblendet, und ein
- * Zurücksetzen von hier aus wäre eine zweite Wahrheit neben dem Store.
- *
- * Wie überall hier entscheidet der Rückgabewert über den Flug — ein
- * abgewiesener Doppelgriff darf keine zweite Zahl fliegen lassen. Schlägt es
- * fehl, bleibt das Fenster offen und der Eintrag erhalten.
+ * Der Rückgabewert entscheidet über den Flug — ein abgewiesener Doppelgriff darf
+ * keine zweite Zahl fliegen lassen. Schlägt es fehl, bleibt das Fenster offen.
  */
 const handleProjectWork = async (effort: number, note: string) => {
   const subtaskId = projectWorkSubtaskId.value
@@ -363,26 +292,17 @@ const handleProjectWork = async (effort: number, note: string) => {
 /**
  * Ein Zettelchen abreißen = die Unteraufgabe erledigen.
  *
- * Der Doppeltipp-Schutz sitzt **synchron** in `taskStore.completeTask`: dort
- * wird `completionsInFlight` geprüft und noch vor dem ersten `await` gesetzt,
- * ein zweiter Tap im selben Tick kommt also nicht durch. Hier steht bewusst
- * KEIN eigenes `:disabled` — das Attribut schreibt Vue erst im nächsten Tick
- * und schützt gegen drei synchrone Taps nicht. Aus demselben Grund entscheidet
- * über den Punkteflug der **Rückgabewert** von `completeTask`: ein
- * abgewiesener Doppelgriff darf keine zweite Zahl fliegen lassen.
+ * Der Doppeltipp-Schutz sitzt **synchron** in `taskStore.completeTask`
+ * (`completionsInFlight`, gesetzt vor dem ersten `await`). Hier bewusst KEIN
+ * eigenes `:disabled` — das schreibt Vue erst im nächsten Tick und schützt nicht
+ * gegen synchrone Taps. Über den Punkteflug entscheidet der **Rückgabewert**.
  *
- * Punkte je nach `subtask_points_mode` der Unteraufgabe: `checklist` = 0,
- * `deduct` = wird vom Elternaufwand abgezogen, `bonus` = zusätzlich. Gerechnet
- * wird das ausschließlich in der Edge Function `complete-task`.
- *
- * **Was fliegt:** bei `bonus` und bei `deduct` der volle `effort` der
- * Unteraufgabe — beide erhöhen die Wochenpunkte um genau diesen Betrag (siehe
- * `estimateCompletionEffort`). Dass `deduct` am Zettelchen mit einem Minus
- * steht, meint den späteren Abzug beim Elternteil, nicht die Woche. Bei
- * `checklist` fliegt nichts, weil auch nichts dazukommt. Stumm ist das trotzdem
- * nicht — anders als beim ganzen Zettel bleibt das Zettelchen ja stehen und
- * quittiert selbst: `mini--torn` knickt es weg, und bei Aufgaben mit
- * Fortschritt kommt der Durchstrich dazu.
+ * Was fliegt: bei `bonus` und `deduct` der volle `effort` der Unteraufgabe —
+ * beide erhöhen die Wochenpunkte um genau diesen Betrag
+ * (`estimateCompletionEffort`; das Minus am `deduct`-Zettelchen meint den
+ * späteren Abzug beim Elternteil). Bei `checklist` fliegt nichts; das
+ * Zettelchen quittiert selbst (`mini--torn`, ggf. Durchstrich). Verbindlich
+ * gerechnet wird in der Edge Function `complete-task`.
  */
 const tearSubtask = async (subtaskId: string, handle: HTMLElement) => {
   const subtask = subtasks.value.find((s) => s.task_id === subtaskId)
@@ -397,15 +317,10 @@ const tearSubtask = async (subtaskId: string, handle: HTMLElement) => {
 /**
  * Den ganzen Zettel abreißen = die Aufgabe erledigen.
  *
- * **Ein Abriss quittiert immer**, auch wenn er null Punkte bringt. Ein Zettel,
- * dessen Punkte schon über seine `deduct`-Unteraufgaben eingesammelt wurden,
- * ist kein Sonderfall, sondern das erwartete Ende genau dieser Zettel — er
- * verschwand vorher stumm von der Wand, und stumm sieht aus wie ein Fehlgriff.
- *
- * Kein „+0 P": eine Null in derselben Aufmachung wie ein Punktgewinn liest sich
- * wie ein Verlust oder wie ein Fehler. Stattdessen fliegt „erledigt" in der
- * ruhigen Papiervariante — dieselbe Bahn, dieselbe Ankunft, nur ohne
- * Punktbehauptung.
+ * **Ein Abriss quittiert immer**, auch mit null Punkten (alles schon über
+ * `deduct`-Unteraufgaben eingesammelt) — stumm sieht aus wie ein Fehlgriff. Kein
+ * „+0 P", das läse sich wie Verlust oder Fehler; stattdessen fliegt „erledigt"
+ * in der ruhigen Papiervariante.
  */
 const tearNote = async (handle: HTMLElement) => {
   const origin = centerOf(handle)
@@ -414,15 +329,10 @@ const tearNote = async (handle: HTMLElement) => {
   if (!applied) return
   if (points > 0) flyPoints(`+${points} P`, origin)
   else flyPoints('erledigt', origin, { muted: true })
-  // Der Fetzen — das Rückgängig zur Geste (Ticket 11). Erst NACH `applied`:
-  // ein abgewiesener Doppelgriff hat nichts erledigt und darf nichts zum
-  // Zurücknehmen anbieten.
-  //
-  // Nur der ganze Zettel bekommt einen. Ein abgerissenes Zettelchen bleibt
-  // sichtbar an seinem Platz stehen — es verschwindet nichts, was man
-  // zurückholen müsste —, und die Wege über die Dialoge (Aufwand anpassen,
-  // verschieben) sind bewusste Entscheidungen mit Bestätigung, keine Geste,
-  // die schneller ist als der Gedanke.
+  // Der Fetzen erst NACH `applied`: ein abgewiesener Doppelgriff hat nichts
+  // erledigt und darf nichts zum Zurücknehmen anbieten. Nur der ganze Zettel
+  // bekommt einen — ein Zettelchen bleibt sichtbar stehen, und die Dialogwege
+  // sind bewusste Entscheidungen mit Bestätigung.
   offerScrap({ taskId: props.task.task_id, title: props.task.title, points })
 }
 
@@ -435,11 +345,8 @@ const tearNote = async (handle: HTMLElement) => {
 const tear = useTearGesture({
   onTear: (id, handle) => {
     if (id === NOTE_HANDLE) {
-      // Am Projekt reißt nichts ab — der Griff ist dort der Griff zum Arbeiten
-      // (Ticket 03). Nicht über `tearNote()`: das erledigt die Aufgabe UND
-      // bietet unbedingt einen Fetzen an (`offerScrap`), und „Zurückkleben"
-      // löschte dort einen Arbeitseintrag, ohne dass es jemand als Löschen
-      // liest.
+      // Am Projekt reißt nichts ab. Nicht über `tearNote()`: das böte einen
+      // Fetzen an, und „Zurückkleben" löschte dort still einen Arbeitseintrag.
       if (isProject.value) openProjectWork()
       else void tearNote(handle)
     } else void tearSubtask(id, handle)
@@ -466,13 +373,11 @@ const {
 const isNoteTearing = computed(() => tearActiveId.value === NOTE_HANDLE)
 
 /**
- * Weit genug für ein Abreißen — der Zettel sagt es, bevor losgelassen wird.
+ * Weit genug für ein Abreißen — der Zettel sagt es vor dem Loslassen.
  *
- * **An einem Projekt nie.** Der gestrichelte Umriss (`.zettel--tear-ready`) und
- * die Perforation am Eselsohr (`.ear--ready`) kündigen ein Abreißen an, das
- * dort nicht stattfindet: der Zettel bleibt hängen. Das Ziehfeedback bleibt
- * davon unberührt — der Zettel folgt weiter dem Finger (`.zettel--tearing`),
- * nur die Ankündigung des Abrisses entfällt.
+ * **An einem Projekt nie:** Umriss (`.zettel--tear-ready`) und Perforation
+ * (`.ear--ready`) kündigten einen Abriss an, den es dort nicht gibt. Das
+ * Mitziehen (`.zettel--tearing`) bleibt.
  */
 const isTearReady = computed(
   () => !isProject.value && isNoteTearing.value && tearPull.value >= tearDistance,
@@ -498,14 +403,11 @@ const miniStyle = (subtaskId: string): Record<string, string> | undefined => {
 }
 
 /**
- * Antippen eines Zettelchen-Griffs erledigt weiterhin sofort — das ist der
- * Weg aus Ticket 06 und bleibt. Die Zieh-Geste kommt daneben, nicht an seine
- * Stelle. Hat sie ausgelöst, wird der nachlaufende Klick geschluckt; käme er
- * durch, finge ihn ohnehin der synchrone Riegel im Store ab.
+ * Antippen eines Zettelchen-Griffs erledigt sofort; die Zieh-Geste kommt daneben.
+ * Hat sie ausgelöst, wird der nachlaufende Klick geschluckt.
  *
- * Der Scroll-Schutz gilt auch für dieses Antippen. Er hängt sonst nur am
- * `pointerdown` der Geste — der Klick liefe daran vorbei und erledigte mitten
- * im Bildlauf doch etwas.
+ * Der Scroll-Schutz gilt auch fürs Antippen — er hängt sonst nur am
+ * `pointerdown` der Geste, und der Klick erledigte mitten im Bildlauf doch etwas.
  */
 const onMiniEarClick = (subtaskId: string, event: MouseEvent) => {
   if (swallowTearClick(event)) return
@@ -514,15 +416,10 @@ const onMiniEarClick = (subtaskId: string, event: MouseEvent) => {
 }
 
 /**
- * Kurze, **vergängliche** Rückmeldung auf ein Abreißen.
- *
- * Sie ist der einzige Beleg an einem täglichen Zettel, dass der Tipp angekommen
- * ist — dort darf nichts Bleibendes stehen (siehe `tracksProgress`). An allen
- * anderen Zetteln läuft sie zusätzlich zum Durchstreichen und überbrückt die
- * Zeit, bis der Store den Zustand angewandt hat.
- *
- * Die 700 ms sind gesetzt, nicht gemessen: etwas länger als die 600 ms der
- * Animation, damit sie nicht mitten im Bild abgeschnitten wird.
+ * Kurze, **vergängliche** Rückmeldung auf ein Abreißen — an einem täglichen
+ * Zettel der einzige Beleg (siehe `tracksProgress`), sonst Überbrückung, bis der
+ * Store den Zustand angewandt hat. 700 ms: etwas länger als die 600-ms-Animation,
+ * damit sie nicht abgeschnitten wird.
  */
 const recentlyTorn = ref(new Set<string>())
 
@@ -535,57 +432,34 @@ const markTorn = (subtaskId: string) => {
   }, 700)
 }
 
-// --- Long-Press mit vier Richtungen (Etappe 4 / Ticket 10) -------------------
+// --- Long-Press mit vier Richtungen ------------------------------------------
 
 /**
- * Was diese Geste NICHT starten darf.
+ * Was diese Geste NICHT starten darf: **nur die Abreiß-Griffe** (`.ear`,
+ * `.mini-ear`). Sie haben ihre eigene Geste; weil `pointerdown` bis zum
+ * Wurzelelement hochblubbert, liefe der Long-Press sonst **zusätzlich** mit, und
+ * derselbe Zug nach unten erledigte zweimal. Abreißen greift laut Glossar sofort
+ * und **ohne Kranz**.
  *
- * **Nur noch die Abreiß-Griffe** (Ticket 01). Das Eselsohr des Zettels
- * (`.ear`) und die Mini-Eselsohren der Zettelchen (`.mini-ear`) haben ihre
- * eigene Geste (`useTearGesture`); weil `pointerdown` bis zum Wurzelelement
- * hochblubbert, liefe der Long-Press dort sonst **zusätzlich** mit: ein Zug am
- * Eselsohr hätte nach 420 ms auch die Richtungen eingeblendet, und dieselbe
- * Fingerbewegung nach unten hätte zweimal erledigt. Das **Abreißen** ist
- * außerdem laut Glossar ausdrücklich vom **Greifen** ausgenommen — es greift
- * sofort und **ohne Kranz**, weil es nur ein Ziel hat. Genau das leistet dieser
- * Wächter: startet die Geste hier nicht, erscheint auch keine Beschriftung.
- *
- * **Was hier bewusst NICHT steht: `.mini`, `.edit`, `.subs-badge` — und seit
- * Ticket 02 auch `.due-stamp` nicht.**
- * Ticket 01 dreht die Regel um — *der ganze Zettel ist Griff*. Ein Finger, der
- * auf dem Bearbeiten-Stift, dem Unteraufgaben-Abzeichen, dem Stempel oder der
- * Zeile eines aufgeklappten Zettelchens aufsetzt, muss den Zettel genauso greifen können
- * wie leeres Papier; wo er aufsetzt, ist für das Greifen ohne Bedeutung.
- *
- * Die Knöpfe verlieren dadurch nichts: sie hängen an `@click`, feuern also
- * ohnehin erst beim Loslassen, und ein Loslassen NACH überschrittener
+ * **Bewusst NICHT hier: `.mini`, `.edit`, `.subs-badge`, `.due-stamp`** — der
+ * ganze Zettel ist Griff (→ CONTEXT.md „Greifen"). Die Knöpfe verlieren dadurch
+ * nichts: sie hängen an `@click`, und ein Loslassen NACH überschrittener
  * Halte-Schwelle schluckt der Klick-Wächter am Fenster (`armClickGuard` in
- * `useDirectionPress`, feuert bei `fired` auch ohne anliegende Richtung). Wer
- * gespürt hat, dass er greift, bekommt beim Loslassen also weder ein
- * Bearbeiten-Modal noch ein Auf-/Zuklappen. Ein kurzer Tipp läuft wie gehabt
- * durch — unter 420 ms wird der Wächter nie scharf.
+ * `useDirectionPress`, feuert bei `fired` auch ohne anliegende Richtung). Ein
+ * kurzer Tipp läuft durch — unter 420 ms wird der Wächter nie scharf.
  */
 const isPressControl = (target: EventTarget | null): boolean =>
   target instanceof Element && target.closest('.ear, .mini-ear') !== null
 
 /**
  * Die Belegung ist in `WallDirectionMenu` beschriftet und hier ausgeführt —
- * beide Listen müssen dieselbe Aussage machen.
- *
- * Für alles außer Projekten gilt weiter: dieselbe Bewegung tut auf jedem
- * Zettel dasselbe. Drei der vier Richtungen öffnen genau die Dialoge, die schon
- * am Bearbeiten-Knopf hängen; nur „unten" handelt sofort, weil es der
+ * beide Listen müssen dieselbe Aussage machen. Drei Richtungen öffnen die
+ * Dialoge vom Bearbeiten-Knopf; nur „unten" handelt sofort, weil es der
  * Schnellweg ist, den die Beschriftung lehren soll.
  *
- * **Projekte sind die eine Ausnahme** (Ticket 03, `HANDOFF-ziehgeste.md`
- * Punkt 5). Sie bekommen gar keinen Kranz, also auch keine Beschriftung, die
- * hier eingelöst werden müsste: „unten" öffnet das Arbeitsfenster, die anderen
- * drei tun **nichts**. Verschieben ergibt an einem Projekt keinen Sinn,
- * Erledigen gibt es dort nicht, und Zuweisen und Aufwand laufen laut
- * Nutzerentscheidung über den Bearbeiten-Stift. Eine Aktion ohne Beschriftung
- * wäre außerdem eine unsichtbare — der frühere Kommentar hier („kein
- * `if (task_type === …)`") stammt aus der Fassung, in der jeder Zettel einen
- * Kranz bekam.
+ * **Projekte** haben keinen Kranz, also auch keine Beschriftung: „unten" öffnet
+ * das Arbeitsfenster, die anderen drei tun **nichts** — eine Aktion ohne
+ * Beschriftung wäre eine unsichtbare.
  */
 const onPressDirection = (direction: PressDirection) => {
   if (isProject.value) {
@@ -623,15 +497,11 @@ const {
 } = press
 
 /**
- * Dieselbe Ausnahme wie beim Abreißen: solange die Richtungen offen sind, darf
- * ein Neupacken der Wand (ein anderes Mitglied ändert etwas) diesen Zettel nicht
- * durch die Gegend fliegen lassen. Das Overlay liegt in Fensterkoordinaten fest
- * — ein wegfliegender Zettel unter einer stehenden Geste ist keine Bewegung, die
- * jemand erwartet.
- *
- * Beide Gesten teilen sich dafür `gestureNoteId` in `WallView`. Das geht, weil sie
- * sich gegenseitig ausschließen: der Long-Press startet nicht auf dem Eselsohr
- * (→ `isPressControl`), und ein zweiter Finger kommt in keiner der beiden durch.
+ * Solange die Richtungen offen sind, darf ein Neupacken (ein anderes Mitglied
+ * ändert etwas) diesen Zettel nicht verschieben — das Overlay liegt in
+ * Fensterkoordinaten fest. Beide Gesten teilen sich dafür `gestureNoteId` in
+ * `WallView`; das geht, weil sie sich ausschließen (→ `isPressControl`, ein
+ * zweiter Finger kommt in keiner durch).
  */
 watch(pressOpen, (open) => {
   if (open) emit('gesture-start', props.task.task_id)
@@ -642,19 +512,13 @@ watch(pressOpen, (open) => {
 const rotation = computed(() => rotationOf(props.task.task_id))
 
 /**
- * Personenfarbe für die Reißzwecke — unverändert so, wie das Mitglied sie
- * gewählt hat. Es wird zur Laufzeit **nichts** umgefärbt, aufgehellt oder auf
- * eine Palette gerundet: die gewählte Farbe muss die angezeigte sein.
+ * Personenfarbe für die Befestigung — genau so, wie das Mitglied sie gewählt
+ * hat; zur Laufzeit wird nichts umgefärbt, aufgehellt oder gerundet. `null`
+ * heißt „niemand zuständig": dann bleibt `--owner` ungesetzt und es greift die
+ * Rückfallfarbe (`--owner-none`).
  *
- * `null` heißt „niemand zuständig". Dann bleibt `--owner` ungesetzt und an
- * der Reißzwecke greift die neutrale CSS-Rückfallfarbe (siehe `--owner-none`
- * unten).
- *
- * Seit der Korrektur zu Ticket 10 steht die Zuweisungsfarbe **ausschließlich**
- * an der Reißzwecke (`.pin`) — der Nutzer mochte den zwischenzeitlich
- * gebauten dicken farbigen Rahmen nicht. Der Zettelrahmen selbst bleibt
- * unabhängig von `ownerColor` immer konturlos (`transparent`, siehe
- * `.zettel` unten).
+ * Die Zuweisungsfarbe steht **ausschließlich** an der Befestigung
+ * (→ CONTEXT.md „Befestigung"); der Zettelrahmen bleibt immer konturlos.
  */
 const ownerColor = computed(() => {
   if (!props.task.assigned_to) return null
@@ -663,34 +527,25 @@ const ownerColor = computed(() => {
 })
 
 /**
- * Ob jemand zuständig ist. Eigene Ableitung statt eines rohen
- * `!!props.task.assigned_to`, damit derselbe Fall wie bei `ownerColor` gilt:
- * ein `assigned_to`, das auf kein (mehr) existierendes Mitglied zeigt, zählt
- * als „niemand zuständig".
- *
- * Aktuell OHNE CSS-Wirkung am Zettel selbst (die frühere `.zettel--assigned`-
- * Regel mit dem dicken farbigen Rahmen ist nach der Nutzerkorrektur zu
- * Ticket 10 entfernt) — die Klasse bleibt am Element als Hook stehen, falls
- * die im Ticket angekündigte „zurückhaltendere Auszeichnung" später dort
- * andockt. Bis dahin ist sie totes Markup, bewusst belassen statt entfernt.
+ * Ob jemand zuständig ist — über `ownerColor`, damit ein `assigned_to` auf ein
+ * nicht (mehr) existierendes Mitglied als „niemand" zählt. Die Klasse
+ * `.zettel--assigned` hat derzeit keine CSS-Wirkung; sie bleibt bewusst als
+ * Haken für eine spätere, zurückhaltendere Auszeichnung.
  */
 const isAssigned = computed(() => ownerColor.value !== null)
 
 /**
- * `--owner` wird nur gesetzt, wenn es wirklich eine Person gibt. Ohne die
- * Eigenschaft greift in jeder Regel der zweite Parameter von
- * `var(--owner, …)` — der zurücktretende Rand.
+ * `--owner` nur, wenn es wirklich eine Person gibt — sonst greift der zweite
+ * Parameter von `var(--owner, …)`.
  *
- * Hier hängt auch die Zieh-Bewegung des Abreißens dran: die Neigung ist bereits
- * ein Inline-`transform`, ein zweites daneben gäbe es nicht — die letzte
- * Deklaration gewänne und die Neigung wäre weg. Beides steht deshalb in
- * derselben Zeichenkette.
+ * Die Zieh-Bewegung des Abreißens steht in derselben `transform`-Zeichenkette
+ * wie die Neigung: ein zweites Inline-`transform` überschriebe die Neigung.
  *
  * Der z-index bleibt bewusst **draußen**: den schreibt `WallView` direkt ans
  * Element. Würde Vue ihn hier zeitweise mitverwalten, entfernte es ihn beim
  * Loslassen wieder — der Zettel verlöre seine Stapelposition bis zum nächsten
- * Packen. Das Anheben während des Ziehens macht deshalb eine Klasse mit
- * `!important` (`.zettel--tearing`).
+ * Packen. Das Anheben beim Ziehen macht deshalb `.zettel--tearing` mit
+ * `!important`.
  */
 const noteStyle = computed((): Record<string, string> => {
   const pull = isNoteTearing.value ? tearPull.value : 0
@@ -705,8 +560,7 @@ const noteStyle = computed((): Record<string, string> => {
 
 /**
  * Der **Grundabdruck** — der berechnete unterste Abdruck des Gummistempels
- * (→ CONTEXT.md, „Stempel"). **Jeder Zettel trägt einen**, auch der, der noch
- * Zeit hat; es gibt keinen Zettel ohne Stempel mehr.
+ * (→ CONTEXT.md „Stempel"). **Jeder Zettel trägt einen.**
  *
  *   tägliche Aufgabe            → BEDARF   (sie wird nicht fällig, sie fällt an)
  *   Projekt                     → Projektspruch (es kann nicht in Verzug geraten)
@@ -714,61 +568,26 @@ const noteStyle = computed((): Record<string, string> => {
  *   sonst                       → FÄLLIG
  *
  * **Der Typ schlägt NEU, und die Reihenfolge dieser Prüfungen ist die ganze
- * Regel.** Eine nagelneue tägliche Aufgabe zeigt BEDARF, ein nagelneues Projekt
- * seinen Spruch — beide werden nie abgeschlossen, stünden bei umgekehrter
- * Prüfreihenfolge also DAUERHAFT auf NEU. Der Fehler wäre still: der Stempel
- * sähe plausibel aus, er stünde nur nie wieder um.
+ * Regel.** Tägliche Aufgaben und Projekte werden nie abgeschlossen und stünden
+ * bei umgekehrter Reihenfolge DAUERHAFT auf NEU — ein stiller Fehler: der
+ * Stempel sähe plausibel aus, er stünde nur nie wieder um.
  *
- * **`NIE` und `HEUTE` sind ersatzlos entfallen.** `NEU` ersetzt `NIE` und heißt
- * dasselbe — noch nie abgeschlossen —, klingt aber nicht wie ein Urteil über die
- * Bewohner. `HEUTE` fällt weg, weil auf der Wand alle fälligen Aufgaben gleich
- * dringend sind; „heute dran" gegen „liegt schon länger" wäre eine Rangfolge,
- * und Rangfolgen macht die Wand nicht (→ ADR-0002). Aus demselben Grund gibt es
- * hier **keine Dringlichkeitsstufe mehr**, die den Stempel einfärben könnte: die
- * früheren Klassen `--hot`/`--today` sind mit ihrer Aussage verschwunden.
- *
- * **Der Grundabdruck verfällt nicht.** Er wird berechnet und kommt von selbst
- * wieder; was von Hand daraufgelegt wird, ist das Überstempeln und hängt an
- * `emphasis_level` (→ Ticket `02`/`03`). Und er **ordnet nicht** (→ ADR-0002).
- *
- * **Kein Ring an der Reißzwecke.** Der Handoff (Punkt 7) sah zusätzlich einen
- * farbigen Ring um die Reißzwecke vor — Ticket 10 hat die Reißzwecke seither
- * der Zuweisungsfarbe gegeben (`--owner`), ein Ring wäre sofort wieder
- * entfernt worden. Der Stempel hier ist deshalb die EINZIGE Stelle am Zettel,
- * die den Stand einer Aufgabe zeigt (→ CONTEXT.md, „Stempel").
- *
- * **Es gibt bewusst keinen zweiten Text mit der genauen Tageszahl daneben**
- * (früher `metaLabel`/`.meta`, „3 Tage" / „heute" / „nie" in Rot — entfernt,
- * QC-Befund: die Dringlichkeit stand damit zweimal in der Fußzeile, einmal
- * am Stempel, einmal an einer Farbe, die das Glossar für den Stempel
- * ausdrücklich ausschließt, siehe CONTEXT.md). Die Tageszahl selbst fehlt
- * damit auch als Information — gewollt: auf der Wand gelten alle fälligen
- * Aufgaben als GLEICH dringend, eine Zählung „3 Tage überfällig" widerspräche
- * dem. Kein Verlust, sondern die Auflösung eines Widerspruchs. Wer hier
- * wieder eine Tageszahl anzeigen will, widerspricht damit dem Glossareintrag
- * „Stempel" — das ist eine Domänenentscheidung, keine UI-Petitesse.
+ * Keine Dringlichkeitsstufe, keine Tageszahl, kein „HEUTE": auf der Wand sind
+ * alle fälligen Aufgaben gleich dringend, der Stempel **ordnet nicht**
+ * (→ ADR-0002). Wer hier wieder eine Tageszahl anzeigen will, widerspricht dem
+ * Glossareintrag „Stempel" — das ist eine Domänenentscheidung, keine
+ * UI-Petitesse. Was von Hand daraufgelegt wird, ist das Überstempeln
+ * (`emphasis_level`); der Grundabdruck selbst verfällt nicht.
  */
 const stampLabel = computed((): string => {
   // ERST der Typ, DANN der Erledigungs-Status. Nicht umstellen, siehe oben.
   if (props.task.task_type === 'daily') return 'BEDARF'
 
-  // DIESER ZWEIG LÄUFT HEUTE NIE — und bleibt trotzdem stehen.
-  //
-  // `stampLabel` wird an genau einer Stelle gelesen: in `stampLayers`, und dort
-  // im NICHT-Projekt-Zweig des Ternärs. Für ein Projekt liefert seit der
-  // Nacharbeit vom 05.09.2026 `projectPhraseStackOf` alle drei Lagen auf einmal;
-  // an dieser Zeile kommt kein Projekt mehr vorbei.
-  //
-  // Er steht als Notausgang da, nicht aus Nachlässigkeit: `stampLabel` sagt
-  // „der Grundabdruck DIESER Aufgabe", und der Grundabdruck eines Projekts IST
-  // sein Spruch (→ CONTEXT.md, „Stempel": der Typ schlägt NEU). Ohne die Zeile
-  // wäre der Ausdruck für sich genommen falsch und lieferte einem künftigen
-  // zweiten Leser still `NEU`/`FÄLLIG` an einem Projekt — genau die Sorte
-  // Fehler, die plausibel aussieht.
-  //
-  // Was NICHT an ihm hängt: der `warnOnce`-Stolperdraht in `projectPhrases.ts`.
-  // Der sitzt in `effectivePhraseSlot` und wird von `projectPhraseStackOf`
-  // ebenso ausgelöst; er ginge also auch ohne diese Zeile nicht verloren.
+  // Dieser Zweig läuft derzeit nie: Projekte nehmen in `stampLayers` den Weg
+  // über `projectPhraseStackOf`. Er bleibt als Notausgang — der Grundabdruck
+  // eines Projekts IST sein Spruch; ohne die Zeile lieferte ein künftiger
+  // zweiter Leser still `NEU`/`FÄLLIG` an einem Projekt. Der
+  // `warnOnce`-Stolperdraht in `projectPhrases.ts` hängt nicht an ihm.
   if (props.task.task_type === 'project') return projectPhraseOf(props.task)
 
   return props.task.last_completed_at ? 'FÄLLIG' : 'NEU'
@@ -776,18 +595,12 @@ const stampLabel = computed((): string => {
 
 /**
  * Der **Nachdruck** — was von Hand auf den Grundabdruck gelegt wurde
- * (Ticket `02`, → CONTEXT.md „Überstempeln"). `null` heißt: der Zettel ist
- * sauber, es gilt allein der Grundabdruck.
+ * (→ CONTEXT.md „Überstempeln"); `null` heißt: sauber.
  *
- * **An einem Projekt gibt es diese beiden Wörter nicht** (Ticket `04`,
- * Nacharbeit vom 05.09.2026): dort trägt jede Stufe einen Projektspruch, die
- * Stufe steht in der Farbe. Was oben liegt, sagt deshalb `stampLayers`, nicht
- * dieser Wert — er wird nur noch für den Tooltip gebraucht und liefert an
- * einem Projekt bewusst `null`, statt ein Wort zu behaupten, das dort nirgends
- * steht.
- *
- * **Die Modulo-Logik steht hier bewusst NICHT** — sie liegt im Store
- * (`cycleEmphasisLevel`). Diese Stelle zeigt nur an, was gerade gilt.
+ * Am Projekt gibt es diese Wörter nicht (jede Stufe trägt einen Spruch, die
+ * Stufe steht in der Farbe) — dort bewusst `null`, statt ein Wort zu behaupten,
+ * das nirgends steht. Gebraucht nur für den Tooltip; was oben liegt, sagt
+ * `stampLayers`. Die Modulo-Logik liegt im Store (`cycleEmphasisLevel`).
  */
 const emphasisLabel = computed((): string | null => {
   if (props.task.task_type === 'project') return null
@@ -797,12 +610,8 @@ const emphasisLabel = computed((): string | null => {
 })
 
 /**
- * Der Tooltip am Stempel — die einzige Stelle, die den Stand in Worte fasst.
- *
- * Drei Fälle, weil ein Projekt keine Stufenwörter hat: ungestempelt (überall
- * gleich), überstempelt an einem gewöhnlichen Zettel (das Wort steht da) und
- * überstempelt an einem Projekt (das Wort steht NICHT da, die Stufe ist eine
- * Farbe — also wird sie hier gezählt statt benannt).
+ * Der Tooltip am Stempel. Am Projekt steht kein Stufenwort da, die Stufe ist
+ * eine Farbe — dort wird sie gezählt statt benannt.
  */
 const stampTitle = computed((): string => {
   if (props.task.emphasis_level === 0) return 'Tippen: überstempeln'
@@ -811,29 +620,19 @@ const stampTitle = computed((): string => {
 })
 
 /**
- * Betrag der Neigung eines Abdrucks in Grad, dazu die Streubreite je Lage:
- * **9° ± 5°**. Beides aus der Abnahme am Bild (Variante F,
- * `stempel-optik-prototypen.md`), nicht frei gewählt — der Nutzer will die
- * Neigung ausdrücklich sehen.
- *
- * **Es ist ein Betrag, kein Winkel: die Richtung kommt aus `stampTiltSign`.**
- * Bis zum 05.09.2026 stand hier −9 mit ±5 Streuung, und weil `jitterOf`
- * symmetrisch um null streut, ergab das −14° … −4° — **jeder** Stempel der
- * ganzen Wand nach links, keiner nach rechts. Vom Maintainer am Gerät
- * bemerkt. Ein Vorzeichen, das nie kippt, ist keine Streuung, sondern eine
- * feste Schräge mit Rauschen.
+ * Betrag der Neigung eines Abdrucks in Grad und Streubreite je Lage: **9° ± 5°**
+ * (am Bild abgenommen, nicht frei gewählt). **Ein Betrag, kein Winkel** — die
+ * Richtung kommt aus `tiltSignOf`. Weil `jitterOf` symmetrisch um null streut,
+ * ergäbe ein vorzeichenbehafteter Wert eine feste Schräge mit Rauschen: jeder
+ * Stempel der Wand nach derselben Seite.
  */
 const STAMP_TILT = 9
 const STAMP_TILT_JITTER = 5
 
 /**
- * Versatz einer UNTEREN Lage gegen die oberste, in Pixeln: ±5,5.
- *
- * **Ein Messergebnis, kein Geschmack.** Der Wert stand ursprünglich auf 3 px;
- * sobald die oberste Lage deckt (und genau das ist Variante F), verschwinden
- * die unteren darunter vollständig — der Stapel wäre unsichtbar, und die
- * Stapelhöhe soll die Aussage tragen. Bei 5,5 px lugen die Rahmen erkennbar
- * hervor. Nicht „aufräumen".
+ * Versatz einer Lage, in Pixeln: ±5,5. **Ein Messergebnis, kein Geschmack:** bei
+ * 3 px verschwinden die unteren Lagen unter der deckenden obersten, und die
+ * Stapelhöhe soll die Aussage tragen. Nicht „aufräumen".
  *
  * Der Versatz läuft über `transform` und geht deshalb **nicht** in die Breite
  * der Fußzeile ein — was die Breite bestimmt, steht am `.due-stamp`-CSS.
@@ -841,28 +640,14 @@ const STAMP_TILT_JITTER = 5
 const STAMP_OFFSET = 5.5
 
 /**
- * Nach links oder nach rechts? Deterministisch aus der Aufgaben-Kennung, damit
- * derselbe Zettel überall gleich hängt — dieselbe Regel wie bei Versatz und
- * Neigung.
+ * Nach links oder rechts geneigt — deterministisch aus der Aufgaben-Kennung.
+ * **Das Vorzeichen hängt an der LAGE, nicht am Zettel:** jeder Abdruck ist ein
+ * eigener Handgriff; kippen alle drei gleich, sieht der Stapel gedruckt aus
+ * statt gestempelt.
  *
- * **Das Vorzeichen hängt an der LAGE, nicht am Zettel.** Jeder Abdruck ist ein
- * eigener Handgriff und darf anders herum sitzen; ein Stapel, in dem alle drei
- * gleich kippen, sieht aus wie gedruckt, nicht wie gestempelt. Bis zum
- * 05.09.2026 hing das Vorzeichen am Zettel — vom Maintainer am Gerät bemerkt:
- * „ich hab nie erlebt, dass ein Stempel der nach links geneigt ist von einem
- * überstempelt wird der nach rechts geneigt ist".
- *
- * Für die Geometrie ist das Kippen folgenlos: die Hüllbreite eines gedrehten
- * Kastens ist `b·cos θ + h·sin θ` und damit für +θ und −θ gleich. Gemessen an
- * 94 Zetteln × 3 Stufen: gekreuzte Lagen ragen in **0 von 564** Fällen in die
- * 88-px-Reserve, und über die Papierkante nicht weiter als gleichsinnige.
- *
- * **„von 93" oder „von 94"?** Beides steht in dieser Datei, und beides stimmt
- * für seinen Tag: die Messungen bis zum 04.09.2026 liefen an **93** Zetteln,
- * die vom 05.09.2026 an **94** — der Bestand der Wand hat sich zwischen den
- * Läufen geändert, die Zahlen sind nicht ineinander umzurechnen. Wer zwei
- * Werte aus verschiedenen Blöcken vergleicht, vergleicht zwei Wände.
- * (Nachgetragen am 05.09.2026; vorher stand die Vermischung undatiert da.)
+ * Geometrisch folgenlos: die Hüllbreite eines gedrehten Kastens ist
+ * `b·cos θ + h·sin θ`, für +θ und −θ gleich. Gekreuzte Lagen ragen nicht in die
+ * 88-px-Reserve und nicht weiter über die Papierkante als gleichsinnige.
  */
 const tiltSignOf = (id: string, index: number) =>
   jitterOf(id, `stamp-dir${index}`, 1) < 0 ? -1 : 1
@@ -870,12 +655,9 @@ const tiltSignOf = (id: string, index: number) =>
 /** Eine Lage des Abdruckstapels, von unten (Grundabdruck) nach oben. */
 interface StampLayer {
   /**
-   * Index in der Rampe: 0 Grundabdruck, 1 und 2 die überstempelten Lagen.
-   *
-   * An einem gewöhnlichen Zettel stehen auf 1 und 2 `WICHTIG` und `DRINGEND`,
-   * an einem **Projekt** zwei weitere Projektsprüche (seit 05.09.2026,
-   * → `stampLayers`). Die ZAHL bedeutet in beiden Fällen dasselbe — deshalb
-   * heißt das Feld nach der Stufe und nicht nach dem Wort.
+   * Stufe: 0 Grundabdruck, 1 und 2 die überstempelten Lagen. Am Projekt stehen
+   * auf 1 und 2 Projektsprüche statt `WICHTIG`/`DRINGEND` — deshalb heißt das
+   * Feld nach der Stufe, nicht nach dem Wort.
    */
   level: 0 | 1 | 2
   text: string
@@ -887,37 +669,16 @@ interface StampLayer {
 }
 
 /**
- * Der **Abdruckstapel** (Ticket `03`, Variante F „Papier-Halo",
- * → CONTEXT.md „Überstempeln").
+ * Der **Abdruckstapel** (→ CONTEXT.md „Überstempeln", ADR-0003).
  *
  * **Alle drei Lagen stehen IMMER im DOM — auch die noch nicht gestempelten.**
- * Das ist die Stelle, an der dieses Ticket still kaputtginge: nach einem Tipp
- * wird bewusst NICHT neu gepackt (`layoutSignature` in `WallView.vue` kennt
- * `emphasis_level` nicht, → ADR-0002). Wüchse die Fußzeile beim Stempeln,
- * schöbe sich das Layout unter dem Finger weg — oder bliebe, schlimmer, falsch
- * gepackt stehen. Die noch nicht gesetzten Lagen sind deshalb nur
- * `visibility: hidden`: unsichtbar, aber im Grid weiterhin vermessen. Der
- * Stapel hat seinen Platz damit **von Anfang an**, unabhängig von der Stufe.
- * (Gemessen: `style.left/top/width` aller Zettel und die Wandhöhe sind auf
- * Stufe 0 und Stufe 2 bis auf den letzten Pixel gleich.)
- *
- * **Der Weg, der stattdessen nahelag, ist gemessen und gescheitert:** die
- * Nachdrücke ABSOLUT über den Grundabdruck legen, so wie es Ticket `02` tat.
- * Er kostet tatsächlich keinen Pixel — Wandhöhe und alle Positionen bleiben
- * exakt auf dem stempellosen Stand, 0 von 93 Zetteln bewegen sich. Er
- * scheitert an einer Arithmetik, die nichts mit der Optik zu tun hat: die
- * Breite eines Zettels wird aus dem GRUNDABDRUCK plus den 88 px für Stift und
- * Eselsohr gerechnet. Auf einem schmalen Zettel (`NEU`, 38,8 px, Zettel 156 px)
- * beginnt der Stift damit unmittelbar rechts vom Grundabdruck — für die 77,87 px
- * (nachgemessen am 05.09.2026; hier stand bis dahin „79 px")
- * von `DRINGEND` ist dort kein Platz, egal wie man die Lage verankert. Nach
- * links geht es nicht, dort sind nur 9 px bis zur Papierkante. Gemessen: der
- * Kasten der obersten Lage lief auf **86 von 93** Zetteln in den Stift (bis
- * 28,02 px), und auf **36 von 93** lag das WORT unter der sichtbaren
- * Stift-Glyphe, die später im DOM steht und deshalb darüber gezeichnet wird.
- * Geschluckte Klicks gab es keine (`elementFromPoint` auf Stift und Eselsohr:
- * 0 von 93), die Papierkante hielt ebenfalls — aber der oberste Abdruck war
- * nicht mehr sauber lesbar, und genau das ist der Zweck dieses Tickets.
+ * Nach einem Tipp wird bewusst NICHT neu gepackt (`layoutSignature` in
+ * `WallView.vue` kennt `emphasis_level` nicht, → ADR-0002). Wüchse die Fußzeile
+ * beim Stempeln, schöbe sich das Layout unter dem Finger weg — oder bliebe,
+ * schlimmer, falsch gepackt stehen. Die noch nicht gesetzten Lagen sind deshalb
+ * nur `visibility: hidden`: unsichtbar, aber im Grid weiterhin vermessen. Die
+ * naheliegende Alternative — Nachdrücke absolut über den Grundabdruck legen —
+ * ist gemessen und verworfen (→ ADR-0003, Alternativen).
  *
  * **Versatz und Neigung kommen deterministisch aus der Aufgaben-Kennung**
  * (`jitterOf`, derselbe FNV-1a wie beim Zettelversatz) — nie `Math.random`, nie
@@ -925,29 +686,16 @@ interface StampLayer {
  * wie ein Fehler; auf einem zweiten Gerät säße er anders als hier.
  *
  * **Der Versatz hängt an der LAGE, nicht an ihrer Rolle — und JEDE Lage hat
- * einen, auch der Grundabdruck.** Das ist keine Feinheit. Hing er an `top`,
- * dann sprang der Grundabdruck in dem Moment beiseite, in dem der erste
- * Nachdruck daraufkam: er war bis dahin die oberste Lage und saß bei 0/0.
- * Nicht der neue Abdruck bewegte sich, sondern der alte. Das widerspricht dem
- * Ticket („vorherige Abdrücke **bleiben liegen**") und der Sache selbst — ein
- * Abdruck, der einmal auf dem Papier ist, verrutscht nicht mehr. Vom
- * Maintainer am Gerät bemerkt, bevor es committet war.
- *
- * Dass auch Lage 0 einen Versatz bekommt, ist Absicht und nicht bloß der
- * bequemste Weg, den Sprung loszuwerden: ein handgesetzter Stempel sitzt nie
- * exakt, genau wie die Neigung. Und es ist das, was den Stapel überhaupt
- * sichtbar macht — läge der Grundabdruck mittig unter einem deckenden
- * Nachdruck, sähe man beim Überstempeln nichts von ihm.
+ * einen, auch der Grundabdruck.** Hinge er an `top`, spränge der Grundabdruck
+ * beiseite, sobald der erste Nachdruck daraufkommt — ein Abdruck auf dem Papier
+ * verrutscht aber nicht mehr. Und erst der Versatz von Lage 0 macht den Stapel
+ * unter einem deckenden Nachdruck sichtbar.
  */
 const stampLayers = computed((): StampLayer[] => {
-  // AN EINEM PROJEKT TRÄGT JEDE STUFE EINEN SPRUCH (Ticket `04`, Nacharbeit vom
-  // 05.09.2026, → CONTEXT.md „Projektspruch"). `WICHTIG` und `DRINGEND` kommen
-  // dort NICHT vor — die Dringlichkeit steht allein in der Farbe der obersten
-  // Lage (blau → orange → rot). Deshalb darf die Rampe nie ans Wort gebunden
-  // werden: sie ist am Projekt der einzige Hinweis, der übrig bleibt.
-  //
-  // Die drei Sprüche kommen aus dem EINEN gespeicherten Listenplatz
-  // (`projectPhraseStackOf`); hier wird nichts gezogen und nichts gerechnet.
+  // An einem Projekt trägt jede Stufe einen Spruch (→ CONTEXT.md „Projektspruch");
+  // die Dringlichkeit steht allein in der Farbe der obersten Lage — die Rampe
+  // darf deshalb nie ans Wort gebunden werden. Alle drei kommen aus dem EINEN
+  // gespeicherten Listenplatz (`projectPhraseStackOf`); hier wird nichts gezogen.
   const texts =
     props.task.task_type === 'project'
       ? projectPhraseStackOf(props.task)
@@ -974,40 +722,27 @@ const stampLayers = computed((): StampLayer[] => {
 })
 
 /**
- * Ein Tipp auf den Stempel dreht ihn weiter: sauber → WICHTIG → DRINGEND →
- * sauber (Ticket `02`).
+ * Ein Tipp dreht den Stempel weiter: sauber → WICHTIG → DRINGEND → sauber. Am
+ * Projekt zieht das Abräumen zusätzlich einen neuen Spruch — das macht der
+ * Store; diese Stelle weiß davon nichts und soll es nicht wissen.
  *
- * **An einem Projekt wechselt beim letzten Schritt zusätzlich der Grundabdruck**
- * — das Abräumen zieht einen neuen Projektspruch (Ticket `04`). Auch das macht
- * der Store; diese Stelle weiß davon nichts und soll es nicht wissen.
+ * **Kein `await`, kein Rückgabewert, kein Toast.** Der Store ist optimistisch,
+ * mehrfaches schnelles Antippen ist vorgesehen; ein Erfolgs-Toast blitzte dabei
+ * dreimal auf. Scheitert das Schreiben, meldet der Store es selbst mit **einem**
+ * Toast.
  *
- * **Kein `await`, keine Auswertung des Rückgabewerts, kein Toast.** Der Automat
- * im Store ist optimistisch — der Wert steht, bevor diese Funktion zurückkehrt,
- * und genau darauf beruht das Gummistempel-Gefühl: mehrfaches schnelles
- * Antippen ist ausdrücklich vorgesehen. Ein Erfolgs-Toast blitzte dabei dreimal
- * auf. Scheitert das Schreiben, springt der Wert zurück und der Store meldet es
- * selbst mit **einem** Toast (`onError` dort).
+ * **Kein Doppeltipp-Riegel:** `emphasis_level` ist ein Zustand, kein Ereignis,
+ * und `runOptimistic` reiht die Schreibvorgänge je `task_id` auf (`enqueue`) —
+ * nichts wird gebucht.
  *
- * **Kein eigener Doppeltipp-Riegel.** Anders als beim Erledigen entsteht hier
- * durch einen zweiten Griff keine zweite Buchung: `emphasis_level` ist ein
- * Zustand, kein Ereignis, und `runOptimistic` reiht die Schreibvorgänge je
- * `task_id` hintereinander auf (`enqueue`). Drei schnelle Taps ergeben drei
- * Umläufe des Werts und einen Endzustand, der stimmt — nichts wird gebucht.
- *
- * **Der Stempel steht bewusst nicht in `isPressControl`** (Begründung dort):
- * Gedrückthalten auf ihm greift weiterhin den Zettel und öffnet den Kranz. Dass
- * dabei nicht ZUSÄTZLICH gestempelt wird, erledigt der Klick-Wächter am Fenster
- * in `useDirectionPress` — er sieht den nachlaufenden Klick in der Einfangphase,
- * also vor dem `@click.stop` am Stempel. Ein kurzer Tipp (unter 420 ms) macht
- * den Wächter nie scharf und kommt unangetastet hier an.
+ * Gedrückthalten auf dem Stempel greift den Zettel; den nachlaufenden Klick
+ * schluckt der Klick-Wächter (→ `isPressControl`), bevor er hier ankommt.
  */
 const onStampTap = () => {
   void taskStore.cycleEmphasisLevel(props.task.task_id)
 }
 
 // --- Bearbeiten und seine Folgedialoge --------------------------------------
-// Der Zettel zeigt nur den Bearbeiten-Knopf. Zuweisen, Unteraufgaben und
-// Verschieben hängen unverändert am bestehenden Modal.
 
 const showEditModal = ref(false)
 const showAssignmentModal = ref(false)
@@ -1017,26 +752,13 @@ const showPostponeModal = ref(false)
 const showCompletionModal = ref(false)
 
 /**
- * Erledigen mit angepasstem Aufwand.
+ * Erledigen mit angepasstem Aufwand. Doppeltipp-Schutz und Flug wie beim
+ * Abreißen (`completionsInFlight` im Store, Rückgabewert entscheidet).
  *
- * **Kein eigenes `:disabled` und kein eigener Riegel**: der Doppeltipp-Schutz
- * sitzt synchron in `taskStore.completeTask` (`completionsInFlight`, vor dem
- * ersten `await`). Über den Rückgabewert entscheidet sich auch hier, ob eine
- * Zahl fliegt — ein abgewiesener zweiter Griff darf keine zweite auslösen.
- *
- * **Was fliegt, ist der gewählte Aufwand, nicht `effectivePoints`.** Ein
- * ausdrücklich gesetzter `effortOverride` ersetzt die Rechnung vollständig,
- * inklusive des Abzugs erledigter `deduct`-Unteraufgaben — genau so rechnet
- * `estimateCompletionEffort` im Store (erste Zeile: `if (effortOverride !==
- * undefined) return effortOverride`), und die Statusleiste wächst um genau
- * diesen Betrag.
- *
- * Der Startpunkt ist die Mitte des Zettels und nicht die des Eselsohrs: der
- * Zug ging hier nicht von der Ecke aus.
- *
- * Bei einem Aufwand von 0 kann diese Stelle nicht landen — das Modal lässt nur
- * 1 bis 5 zu. Die ruhige „erledigt"-Variante des Abreißens braucht es hier
- * deshalb nicht.
+ * **Was fliegt, ist der gewählte Aufwand, nicht `effectivePoints`:** ein
+ * `effortOverride` ersetzt die Rechnung samt `deduct`-Abzug — so rechnet auch
+ * `estimateCompletionEffort`. Startpunkt ist die Zettelmitte, weil der Zug nicht
+ * von der Ecke ausging. 0 kommt hier nicht an (das Modal lässt nur 1–5 zu).
  */
 const handleCustomCompletion = async (effortOverride: number, note: string) => {
   const el = root.value
@@ -1047,7 +769,7 @@ const handleCustomCompletion = async (effortOverride: number, note: string) => {
   if (origin) flyPoints(`+${effortOverride} P`, origin)
 }
 
-/** Folge-Dialog-Muster wie in der alten Karte: Bearbeiten schließt, der nächste öffnet. */
+/** Folge-Dialog-Muster: Bearbeiten schließt, der nächste öffnet. */
 const openFollowUp = (which: 'assign' | 'subtasks' | 'postpone') => {
   showEditModal.value = false
   if (which === 'assign') showAssignmentModal.value = true
@@ -1105,16 +827,14 @@ const handlePostponeConfirm = async (targetDate: string) => {
 </script>
 
 <template>
-  <!-- `@contextmenu.prevent` (Ticket 01): die native Langdruck-Geste des
-       Browsers ist der einzige Mechanismus, der ortsabhängig ist — sie hängt
-       daran, WAS unter dem Finger liegt (Text, Bild, Auswahlbares), während
-       unser eigener Timer in `useDirectionPress` die Stelle gar nicht kennt.
-       Sie feuert die native Haptik (die App selbst ruft nirgends
-       `navigator.vibrate`) und nimmt uns danach den Zeiger per `pointercancel`
-       weg. `user-select: none` unterdrückt nur die SICHTBARE Auswahl — Marker
-       und Lupe bleiben deshalb aus, die Geste läuft trotzdem. Erst das
-       Abbestellen des Kontextmenüs bricht sie ab; genau das tat auch das
-       frühere Langdrücken der Listen, das seit jeher `@contextmenu` band.
+  <!-- `@contextmenu.prevent`: die native Langdruck-Geste des Browsers ist der
+       einzige Mechanismus, der ortsabhängig ist — sie hängt daran, WAS unter
+       dem Finger liegt (Text, Bild, Auswahlbares), während unser eigener Timer
+       in `useDirectionPress` die Stelle gar nicht kennt. Sie feuert die native
+       Haptik (die App selbst ruft nirgends `navigator.vibrate`) und nimmt uns
+       danach den Zeiger per `pointercancel` weg. `user-select: none`
+       unterdrückt nur die SICHTBARE Auswahl — Marker und Lupe bleiben aus, die
+       Geste läuft trotzdem. Erst das Abbestellen des Kontextmenüs bricht sie ab.
        Am Zettel geht dabei nichts verloren: er ist ein Knopf, kein Fließtext,
        und ein Kontextmenü hat dort keine Aufgabe. -->
   <div
@@ -1150,22 +870,18 @@ const handlePostponeConfirm = async (targetDate: string) => {
       <span class="clip clip--r" aria-hidden="true"></span>
     </template>
 
-    <!-- Kopf: der Titel bekommt die ganze obere Kante (Karten-Redesign,
-         Ticket 00a). Der Punktwert steht HIER ein zweites Mal im DOM —
-         sichtbar ist immer nur eine der beiden Stellen, gesteuert über
-         `zettel--meta-top` (Prop `metaTop`, siehe Skript und `WallView`). -->
+    <!-- Kopf: der Titel bekommt die ganze obere Kante. Der Punktwert steht HIER
+         ein zweites Mal im DOM — sichtbar ist immer nur eine der beiden Stellen,
+         gesteuert über `zettel--meta-top` (Prop `metaTop`, siehe Skript und
+         `WallView`). -->
     <div class="head">
       <!-- Schwimmt nach rechts — der Titel fließt aber NICHT darum herum:
            `.title` öffnet mit `overflow: hidden` einen eigenen Block-
            Formatierungskontext, und ein solcher Kasten darf den Float-Kasten
            nicht überlappen. Der Titel steht deshalb über seine GANZE Höhe in
            einer um die Ecke verengten Spalte; auch die zweite und dritte
-           Zeile bleiben kurz, keine läuft unter der Ecke weiter. QC-Beleg:
-           `head.clientWidth − title.clientWidth` ist ohne `zettel--meta-top`
-           0 und mit ihr genau die Breite dieser Ecke — gemessen 41 px bei 36
-           Zetteln und 46 px bei zwei Zetteln mit Fünf-Punkte-Stern, den
-           `.points--s5` breiter macht. Die Ecken sind also NICHT alle gleich
-           breit.
+           Zeile bleiben kurz. Die Ecken sind NICHT alle gleich breit:
+           `.points--s5` macht den Fünf-Punkte-Stern breiter.
 
            Das ist eine echte Kopplung, kein Nebeneffekt: wer das
            `overflow: hidden` an `.title` wegräumt, nimmt nicht nur die
@@ -1184,37 +900,27 @@ const handlePostponeConfirm = async (targetDate: string) => {
     </div>
 
     <!-- Fußzeile im normalen Fluss, zugleich die GRIFFZEILE: links der
-         Punktwert, rechts Stift und Eselsohr — beide 44×44 px nebeneinander
-         (Karten-Redesign, Ticket 00a). -->
+         Punktwert, rechts Stift und Eselsohr — beide 44×44 px nebeneinander. -->
     <div class="foot">
       <!-- NICHT `task.effort`: hier steht, was das Abreißen wirklich noch
-           einbringt (→ `effectivePoints`). Die Zahl ist das Versprechen, das
-           der Punkteflug gleich einlöst — beide kommen aus derselben Quelle.
+           einbringt (→ `effectivePoints`) — dieselbe Zahl, die gleich fliegt.
 
            Punkte als aufgeklebter Sticker: die FORM trägt den Wert (Kreis 1,
            Quadrat 2, Sechseck 3, Wappen 4, Stern 5), die Zahl bestätigt ihn
-           nur — auf einen Blick erkennbar, ohne zu lesen. Funktioniert auch
-           bei Farbenblindheit, weil die Silhouette trägt, nicht nur die
-           Farbe. Werte über 5 (Bonus-Unteraufgaben) fallen alle auf den
-           Stern — bekannt offen, siehe `HANDOFF-kartengroesse.md`.
+           nur — die Silhouette trägt auch bei Farbenblindheit. Werte über 5
+           (Bonus-Unteraufgaben) fallen alle auf den Stern; bekannt offen.
 
-           Bei einem PROJEKT steht hier kein Versprechen, sondern die Bilanz:
-           die bis jetzt verschlungenen Punkte (→ `displayPoints`). Ein Projekt
-           wird nicht abgerissen, es fliegt beim Zug also auch nichts, was diese
-           Zahl einlösen müsste. Das Abzeichen trägt deshalb ein eigenes Bild
-           (`points--badge`, siehe CSS) — die Sticker-Formen bedeuten eine
-           Punktzahl, das Abzeichen eine Stufe. -->
+           Bei einem PROJEKT steht hier die Bilanz der verschlungenen Punkte
+           (→ `displayPoints`), als Abzeichen mit eigenem Bild (`points--badge`):
+           die Sticker-Formen bedeuten eine Punktzahl, das Abzeichen eine Stufe. -->
       <span class="points" :class="pointsShapeClass" :title="pointsTitle">
         {{ pointsLabel }}
       </span>
-      <!-- Unteraufgaben haben jetzt IMMER ein eigenes Zeichen — ein
-           angeklammerter Zettelstapel. Vorher verriet nur die Fortschrittszahl
-           ihre Existenz, und die fehlte bei `daily` und reinen Checklisten
-           ganz (→ `tracksProgress`); dort war das Aufklappen unsichtbar.
-
-           Es ist ein echter Knopf, kein bloßes Zeichen: die ganze Zettelfläche
-           klappt zwar weiterhin auf, aber sie sagt es niemandem. Der Zähler
-           steht nur, wo Fortschritt etwas bedeutet; sonst die blanke Anzahl. -->
+      <!-- Unteraufgaben haben IMMER ein eigenes Zeichen: sonst verriete nur die
+           Fortschrittszahl ihre Existenz, und die fehlt bei `daily`
+           (→ `tracksProgress`). Ein echter Knopf, weil die aufklappende
+           Zettelfläche es niemandem sagt. Der Zähler steht nur, wo Fortschritt
+           etwas bedeutet; sonst die blanke Anzahl. -->
       <button
         v-if="hasSubtasks"
         class="subs-badge"
@@ -1227,45 +933,26 @@ const handlePostponeConfirm = async (targetDate: string) => {
           {{ tracksProgress ? `${doneSubtasks}/${subtasks.length}` : subtasks.length }}
         </span>
       </button>
-      <!-- Der Gummistempel, sein Grundabdruck (→ `stampLabel` im Skript).
-           **JEDER Zettel trägt einen**, auch der, der noch Zeit hat: ohne
-           sichtbaren Abdruck gäbe es keine Fläche zum Antippen, und das
-           Überstempeln hängt daran (→ Ticket `02`).
+      <!-- Der Gummistempel (→ `stampLabel` im Skript) — **JEDER Zettel trägt
+           einen**, sonst gäbe es keine Fläche zum Überstempeln.
 
            Er steht IM FLUSS der Fußzeile, nicht darüber: so kann er sich mit
            keinem Knopf überschneiden, egal wie schmal der Zettel wird — die
            Zeile schiebt ihn zur Seite, statt ihn zu überlagern.
 
-           **`v-if` gibt es hier bewusst nicht mehr.** Das Element ist ab jetzt
-           unbedingt da, und die Breitenmessung in `WallView.vue` verlässt sich
-           darauf: sie sucht `.due-stamp` per `querySelector` und zählt danach
-           die Flex-`gap`s der Fußzeile ab. **Klassenname und Platz als
+           **`v-if` gibt es hier bewusst nicht.** Das Element ist unbedingt da,
+           und die Breitenmessung in `WallView.vue` verlässt sich darauf: sie
+           sucht `.due-stamp` per `querySelector` und zählt danach die
+           Flex-`gap`s der Fußzeile ab. **Klassenname und Platz als
            DIREKTES Flex-Kind von `.foot` sind Vertrag mit dieser Messung** —
            wer eines von beidem ändert, ohne `WallView.vue` mitzuziehen,
            bekommt eine still falsche Zettelbreite: kein Fehler, keine Warnung,
-           nur ein Zettel, der nicht passt.
-
-           **Er ist die EINZIGE Stelle am Zettel, die den Stand einer Aufgabe
-           zeigt** (→ CONTEXT.md, „Stempel"). Vorher stand daneben zusätzlich
-           die genaue Tageszahl in Rot (`.meta`, „3 Tage" / „heute" / „nie") —
-           das war eine zweite Anzeige derselben Aussage, und dazu eine Farbe,
-           die das Glossar für den Stempel ausdrücklich ausschließt. Die
-           Tageszahl fehlt jetzt bewusst: auf der Wand gelten alle fälligen
-           Aufgaben als GLEICH dringend, eine Zählung „3 Tage überfällig"
-           widerspräche dem. Das ist kein Informationsverlust, sondern die
-           Auflösung eines Widerspruchs — nicht wieder einführen. -->
-      <!-- Antippbar seit Ticket `02`: ein Tipp dreht den Nachdruck weiter
-           (→ `onStampTap` im Skript). `@click.stop` hält den Zettel davon ab,
-           dabei auch noch auf- oder zuzuklappen (`onSurfaceTap` an der
-           Wurzel) — es ist die EINZIGE Abgrenzung zwischen den beiden
-           Tipp-Zielen auf diesem Zettel.
-
-           **Der Stempel kommt trotzdem NICHT in `isPressControl`**: der ganze
-           Zettel bleibt Griff, gerade unten, wo der Daumen liegt. Genau wie
-           `.edit` und `.subs-badge`, die auch Knöpfe sind und auch nicht darin
-           stehen. Gedrückthalten öffnet hier also weiterhin den Kranz; der
-           nachlaufende Klick wird vom Wächter am Fenster geschluckt, bevor er
-           dieses `@click.stop` erreicht.
+           nur ein Zettel, der nicht passt. -->
+      <!-- Ein Tipp dreht den Nachdruck weiter (→ `onStampTap` im Skript).
+           `@click.stop` hält den Zettel davon ab, dabei auch noch auf- oder
+           zuzuklappen (`onSurfaceTap` an der Wurzel) — es ist die EINZIGE
+           Abgrenzung zwischen den beiden Tipp-Zielen auf diesem Zettel. Nicht in
+           `isPressControl` — Begründung dort.
 
            Kein `<button>`: das Element ist Vertrag mit der Breitenmessung in
            `WallView.vue` (Klassenname UND Platz als direktes Flex-Kind von
@@ -1277,21 +964,14 @@ const handlePostponeConfirm = async (targetDate: string) => {
         :title="stampTitle"
         @click.stop="onStampTap"
       >
-        <!-- Der Abdruckstapel (Ticket `03`, → `stampLayers` im Skript).
-
-             **Immer alle drei Lagen**, auch die noch nicht gestempelten: die
-             stehen als `.stamp-layer--reserved` unsichtbar, aber im Grid
-             weiterhin gemessen. Ohne sie wüchse die Fußzeile beim Stempeln,
-             und die Wand packt nach einem Tipp nicht neu (`layoutSignature`
-             kennt `emphasis_level` nicht, → ADR-0002). Ausführlich bei
-             `stampLayers`.
+        <!-- Der Abdruckstapel (→ `stampLayers` im Skript). **Immer alle drei
+             Lagen**, die noch nicht gestempelten als `.stamp-layer--reserved`
+             unsichtbar, aber im Grid weiterhin gemessen (→ ADR-0003).
 
              `v-for` über `level` statt über den Text: der Schlüssel ist die
-             LAGE, nicht das Wort. An einem Projekt stehen jetzt drei
-             Projektsprüche übereinander (Ticket `04`, Nacharbeit) — dass
-             darunter nie zweimal dasselbe Wort ist, garantiert
-             `projectPhraseStackOf`, aber diese Zusage gehört dorthin und nicht
-             in einen Vue-Schlüssel. -->
+             LAGE, nicht das Wort. Dass am Projekt nie zweimal derselbe Spruch
+             steht, garantiert `projectPhraseStackOf` — diese Zusage gehört
+             dorthin und nicht in einen Vue-Schlüssel. -->
         <span
           v-for="layer in stampLayers"
           :key="layer.level"
@@ -1348,38 +1028,24 @@ const handlePostponeConfirm = async (targetDate: string) => {
       </div>
     </div>
 
-    <!-- Der nachlaufende Klick eines Long-Press kann sehr wohl hier landen: der
-         Knopf sitzt jetzt unten rechts (Karten-Redesign, Ticket 00a), also
-         genau dort, wo ein Zug nach unten oder rechts enden kann. Dass er das
-         Modal trotzdem nicht öffnet, regelt der Klick-Wächter am Fenster (→
-         `useDirectionPress`) — er sieht den Klick in der Einfangphase, vor
-         diesem `@click.stop`.
-
-         **Seit Ticket 01 startet der Long-Press auch AUF diesem Knopf**:
-         `.edit` steht nicht mehr in `isPressControl`, der ganze Zettel ist
-         Griff. Derselbe Wächter trägt beide Fälle — wer hier lange drückt,
-         greift den Zettel, und beim Loslassen ohne Bewegung öffnet sich
-         KEIN Modal. Ein kurzer Tipp öffnet es wie bisher. -->
+    <!-- Hier endet oft ein Zug nach unten oder rechts, und der Long-Press
+         startet auch AUF diesem Knopf. Dass dabei kein Modal aufgeht, regelt der
+         Klick-Wächter am Fenster (→ `isPressControl`, `useDirectionPress`). -->
     <button class="edit" title="Aufgabe bearbeiten" @click.stop="showEditModal = true">
       <i class="bi bi-pencil" aria-hidden="true"></i>
     </button>
 
     <!-- Das Eselsohr: der Abreiß-Griff. Kein Text daneben — die angeknickte
-         Ecke mit der Perforationslinie sagt „hier anfassen".
-
-         Ein Antippen tut ausdrücklich NICHTS (der Klick wird nur geschluckt,
-         damit er den Zettel nicht aufklappt): Erledigen ist eine Zieh-Geste.
-         Ein Griff, der schon auf Antippen erledigt, wäre die versehentlichste
-         Erledigung der ganzen App.
+         Ecke mit der Perforationslinie sagt „hier anfassen". Ein Antippen tut
+         ausdrücklich NICHTS (der Klick wird nur geschluckt, damit er den Zettel
+         nicht aufklappt): ein Griff, der schon auf Antippen erledigt, wäre die
+         versehentlichste Erledigung der ganzen App.
 
          **Am AUFGEKLAPPTEN Zettel gibt es ihn nicht.** Dort sitzt in derselben
-         Ecke der Griff des letzten Zettelchens: die untere rechte Ecke des
-         Zettels IST die untere rechte Ecke des letzten Zettelchens, und beide
-         Trefferflächen lägen übereinander. Der Zettel steht im DOM später und
-         gewänne — ein Zug am letzten Zettelchen würde also die ganze Aufgabe
-         erledigen statt der Unteraufgabe. Genau die Art Fehlgriff, die man
-         nicht sieht und nur ertastet. Wer die ganze Aufgabe abreißen will,
-         klappt zu und zieht; eingeklappt ist die Ecke frei. -->
+         Ecke der Griff des letzten Zettelchens, und beide Trefferflächen lägen
+         übereinander. Der Zettel steht im DOM später und gewänne — ein Zug am
+         letzten Zettelchen erledigte die ganze Aufgabe statt der Unteraufgabe.
+         Eingeklappt ist die Ecke frei. -->
     <button
       v-if="!props.expanded"
       class="ear"
@@ -1396,32 +1062,16 @@ const handlePostponeConfirm = async (targetDate: string) => {
 
     <!-- Die vier beschrifteten Richtungen: Vollbild-Overlay, teleportiert nach
          `body` und in Fensterkoordinaten gelegt — die Begründung steht in der
-         Komponente. Es hängt an der Geste, nicht am Zettel: Ursprung ist der
-         Aufsetzpunkt, nicht die Zettelmitte.
+         Komponente. Ursprung ist der Aufsetzpunkt, nicht die Zettelmitte.
 
-         **An einem Projekt gar nicht** (Ticket 03): kein Kranz, kein Schleier.
-         Die Geste läuft trotzdem weiter — nur „unten" führt dort zu etwas, und
-         eine Beschriftung, die drei tote Richtungen anböte, wäre eine falsche
-         Aussage.
+         **An einem Projekt gar nicht:** kein Kranz, kein Schleier — eine
+         Beschriftung, die drei tote Richtungen anböte, wäre eine falsche Aussage.
 
-         **`zettel--pressed` bleibt trotzdem an** — auch am Projekt. Erste
-         Fassung hatte es mit unterdrückt („sichtbar passiert nichts"); der QC
-         hat gemessen, was das kostet: ab exakt 420 ms sperrt
-         `useDirectionPress` den Bildlauf (`onTouchMove` → `preventDefault`)
-         und schluckt den Loslass-Klick (`armClickGuard` feuert bei `fired`,
-         auch ohne anliegende Richtung) — halten und loslassen ließ den Zettel
-         messbar unverändert, der Tipp verpuffte. Das passiert bei JEDEM
-         Zettel; der Unterschied ist nur, dass man dort den Kranz sieht und
-         deshalb versteht, warum die Wand gerade nicht reagiert. Der Defekt
-         war also die fehlende Rückmeldung, nicht der Wächter.
-
-         Das Ticket verbietet den **Kranz**, nicht das Anheben: ein Zettel, der
-         sich hebt, sagt „ich höre zu", ohne eine Richtung zu versprechen.
-         `.zettel--pressed` hebt nur Schatten und Papierhelligkeit an, weder
-         Größe noch Lage noch Neigung (Begründung samt Messwerten an der Regel
-         im CSS-Block). Damit passt auch das `gesture-start`/`gesture-end`
-         an `pressOpen` zum sichtbaren Zustand, statt ein unsichtbarer
-         Nebeneffekt zu sein — deshalb ist dort ebenfalls nichts unterdrückt. -->
+         **`zettel--pressed` bleibt trotzdem an**, auch am Projekt: ab 420 ms
+         sperrt `useDirectionPress` bei JEDEM Zettel den Bildlauf und schluckt
+         den Loslass-Klick — ohne sichtbares Anheben verpuffte der Tipp
+         unerklärt. Ein Zettel, der sich hebt, sagt „ich höre zu", ohne eine
+         Richtung zu versprechen. -->
     <WallDirectionMenu
       v-if="pressOpen && !isProject"
       :origin="pressOrigin"
@@ -1429,8 +1079,7 @@ const handlePostponeConfirm = async (targetDate: string) => {
       :active="pressDirection"
     />
 
-    <!-- Zug nach rechts: erledigen mit angepasstem Aufwand. Dasselbe Modal wie
-         in der alten Karte, damit beide Ansichten denselben Ablauf haben. -->
+    <!-- Zug nach rechts: erledigen mit angepasstem Aufwand. -->
     <TaskCompletionModal
       v-if="showCompletionModal"
       :taskTitle="props.task.title"
@@ -1441,9 +1090,8 @@ const handlePostponeConfirm = async (targetDate: string) => {
     />
 
     <!-- Beide Gesten nach unten an einem Projekt: das Arbeitseintrag-Fenster.
-         Auswahl UND Notiz
-         sind dort Pflicht, nichts ist vorausgewählt — Schließen ohne Eintrag
-         bucht nichts. -->
+         Auswahl UND Notiz sind Pflicht, nichts ist vorausgewählt — Schließen
+         ohne Eintrag bucht nichts. -->
     <ProjectWorkModal
       v-if="showProjectWorkModal"
       :projectTitle="props.task.title"
@@ -1501,48 +1149,31 @@ const handlePostponeConfirm = async (targetDate: string) => {
   top: 0;
   display: flex;
   flex-direction: column;
-  /* Rückfallfarbe der Reißzwecke ohne Zuständige (`.pin` unten): derselbe
-     Grauton wie zuvor, aber auf 45 % gegen das Papier gemischt, damit
-     „niemand zuständig" nie kräftiger wirkt als „X ist zuständig". Gemessen:
-     `--pw-free` erreichte 3,87:1 gegen das Papier, die blasseste vergebene
-     Personenfarbe (#4A90E2) nur 3,23:1 — „niemand" las sich lauter als
-     „jemand". Jetzt sind es 1,71:1 gegen Papier und 1,28:1 gegen Kork, also
-     klar zurücktretend gegenüber jeder Personenfarbe.
+  /* Rückfallfarbe der Befestigung ohne Zuständige: auf 45 % gegen das Papier
+     gemischt, damit „niemand zuständig" nie kräftiger wirkt als „X ist
+     zuständig" — ungemischt las sich `--pw-free` lauter als die blasseste
+     Personenfarbe. Gewählte Farben werden nicht angetastet.
 
-     Bewusst NICHT die Lösung des eigentlichen Problems: dass eine helle
-     `user_color` auf Kork wenig hergibt, klärt die kuratierte Palette samt
-     Migration in einer eigenen Etappe. Hier wird nur der farblose Zustand
-     leiser gedreht, keine gewählte Farbe angetastet.
-
-     Als benutzerdefinierte Eigenschaft hier deklariert (nicht direkt bei
-     `.pin`), damit sie an die Reißzwecke als Kindelement vererbt wird. */
+     Hier deklariert (nicht direkt bei `.pin`), damit sie an die Befestigung
+     als Kindelement vererbt wird. */
   --owner-none: color-mix(in srgb, var(--pw-free) 45%, var(--pw-paper));
-  /* **Die Papierfarbe DIESES Zettels**, als benutzerdefinierte Eigenschaft
-     deklariert und damit an die Kinder vererbt (Ticket `03`). Gebraucht wird
-     sie vom Papier-Halo der obersten Stempellage weit unten: der Halo muss die
-     Farbe dieses Zettels treffen, nicht die des Standardpapiers, sonst stünde
-     auf einem gelben Notizblock oder auf Packpapier ein weißer Kasten.
+  /* **Die Papierfarbe DIESES Zettels**, vererbt an die Kinder. Gebraucht vom
+     Papier-Halo der obersten Stempellage: der Halo muss die Farbe dieses
+     Zettels treffen, sonst stünde auf einem gelben Notizblock oder auf
+     Packpapier ein weißer Kasten.
 
-     Die drei Typen überschreiben sie bei sich (`.zettel--daily`,
-     `.zettel--project`) — **zusammen mit ihrem `background`, direkt daneben**.
-     Wer dort das Papier ändert und diese Zeile vergisst, bekommt keinen
-     Fehler, nur einen Halo in der falschen Farbe. */
+     Die Typen überschreiben sie bei sich (`.zettel--daily`, `.zettel--project`)
+     — **zusammen mit ihrem `background`, direkt daneben**. Wer dort das Papier
+     ändert und diese Zeile vergisst, bekommt keinen Fehler, nur einen Halo in
+     der falschen Farbe. */
   --note-paper: var(--pw-paper);
-  /* Rahmen: bewusst konturlos (`transparent`), die Zuweisungsfarbe steht nach
-     der Korrektur zu Ticket 10 ausschließlich an der Reißzwecke (`.pin`
-     unten) — kein farbiger Rahmen mehr, das mochte der Nutzer nicht.
+  /* Rahmen: bewusst konturlos (`transparent`) — die Zuweisungsfarbe steht
+     ausschließlich an der Befestigung.
 
-     Trotzdem keine `0`: die Breite bleibt als stabile Fläche stehen, auf der
-     `.zettel--tear-ready` weiter unten den neutralen „reißt gleich
-     ab"-Umriss zeichnet (eigene Farbe und eigener Stil, nur die Breite kommt
-     von hier). Ohne Breite hätte dieser Umriss nichts zum Zeichnen — genauer
-     Fehlgriff aus der vorigen Runde, siehe Kommentar dort.
-
-     2px ist der Wert von vor Ticket 10 (die zwischenzeitlichen 5px trugen
-     „deutlich dicker als bisher" für den inzwischen wieder entfernten
-     Zuweisungs-Rahmen; die Forderung ist mit ihm entfallen). Konstant für
-     alle Zustände, damit Zuweisen/Zurücknehmen keinen Sprung im Innenraum
-     auslöst (`box-sizing: border-box`).
+     Trotzdem keine `0`: auf dieser Breite zeichnet `.zettel--tear-ready` den
+     neutralen „reißt gleich ab"-Umriss; ohne Breite hätte er nichts zum
+     Zeichnen. Konstant für alle Zustände, damit Zuweisen/Zurücknehmen keinen
+     Sprung im Innenraum auslöst (`box-sizing: border-box`).
 
      ACHTUNG, diese 2px stehen nicht nur hier: der umschließende Block der
      absolut positionierten Befestigungen (`.pin`, `.tape`, `.clip`) ist die
@@ -1551,22 +1182,20 @@ const handlePostponeConfirm = async (targetDate: string) => {
      innen, als ihr eigenes CSS aussagt — und genau daraus rechnet die Wand ihr
      oberes Polster. Wer diesen Wert ändert, ändert `ZETTEL_BORDER` in
      `src/lib/wallLayout.ts` mit, sonst ragen die Befestigungen wieder über den
-     Kork (Ticket 04). */
+     Kork. */
   border: 2px solid transparent;
   border-radius: 3px;
   background: var(--pw-paper);
   color: var(--pw-ink);
   box-shadow: var(--pw-shadow);
-  /* Stift und Eselsohr sitzen jetzt UNTEN nebeneinander (Karten-Redesign,
-     Ticket 00a) — oben ist deshalb nichts mehr für den Bearbeiten-Knopf
-     reserviert, der Titel bekommt die ganze obere Kante. Den Platz für die
-     beiden Griffe (je 44 px) reserviert stattdessen `.foot` selbst über ihr
-     `padding-right`, weil dort auch der Text drumherum fließen muss. */
+  /* Stift und Eselsohr sitzen UNTEN nebeneinander, der Titel bekommt die ganze
+     obere Kante. Den Platz für die beiden Griffe (je 44 px) reserviert `.foot`
+     selbst über ihr `padding-right`. */
   padding: 5px 7px 0 7px;
   min-height: 44px;
   text-align: left;
   will-change: transform;
-  /* Ohne das ist der Long-Press (Ticket 10) auf einem Zettel nicht bedienbar:
+  /* Ohne das ist der Long-Press auf einem Zettel nicht bedienbar:
      ein langes Drücken auf Text startet auf dem Telefon die native
      Textauswahl samt Lupe und Kontextleiste. Der Browser nimmt dabei die Geste
      weg (`pointercancel`) — die Richtungen erschienen und verschwänden sofort
@@ -1580,9 +1209,8 @@ const handlePostponeConfirm = async (targetDate: string) => {
 
 .title {
   margin: 0;
-  /* ×1,2 (Karten-Redesign, Ticket 00a): 13 → 15,6 px. Recherche im Handoff —
-     Material 3 Body-Large 16 sp, Apple Body 17 pt, Material Label-Small 11 sp
-     als Untergrenze — der vorige Wert lag mit 13/10 px unter allem davon. */
+  /* 15,6 px: Material 3 Body-Large 16 sp, Apple Body 17 pt — 13 px lag unter
+     jeder Richtlinie. */
   font-size: 15.6px;
   font-weight: 800;
   line-height: 1.15;
@@ -1608,10 +1236,9 @@ const handlePostponeConfirm = async (targetDate: string) => {
   text-overflow: ellipsis;
 }
 
-/* Fußzeile, zugleich die GRIFFZEILE (Karten-Redesign, Ticket 00a): links der
-   Punktwert (plus Stempel/Unteraufgaben-Zeichen, wenn vorhanden), rechts
-   Stift und Eselsohr — beide 44 px, deshalb `min-height` UND das rechte
-   Polster, das die beiden Griffe freihält. */
+/* Fußzeile, zugleich die GRIFFZEILE: links der Punktwert (plus Stempel und
+   Unteraufgaben-Zeichen), rechts Stift und Eselsohr — beide 44 px, deshalb
+   `min-height` UND das rechte Polster, das die beiden Griffe freihält. */
 .foot {
   display: flex;
   align-items: center;
@@ -1627,34 +1254,29 @@ const handlePostponeConfirm = async (targetDate: string) => {
   white-space: nowrap;
 }
 
-/* Nur ein Zettel mit Unteraufgaben reagiert auf ein Antippen der Fläche. */
 .zettel--tappable {
   cursor: pointer;
 }
 
-/* --- Kopf: Titel plus die Ecke oben rechts (Ticket 00a) -------------------- */
+/* --- Kopf: Titel plus die Ecke oben rechts ---------------------------------- */
 
 /* Der Zettel selbst ist ein Flex-Container; ein `float` wäre darin
    wirkungslos. Der Kopf ist deshalb ein eigener Block — nur dort wirkt der
    Float der Ecke überhaupt. UMFLOSSEN wird sie dabei nicht: der Titel steht
    in einer verengten Spalte daneben (Begründung am `.corner` im Template).
 
-   `flow-root`, nicht `block`: die Ecke (34 px hoch) kann höher sein als eine
-   einzeilige Titelzeile (~18 px) — bei einem kurzen Titel wie „Müll" mit
-   aktivem `zettel--meta-top`. Ein bloßer `block` umschließt einen Float
-   NICHT automatisch; die Ecke überstünde dann `.head` nach unten und liefe
-   sichtbar in die Fußzeile hinein. `flow-root` öffnet einen eigenen
-   Block-Formatierungskontext und fängt den Float korrekt ein, ohne sonst am
-   Verhalten von `block` etwas zu ändern. */
+   `flow-root`, nicht `block`: die Ecke (34 px) kann höher sein als eine
+   einzeilige Titelzeile (~18 px). Ein bloßer `block` umschließt einen Float
+   NICHT; die Ecke liefe sichtbar in die Fußzeile hinein. */
 .head {
   display: flow-root;
   position: relative;
 }
 
 /* Der Punktwert steht an ZWEI Stellen im DOM zugleich (Ecke UND Fußzeile);
-   sichtbar ist immer nur eine, gesteuert über `zettel--meta-top` (Prop
-   `metaTop`, siehe Skript). Ein `v-if` wäre hier falsch: die Wand entscheidet
-   das während der Messung, nicht im Render. */
+   sichtbar ist immer nur eine, gesteuert über `zettel--meta-top`. Ein `v-if`
+   wäre hier falsch: die Wand entscheidet das während der Messung, nicht im
+   Render. */
 .corner {
   display: none;
 }
@@ -1667,8 +1289,7 @@ const handlePostponeConfirm = async (targetDate: string) => {
   display: none;
 }
 
-/* Schwimmt nach rechts — bewusst KEIN `display` in dieser Regel, das steht
-   bereits oben. */
+/* Bewusst KEIN `display` in dieser Regel, das steht bereits oben. */
 .corner {
   float: right;
   align-items: center;
@@ -1677,15 +1298,10 @@ const handlePostponeConfirm = async (targetDate: string) => {
 }
 
 /* --- Der Gummistempel: der Abdruckstapel -----------------------------------
-   Ein Zettel, an dem jemand dreimal nachgedrückt hat, sieht auch danach aus:
-   die vorherigen Abdrücke verschwinden nicht, sie bleiben unter dem nächsten
-   liegen. Der oberste gilt und ist am besten lesbar, und die **Stapelhöhe ist
-   selbst eine Aussage** — man sieht einem Zettel ohne Lesen an, ob einmal oder
-   mehrfach nachgedrückt wurde (Ticket `03`, → CONTEXT.md „Überstempeln").
-
-   Die Optik ist **Variante F, „Papier-Halo"**, aus zwei Runden Prototypen
-   abgenommen (`stempel-optik-prototypen.md`). Die Werte, die dort GEMESSEN
-   wurden und nicht Geschmack sind, stehen an ihrer Stelle einzeln benannt.
+   Die vorherigen Abdrücke bleiben unter dem nächsten liegen; die
+   **Stapelhöhe ist selbst eine Aussage** (→ CONTEXT.md „Überstempeln"). Optik
+   „Papier-Halo"; die gemessenen, nicht geschmacklichen Werte stehen an ihrer
+   Stelle einzeln benannt (Herleitung → docs/pinnwand-layout.md, „Stempelstapel").
 
    Der Stapel steht IM FLUSS der Fußzeile (ein normales Flex-Kind, keine
    Überlagerung) — dadurch schiebt die Zeile ihn zur Seite, statt dass er einen
@@ -1694,26 +1310,21 @@ const handlePostponeConfirm = async (targetDate: string) => {
    `WallView.vue`** (dort steht ein Laufzeit-Wächter); wer eines von beidem
    ändert, bekommt eine still falsche Zettelbreite.
 
-   **Die Breite ist das Maximum über ALLE Lagen, nicht die der obersten.** Der
-   Fall, an dem das kippt: ein Projekt trägt unten seinen zehnstelligen Spruch
-   und darüber das kürzere DRINGEND — die breiteste Lage liegt also UNTEN.
-   Lägen die unteren Lagen absolut, zählten sie nicht zur Breite, ragten aber
-   heraus, und der Zettel würde zu schmal gepackt. Deshalb liegen alle Lagen
-   als Grid-Elemente in DERSELBEN Zelle (`grid-area: 1 / 1`, unten): der Stapel
-   misst damit immer seine breiteste Lage.
+   **Die Breite ist das Maximum über ALLE Lagen, nicht die der obersten:** an
+   einem Projekt kann die breiteste Lage UNTEN liegen. Lägen die unteren Lagen
+   absolut, zählten sie nicht zur Breite, ragten aber heraus. Deshalb liegen
+   alle Lagen als Grid-Elemente in DERSELBEN Zelle (`grid-area: 1 / 1`).
 
    **`place-items: center`, nicht `stretch`:** die Lagen sollen ihre eigene
-   natürliche Breite behalten und mittig übereinander liegen. Mit `stretch`
-   wären alle so breit wie die breiteste — die schmaleren Abdrücke bekämen
-   einen Rahmen um Luft statt um ihr Wort. */
+   natürliche Breite behalten und mittig übereinander liegen. */
 .due-stamp {
   position: relative;
   display: inline-grid;
   place-items: center;
   flex: 0 0 auto;
-  /* Seit Ticket `02` ein Bedienelement, kein Schild mehr — die Fläche muss das
-     mit der Maus auch sagen. `.zettel--tappable` färbt den Zeiger nur an
-     Zetteln MIT Unteraufgaben; der Stempel ist an jedem Zettel antippbar. */
+  /* Ein Bedienelement — die Fläche muss das mit der Maus auch sagen.
+     `.zettel--tappable` färbt den Zeiger nur an Zetteln MIT Unteraufgaben; der
+     Stempel ist an jedem Zettel antippbar. */
   cursor: pointer;
 }
 
@@ -1725,16 +1336,12 @@ const handlePostponeConfirm = async (targetDate: string) => {
    `min-height: 44px` der Fußzeile auch in die Wandhöhe ein. `padding` oder
    `min-height` am Stempel selbst wären genau dieser Fehler.
 
-   Sie liegt am STAPEL, nicht an einer Lage: das Ziel ist der Stempel als
-   Ganzes, und ein Klick auf das Pseudoelement zielt auf `.due-stamp` selbst —
-   es ist ein Kind, kein Geschwister —, der Handler dort fängt ihn also mit.
+   Sie liegt am STAPEL, nicht an einer Lage: ein Klick auf das Pseudoelement
+   zielt auf `.due-stamp` selbst, der Handler dort fängt ihn mit.
 
-   **Sie schluckt dem Zettel nichts.** Die Long-Press-Geste hängt an der Wurzel
-   und lebt vom Hochblubbern; sie startet auf dieser Fläche genauso wie auf
-   blankem Papier (der Stempel steht NICHT in `isPressControl`). Und die Fläche
-   ist nur so hoch wie die Fußzeile selbst (44 px) und liegt in ihr — sie deckt
-   keinen der beiden Griffe rechts ab, die hinter `padding-right: 88px`
-   freigehalten sind. */
+   **Sie schluckt dem Zettel nichts:** der Long-Press startet auf ihr wie auf
+   blankem Papier (Hochblubbern zur Wurzel), und sie deckt keinen der beiden
+   Griffe rechts ab, die hinter `padding-right: 88px` freigehalten sind. */
 .due-stamp::after {
   content: '';
   position: absolute;
@@ -1746,60 +1353,27 @@ const handlePostponeConfirm = async (targetDate: string) => {
   transform: translate(-50%, -50%);
 }
 
-/* Eine Lage des Stapels. Maße und Typografie sind unverändert die des früheren
-   einzelnen Abdrucks — die Schriftgröße ist ausdrücklich KEIN Stellknopf
-   (Prototypen-Runde 3: 11 px sind die dokumentierte Untergrenze, alles
-   darunter nähme die Anhebung des Karten-Redesigns zurück).
+/* Eine Lage des Stapels. Die Schriftgröße ist ausdrücklich KEIN Stellknopf:
+   11 px sind die Untergrenze (Material Label-Small 11 sp), alles darunter
+   nähme die Anhebung der Schrift zurück (→ ADR-0003, „Den Stempel schmaler
+   setzen").
 
    `transform` steht NICHT hier, sondern als Inline-Stil am Element: Versatz
    und Neigung kommen je Lage deterministisch aus der Aufgaben-Kennung
    (→ `stampLayers` im Skript). Weil beides über `transform` läuft, geht es
-   NICHT in die Breite der Fußzeile ein — die Lagen liegen versetzt
-   übereinander, nicht nebeneinander, und der Stapel bleibt so breit wie sein
+   NICHT in die Breite der Fußzeile ein — der Stapel bleibt so breit wie sein
    breitestes Wort. */
 .stamp-layer {
   grid-area: 1 / 1;
-  /* JEDE Lage steht auf Zellbreite, nicht nur die oberste. Sonst fiel eine Lage
-     in dem Moment auf ihre Textbreite zurueck, in dem sie ueberstempelt wurde —
-     gemessen 78,36 px -> 39,81 px, also 38,55 px Sprung. Der Mittelpunkt blieb
-     dabei stehen, deshalb sah es nicht nach Verrutschen aus, sondern nach
-     Schrumpfen. Vom Maintainer am Geraet gesehen, nicht von einer Pruefung
-     gefunden. */
+  /* JEDE Lage steht auf Zellbreite, nicht nur die oberste — sonst fiele eine
+     Lage beim Überstempeln auf ihre Textbreite zurück und sähe geschrumpft aus. */
   min-width: 100%;
-  /* ZENTRIERT WIRD IN JEDER LAGE, nicht nur in der obersten. Der Kasten ist
-     breiter als sein Wort — er steht auf Zellbreite, also auf der Breite des
-     BREITESTEN Worts im Stapel —, und ohne Zentrierung klebt das Wort links
-     (gemessen 11,3 px im Median).
-
-     Bis zum 05.09.2026 stand diese Zeile am `.stamp-layer--top`-Block. Eine
-     Lage sprang damit in dem Moment nach links, in dem sie überstempelt wurde:
-     der Kasten blieb stehen (seit `min-width: 100%`), das WORT darin nicht.
-     Gemessen an 94 Zetteln über alle drei Stufen (282 Lagen): **98 Lagen**
-     verschoben ihren Text tatsächlich, im schlimmsten Fall um **24,96 px**.
-
-     Hier stand bis zum 05.09.2026 „**182 Lagen**, im schlimmsten Fall
-     **24,70 px**" — und der Fehler darin ist lehrreicher als der Wert. Gezählt
-     wurde `getComputedStyle().textAlign`: `center` an der obersten Lage, `left`
-     an den unteren. Das misst eine EIGENSCHAFT, keine Bewegung, und liefert
-     deshalb im Kern die Zahl ALLER Nicht-Oberlagen — bei 94 Zetteln also 188.
-     Bei der jeweils BREITESTEN Lage füllt der Text die Zelle aus; sie steht mit
-     `left` an derselben Stelle wie mit `center` und verschiebt sich nicht. Wer
-     „hat sich der Text bewegt" fragen will, muss die Position des Textes vorher
-     und nachher vergleichen, nicht seine CSS-Eigenschaft lesen.
-
-     **Die 182 bleibt damit UNERKLÄRT, und das steht hier absichtlich.** Sie
-     liegt sechs unter den 188, die dieselbe Methode heute ergäbe; woher die
-     sechs Lagen Differenz kommen, ist nicht nachvollzogen — der damalige Lauf
-     ist nicht wiederholbar (anderer Wandbestand, siehe die 93/94-Notiz weiter
-     oben). Gesichert ist die Größenordnung und die Ursache, nicht die Zahl.
-     Eine halbe Erklärung, die wie eine ganze aussieht, wäre hier derselbe
-     Fehler noch einmal.
-     Vom Maintainer am Gerät gesehen — „der Stempel fällt nicht mehr zusammen,
-     aber der Text bewegt sich noch".
-
-     An einem PROJEKT fällt es am meisten auf: dort stehen drei verschieden
-     breite Sprüche in einem Kasten. Ein Abdruck, der einmal auf dem Papier
-     ist, verrutscht nicht mehr — auch nicht sein Wort. */
+  /* ZENTRIERT WIRD IN JEDER LAGE, nicht nur in der obersten. Der Kasten steht
+     auf der Breite des BREITESTEN Worts im Stapel; ohne Zentrierung klebte das
+     Wort links und spränge beim Überstempeln, während der Kasten stehen bleibt.
+     Ein Abdruck, der einmal auf dem Papier ist, verrutscht nicht mehr — auch
+     nicht sein Wort. Am Projekt (drei verschieden breite Sprüche) fällt es am
+     meisten auf. */
   text-align: center;
   padding: 1px 5px;
   border: 2px solid currentColor;
@@ -1810,24 +1384,16 @@ const handlePostponeConfirm = async (targetDate: string) => {
   white-space: nowrap;
 }
 
-/* Die Farbrampe **blau → orange → rot**, vom Maintainer am 01.09.2026
-   ausdrücklich der reinen Deckungs-Eskalation vorgezogen.
+/* Die Farbrampe **blau → orange → rot**, vom Maintainer der reinen
+   Deckungs-Eskalation vorgezogen.
 
-   **Der Grundabdruck bekommt hier sein Blau.** Ticket `01` hatte ihn
-   einheitlich auf `--pw-ink` gestellt, weil die alten Stufen mit den
-   abgeschafften Wörtern NIE/HEUTE wegfielen — das war ein Zwischenzustand, bis
-   dahin war die Wand einfarbig und ein überfälliger Zettel drängte optisch
-   nicht.
+   **Der Grundabdruck ist blau, FÄLLIG also nicht rot.** JEDER Zettel trägt den
+   Stempel; bliebe der berechnete Abdruck rot, wäre die ganze Wand rot und
+   DRINGEND hätte keine Steigerung mehr übrig. Rot heißt „ein Mensch hat das
+   gesagt", nicht „der Kalender ist abgelaufen" (→ ADR-0002).
 
-   **Und das kostet FÄLLIG sein Rot.** Der Stempel ist seit Ticket `01` nicht
-   mehr selten: JEDER Zettel trägt ihn. Bliebe der berechnete Abdruck rot, wäre
-   die ganze Wand rot und DRINGEND hätte keine Steigerung mehr übrig. Rot heißt
-   ab hier „ein Mensch hat das gesagt", nicht „der Kalender ist abgelaufen" —
-   genau die Rangfolge, die ADR-0002 aufmacht.
-
-   Die beiden Festwerte sind aus dem Prototypen übernommen und **nicht gegen
-   die Personenfarben am Zettelrand geprüft** — dieselbe offene Baustelle wie
-   bei den Punkte-Stickern, dort ebenso benannt. */
+   Die beiden Festwerte sind **nicht gegen die Personenfarben geprüft** —
+   dieselbe offene Baustelle wie bei den Punkte-Stickern. */
 .stamp-layer--l0 {
   color: #3a4a6b;
 }
@@ -1841,50 +1407,17 @@ const handlePostponeConfirm = async (targetDate: string) => {
 }
 
 /* Die OBERSTE Lage ist **voll deckend** und bekommt die Papierfarbe des
-   Zettels als Hintergrund — den „Papier-Halo", der der Variante ihren Namen
-   gibt.
+   Zettels als Hintergrund — den „Papier-Halo".
 
-   **Beides ist ein Messergebnis, kein Geschmack.** An der Durchsichtigkeit der
-   obersten Lage ist die erste Prototypenrunde gescheitert: dort war jede Lage
-   durchsichtig, und die unteren Wörter schienen durch die BUCHSTABEN des
-   obersten. Nicht „aufräumen".
+   **Beides ist ein Messergebnis, kein Geschmack.** Mit durchsichtiger oberster
+   Lage schienen die unteren Wörter durch die BUCHSTABEN des obersten. Nicht
+   „aufräumen". Der Halo bemisst sich an der **Zelle** (`min-width: 100%` an
+   `.stamp-layer`), nicht an seinem Wort — er kann nur verdecken, was er
+   überdeckt.
 
-   Der Halo löst den offenen Befund aus Ticket `02`: der frühere Nachdruck war
-   mit 8,6 px schmaler als viele Grundabdrücke, deckte nur links ab, und rechts
-   schaute der Rest des Grundworts heraus — bei WICHTIG an 50 von 93 Zetteln,
-   schlimmster Überstand 42,5 px; `IN PLANUNG` las sich mit WICHTIG als
-   `[WICHTIG]NUNG`.
-
-   **Gleiche Schriftgröße genügt dafür NICHT**, und genau daran ist der erste
-   Anlauf gescheitert: neun Grundabdrücke — sämtlich Projektsprüche — sind
-   längere Wörter als `WICHTIG`, und ein Halo kann nur verdecken, was er
-   überdeckt. Gemessen blieben 8 von 93 Zetteln übrig, bis 13,06 px; `IN
-   PLANUNG` las sich als `WICHTIG G`. Dieselbe Krankheit, nur kleiner.
-
-   Deshalb bemisst sich der Halo an der **Zelle**, nicht an seinem eigenen
-   Wort: alle drei Lagen liegen in derselben Grid-Zelle, die Zelle ist also so
-   breit wie die BREITESTE Lage. `min-width: 100%` zieht sie auf genau diese
-   Breite.
-
-   **Diese Zeile steht seit dem 05.09.2026 nicht mehr hier, sondern an
-   `.stamp-layer`** — sie gilt also für JEDE Lage, nicht nur für die oberste;
-   die Begründung steht dort. Für den Halo ändert das nichts: die oberste Lage
-   bekommt die Zellbreite nach wie vor, nur eben über dieselbe Regel wie alle
-   anderen.
-
-   **Einen seitlichen Zuschlag über die Zelle hinaus gibt es NICHT mehr.** Bis
-   zum 05.09.2026 trug die oberste Lage einen gerechneten Überstand
-   (`--halo-slack`), der den seitlichen Versatz der Lagen darunter zudecken
-   sollte. Solange die unteren Lagen auf ihre Textbreite zusammenfielen, war
-   das nötig. Seit alle Lagen auf Zellbreite stehen, richtet derselbe Zuschlag
-   nur noch Schaden an: gemessen an 94 Zetteln überdeckte er in **261 von 282**
-   Fällen den Rahmen der Lage darunter, bis zu **10,08 px** — die Abdrücke sahen
-   an den Seiten abgeschnitten aus. Gespart hätte er dafür wenig: ohne ihn liegt
-   in **17 von 282** Fällen etwas vom Wort darunter frei, höchstens **3,82 px**,
-   und das ist gerade der Rand des Kastens, kaum je ein Buchstabe.
-
-   Vom Maintainer am Gerät gesehen. 261 beschnittene Rahmen gegen 17 Zipfel ist
-   kein Tausch, den man macht.
+   **Bewusst KEIN seitlicher Zuschlag über die Zelle hinaus:** er beschnitte den
+   Rahmen der Lage darunter fast überall (→ docs/pinnwand-layout.md,
+   „Stempelstapel").
 
    Die zyklische Prozentangabe (`100%` an einem Grid-Element, dessen Spur sich
    nach dem Inhalt richtet) soll die Spur laut Spezifikation NICHT aufblähen.
@@ -1894,23 +1427,15 @@ const handlePostponeConfirm = async (targetDate: string) => {
    aussehen als hier, ist das die erste Stelle zum Nachsehen.
 
    `--note-paper` kommt vom `.zettel` und wird vererbt (weiß / gelb /
-   Packpapier je nach Typ) — der Halo trifft damit die Farbe DIESES Zettels,
-   nicht die des Standardpapiers.
-
-   Das `text-align: center` stand bis zum 05.09.2026 HIER und gehört jetzt an
-   `.stamp-layer` — die Begründung steht dort. */
+   Packpapier je nach Typ). */
 .stamp-layer--top {
   background: var(--note-paper);
 }
 
 /* Die unteren Lagen bleiben durchsichtig und lugen an den Rändern hervor —
-   dort, und nur dort, steckt die sichtbare Stapelhöhe. 40 % für Lage 0
-   (Grundabdruck), 60 % für Lage 1; nach oben also immer prominenter.
-
-   Die Regel hängt an der STUFE, nicht am Wort: an einem gewöhnlichen Zettel ist
-   Lage 1 `WICHTIG`, an einem Projekt ein zweiter Projektspruch (seit
-   05.09.2026, → `stampLayers`). Bis dahin stand hier „60 % für WICHTIG" — das
-   las sich, als gälte die Deckung nur dort. */
+   dort, und nur dort, steckt die sichtbare Stapelhöhe. 40 % für Lage 0,
+   60 % für Lage 1; nach oben immer prominenter. Die Regel hängt an der STUFE,
+   nicht am Wort (am Projekt ist Lage 1 ein Projektspruch). */
 .stamp-layer--under.stamp-layer--l0 {
   opacity: 0.4;
 }
@@ -1921,26 +1446,17 @@ const handlePostponeConfirm = async (targetDate: string) => {
 
 /* Eine noch nicht gestempelte Lage: unsichtbar, aber **weiterhin gemessen**.
 
-   `visibility: hidden` und nicht `display: none` — das ist der ganze Punkt.
-   Ein `display: none`-Kind fällt aus dem Grid und damit aus der Breite; die
-   Fußzeile wüchse dann bei jedem Tipp, und die Wand packt nach einem Tipp
-   NICHT neu (`layoutSignature` in `WallView.vue` kennt `emphasis_level` nicht,
-   → ADR-0002). Das Layout schöbe sich unter dem Finger weg oder bliebe falsch
-   gepackt stehen. So hat der Stapel seinen Platz von Anfang an, unabhängig von
-   der Stufe. Ausführlich bei `stampLayers` im Skript.
-
-   Der Preis, benannt: JEDER Zettel ist so breit wie sein dreilagiger Stapel,
-   auch der ungestempelte. Das ist gemessen und gehört zur Breitenfrage aus
-   Ticket `78`, nicht hierher. */
+   `visibility: hidden` und nicht `display: none` — das ist der ganze Punkt:
+   ein `display: none`-Kind fiele aus dem Grid und damit aus der Breite, und
+   die Fußzeile wüchse bei jedem Tipp (→ `stampLayers` im Skript, ADR-0003). */
 .stamp-layer--reserved {
   visibility: hidden;
 }
 
-/* --- Punkte als aufgeklebter Sticker (Ticket 00a) --------------------------
+/* --- Punkte als aufgeklebter Sticker ----------------------------------------
    Die Form ist die Botschaft: ein Kreis ist eine Kleinigkeit, ein Stern die
-   dickste Aufgabe auf der Wand. Wer die Wand überfliegt, sucht die Sterne —
-   und muss dafür keine Zahl lesen. Funktioniert auch bei Farbenblindheit,
-   weil die Silhouette trägt, nicht nur die Farbe.
+   dickste Aufgabe auf der Wand — lesbar ohne Zahl und auch bei
+   Farbenblindheit, weil die Silhouette trägt, nicht nur die Farbe.
 
      0–1 P  Kreis                ruhig, blass
        2 P  abgerundetes Quadrat
@@ -1949,13 +1465,12 @@ const handlePostponeConfirm = async (targetDate: string) => {
        5 P  Stern                Gold, der Blickfang
 
    Alle Formen haben dieselbe Kantenlänge (der Stern fällt bewusst aus der
-   Reihe, siehe dort); nur Silhouette und Farbe unterscheiden sie. Der
-   Schatten kommt aus `drop-shadow`, nicht `box-shadow`: ein `box-shadow` legt
-   sich um das RECHTECK und wäre am Stern als Kasten sichtbar.
+   Reihe, siehe dort). Der Schatten kommt aus `drop-shadow`, nicht
+   `box-shadow`: ein `box-shadow` legt sich um das RECHTECK und wäre am Stern
+   als Kasten sichtbar.
 
-   Die Farben sind geraten (blass/blau/grün/orange/gold) und konkurrieren mit
-   den Personenfarben am Zettelrand — eine kuratierte Palette ist bewusst
-   Out of Scope für dieses Ticket (siehe `HANDOFF-kartengroesse.md`). */
+   Die Farben sind gesetzt, nicht gegen die Personenfarben geprüft — eine
+   kuratierte Palette ist offen. */
 .points {
   display: grid;
   place-items: center;
@@ -1997,14 +1512,11 @@ const handlePostponeConfirm = async (targetDate: string) => {
 /* Der Stern ist absichtlich der einzige, der aus der Reihe fällt: größer,
    golden, stärker geneigt. Fünf Punkte sind der Ausreißer.
 
-   Korrektur 26.08.2026: hier stand "Werte über 5 (Bonus-Unteraufgaben) fallen
-   ebenfalls hierauf — bekannt offen". Das trifft nicht zu. tasks.effort und
-   task_completions.effort_override tragen beide einen CHECK auf höchstens 5;
-   'bonus' bedeutet eine eigene Completion-Zeile mit eigenem Wert ≤ 5, nicht
-   eine Summe. In 2910 Completions kommt kein Wert über 5 vor. Das Math.min(5, …)
-   in pointsShapeClass ist für Nicht-Projekte damit reine Vorsorge. Real werden
-   Werte über 5 erst, wenn die Punkte-Skala verdoppelt wird — dann fällt mit der
-   CHECK-Grenze auch diese Palette an (Backlog: 51 und 40). */
+   Werte über 5 gibt es nicht: `tasks.effort` und
+   `task_completions.effort_override` tragen beide einen CHECK auf höchstens 5,
+   `bonus` ist eine eigene Completion mit eigenem Wert ≤ 5. Das `Math.min(5, …)`
+   in `pointsShapeClass` ist für Nicht-Projekte reine Vorsorge; fällt die
+   CHECK-Grenze, fällt auch diese Palette an. */
 .points--s5 {
   width: 39.1px;
   height: 39.1px;
@@ -2025,52 +1537,34 @@ const handlePostponeConfirm = async (targetDate: string) => {
   );
 }
 
-/* --- Projekt-Abzeichen statt Punkte-Sticker (Ticket 03-3) ------------------
-   Ein Projekt hat keine feste Punktzahl mehr. An derselben Stelle steht, wie
-   viele Punkte es bis jetzt VERSCHLUNGEN hat — eine Bilanz, kein Versprechen.
-   Das Bild ist deshalb bewusst ein anderes: keine aufgeklebte Form, sondern
-   eine **Siegelmarke mit umlaufender Skala**.
-
-   Warum getrennt von `.points--s0…s5`: dort bedeutet die Form eine PUNKTZAHL
-   (Kreis 1 … Stern 5). Ein Projekt mit 21 Punkten hätte über `Math.min(5, …)`
-   den goldenen Fünf-Punkte-Stern getragen und sich als „5 Punkte" gelesen
-   statt als „Stufe 5". Die Sticker-Regeln bleiben unangetastet; hier steht
-   ein eigenes Bild daneben.
+/* --- Projekt-Abzeichen statt Punkte-Sticker ---------------------------------
+   An dieser Stelle steht beim Projekt, wie viele Punkte es bis jetzt
+   VERSCHLUNGEN hat — eine Bilanz, kein Versprechen. Das Bild ist deshalb ein
+   anderes: eine **Siegelmarke mit umlaufender Skala**, getrennt von
+   `.points--s0…s5` (Begründung bei `badgeStage` im Skript).
 
    **Zwei Merkmale tragen die fünf Stufen**, ein drittes schmückt nur:
 
      1. **Wie dunkel die Marke ist.** Die Scheibe läuft von fast weißem Papier
         (Stufe 1) bis nahezu Tinte (Stufe 5); ab Stufe 4 kippt die Schrift auf
-        Papierfarbe. Der Sprung hell→dunkel ist auf Armlänge sichtbar. Die
-        Rampe ist streng monoton in der Luminanz (0,921 / 0,615 / 0,325 /
-        0,138 / 0,046), Nachbarabstände 1,46 / 1,77 / 2,00 / 1,96 — ab b2
-        aufwärts trägt sie deshalb bei jeder Farbfehlsichtigkeit unverändert.
-        Nur das schwächste Paar b1↔b2 (1,46) stützt sich zusätzlich auf den
-        Tonwechsel cremeweiß→blassblau; wer weder Ton noch diese 1,46 sieht,
-        unterscheidet die beiden untersten Stufen nicht. Der Umschlag der
-        Ziffer auf Papierfarbe ab b4 ist am Bild der schärfste Einzelhinweis,
-        deutlicher als der Helligkeitsschritt selbst.
-     2. **Der Umriss.** Stufe 5 ist die einzige mit Zackenkranz (ein gestanztes
-        Siegel statt einer glatten Scheibe) — die Silhouette allein sagt
-        „ab 100", ohne Farbe und ohne Zahl.
+        Papierfarbe — der schärfste Einzelhinweis. Die Rampe ist streng monoton
+        in der Luminanz und trägt ab b2 bei jeder Farbfehlsichtigkeit; nur das
+        schwächste Paar b1↔b2 stützt sich zusätzlich auf den Tonwechsel
+        cremeweiß→blassblau.
+     2. **Der Umriss.** Stufe 5 ist die einzige mit Zackenkranz — die
+        Silhouette allein sagt „ab 100", ohne Farbe und ohne Zahl.
 
-   **Die Skala am Rand trägt NICHT** — sie sieht in der Abnahme aus wie eine
-   Kontur, nicht wie ein Füllstand. In 3,4 px Bandbreite bei 34 px Marke ist
-   der Unterschied zwischen 80 % und 100 % Füllung am Bild nicht auszumachen,
-   und auf b5 frisst der Zackenkranz das Band zusätzlich an; ablesbar wird sie
-   erst bei drei- bis vierfacher Vergrößerung. Sie bleibt als Schmuck, weil sie
-   der Marke ihre Siegelform gibt — wer sich auf sie als ordinalen Träger
-   verlässt, verlässt sich auf nichts. Ein früherer Kommentar hier behauptete
-   genau das; er war die Absicht, nicht der Befund.
+   **Die Skala am Rand trägt NICHT** — in 3,4 px Bandbreite sieht sie aus wie
+   eine Kontur, nicht wie ein Füllstand. Sie bleibt als Schmuck, weil sie der
+   Marke ihre Siegelform gibt; wer sich auf sie als ordinalen Träger verlässt,
+   verlässt sich auf nichts.
 
    Die Bänder (0–9, 10–24, 25–49, 50–99, ab 100) stehen im Skript
    (`badgeStage`), nicht hier.
 
-     Fläche: 34 × 34 px wie der frühere Punkte-Sticker, auf ALLEN Stufen. Das
-     Abzeichen wächst bewusst nicht wie `.points--s5` (39,1 px) — die
-     Sticker-Ausnahme war genau der Grund, warum ein dreistelliger Wert bisher
-     39 statt 34 px maß. Die Zahl passt über `points--fitN` (unten), nicht über
-     eine größere Fläche. */
+     Fläche: 34 × 34 px auf ALLEN Stufen. Das Abzeichen wächst bewusst nicht
+     wie `.points--s5` (39,1 px); die Zahl passt über `points--fitN` (unten),
+     nicht über eine größere Fläche. */
 .points--badge {
   --badge-arc: 20%;
   --badge-disc: color-mix(in srgb, var(--pw-accent) 4%, var(--pw-paper));
@@ -2182,13 +1676,10 @@ const handlePostponeConfirm = async (targetDate: string) => {
 /* Passung: die Schriftgröße folgt der STELLENZAHL, die Fläche bleibt 34 px.
    Gerechnet gegen die freie Innenfläche von ~26,5 px (Ring 3,4 px + Kontur):
 
-     1–2 Stellen  14,3 px  →  bis ~18,9 px breit  (unverändert wie am Sticker)
+     1–2 Stellen  14,3 px  →  bis ~18,9 px breit  (wie am Sticker)
      3 Stellen    11,6 px  →  ~20,7 px
-     `999+`        10 px    →  ~22,4 px
-
-   `999+` lag zuerst bei 9,6 px und damit unter `--font-xs`, dem kleinsten
-   Schriftmaß des Projekts. Gemessen waren es 21,5 px in 26,5 px Fläche — die
-   Luft reichte, also steht dort jetzt das Token statt einer eigenen Zahl.
+     `999+`        10 px    →  ~22,4 px  (`--font-xs`, nicht kleiner als das
+                                          kleinste Schriftmaß des Projekts)
 
    Steht NACH den Stufenregeln, damit es sie in der Schriftgröße schlägt. */
 .points--fit1,
@@ -2206,15 +1697,12 @@ const handlePostponeConfirm = async (targetDate: string) => {
   letter-spacing: -0.3px;
 }
 
-/* --- Zeichen für Unteraufgaben (Ticket 00a) --------------------------------
+/* --- Zeichen für Unteraufgaben ---------------------------------------------
    Ein angeklammerter Stapel: Papier mit gestricheltem Rand, damit er zu den
    Zettelchen gehört, die er ankündigt — und nicht zu den beiden Griffen
-   rechts, die etwas mit dem GANZEN Zettel tun.
-
-   Immer sichtbar, auch bei `daily` und reinen Checklisten — vorher verriet
-   nur die Fortschrittszahl die Existenz von Unteraufgaben, und die fehlte an
-   genau diesen beiden Zetteltypen ganz (→ `tracksProgress` im Skript).
-   Aufgeklappt kippt die Farbe um, damit man den Weg zurück findet. */
+   rechts, die etwas mit dem GANZEN Zettel tun. Immer sichtbar, auch bei
+   `daily` (→ `tracksProgress` im Skript). Aufgeklappt kippt die Farbe um,
+   damit man den Weg zurück findet. */
 .subs-badge {
   display: flex;
   align-items: center;
@@ -2262,11 +1750,9 @@ const handlePostponeConfirm = async (targetDate: string) => {
   margin: 11px 0 2px;
   padding-top: 9px;
   border-top: 1.5px dashed rgba(36, 31, 26, 0.35);
-  /* Unten Platz für den Bearbeiten-Knopf lassen (Karten-Redesign, Ticket
-     00a): der sitzt jetzt UNTEN rechts (44 px, `bottom: 0`) statt oben — bei
-     aufgeklapptem Zettel gibt es KEIN `.ear` mehr (siehe dort), aber `.edit`
-     bleibt, und ohne dieses Polster läge die letzte Zeile der Zettelchen
-     genau darunter. */
+  /* Unten Platz für den Bearbeiten-Knopf (44 px, `bottom: 0`): aufgeklappt gibt
+     es KEIN `.ear` (siehe dort), aber `.edit` bleibt, und ohne dieses Polster
+     läge die letzte Zeile der Zettelchen genau darunter. */
   padding-bottom: 44px;
 }
 
@@ -2277,7 +1763,7 @@ const handlePostponeConfirm = async (targetDate: string) => {
      Zettelchen über seine Spalte hinaus: die Vorgabe ist `min-width: auto`,
      also die inhaltliche Mindestbreite. */
   min-width: 0;
-  /* Untergrenze der Spec. Sie ist zugleich die Bedingung dafür, dass der
+  /* Untergrenze für Trefferflächen — und die Bedingung dafür, dass der
      40-px-Griff vollständig ins Zettelchen passt. */
   min-height: 44px;
   display: flex;
@@ -2400,8 +1886,7 @@ const handlePostponeConfirm = async (targetDate: string) => {
   border-top: 1.2px dashed rgba(36, 31, 26, 0.4);
 }
 
-/* Am Finger: das Zettelchen liegt über seinen Nachbarn (Rest inline, weil der
-   Betrag am Zug hängt). */
+/* Am Finger (Lage und Anheben inline, weil der Betrag am Zug hängt). */
 .mini--tearing {
   border-style: dashed;
 }
@@ -2453,15 +1938,9 @@ const handlePostponeConfirm = async (targetDate: string) => {
   width: max-content;
 }
 
-/* Der Bearbeiten-Knopf sitzt jetzt UNTEN rechts, unmittelbar links neben dem
-   Eselsohr — beide 44 × 44 px, nebeneinander in der Griffzeile (Karten-
-   Redesign, Ticket 00a). Vorher saß er oben rechts und nahm dem Titel eine
-   ganze Zeile weg; jetzt bekommt der Titel die ganze obere Kante.
-
-   Der `clip-path`-Ausschnitt im Eselsohr, der ihn dort früher vor dem Ohr
-   schützte, entfällt damit ERSATZLOS (samt der vermessenen Geometrie, siehe
-   `.ear` unten) — beide Griffe teilen sich keine Fläche mehr, jeder hat seine
-   eigenen vollen 44 × 44 px. */
+/* Der Bearbeiten-Knopf sitzt UNTEN rechts, unmittelbar links neben dem
+   Eselsohr — beide 44 × 44 px, nebeneinander in der Griffzeile, ohne geteilte
+   Fläche. Oben bekommt der Titel dadurch die ganze Kante. */
 .edit {
   position: absolute;
   bottom: 0;
@@ -2483,20 +1962,13 @@ const handlePostponeConfirm = async (targetDate: string) => {
   transform: translate(1px, 1px);
 }
 
-/* --- Das Eselsohr: der Abreiß-Griff (Etappe 4) ---------------------------- */
+/* --- Das Eselsohr: der Abreiß-Griff ---------------------------------------- */
 
 /* 44 × 44 px Kasten in der unteren rechten Ecke SEINES Zettels — `right: 0;
    bottom: 0`, kein negativer Versatz: der würde den Griff über die Kante
    schieben und im dichten Packen den Nachbarzettel betätigen, also die
    falsche Aufgabe erledigen. Unsichtbar, nur durch Abtasten der Ecken zu
    finden — deshalb bündig.
-
-   **Kein `clip-path`-Ausschnitt mehr** (Karten-Redesign, Ticket 00a): er
-   existierte nur, damit das Stiftsymbol des Bearbeiten-Knopfes — der vorher
-   OBEN rechts saß — nicht unter dem Eselsohr verschwand. Jetzt sitzt der
-   Stift UNTEN links daneben (→ `.edit`), beide teilen sich keine Fläche mehr,
-   und das Eselsohr ist ein volles Quadrat: seine Trefferfläche wächst von
-   rund 1500 auf rund 1936 px².
 
    `touch-action: none` ist die zweite Hälfte des Scroll-Schutzes: nur so wird
    aus einem Zug nach unten überhaupt eine Geste statt eines Bildlaufs.
@@ -2589,7 +2061,7 @@ const handlePostponeConfirm = async (targetDate: string) => {
   cursor: grabbing;
 }
 
-/* --- Long-Press: der Zettel unter den Beschriftungen (Ticket 10) ----------- */
+/* --- Long-Press: der Zettel unter den Beschriftungen ------------------------ */
 
 /* Er hebt sich ab wie beim Abreißen, und aus demselben Grund mit `!important`:
    den z-index schreibt `WallView` als Inline-Style.
@@ -2598,25 +2070,17 @@ const handlePostponeConfirm = async (targetDate: string) => {
    ein Zettel, der beim Auslösen wächst oder springt, rutschte also unter der
    stehenden Geste weg. Der Zustand ist deshalb rein farblich.
 
-   **Zwei Klassen am selben Element (0,2,0), nicht eine (0,1,0) — und das ist
-   kein Stilmittel, sondern eine Reparatur.** `.zettel--project` steht weiter
-   unten und setzt einen eigenen `box-shadow` (`4px 4px 0`). Bei gleicher
-   Spezifität gewinnt die spätere Regel: der Hebe-Schatten erreichte den
-   Projekt-Zettel **nie**. Gemessen (QC): Projekt ruhend gegen gehalten
-   0 geänderte Pixel, beide PNGs bitgleich — die Klasse stand am Element, die
-   Wirkung kam nicht an. Genau das trifft am Projekt am härtesten, weil dort
-   seit Ticket 03 gar kein Richtungskranz mehr erscheint und dieser Zustand
-   die EINZIGE Rückmeldung auf das Halten ist. `!important` wäre hier falsch
-   (es überschriebe auch spätere absichtliche Ausnahmen), Umsortieren ebenso
-   (es risse die anderen Typregeln mit).
+   **Zwei Klassen am selben Element (0,2,0), nicht eine (0,1,0).**
+   `.zettel--project` steht weiter unten und setzt einen eigenen `box-shadow`;
+   bei gleicher Spezifität gewönne die spätere Regel, und der Hebe-Schatten
+   erreichte den Projekt-Zettel nie — dort ist dieser Zustand ohne Kranz die
+   EINZIGE Rückmeldung auf das Halten. `!important` wäre hier falsch (es
+   überschriebe auch spätere absichtliche Ausnahmen), Umsortieren ebenso (es
+   risse die anderen Typregeln mit).
 
-   **Warum zusätzlich `filter`.** Der Hebe-Schatten allein ist am Projekt fast
-   stumm: dessen Ruheschatten ist mit `4px 4px 0` opak ohnehin der kräftigste
-   der drei Zetteltypen, `7px 10px 0` bei 35 % Deckkraft ist breiter, aber
-   blasser — überschlägig gleich viel Tinte. Das Papier hebt sich deshalb
-   zusätzlich ins Licht: dieselbe Aussage wie der Schatten (der Zettel liegt
-   nicht mehr auf, er wird gehalten), nur trägt sie hier die ganze Fläche
-   statt eines Randstreifens.
+   **Warum zusätzlich `filter`:** der Hebe-Schatten allein ist am Projekt fast
+   stumm, dessen Ruheschatten ist ohnehin der kräftigste. Das Papier hebt sich
+   deshalb zusätzlich ins Licht — dieselbe Aussage, über die ganze Fläche.
 
    Bewusst KEIN `transform`: die Zettel tragen ihre Neigung als Inline-Style
    (siehe `noteStyle`), und `.zettel--tearing` schiebt sie dem Finger nach —
@@ -2634,18 +2098,10 @@ const handlePostponeConfirm = async (targetDate: string) => {
 
 /* Weit genug gezogen: Loslassen erledigt. Die Perforation reißt sichtbar auf.
 
-   `border-color` steht hier bewusst dazu (QC-Befund, Ticket 10): ohne sie
-   erbt der Umriss `transparent` von der Basisregel, und ein `dashed`-Umriss
-   in Transparent zeigt nichts an. Bei 48 von 49 Zetteln auf der Testwand war
-   „reißt gleich ab" damit faktisch stumm, nur die Perforationslinie am
-   Eselsohr blieb (24 × 2 px statt einem Umriss ums ganze Papier). Neutrale
-   Tintenfarbe (`--pw-line`, dieselbe wie an Reißzwecken-Kontur,
-   Büroklammern und Projekt-Umriss) macht den Umriss sichtbar — jetzt auf
-   JEDEM Zettel gleich, seit die Zuweisungsfarbe nach der Korrektur zu
-   Ticket 10 nicht mehr am Rahmen steht, sondern nur noch an der Reißzwecke.
-   (Vorher überschrieb `.zettel.zettel--assigned` diese Farbe an zugewiesenen
-   Zetteln mit der Personenfarbe — die Regel gibt es seit der Korrektur nicht
-   mehr.) */
+   `border-color` steht hier bewusst dazu: ohne sie erbt der Umriss
+   `transparent` von der Basisregel, und ein `dashed`-Umriss in Transparent
+   zeigt nichts an. Neutrale Tintenfarbe (`--pw-line`, wie Reißzwecken-Kontur,
+   Büroklammern und Projekt-Umriss), auf JEDEM Zettel gleich. */
 .zettel--tear-ready {
   border-style: dashed;
   border-color: var(--pw-line);
@@ -2657,12 +2113,8 @@ const handlePostponeConfirm = async (targetDate: string) => {
 }
 
 /* Der Knick wächst beim Ziehen nur in die Breite, seine Höhe bleibt bei
- * 22 px. Vorgeschichte: er wuchs früher auch in der Höhe, was in den (jetzt
- * entfallenen) `clip-path`-Ausschnitt des Bearbeiten-Knopfes ragte — seit
- * `.edit` unten neben statt oben über dem Eselsohr sitzt (Karten-Redesign,
- * Ticket 00a), gibt es diese Kollision gar nicht mehr. Die Breite genügt
- * trotzdem als Ankündigung: ein breiterer Knick liest sich als größeres
- * Eselsohr, und daneben stehen ohnehin schon der gestrichelte Rand des
+ * 22 px. Die Breite genügt als Ankündigung: ein breiterer Knick liest sich als
+ * größeres Eselsohr, und daneben stehen ohnehin der gestrichelte Rand des
  * Zettels und die aufleuchtende Perforationslinie. */
 .zettel--tear-ready .ear::before {
   width: 27px;
@@ -2671,7 +2123,7 @@ const handlePostponeConfirm = async (targetDate: string) => {
 /* --- Typ 1: offene Putzaufgabe — weißes Papier, Reißzwecke ---------------- */
 /* Ragt über die Oberkante des Zettels; die Wand hält oben Platz dafür frei.
    Wer diesen Wert oder die Maße ändert, ändert `FASTENERS` in
-   `src/lib/wallLayout.ts` mit (Ticket 04). */
+   `src/lib/wallLayout.ts` mit. */
 .pin {
   position: absolute;
   top: -7px;
@@ -2680,22 +2132,17 @@ const handlePostponeConfirm = async (targetDate: string) => {
   width: 14px;
   height: 14px;
   border-radius: 50%;
-  /* Reines Ornament, kein Bedienelement (`aria-hidden`, keine Handler) — ragt
-     mit `top: -7px` über den eigenen Zettelrand hinaus und lag als Kind mit
-     eigener Box im Trefferbereich des Nachbarn darunter, obwohl der
-     Zettelkörper selbst sich gar nicht überlappte (QC-Befund, Ticket 11).
-     `pointer-events: none` nimmt sie aus dem Hit-Test: der Teil über dem
-     EIGENEN Zettel fällt durch auf `.zettel` selbst (unverändertes
-     Verhalten, die Handler sitzen am Wurzelelement, nicht hier), nur der
-     überstehende Teil gibt jetzt an den wirklich darunterliegenden Nachbarn
-     weiter. */
+  /* Reines Ornament, kein Bedienelement (`aria-hidden`, keine Handler). Sie ragt
+     mit `top: -7px` über den eigenen Zettelrand und läge sonst mit eigener Box
+     im Trefferbereich des Nachbarn darunter. `pointer-events: none` nimmt sie
+     aus dem Hit-Test: über dem EIGENEN Zettel fällt der Treffer auf `.zettel`
+     (dort sitzen die Handler), der überstehende Teil geht an den wirklich
+     darunterliegenden Nachbarn. */
   pointer-events: none;
-  /* Trägt die Zuweisungsfarbe (Ticket 10) — mit Zuständigkeit `--owner`,
-     ohne die gedämpfte `--owner-none` von oben. Ihre eigene Tintenkontur
-     (`border` gleich darunter) hält sie auch farblos sichtbar. Anders als
-     der Rahmen des Zettels bleibt die Reißzwecke IMMER sichtbar: sie ist die
-     einzige Stelle am Zettel, die auch „niemand zuständig" aktiv zeigt statt
-     nur das Fehlen eines Signals. */
+  /* Trägt die Zuweisungsfarbe — mit Zuständigkeit `--owner`, ohne die gedämpfte
+     `--owner-none` von oben. Ihre eigene Tintenkontur (`border` gleich darunter)
+     hält sie auch farblos sichtbar; so zeigt sie auch „niemand zuständig" aktiv
+     statt nur das Fehlen eines Signals. */
   background: var(--owner, var(--owner-none));
   border: 2px solid var(--pw-line);
   box-shadow:
@@ -2725,7 +2172,7 @@ const handlePostponeConfirm = async (targetDate: string) => {
    ist, schlägt die Drehung bei ihm am stärksten durch. Die Wand hält oben Platz
    dafür frei; gerechnet wird das in `FASTENERS` / `overhangOf` in
    `src/lib/wallLayout.ts`. Wer `top`, `width`, `height` oder die Drehung
-   ändert, ändert die Zeile dort mit (Ticket 04). */
+   ändert, ändert die Zeile dort mit. */
 .tape {
   position: absolute;
   top: -9px;
@@ -2733,9 +2180,8 @@ const handlePostponeConfirm = async (targetDate: string) => {
   margin-left: -23px;
   width: 46px;
   height: 16px;
-  /* Trägt die Zuweisungsfarbe (Ticket 03) — die dritte Befestigungssorte,
-     Ticket 10 hatte nur die Reißzwecke geregelt. ZWEI bewusste Abweichungen
-     von `.pin` und `.clip`, bitte nicht „angleichen":
+  /* Trägt die Zuweisungsfarbe wie jede Befestigung — mit ZWEI bewussten
+     Abweichungen von `.pin` und `.clip`, bitte nicht „angleichen":
 
      1. Durchscheinend, nicht deckend. `user_color` ist ein roher Hexwert ohne
         Alphakanal, die 62 % müssen deshalb beim Mischen entstehen. Ein
@@ -2744,9 +2190,8 @@ const handlePostponeConfirm = async (targetDate: string) => {
         (`border` gleich darunter) und den Schlagschatten durch. Der Streifen
         soll Klebeband bleiben, kein buntes Washi-Tape.
      2. OHNE Zuständigkeit KEIN Rückfall auf `--owner-none`, sondern
-        durchscheinendes Weiß — exakt das bisherige Bild. Reißzwecke und
-        Büroklammer zeigen „niemand zuständig" aktiv an, der Klebestreifen
-        nicht. Nutzerentscheidung (Q32/Q33). */
+        durchscheinendes Weiß. Reißzwecke und Büroklammer zeigen „niemand
+        zuständig" aktiv an, der Klebestreifen nicht — Nutzerentscheidung. */
   background: color-mix(in srgb, var(--owner, #ffffff) 62%, transparent);
   border: 1.5px solid rgba(36, 31, 26, 0.42);
   transform: rotate(-4deg);
@@ -2767,12 +2212,9 @@ const handlePostponeConfirm = async (targetDate: string) => {
     rgba(0, 0, 0, 0.045) 0 1px,
     transparent 1px 7px
   );
-  /* Keine eigene `border-width` mehr (vormals 3px): die Basisregel liefert
-     jetzt für alle drei Zetteltypen dieselbe Dicke (2px, konturlos, siehe
-     `.zettel` oben) — sie trägt nur noch die Fläche für den neutralen
-     „reißt gleich ab"-Umriss (`.zettel--tear-ready`), gleich breit auf jedem
-     Zetteltyp. Eine schmalere Ausnahme hier hätte diesen Umriss am
-     Projekt-Zettel dünner gemacht als an den anderen beiden Typen. */
+  /* Keine eigene `border-width`: die Basisregel liefert allen Zetteltypen
+     dieselbe Dicke, damit der „reißt gleich ab"-Umriss (`.zettel--tear-ready`)
+     auf jedem Typ gleich breit ist. */
   border-radius: 0;
   box-shadow: 4px 4px 0 var(--pw-line);
   padding-top: 11px;
@@ -2786,7 +2228,7 @@ const handlePostponeConfirm = async (targetDate: string) => {
 /* Ragt über die Oberkante des Zettels; die Wand hält oben Platz dafür frei.
    Wer diesen Wert, die Maße oder die Kantenlage und Drehung von
    `.clip--l`/`.clip--r` ändert, ändert `FASTENERS` in `src/lib/wallLayout.ts`
-   mit (Ticket 04). Die Kantenlage ist dort der wichtigste Teil: `left: 12px`
+   mit. Die Kantenlage ist dort der wichtigste Teil: `left: 12px`
    bzw. `right: 12px` geht als `inset` (12 + halbe Breite) in die Rechnung ein
    und ist bei breiten Zetteln der DOMINIERENDE Beitrag — eine Klammer an der
    Kante fährt mit der Neigung des Zettels nach oben. */
@@ -2797,13 +2239,10 @@ const handlePostponeConfirm = async (targetDate: string) => {
   height: 20px;
   border: 2.5px solid var(--pw-line);
   border-radius: 3px;
-  /* Trägt die Zuweisungsfarbe (Ticket 10, nachgezogen in 03-3) — dieselbe
-     Regel wie an der Reißzwecke: mit Zuständigkeit `--owner`, ohne die
-     gedämpfte `--owner-none` vom Zettel. An `.zettel--project` gibt es keine
-     Reißzwecke, die Regel dort griff bis jetzt ins Leere; das Papier war die
-     einzige Stelle, an der ein Projekt gar keine Zuständigkeit zeigte.
-     Vorher fest #b9b3a6 („Metall"). Die eigene Tintenkontur (`border` oben)
-     hält die Klammer auch in der neutralen Fassung sichtbar. */
+  /* Trägt die Zuweisungsfarbe — dieselbe Regel wie an der Reißzwecke: mit
+     Zuständigkeit `--owner`, ohne die gedämpfte `--owner-none` vom Zettel. Die
+     eigene Tintenkontur (`border` oben) hält die Klammer auch in der neutralen
+     Fassung sichtbar. */
   background: var(--owner, var(--owner-none));
   box-shadow: 1px 2px 0 rgba(0, 0, 0, 0.25);
   /* Ornament, kein Bedienelement — Begründung bei `.pin`. `pointer-events`
@@ -2830,7 +2269,7 @@ const handlePostponeConfirm = async (targetDate: string) => {
    Beitrag zum Überstand, größer als `top` und die Drehung zusammen. Die Wand
    hält oben Platz dafür frei. Wer hier `left`/`right` oder die Drehung ändert,
    ändert `FASTENERS` in `src/lib/wallLayout.ts` mit — dort stehen beide
-   Klammern als getrennte Zeilen mit `anchor` und `inset` (Ticket 04). */
+   Klammern als getrennte Zeilen mit `anchor` und `inset`. */
 .clip--l {
   left: 12px;
   transform: rotate(-7deg);
