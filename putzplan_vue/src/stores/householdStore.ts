@@ -18,6 +18,7 @@ import {
 } from '@/lib/weekWindow'
 import type { RealtimeChannel } from '@supabase/supabase-js'
 import { createLatestRunGuard } from '@/lib/latestRun'
+import { onSessionEnd } from '@/lib/sessionEnd'
 
 /** Grenzen des Wochenziels — identisch zum CHECK auf `households`. */
 export const MIN_WEEKLY_GOAL_POINTS = 1
@@ -75,13 +76,19 @@ export const useHouseholdStore = defineStore('household', () => {
       console.error('No user logged in')
       return
     }
+    const userId = authStore.user.id
+    // Endet die Sitzung, während die Antwort unterwegs ist, gehört sie einem
+    // Konto, das nicht mehr angemeldet ist — dann nichts mehr setzen.
+    const stillSameUser = () => authStore.user?.id === userId
 
     // 1. Finde household_member Eintrag für diesen User
     const { data: memberData, error: memberError } = await supabase
       .from('household_members')
       .select('*')
-      .eq('user_id', authStore.user.id)
+      .eq('user_id', userId)
       .maybeSingle()
+
+    if (!stillSameUser()) return
 
     if (memberError) {
       console.error('Error loading household member:', memberError)
@@ -91,6 +98,11 @@ export const useHouseholdStore = defineStore('household', () => {
 
     if (!memberData) {
       console.log('User has no household')
+      // Leeren, nicht stehen lassen: sonst behält ein Konto ohne Haushalt den
+      // des vorigen, und der Router-Guard lässt es nie zur Einrichtung.
+      unsubscribeFromHouseholdSettings()
+      currentHousehold.value = null
+      householdMembers.value = []
       return
     }
 
@@ -100,6 +112,8 @@ export const useHouseholdStore = defineStore('household', () => {
       .select('*')
       .eq('household_id', memberData.household_id)
       .single()
+
+    if (!stillSameUser()) return
 
     if (householdError) {
       console.error('Error loading household:', householdError)
@@ -131,12 +145,17 @@ export const useHouseholdStore = defineStore('household', () => {
     // `household_members` (Farbe, Name) kann sie zwischen zwei Ladevorgängen
     // still kippen. Beitrittsdatum ist die fachliche Ordnung; `user_id` ist
     // der Tiebreaker, falls `joined_at` fehlt oder zweimal gleich ist.
+    const householdId = currentHousehold.value.household_id
     const { data, error } = await supabase
       .from('household_members')
       .select('user_id, household_id, display_name, user_color')
-      .eq('household_id', currentHousehold.value.household_id)
+      .eq('household_id', householdId)
       .order('joined_at', { ascending: true, nullsFirst: true })
       .order('user_id', { ascending: true })
+
+    // Haushalt inzwischen gewechselt oder Sitzung beendet: die Antwort
+    // gehört nicht mehr zum angezeigten Haushalt.
+    if (currentHousehold.value?.household_id !== householdId) return
 
     if (error) {
       console.error('Error loading household members:', error)
@@ -292,7 +311,9 @@ export const useHouseholdStore = defineStore('household', () => {
       console.error('Error promoting pending week start:', error)
       return
     }
-    if (data) currentHousehold.value = data
+    if (data && currentHousehold.value?.household_id === data.household_id) {
+      currentHousehold.value = data
+    }
   }
 
   /** Wochenstart, gegen den die geladenen Erledigungen gezogen wurden. */
@@ -307,6 +328,7 @@ export const useHouseholdStore = defineStore('household', () => {
     const isLatest = weeklyLoadGuard.start()
 
     await promoteDueWeekStart()
+    if (!currentHousehold.value || !isLatest()) return
 
     const weekStart = currentWeekStart()
     loadedWeekStart.value = formatDayStamp(weekStart)
@@ -501,6 +523,7 @@ export const useHouseholdStore = defineStore('household', () => {
       .maybeSingle()
 
     if (error || !data) return
+    if (currentHousehold.value?.household_id !== data.household_id) return
     currentHousehold.value = data
   }
 
@@ -684,6 +707,21 @@ export const useHouseholdStore = defineStore('household', () => {
     toastStore.showToast('Haushalt beigetreten', 'success', 3000)
     return true
   }
+
+  // Session-Ende: alles, was an Konto und Haushalt hängt, weg — auch Kanal und
+  // Sichtbarkeits-Listener. In-flight-Ladevorgänge verwerfen ihre Antwort
+  // (Wächter oben), statt den alten Haushalt zurückzuschreiben.
+  onSessionEnd(() => {
+    unsubscribeFromHouseholdSettings()
+    weeklyLoadGuard.invalidate()
+    inFlightWeeklyLoad = null
+    lastWeeklyLoadAt = 0
+    loadedWeekStart.value = null
+    currentHousehold.value = null
+    householdMembers.value = []
+    weeklyCompletions.value = []
+    optimisticWeeklyCompletions.value = []
+  })
 
   return {
     currentHousehold,

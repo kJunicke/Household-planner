@@ -6,6 +6,7 @@ import { useHouseholdStore } from './householdStore'
 import { useAuthStore } from './authStore'
 import { useToastStore } from './toastStore'
 import type { RealtimeChannel } from '@supabase/supabase-js'
+import { onSessionEnd } from '@/lib/sessionEnd'
 
 export const useNotesStore = defineStore('notes', () => {
   // State
@@ -237,6 +238,12 @@ export const useNotesStore = defineStore('notes', () => {
       realtimeChannel = null
     }
   }
+
+  // Session-Ende: die Notizen des Haushalts gehören dem nächsten Konto nicht.
+  onSessionEnd(() => {
+    unsubscribeFromNotes()
+    notes.value = []
+  })
 
   // ============================================================================
   // Return - Public API

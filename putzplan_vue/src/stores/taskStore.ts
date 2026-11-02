@@ -18,6 +18,7 @@ import {
 import { createLatestRunGuard } from '@/lib/latestRun'
 import { mergeLoadedRows, type ChangeDuringLoad } from '@/lib/rowMerge'
 import { collectKeysetPages } from '@/lib/keysetPages'
+import { onSessionEnd } from '@/lib/sessionEnd'
 
 /**
  * Optimistische Completion: trägt eine Client-Kennung, weil die `completion_id`
@@ -171,13 +172,17 @@ export const useTaskStore = defineStore('tasks', () => {
     tasksChangedDuringLoad = changedDuringLoad
 
     try {
+      const householdId = householdStore.currentHousehold.household_id
       // Nur aktive Tasks laden (deleted_at IS NULL = nicht soft-deleted)
       const { data: tasksData, error: tasksError } = await supabase
         .from('tasks')
         .select('*')
-        .eq('household_id', householdStore.currentHousehold.household_id)
+        .eq('household_id', householdId)
         .is('deleted_at', null)
 
+      // Sitzung beendet oder Haushalt gewechselt, während die Antwort
+      // unterwegs war: sie gehört nicht mehr auf diese Wand.
+      if (householdStore.currentHousehold?.household_id !== householdId) return
       if (tasksError) throw tasksError
 
       // Mergen statt ersetzen: eine fremde Änderung, die während des SELECT
@@ -1340,6 +1345,7 @@ export const useTaskStore = defineStore('tasks', () => {
       toastStore.showToast('Fehler beim Laden der Historie', 'error')
       return []
     }
+    if (householdStore.currentHousehold?.household_id !== householdId) return []
 
     // Neueste zuerst, wie es Historie und Übersicht erwarten. Gleichstand über
     // den PK, damit die Reihenfolge nicht von der Seitengrenze abhängt.
@@ -1664,6 +1670,20 @@ export const useTaskStore = defineStore('tasks', () => {
       projectTotalsTimer = null
     }
   }
+
+  // Session-Ende: Kanal, Sichtbarkeits-Listener und alle Daten des Haushalts
+  // weg. Laufende Ladevorgänge prüfen nach ihrem `await` den Haushalt und
+  // verwerfen dann ihre Antwort.
+  onSessionEnd(() => {
+    unsubscribeFromTasks()
+    stopProjectEffortTotals()
+    projectTotalsGuard.invalidate()
+    tasks.value = []
+    completions.value = []
+    projectEffortTotals.value = {}
+    undoTickets.clear()
+    pendingBypass = new Set<string>()
+  })
 
   // Return - was andere Komponenten verwenden können
   return {

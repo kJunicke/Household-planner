@@ -7,6 +7,7 @@ import { useAuthStore } from './authStore'
 import { useToastStore } from './toastStore'
 import { useTaskStore } from './taskStore'
 import type { RealtimeChannel } from '@supabase/supabase-js'
+import { onSessionEnd } from '@/lib/sessionEnd'
 
 interface CompletionForBalance {
   user_id: string
@@ -249,6 +250,13 @@ export const useSettlementStore = defineStore('settlement', () => {
       realtimeChannel = null
     }
   }
+
+  // Session-Ende: Ausgleiche und Bilanz gehören dem nächsten Konto nicht.
+  onSessionEnd(() => {
+    unsubscribe()
+    settlements.value = []
+    completions.value = []
+  })
 
   // ============================================================================
   // Public API
