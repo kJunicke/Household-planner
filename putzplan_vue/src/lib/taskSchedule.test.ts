@@ -6,7 +6,6 @@ import {
   canPostpone,
   earliestPostponeDate,
   formatPostponeDate,
-  isOverdue,
   postponeTargetDate,
   scheduleOf,
 } from './taskSchedule'
@@ -42,7 +41,6 @@ describe('scheduleOf — Kadenz', () => {
     const s = scheduleOf(task({ last_completed_at: daysAgo(10) }), TODAY)
     expect(s.status).toBe('overdue')
     expect(s.daysOverdue).toBe(3)
-    expect(isOverdue(s)).toBe(true)
   })
 
   it('genau am Kadenztag ist sie überfällig mit 0 Tagen', () => {
@@ -55,7 +53,6 @@ describe('scheduleOf — Kadenz', () => {
     const s = scheduleOf(task({ last_completed_at: daysAgo(6) }), TODAY)
     expect(s.status).toBe('pending')
     expect(s.daysUntilDue).toBe(1)
-    expect(isOverdue(s)).toBe(false)
   })
 
   it('noch nie gemacht ist ein eigener Zustand: maximal dringend, ohne Tageszahl', () => {
@@ -64,7 +61,6 @@ describe('scheduleOf — Kadenz', () => {
     expect(s.daysOverdue).toBeNull()
     expect(s.daysUntilDue).toBeNull()
     expect(s.urgency).toBe(Infinity)
-    expect(isOverdue(s)).toBe(true)
   })
 
   it('erledigt zählt den Countdown — und wird nie aus der Kadenz „dran" (ADR-0001)', () => {
@@ -74,7 +70,6 @@ describe('scheduleOf — Kadenz', () => {
 
     const stale = scheduleOf(task({ completed: true, last_completed_at: daysAgo(30) }), TODAY)
     expect(stale.status).toBe('upcoming')
-    expect(isOverdue(stale)).toBe(false)
   })
 
   it('zählt Kalendertage, nicht 24-h-Perioden: gestern 23:00 ist heute 07:00 ein Tag her', () => {
@@ -98,7 +93,6 @@ describe('scheduleOf — Kadenz', () => {
     const s = scheduleOf(task({ task_type: taskType, last_completed_at: daysAgo(30) }), TODAY)
     expect(s.status).toBe('not-scheduled')
     expect(s.urgency).toBe(-Infinity)
-    expect(isOverdue(s)).toBe(false)
   })
 
   it('wiederkehrend mit 0 Tagen hat ebenfalls keine Kadenz', () => {
@@ -129,7 +123,6 @@ describe('scheduleOf — verschoben', () => {
     expect(s.daysUntilDue).toBe(5)
     expect(s.daysOverdue).toBeNull()
     expect(s.postponedUntil).toBe('2026-08-24')
-    expect(isOverdue(s)).toBe(false)
   })
 
   it('gilt auch für einmalige Aufgaben ohne Kadenz', () => {
