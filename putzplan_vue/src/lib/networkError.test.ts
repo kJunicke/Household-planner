@@ -42,8 +42,12 @@ describe('isTransientFailure: WebKit-Texte', () => {
 })
 
 describe('isTransientFailure: HTTP-Status', () => {
-  it.each([500, 502, 503, 504, 520, 599])('%i ist vorübergehend', (status) => {
+  it.each([502, 503, 504, 520])('%i ist vorübergehend', (status) => {
     expect(isTransientFailure({ message: 'upstream', code: '', status })).toBe(true)
+  })
+
+  it.each([500, 501, 599])('%i ist nicht sicher vorübergehend', (status) => {
+    expect(isTransientFailure({ message: 'boom', code: 'XX001', status })).toBe(false)
   })
 
   it.each([400, 401, 403, 404, 409])('%i zählt', (status) => {

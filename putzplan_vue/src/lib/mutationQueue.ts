@@ -194,6 +194,9 @@ export function createMutationQueue(opts: MutationQueueOptions): MutationQueue {
     }
     if (owner.value !== key) return
 
+    if (result.serverNotice) {
+      toastStore.showToast('Server antwortet nicht – Änderungen warten', 'info', 4000)
+    }
     if (result.discarded.length > 0) {
       console.warn('🗑️ Gave up on mutations:', result.discarded)
       opts.onDiscarded?.(result.discarded)

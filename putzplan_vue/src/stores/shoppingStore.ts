@@ -554,6 +554,9 @@ export const useShoppingStore = defineStore('shopping', () => {
     }
     if (storageOwner.value !== owner) return
 
+    if (result.serverNotice) {
+      toastStore.showToast('Server antwortet nicht – Änderungen warten', 'info', 4000)
+    }
     if (result.discarded.length > 0) {
       console.warn('🗑️ Gave up on mutations:', result.discarded)
       dropDiscardedTempRows(result.discarded)

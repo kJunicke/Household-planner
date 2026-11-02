@@ -15,10 +15,23 @@ import { isTransientFailure } from './networkError'
 export const COUNT_GAP_MS = 30_000
 
 /**
+ * Ein Serverfehler 5xx kann eine Störung sein, die sich von selbst legt, oder
+ * ein Fehler, der bei jedem Versuch wiederkommt. Er zählt deshalb in einem
+ * eigenen, langsamen Budget: höchstens einmal je Abstand, verworfen erst nach
+ * der letzten Zählung — rund eine Stunde Störung übersteht eine Änderung, ein
+ * dauerhafter Fehler hält die Warteschlange nicht für immer an.
+ */
+export const SERVER_COUNT_GAP_MS = 10 * 60_000
+export const MAX_SERVER_RETRIES = 6
+/** Ab dieser Zählung sagt die App einmal, dass Änderungen auf den Server warten. */
+const SERVER_NOTICE_AT = 2
+
+/**
  * Fehler, nach denen ein späterer Versuch sicher anders ausgeht: kein Netz,
- * ein Serverfehler 5xx (→ `isTransientFailure`) oder ein abgelaufenes Token,
- * das supabase-js gleich erneuert. Sie verbrauchen keinen Versuch — sonst
- * verwirft die Warteschlange gerade die Änderungen, für die es sie gibt.
+ * ein Gateway- oder Verbindungsfehler (→ `isTransientFailure`) oder ein
+ * abgelaufenes Token, das supabase-js gleich erneuert. Sie verbrauchen keinen
+ * Versuch — sonst verwirft die Warteschlange gerade die Änderungen, für die es
+ * sie gibt.
  */
 export function isTransientError(error: unknown): boolean {
   if (typeof navigator !== 'undefined' && navigator.onLine === false) return true
@@ -29,28 +42,79 @@ export function isTransientError(error: unknown): boolean {
   return code === 'PGRST301' || code === 'PGRST303' || message.toLowerCase().includes('jwt expired')
 }
 
-/** 'later' = Durchlauf abbrechen, nichts zählen · 'retry' = liegen lassen · 'discard' = aufgeben. */
+/**
+ * SQLSTATEs, die PostgREST mit 5xx meldet, obwohl ein zweiter Versuch genauso
+ * scheitert (fehlende Zeile im RPC, Rekursion in einer Policy, Limits, interner
+ * Fehler, abgebrochene Transaktion, Trigger, fehlendes JWT-Secret). Sie zählen
+ * sofort im normalen Budget statt eine Stunde zu warten.
+ */
+const PERMANENT_CODES = new Set(['P0002', 'P0003', 'P0004', '42P17', 'XX000', '25P02', 'PGRST300'])
+const PERMANENT_CLASSES = ['54', '09']
+
+function isPermanentCode(code: string): boolean {
+  return PERMANENT_CODES.has(code) || PERMANENT_CLASSES.some((c) => code.startsWith(c))
+}
+
+function isServerStatus(error: unknown): boolean {
+  const status = (error as { status?: unknown } | null)?.status
+  return typeof status === 'number' && status >= 500 && status <= 599
+}
+
+/** 'later' = Durchlauf abbrechen · 'retry' = liegen lassen · 'discard' = aufgeben. */
 type FailureVerdict = 'later' | 'retry' | 'discard'
 
-export interface FailureJudgement {
+type FailureCounters = Pick<
+  PendingMutation,
+  'retries' | 'lastFailedAt' | 'serverRetries' | 'lastServerFailedAt'
+>
+
+export interface FailureJudgement extends FailureCounters {
   verdict: FailureVerdict
-  retries: number
-  lastFailedAt: number | undefined
+  /** true genau bei der Zählung, ab der die App einmal auf den Server hinweist. */
+  serverNotice: boolean
 }
 
 export function judgeFailure(
-  m: Pick<PendingMutation, 'retries' | 'lastFailedAt'>,
+  m: FailureCounters,
   error: unknown,
   now: number,
   maxRetries: number,
 ): FailureJudgement {
-  if (isTransientError(error)) {
-    return { verdict: 'later', retries: m.retries, lastFailedAt: m.lastFailedAt }
+  const unchanged = {
+    retries: m.retries,
+    lastFailedAt: m.lastFailedAt,
+    serverRetries: m.serverRetries,
+    lastServerFailedAt: m.lastServerFailedAt,
+    serverNotice: false,
   }
+  if (isTransientError(error)) return { verdict: 'later', ...unchanged }
+
+  const code = String((error as { code?: unknown }).code ?? '')
+  if (isServerStatus(error) && !isPermanentCode(code)) {
+    const last = m.lastServerFailedAt
+    if (last !== undefined && now - last < SERVER_COUNT_GAP_MS) {
+      return { verdict: 'later', ...unchanged }
+    }
+    const serverRetries = (m.serverRetries ?? 0) + 1
+    return {
+      ...unchanged,
+      // Abbrechen hält die Reihenfolge: was danach wartet, trifft denselben Server.
+      verdict: serverRetries >= MAX_SERVER_RETRIES ? 'discard' : 'later',
+      serverRetries,
+      lastServerFailedAt: now,
+      serverNotice: serverRetries === SERVER_NOTICE_AT,
+    }
+  }
+
   const counts = m.lastFailedAt === undefined || now - m.lastFailedAt >= COUNT_GAP_MS
   const retries = counts ? m.retries + 1 : m.retries
   const lastFailedAt = counts ? now : m.lastFailedAt
-  return { verdict: retries >= maxRetries ? 'discard' : 'retry', retries, lastFailedAt }
+  return {
+    ...unchanged,
+    verdict: retries >= maxRetries ? 'discard' : 'retry',
+    retries,
+    lastFailedAt,
+  }
 }
 
 /**
@@ -102,14 +166,21 @@ export interface QueuePassResult {
   discarded: PendingMutation[]
   /** Mutationen, die gescheitert sind und es beim nächsten Sync erneut versuchen. */
   failed: number
-  /** Abgebrochen (Netz weg oder Sitzung gewechselt) — der Rest wartet. */
+  /** Abgebrochen (Netz weg, Server gestört oder Sitzung gewechselt) — der Rest wartet. */
   interrupted: boolean
+  /** Der Server scheitert schon länger; einmal Bescheid geben, nicht bei jedem Lauf. */
+  serverNotice: boolean
 }
 
 export async function runQueuePass(io: QueuePassIO): Promise<QueuePassResult> {
   const now = io.now ?? Date.now
   const attempted = new Set<string>()
-  const result: QueuePassResult = { discarded: [], failed: 0, interrupted: false }
+  const result: QueuePassResult = {
+    discarded: [],
+    failed: 0,
+    interrupted: false,
+    serverNotice: false,
+  }
 
   for (;;) {
     if (io.shouldStop?.()) {
@@ -128,6 +199,9 @@ export async function runQueuePass(io: QueuePassIO): Promise<QueuePassResult> {
       const j = judgeFailure(m, error, now(), io.maxRetries)
       m.retries = j.retries
       m.lastFailedAt = j.lastFailedAt
+      m.serverRetries = j.serverRetries
+      m.lastServerFailedAt = j.lastServerFailedAt
+      if (j.serverNotice) result.serverNotice = true
       if (j.verdict === 'later') {
         // Ohne Netz scheitert auch alles Folgende; abbrechen hält die Reihenfolge.
         result.interrupted = true

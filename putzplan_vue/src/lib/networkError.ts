@@ -46,9 +46,19 @@ function isNetworkMessage(text: string): boolean {
 const WRAPPED_FETCH_FAILURE = /^(TypeError|FetchError|AbortError): /
 
 /**
+ * Gateway- und Verbindungsstörungen: 502/503/504 und Cloudflares 520 kommen von
+ * vor der Datenbank, die SQLSTATEs und PGRST000–003 von einer Datenbank, die
+ * gerade nicht kann (Serialisierung, Deadlock, Verbindung, Ressourcen).
+ */
+const TRANSIENT_STATUSES = new Set([502, 503, 504, 520])
+const TRANSIENT_CODES = new Set(['40001', '40P01', 'PGRST000', 'PGRST001', 'PGRST002', 'PGRST003'])
+const TRANSIENT_CLASSES = ['08', '53']
+
+/**
  * Wird ein späterer Versuch derselben Anfrage wahrscheinlich gelingen? Ja bei
  * Netzfehlern (auch mit `navigator.onLine === true`: Funkloch, Captive Portal)
- * und bei HTTP 5xx (Gateway, Cloudflare 520–599, überlastete Datenbank).
+ * und bei den Störungen oben. Andere 5xx sind es nicht sicher — die zählt die
+ * Warteschlange in einem eigenen Budget (`judgeFailure`).
  *
  * Ein echter `TypeError` aus einem Programmfehler ist eine Error-Instanz ohne
  * die Hülle oben und gilt nicht als vorübergehend — sonst hielte er die
@@ -61,14 +71,17 @@ const WRAPPED_FETCH_FAILURE = /^(TypeError|FetchError|AbortError): /
 export function isTransientFailure(error: unknown): boolean {
   if (!error) return false
   const status = (error as { status?: unknown }).status
-  if (typeof status === 'number' && status >= 500 && status <= 599) return true
+  if (typeof status === 'number' && TRANSIENT_STATUSES.has(status)) return true
 
   const message = String((error as { message?: unknown }).message ?? error)
   if (isNetworkMessage(message)) return true
 
-  if (error instanceof Error) return false
   const code = (error as { code?: unknown }).code
-  return (code === '' || code === undefined) && WRAPPED_FETCH_FAILURE.test(message)
+  if (typeof code === 'string' && code !== '') {
+    return TRANSIENT_CODES.has(code) || TRANSIENT_CLASSES.some((c) => code.startsWith(c))
+  }
+  if (error instanceof Error) return false
+  return WRAPPED_FETCH_FAILURE.test(message)
 }
 
 /** Den HTTP-Status einer Supabase-Antwort an ihren Fehler hängen, bevor er geworfen wird. */
