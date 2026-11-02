@@ -9,7 +9,6 @@ import TaskAssignmentModal from './TaskAssignmentModal.vue'
 import SubtaskManagementModal from './SubtaskManagementModal.vue'
 import SubtaskItem from './SubtaskItem.vue'
 import ProjectWorkModal from './ProjectWorkModal.vue'
-import ProjectCompleteModal from './ProjectCompleteModal.vue'
 import TaskEditModal from './TaskEditModal.vue'
 import TaskPostponeModal from './TaskPostponeModal.vue'
 import confetti from 'canvas-confetti'
@@ -27,12 +26,10 @@ const showAssignmentModal = ref(false)
 const showSubtaskManagementModal = ref(false)
 const showPostponeModal = ref(false)
 const showProjectWorkModal = ref(false)
-const showProjectCompleteModal = ref(false)
 const subtasksExpanded = ref(false) // Standardmäßig eingeklappt für kompakteres Design
 
 // Loading states for async operations in modals
 const isCompletingTask = ref(false)
-const isCompletingProject = ref(false)
 const isLoggingWork = ref(false)
 const isQuickCompleting = ref(false)
 
@@ -411,26 +408,6 @@ const handleProjectWork = async (effort: number, note: string) => {
   }
   // If failed, modal stays open so user can retry
 }
-
-const closeProjectCompleteModal = () => {
-  showProjectCompleteModal.value = false
-}
-
-const handleCompleteProject = async () => {
-  isCompletingProject.value = true
-  const success = await taskStore.completeProject(props.task.task_id)
-  isCompletingProject.value = false
-
-  if (success) {
-    showProjectCompleteModal.value = false
-    confetti({
-      particleCount: 150,
-      spread: 100,
-      origin: { y: 0.6 },
-    })
-  }
-  // If failed, modal stays open so user can retry
-}
 </script>
 
 <template>
@@ -683,15 +660,6 @@ const handleCompleteProject = async () => {
       :isLoading="isLoggingWork"
       @close="closeProjectWorkModal"
       @confirm="handleProjectWork"
-    />
-
-    <!-- Project Complete Modal -->
-    <ProjectCompleteModal
-      v-if="showProjectCompleteModal"
-      :projectTitle="props.task.title"
-      :isLoading="isCompletingProject"
-      @close="closeProjectCompleteModal"
-      @confirm="handleCompleteProject"
     />
 
     <!-- Task Edit Modal -->

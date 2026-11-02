@@ -1433,33 +1433,6 @@ export const useTaskStore = defineStore('tasks', () => {
     return true
   }
 
-  // PROJECTS - Complete a project permanently
-  const completeProject = async (projectId: string) => {
-    const toastStore = useToastStore()
-    isLoading.value = true
-
-    const { error } = await supabase
-      .from('tasks')
-      .update({
-        completed: true,
-        last_completed_at: new Date().toISOString(),
-      })
-      .eq('task_id', projectId)
-
-    isLoading.value = false
-
-    if (error) {
-      console.error('Error completing project:', error)
-      toastStore.showToast('Fehler beim Abschließen des Projekts', 'error')
-      return false
-    }
-
-    // Reload tasks vom Backend (Source of Truth)
-    await loadTasks()
-    toastStore.showToast('Projekt abgeschlossen', 'success', 3000)
-    return true
-  }
-
   // PROJECTS - Calculate total effort contributed to a project from subtask completions
   const getProjectEffort = (projectId: string): number => {
     const subtasks = getSubtasks(projectId)
@@ -1646,7 +1619,6 @@ export const useTaskStore = defineStore('tasks', () => {
     getSubtasks,
     resetSubtasks,
     // Projects
-    completeProject,
     getProjectEffort,
     projectEffortTotals,
     loadProjectEffortTotals,
