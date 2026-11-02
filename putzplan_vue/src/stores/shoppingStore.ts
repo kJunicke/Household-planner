@@ -315,13 +315,26 @@ export const useShoppingStore = defineStore('shopping', () => {
   /**
    * Nach dem Sync die optimistische Kategorienzeile durch die echte ersetzen und
    * alle noch wartenden Mutationen auf die neue ID umbiegen.
+   *
+   * Der Name bleibt der lokale: offline anlegen und sofort umbenennen lässt ein
+   * `update` in der Warteschlange, während der Server hier noch mit dem
+   * angelegten Namen antwortet. Mit `real.name` spränge die Zeile zurück — und
+   * bliebe so, wenn der Sync vor dem wartenden Update abreißt.
+   *
+   * Fehlt die temp-Zeile lokal, wurde sie offline schon wieder gelöscht; das
+   * `delete` wartet hinter diesem `create`. Dann die echte Zeile nicht zeigen,
+   * nur die Warteschlange umbiegen, damit das `delete` die echte ID trifft.
    */
   const reconcileTempCategory = (tempId: string, real: ShoppingCategory) => {
-    const realExists = categories.value.some((c) => c.category_id === real.category_id)
-    categories.value = categories.value.filter(
-      (c) => c.category_id !== tempId && (!realExists || c.category_id !== real.category_id),
-    )
-    categories.value.push(real)
+    const localRow = categories.value.find((c) => c.category_id === tempId)
+
+    if (localRow) {
+      const realExists = categories.value.some((c) => c.category_id === real.category_id)
+      categories.value = categories.value.filter(
+        (c) => c.category_id !== tempId && (!realExists || c.category_id !== real.category_id),
+      )
+      categories.value.push({ ...real, name: localRow.name })
+    }
 
     for (const m of mutationQueue.value) {
       if (m.payload.categoryId === tempId) m.payload.categoryId = real.category_id
