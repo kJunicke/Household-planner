@@ -30,6 +30,8 @@ export interface PendingMutation {
 
   // Metadaten für Retry-Logik
   timestamp: number // Unix timestamp
-  retries: number // Anzahl bisheriger Versuche
+  retries: number // Anzahl gezählter Fehlversuche (Netzfehler zählen nicht)
   lastError?: string // Fehler vom letzten Versuch
+  /** Zeitpunkt des letzten gezählten Fehlversuchs — schnell aufeinanderfolgende zählen einmal. */
+  lastFailedAt?: number
 }

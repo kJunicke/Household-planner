@@ -13,6 +13,7 @@ import {
   orphanSortOrder,
 } from '@/lib/categoryOrder'
 import { createMutationQueue } from '@/lib/mutationQueue'
+import { queueOwner } from '@/lib/queueStorage'
 import { supabase } from '@/lib/supabase'
 import { useHouseholdStore } from './householdStore'
 import { useAuthStore } from './authStore'
@@ -80,8 +81,14 @@ export function createChecklistStore(config: ChecklistStoreConfig) {
 
     const queue = createMutationQueue({
       storageKey: `${config.storeId}_mutation_queue`,
+      owner: () =>
+        queueOwner(useAuthStore().user?.id, useHouseholdStore().currentHousehold?.household_id),
       syncSourceKey: config.storeId,
       process: (m) => processMutation(m),
+      onDiscarded: (discarded) => {
+        const temps = new Set(discarded.map((m) => m.payload.tempCategoryId).filter(Boolean))
+        categories.value = categories.value.filter((c) => !temps.has(c.category_id))
+      },
       onDrained: async () => {
         await loadItems()
         await loadCategories()
@@ -309,6 +316,19 @@ export function createChecklistStore(config: ChecklistStoreConfig) {
           .update(m.payload.updates!)
           .eq('category_id', categoryId!)
         if (error && error.code !== '23505') throw error
+        if (error) {
+          // Der neue Name gehört schon einer anderen Zeile dieser Liste:
+          // verschmelzen. Die Einträge folgen dem Namen über ihre eigenen
+          // wartenden Mutationen; die umbenannte Zeile bliebe sonst auf dem
+          // Server unter dem alten Namen stehen und käme beim Neuabgleich als
+          // leere Kategorie zurück.
+          const { error: deleteError } = await supabase
+            .from(categoriesTable)
+            .delete()
+            .eq('category_id', categoryId!)
+          if (deleteError) throw deleteError
+          categories.value = categories.value.filter((c) => c.category_id !== categoryId)
+        }
         return true
       }
 
@@ -1164,22 +1184,30 @@ export function createChecklistStore(config: ChecklistStoreConfig) {
               const idx = lists.value.findIndex((l) => l.list_id === updated.list_id)
               if (idx !== -1) lists.value[idx] = updated
             }
-            if (payload.eventType === 'DELETE') {
-              const deleted = payload.old as ChecklistList
-              lists.value = lists.value.filter((l) => l.list_id !== deleted.list_id)
-              items.value = items.value.filter((i) => i.list_id !== deleted.list_id)
-              categories.value = categories.value.filter((c) => c.list_id !== deleted.list_id)
-              if (currentListId.value === deleted.list_id) {
-                currentListId.value = lists.value[0]?.list_id ?? null
-              }
+          },
+        )
+        // DELETE über ein eigenes, ungefiltertes Abo: Das alte Zeilenbild trägt
+        // nur den Primärschlüssel, der household_id-Filter verwirft das
+        // Ereignis, und eine fremd gelöschte Liste bliebe hier stehen. Ein
+        // DELETE aus einem anderen Haushalt trifft lokal keine ID.
+        .on(
+          'postgres_changes',
+          { event: 'DELETE', schema: 'public', table: listsTable },
+          (payload) => {
+            const deleted = payload.old as Pick<ChecklistList, 'list_id'>
+            lists.value = lists.value.filter((l) => l.list_id !== deleted.list_id)
+            items.value = items.value.filter((i) => i.list_id !== deleted.list_id)
+            categories.value = categories.value.filter((c) => c.list_id !== deleted.list_id)
+            if (currentListId.value === deleted.list_id) {
+              currentListId.value = lists.value[0]?.list_id ?? null
             }
           },
         )
         .subscribe()
 
       // Die Item-Kanäle bleiben ungefiltert: `*_items` hat keine household_id,
-      // RLS filtert. Der Kategorie-Kanal filtert wie im Einkauf über household_id
-      // — DELETE-Ereignisse kommen dort nur mit REPLICA IDENTITY FULL an.
+      // RLS filtert. Listen und Kategorien filtern über household_id und holen
+      // DELETE deshalb über ein zweites, ungefiltertes Abo.
       realtimeItemsChannel = supabase
         .channel(`${channelPrefix}-items-${Date.now()}`)
         .on('postgres_changes', { event: '*', schema: 'public', table: itemsTable }, (payload) => {
@@ -1191,6 +1219,10 @@ export function createChecklistStore(config: ChecklistStoreConfig) {
           }
           if (payload.eventType === 'UPDATE') {
             const updated = payload.new as ChecklistItem
+            // Wartet für den Eintrag noch eine eigene Mutation, ist das Echo
+            // älter als der lokale Stand; den Serverstand holt der Neuabgleich,
+            // sobald die Warteschlange leer ist.
+            if (queue.pendingItemIds().has(updated.item_id)) return
             const idx = items.value.findIndex((i) => i.item_id === updated.item_id)
             if (idx !== -1) items.value[idx] = updated
           }
@@ -1223,10 +1255,14 @@ export function createChecklistStore(config: ChecklistStoreConfig) {
               const idx = categories.value.findIndex((c) => c.category_id === row.category_id)
               if (idx !== -1) categories.value[idx] = row
             }
-            if (payload.eventType === 'DELETE') {
-              const row = payload.old as CategoryRow
-              categories.value = categories.value.filter((c) => c.category_id !== row.category_id)
-            }
+          },
+        )
+        .on(
+          'postgres_changes',
+          { event: 'DELETE', schema: 'public', table: categoriesTable },
+          (payload) => {
+            const row = payload.old as Pick<CategoryRow, 'category_id'>
+            categories.value = categories.value.filter((c) => c.category_id !== row.category_id)
           },
         )
         .subscribe()
@@ -1245,6 +1281,20 @@ export function createChecklistStore(config: ChecklistStoreConfig) {
         supabase.removeChannel(realtimeCategoriesChannel)
         realtimeCategoriesChannel = null
       }
+    }
+
+    /**
+     * Beim Session-Ende aufrufen (Abmelden, SIGNED_OUT): Listen, Einträge,
+     * Kategorien und Abos leeren, damit der nächste Nutzer nichts davon sieht.
+     * Die Warteschlange bleibt unter Nutzer + Haushalt gespeichert und verlässt
+     * den Speicher von selbst, sobald der Besitzer wechselt.
+     */
+    const resetForSessionEnd = () => {
+      unsubscribe()
+      lists.value = []
+      items.value = []
+      categories.value = []
+      currentListId.value = null
     }
 
     // ==========================================================================
@@ -1292,6 +1342,7 @@ export function createChecklistStore(config: ChecklistStoreConfig) {
       subscribe,
       unsubscribe,
       syncMutations: queue.sync,
+      resetForSessionEnd,
     }
   })
 }
