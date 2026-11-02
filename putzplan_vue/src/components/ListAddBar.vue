@@ -204,9 +204,12 @@ const handleInputBlur = () => {
   display: flex;
   align-items: center;
   gap: 4px;
+  /* Bezugsrahmen der Namensvorschläge ist die ganze Leiste, nicht das
+     Namensfeld: bei 360 px hatte das Feld Platz für rund elf Zeichen, die
+     Vorschläge darunter waren entsprechend gequetscht. */
+  position: relative;
 }
 .top-name-wrap {
-  position: relative;
   flex: 1 1 40%;
   min-width: 0;
 }
@@ -326,6 +329,9 @@ const handleInputBlur = () => {
   text-align: left;
   font-size: var(--font-base);
   color: var(--color-text-primary);
+  /* Ein langer Name ohne Leerzeichen bricht um, statt das Dropdown seitlich
+     scrollbar zu machen. */
+  overflow-wrap: anywhere;
 }
 .suggestion-item:last-child {
   border-bottom: none;
