@@ -12,6 +12,7 @@ import {
   compareCategoryGroups,
   buildCategoryOptions,
 } from '@/lib/categoryOrder'
+import { runQueuePass, type QueuePassResult } from '@/lib/queueRetry'
 import { useHouseholdStore } from './householdStore'
 import { useAuthStore } from './authStore'
 import { useToastStore } from './toastStore'
@@ -233,10 +234,6 @@ export const useShoppingStore = defineStore('shopping', () => {
     console.log('📝 Added to queue:', queueItem)
   }
 
-  const removeFromQueue = (queueId: string) => {
-    mutationQueue.value = mutationQueue.value.filter((m) => m.queueId !== queueId)
-  }
-
   // ============================================================================
   // Offline-Aware Mutations (with Optimistic Updates)
   // ============================================================================
@@ -387,64 +384,70 @@ export const useShoppingStore = defineStore('shopping', () => {
     return true
   }
 
+  /**
+   * Eine wartende Mutation ausführen. `false` heißt „liegen lassen, kein
+   * Fehlversuch"; einen Wurf ordnet `runQueuePass` ein (Netzfehler zählen nicht).
+   */
   const processMutation = async (mutation: PendingMutation): Promise<boolean> => {
     const householdStore = useHouseholdStore()
 
-    try {
-      if (mutation.payload.entity === 'category') {
-        // Noch eine temp-ID heißt: das zugehörige Anlegen steht in derselben
-        // Warteschlange und ist noch nicht durch. In der Queue lassen, ohne einen
-        // Fehlversuch zu zählen — das Anlegen biegt die ID gleich um.
-        if (mutation.payload.categoryId?.startsWith('temp_')) return false
-        const ok = await processCategoryMutation(mutation)
-        console.log('✅ Synced category mutation:', mutation.operation, mutation.payload)
-        return ok
-      }
-
-      if (mutation.operation === 'create') {
-        const { data, error } = await supabase
-          .from('shopping_items')
-          .insert({
-            name: mutation.payload.name!,
-            household_id: householdStore.currentHousehold!.household_id,
-            list_id: mutation.payload.listId!,
-            category: mutation.payload.category ?? null,
-            quantity: mutation.payload.quantity ?? 1,
-          })
-          .select()
-          .single()
-
-        if (error) throw error
-
-        // Temp-ID chaining: swap the optimistic temp row for the real one and
-        // rewrite any already-queued follow-up mutations (toggle/edit/delete of
-        // an item created while offline) to the freshly-minted real id.
-        const tempId = mutation.payload.tempId
-        if (tempId && data) reconcileTempId(tempId, data as ShoppingItem)
-      } else if (mutation.operation === 'update') {
-        const { error } = await supabase
-          .from('shopping_items')
-          .update(mutation.payload.updates!)
-          .eq('shopping_item_id', mutation.payload.itemId!)
-
-        if (error) throw error
-      } else if (mutation.operation === 'delete') {
-        const { error } = await supabase
-          .from('shopping_items')
-          .delete()
-          .eq('shopping_item_id', mutation.payload.itemId!)
-
-        if (error) throw error
-      }
-
-      console.log('✅ Synced mutation:', mutation.operation, mutation.payload)
-      return true
-    } catch (error) {
-      console.error('❌ Failed to sync mutation:', mutation, error)
-      mutation.lastError = error instanceof Error ? error.message : String(error)
-      mutation.retries++
-      return false
+    if (mutation.payload.entity === 'category') {
+      // Noch eine temp-ID heißt: das zugehörige Anlegen steht in derselben
+      // Warteschlange und ist noch nicht durch. In der Queue lassen, ohne einen
+      // Fehlversuch zu zählen — das Anlegen biegt die ID gleich um.
+      if (mutation.payload.categoryId?.startsWith('temp_')) return false
+      const ok = await processCategoryMutation(mutation)
+      console.log('✅ Synced category mutation:', mutation.operation, mutation.payload)
+      return ok
     }
+
+    if (mutation.operation === 'create') {
+      const { data, error } = await supabase
+        .from('shopping_items')
+        .insert({
+          name: mutation.payload.name!,
+          household_id: householdStore.currentHousehold!.household_id,
+          list_id: mutation.payload.listId!,
+          category: mutation.payload.category ?? null,
+          quantity: mutation.payload.quantity ?? 1,
+        })
+        .select()
+        .single()
+
+      if (error) throw error
+
+      // Temp-ID chaining: swap the optimistic temp row for the real one and
+      // rewrite any already-queued follow-up mutations (toggle/edit/delete of
+      // an item created while offline) to the freshly-minted real id.
+      const tempId = mutation.payload.tempId
+      if (tempId && data) reconcileTempId(tempId, data as ShoppingItem)
+    } else if (mutation.operation === 'update') {
+      const { error } = await supabase
+        .from('shopping_items')
+        .update(mutation.payload.updates!)
+        .eq('shopping_item_id', mutation.payload.itemId!)
+
+      if (error) throw error
+    } else if (mutation.operation === 'delete') {
+      const { error } = await supabase
+        .from('shopping_items')
+        .delete()
+        .eq('shopping_item_id', mutation.payload.itemId!)
+
+      if (error) throw error
+    }
+
+    console.log('✅ Synced mutation:', mutation.operation, mutation.payload)
+    return true
+  }
+
+  /** Aufgegebene Anlagen bekommen nie eine echte ID — ihre temp-Zeilen müssen weg. */
+  const dropDiscardedTempRows = (discarded: PendingMutation[]) => {
+    const tempItems = new Set(discarded.map((m) => m.payload.tempId).filter(Boolean))
+    const tempCats = new Set(discarded.map((m) => m.payload.tempCategoryId).filter(Boolean))
+    if (tempItems.size) items.value = items.value.filter((i) => !tempItems.has(i.shopping_item_id))
+    if (tempCats.size)
+      categories.value = categories.value.filter((c) => !tempCats.has(c.category_id))
   }
 
   const syncMutations = async () => {
@@ -454,34 +457,36 @@ export const useShoppingStore = defineStore('shopping', () => {
     isSyncing.value = true
 
     const toastStore = useToastStore()
-    const failedMutations: PendingMutation[] = []
-
-    for (const mutation of mutationQueue.value) {
-      if (mutation.retries >= MAX_RETRIES) {
-        console.warn('⚠️ Max retries reached for mutation:', mutation)
-        failedMutations.push(mutation)
-        continue
-      }
-
-      const success = await processMutation(mutation)
-
-      if (success) {
-        removeFromQueue(mutation.queueId)
-      } else {
-        failedMutations.push(mutation)
-      }
+    let result: QueuePassResult
+    try {
+      result = await runQueuePass({
+        current: () => mutationQueue.value,
+        process: processMutation,
+        remove: (ids) => {
+          mutationQueue.value = mutationQueue.value.filter((m) => !ids.includes(m.queueId))
+        },
+        maxRetries: MAX_RETRIES,
+      })
+    } finally {
+      isSyncing.value = false
     }
 
-    isSyncing.value = false
-
-    if (failedMutations.length > 0) {
-      console.warn('⚠️ Some mutations failed to sync:', failedMutations.length)
+    if (result.discarded.length > 0) {
+      console.warn('🗑️ Gave up on mutations:', result.discarded)
+      dropDiscardedTempRows(result.discarded)
       toastStore.showToast(
-        `${failedMutations.length} Änderung(en) konnten nicht synchronisiert werden`,
+        `${result.discarded.length} Änderung(en) ließen sich nicht speichern und wurden verworfen`,
+        'error',
+        5000,
+      )
+    } else if (result.failed > 0) {
+      console.warn('⚠️ Some mutations failed to sync:', result.failed)
+      toastStore.showToast(
+        `${result.failed} Änderung(en) konnten nicht synchronisiert werden`,
         'error',
         3000,
       )
-    } else if (mutationQueue.value.length === 0) {
+    } else if (!result.interrupted && mutationQueue.value.length === 0) {
       console.log('✅ All mutations synced successfully')
       toastStore.showToast('Einkaufsliste synchronisiert', 'success', 2000)
     }

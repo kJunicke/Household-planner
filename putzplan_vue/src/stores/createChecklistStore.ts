@@ -82,6 +82,10 @@ export function createChecklistStore(config: ChecklistStoreConfig) {
       storageKey: `${config.storeId}_mutation_queue`,
       syncSourceKey: config.storeId,
       process: (m) => processMutation(m),
+      onDiscarded: (discarded) => {
+        const temps = new Set(discarded.map((m) => m.payload.tempCategoryId).filter(Boolean))
+        categories.value = categories.value.filter((c) => !temps.has(c.category_id))
+      },
       onDrained: async () => {
         await loadItems()
         await loadCategories()

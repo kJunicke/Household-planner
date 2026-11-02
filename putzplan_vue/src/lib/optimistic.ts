@@ -204,28 +204,9 @@ export function runOptimistic<S>(mutation: OptimisticMutation<S>): {
   return { applied: true, settled }
 }
 
-/**
- * Netzfehler? Dann ist ein Nachlade-SELECT sinnlos — er läuft in dieselben
- * Timeouts und lässt die Oberfläche sekundenlang widersprüchlich stehen.
- * supabase-js verpackt Netzfehler als `FunctionsFetchError`/`TypeError` mit
- * „Failed to fetch"; zusätzlich zählt ein offline gemeldeter Browser.
- */
-export function isNetworkError(error: unknown): boolean {
-  if (typeof navigator !== 'undefined' && navigator.onLine === false) return true
-  if (!error) return false
-
-  const name = (error as { name?: string }).name ?? ''
-  if (name === 'FunctionsFetchError' || name === 'AbortError' || name === 'TypeError') return true
-
-  const message = String((error as { message?: string }).message ?? error).toLowerCase()
-  return (
-    message.includes('failed to fetch') ||
-    message.includes('networkerror') ||
-    message.includes('network error') ||
-    message.includes('load failed') ||
-    message.includes('fetch failed')
-  )
-}
+// Hier ausgelagert, damit die Offline-Warteschlange dieselbe Einordnung nutzt,
+// ohne den Supabase-Client mitzuladen.
+export { isNetworkError } from './networkError'
 
 /**
  * Rücknahme-Vorlage aus `patchItem`: die betroffenen Zeilen frisch aus der DB

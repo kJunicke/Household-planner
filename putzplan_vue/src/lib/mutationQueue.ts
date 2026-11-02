@@ -15,6 +15,7 @@ import { ref, computed, watch, type Ref, type ComputedRef } from 'vue'
 import type { PendingMutation } from '@/types/PendingMutation'
 import { registerSyncSource } from '@/composables/useSyncStatus'
 import { useToastStore } from '@/stores/toastStore'
+import { runQueuePass, type QueuePassResult } from './queueRetry'
 
 const DEFAULT_MAX_RETRIES = 5
 
@@ -25,9 +26,15 @@ export interface MutationQueueOptions {
   syncSourceKey: string
   /**
    * Eine Mutation ausführen. true = erledigt (wird entfernt). false = liegen lassen,
-   * OHNE Fehlversuch (z. B. Ziel hat noch eine temp-ID). Wirft → retries++, lastError.
+   * OHNE Fehlversuch (z. B. Ziel hat noch eine temp-ID). Wirft → Fehlversuch, außer bei
+   * Netzfehlern (siehe `runQueuePass`).
    */
   process: (m: PendingMutation) => Promise<boolean>
+  /**
+   * Aufgegebene Mutationen, schon aus der Warteschlange entfernt: optimistische
+   * temp-Zeilen wegräumen, die nie eine echte ID bekommen.
+   */
+  onDiscarded?: (discarded: PendingMutation[]) => void
   /** Läuft, wenn die Warteschlange leer synchronisiert wurde (Neuabgleich laden). */
   onDrained?: () => Promise<void> | void
   successToast?: string // z. B. 'Packliste synchronisiert'
@@ -98,22 +105,6 @@ export function createMutationQueue(opts: MutationQueueOptions): MutationQueue {
   const pendingItemIds = () =>
     new Set(queue.value.map((m) => m.payload.itemId).filter(Boolean) as string[])
 
-  /**
-   * Eine Mutation ausführen und den Fehlerfall in den Queue-Eintrag schreiben.
-   * Ein Wurf ist ein Fehlversuch (retries++), ein `false` aus `process` nicht —
-   * das heißt „noch nicht dran", nicht „kaputt".
-   */
-  const runOne = async (mutation: PendingMutation): Promise<boolean> => {
-    try {
-      return await opts.process(mutation)
-    } catch (error) {
-      console.error('❌ Failed to sync mutation:', mutation, error)
-      mutation.lastError = error instanceof Error ? error.message : String(error)
-      mutation.retries++
-      return false
-    }
-  }
-
   const sync = async () => {
     if (!navigator.onLine) return
     if (isSyncing.value || queue.value.length === 0) return
@@ -122,34 +113,36 @@ export function createMutationQueue(opts: MutationQueueOptions): MutationQueue {
     isSyncing.value = true
 
     const toastStore = useToastStore()
-    const failed: PendingMutation[] = []
-
-    for (const mutation of queue.value) {
-      if (mutation.retries >= maxRetries) {
-        console.warn('⚠️ Max retries reached for mutation:', mutation)
-        failed.push(mutation)
-        continue
-      }
-
-      const success = await runOne(mutation)
-
-      if (success) {
-        queue.value = queue.value.filter((m) => m.queueId !== mutation.queueId)
-      } else {
-        failed.push(mutation)
-      }
+    let result: QueuePassResult
+    try {
+      result = await runQueuePass({
+        current: () => queue.value,
+        process: opts.process,
+        remove: (ids) => {
+          queue.value = queue.value.filter((m) => !ids.includes(m.queueId))
+        },
+        maxRetries,
+      })
+    } finally {
+      isSyncing.value = false
     }
 
-    isSyncing.value = false
-
-    if (failed.length > 0) {
-      console.warn('⚠️ Some mutations failed to sync:', failed.length)
+    if (result.discarded.length > 0) {
+      console.warn('🗑️ Gave up on mutations:', result.discarded)
+      opts.onDiscarded?.(result.discarded)
       toastStore.showToast(
-        `${failed.length} Änderung(en) konnten nicht synchronisiert werden`,
+        `${result.discarded.length} Änderung(en) ließen sich nicht speichern und wurden verworfen`,
+        'error',
+        5000,
+      )
+    } else if (result.failed > 0) {
+      console.warn('⚠️ Some mutations failed to sync:', result.failed)
+      toastStore.showToast(
+        `${result.failed} Änderung(en) konnten nicht synchronisiert werden`,
         'error',
         3000,
       )
-    } else if (queue.value.length === 0 && opts.successToast) {
+    } else if (!result.interrupted && queue.value.length === 0 && opts.successToast) {
       console.log('✅ All mutations synced successfully')
       toastStore.showToast(opts.successToast, 'success', 2000)
     }
