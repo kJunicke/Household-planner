@@ -298,7 +298,10 @@ const selectSuggestion = (suggestion: string) => {
   handleAddItem()
 }
 
-const handleInputFocus = () => {
+// Auch beim Tippen öffnen, nicht nur beim Fokus: nach Enter oder einem
+// Vorschlag leert `resetTopBar()` die Liste, das Feld behält aber den Fokus —
+// ein Fokus-Ereignis kommt dann bis zum nächsten Feldwechsel nicht mehr.
+const openSuggestions = () => {
   showSuggestions.value = true
 }
 const handleInputBlur = () => {
@@ -589,7 +592,8 @@ onUnmounted(() => {
                   placeholder="Produkt hinzufügen…"
                   :maxlength="SHOPPING_ITEM_NAME_MAX_LENGTH"
                   @keyup.enter="handleAddItem"
-                  @focus="handleInputFocus"
+                  @input="openSuggestions"
+                  @focus="openSuggestions"
                   @blur="handleInputBlur"
                   :disabled="shoppingStore.isLoading"
                 />

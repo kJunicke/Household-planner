@@ -102,7 +102,10 @@ const selectSuggestion = (suggestion: string) => {
   handleAdd()
 }
 
-const handleInputFocus = () => {
+// Auch beim Tippen öffnen, nicht nur beim Fokus: nach Enter oder einem
+// Vorschlag leert `reset()` die Liste, das Feld behält aber den Fokus — ein
+// Fokus-Ereignis kommt dann bis zum nächsten Feldwechsel nicht mehr.
+const openSuggestions = () => {
   showSuggestions.value = true
 }
 // Der Klick auf einen Vorschlag kommt nach dem Blur — deshalb erst verzögert
@@ -126,7 +129,8 @@ const handleInputBlur = () => {
           :maxlength="SHOPPING_ITEM_NAME_MAX_LENGTH"
           :disabled="disabled"
           @keyup.enter="handleAdd"
-          @focus="handleInputFocus"
+          @input="openSuggestions"
+          @focus="openSuggestions"
           @blur="handleInputBlur"
         />
         <div v-if="showSuggestions && suggestions.length > 0" class="suggestions-dropdown">
