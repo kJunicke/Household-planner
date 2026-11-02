@@ -1,7 +1,7 @@
 /* ============================================================================
-   Pinnwand-Primitiven (Pinnwand-Redesign, Etappe 1 / Ticket 03)
+   Pinnwand-Primitiven
    ----------------------------------------------------------------------------
-   Analog zu utilities.css, aber ausschliesslich fuer das neue Aussehen.
+   Analog zu utilities.css, aber ausschliesslich fuer das Pinnwand-Aussehen.
 
    REGEL FUER DIESE DATEI: **jeder** Selektor beginnt mit
    `:root[data-design='pinnwand']`. Ohne das Attribut darf aus dieser Datei
@@ -12,8 +12,7 @@
       unter DENSELBEN Klassennamen. Sie ueberschreiben Bootstrap nur hier
       unten; Bootstrap bleibt eingebunden und fuer das alte Aussehen zustaendig.
       Kein Template wird angefasst.
-   2. Die wiederkehrenden Pinnwand-Bausteine als `.pw-*`-Klassen
-      (Wandhintergrund, Zettel, Klebeband-Leiste) fuer die spaeteren Etappen.
+   2. Die wiederkehrenden Pinnwand-Bausteine als `.pw-*`-Klassen.
 
    Spezifitaet: `:root[data-design='pinnwand'] .x` = (0,3,0) und schlaegt damit
    auch Bootstraps zusammengesetzte Selektoren wie `.btn:disabled` (0,2,0) und
@@ -64,9 +63,9 @@
 }
 
 /* Bootstraps `.btn:disabled` (0,2,0) faerbt sonst auf `--bs-btn-disabled-bg`
-   (#0d6efd) zurueck und schlaegt dabei `.btn-primary` (0,1,0) aus base.css.
-   Genau das war das Bootstrap-Blau auf /notes: der Knopf „Notiz erstellen"
-   startet leer und damit `disabled`. Die Gegenmassnahme ist nicht Uebermalen,
+   (#0d6efd) zurueck und schlaegt dabei `.btn-primary` (0,1,0) aus base.css —
+   Bootstrap-Blau an jedem leer startenden Knopf (z. B. „Notiz erstellen" auf
+   /notes). Die Gegenmassnahme ist nicht Uebermalen,
    sondern hoehere Spezifitaet: die `.btn-*:disabled`-Regeln weiter unten sind
    (0,4,0) und setzen dieselbe Fuellung wie im aktiven Zustand. Bleibt ein
    `.btn` ohne Variante, greift Bootstraps eigener
@@ -126,7 +125,6 @@
   color: var(--pw-paper);
 }
 
-/* Loest den Ad-hoc-Block aus base.css ab (Etappe 0), jetzt mit Kontur. */
 :root[data-design='pinnwand'] .btn-secondary,
 :root[data-design='pinnwand'] .btn-secondary:disabled {
   background-color: var(--pw-cork-deep);
@@ -204,15 +202,14 @@
    und die knapperen Radien aus den Tokens. Die Regeln hier existieren nur,
    damit Bootstraps eigene Radien und der blaue Fokusring nicht durchschlagen.
 
-   NUR Klassenselektoren, KEINE nackten `input[type=…]`: die nackte Variante traf
-   auch Felder, die ihren Rahmen selbst mitbringen. Sichtbare Folgen waren ein
-   zweiter Rahmen um die `CategoryCombobox` (das Feld zeichnet den Rahmen am
-   Wrapper, das Kind ist bewusst rahmenlos) und ein durchgezogener statt
-   *gestrichelter* Rahmen an den „+ zu Kategorie…"-Zeilen — womit die
-   Unterscheidung zwischen Eingabezeile und echtem Artikel verschwand.
-   Alle bare Inputs im Repo (`combo-input`, `add-input`, `top-name-input`,
-   `history-search-input`, `search-overlay-input`, …) setzen Rahmen und
-   Hintergrund selbst; hier greift daher bewusst nichts mehr.
+   NUR Klassenselektoren, KEINE nackten `input[type=…]`: die nackte Variante
+   trifft auch Felder, die ihren Rahmen selbst mitbringen — zweiter Rahmen um
+   die `CategoryCombobox` (Rahmen am Wrapper, Kind bewusst rahmenlos) und ein
+   durchgezogener statt *gestrichelter* Rahmen an den „+ zu Kategorie…"-Zeilen,
+   womit die Unterscheidung zwischen Eingabezeile und echtem Artikel
+   verschwindet. Alle bare Inputs im Repo (`combo-input`, `add-input`,
+   `top-name-input`, `history-search-input`, `search-overlay-input`, …) setzen
+   Rahmen und Hintergrund selbst; hier greift daher bewusst nichts.
    --------------------------------------------------------------------------*/
 :root[data-design='pinnwand'] .form-control,
 :root[data-design='pinnwand'] .form-select,
@@ -225,15 +222,11 @@
   box-shadow: none;
 }
 
-/* Gezielter Nachtrag zum Selektor-Fix darueber.
-   Die nackten Element-Selektoren waren zu Recht das Problem, aber zwei Felder
-   im Repo haben sich still auf sie verlassen: sie setzen `border: none` bzw.
-   `background: transparent`/`var(--color-background)` und bekamen Fuellung und
-   Kontur bisher aus der Regel oben. Ohne sie sass `.history-search-input`
-   transparent auf Kork (Verlauf ist nicht Teil dieses Tickets und darf sich
-   nicht veraendern) und `.add-qty-input` in Packliste/To-do wechselte von
-   Papier auf Kork. Also nicht die nackten Selektoren zurueckholen, sondern die
-   zwei Felder ueber ihre eigenen Klassennamen nachziehen.
+/* Zwei Felder setzen `border: none` bzw. `background: transparent`/
+   `var(--color-background)` und brauchen Fuellung und Kontur von hier — sonst
+   sitzt `.history-search-input` transparent auf Kork und `.add-qty-input` in
+   Packliste/To-do auf Kork statt Papier. Deshalb einzeln ueber ihre
+   Klassennamen, nicht ueber nackte Element-Selektoren (s. o.).
    `ShoppingView` ueberschreibt sein eigenes `.add-qty-input` mit hoeherer
    Spezifitaet auf Klebeband — das bleibt so. */
 :root[data-design='pinnwand'] .history-search-input,
@@ -247,7 +240,7 @@
 
 /* Bewusst NICHT in dieser Liste: `.combo-input` und `.search-overlay-input`.
    Beide sitzen in einem Wrapper, der die Kontur zeichnet; eine eigene Fuellung
-   ergaebe dort den Kasten im Kasten, den dieser Fix gerade beseitigt hat. */
+   ergaebe dort einen Kasten im Kasten. */
 
 /* Kehrseite davon: ohne eigenen Fokus-Eintrag faellt `.combo-input` auf
    `input:focus` aus base.css zurueck und zieht den klassischen Indigo-Ring
@@ -263,10 +256,9 @@
 :root[data-design='pinnwand'] .form-select:focus,
 :root[data-design='pinnwand'] textarea:focus,
 :root[data-design='pinnwand'] select:focus,
-/* Dieselbe Ursache wie oben: `input:focus` musste raus, sonst haette die
-   rahmenlose `CategoryCombobox` einen zweiten Fokusring bekommen. Ohne Ersatz
-   fiel der Ring der uebrigen bare Inputs auf den klassischen Indigo-Wert aus
-   base.css zurueck. Auch hier: einzeln ueber die Klassennamen. `.combo-input`
+/* Kein nacktes `input:focus`, sonst bekaeme die rahmenlose `CategoryCombobox`
+   einen zweiten Fokusring. Ohne diese Liste fiele der Ring der uebrigen bare
+   Inputs auf den klassischen Indigo-Wert aus base.css zurueck. `.combo-input`
    bleibt aussen vor — dort zeichnet `.combo-field:focus-within` den Zustand. */
 :root[data-design='pinnwand'] .top-name-input:focus,
 :root[data-design='pinnwand'] .top-qty-input:focus,
@@ -345,9 +337,8 @@
    `.card.shadow-sm` (z. B. drei Karten auf /uebersicht) Bootstraps weicher
    Glow `rgba(0,0,0,.075) 0 2px 4px` unter der harten Papierkante stehen: genau
    die Mischform aus weichem Verlauf und harter Kontur, die das neue Aussehen
-   ausschliessen soll. Die Utility-Klassen stehen in den Templates, und die
-   werden in diesem Ticket nicht angefasst.
-   Nur `.shadow-sm` ist im Repo tatsaechlich in Gebrauch (3 Stellen); die
+   ausschliessen soll. Die Utility-Klassen stehen in den Templates.
+   Nur `.shadow-sm` ist im Repo tatsaechlich in Gebrauch; die
    uebrigen Schatten-Utilities bleiben absichtlich unangetastet, damit der
    Eingriff so schmal wie moeglich bleibt.
    Gilt weiterhin nur unterhalb des Pinnwand-Attributs. */
@@ -369,8 +360,8 @@
 
 /* Kategorie-Schnellnav (`CategoryRail.vue`) — geteilt von Einkauf, Packliste und
    To-do. Die Bubbles mischen ihre Fuellung aus Kategoriefarbe und
-   `--color-background`; im Pinnwand-Aussehen ist das Kork, und die Bubble stand
-   gemessen bei 1,09–1,28:1 gegen ihren Untergrund. Repariert wird nicht die
+   `--color-background`; im Pinnwand-Aussehen ist das Kork, und die Bubble
+   haette kaum Kontrast (~1,1–1,3:1) gegen ihren Untergrund. Repariert wird nicht die
    Mischung, sondern das Prinzip: Papier mit Tintenkante, die Kategoriefarbe
    sitzt als breite Kante links und traegt keinen Text mehr.
    Bewusst global und nicht nur im Einkauf: es ist eine reine
@@ -429,9 +420,9 @@
 /* ============================================================================
    6. Pinnwand-Bausteine (`.pw-*`)
    ----------------------------------------------------------------------------
-   Vorrat fuer Etappe 2 ff. Auch diese Klassen haengen am Attribut — im alten
-   Aussehen greift aus dieser Datei nichts, selbst wenn eine Klasse dort
-   versehentlich im Markup landet.
+   Auch diese Klassen haengen am Attribut — im alten Aussehen greift aus
+   dieser Datei nichts, selbst wenn eine Klasse dort versehentlich im Markup
+   landet.
    ========================================================================== */
 
 /* Wandhintergrund: Kork mit unregelmaessiger Sprenkelung. Nur Farbverlaeufe,
@@ -453,7 +444,7 @@
 }
 
 /* ----------------------------------------------------------------------------
-   Punkteflug (Etappe 4 / Ticket 09)
+   Punkteflug
    ----------------------------------------------------------------------------
    Der fliegende Punktwert haengt an `<body>` und nicht am Zettel: er muss ueber
    der oben klebenden Statusleiste (z-index 900) und ueber dem FAB (1000)
@@ -486,8 +477,8 @@
 /* Die ruhige Variante: ein Abriss, der nichts mehr einbringt, weil die Punkte
    schon ueber die `deduct`-Unteraufgaben eingesammelt wurden. Papier statt
    Klebeband, kein Plus, keine Zahl — er quittiert die Handlung, ohne einen
-   Punktgewinn zu behaupten. Ohne ihn verschwand so ein Zettel stumm von der
-   Wand (QC-Befund: „Badezimmer putzen", effort 1, Leiste 11 → 11, 0 Chips). */
+   Punktgewinn zu behaupten. Ohne ihn verschwaende so ein Zettel stumm von der
+   Wand. */
 :root[data-design='pinnwand'] .pw-points-flight--muted {
   background: var(--pw-paper);
   color: var(--pw-ink-soft);
