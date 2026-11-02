@@ -1,7 +1,14 @@
 // Single source of truth for household member colors.
-// Used for the profile color picker (SettingsSidebar) and for assigning
-// distinct default colors on household create/join so members never collide
+// Used for the profile color picker (SettingsSidebar) and as the palette the
+// database assigns from on household create/join, so members never collide
 // (which would make avatars and charts indistinguishable).
+//
+// MIRRORED IN SQL: `create_household` and `join_household`
+// (migration 20261102120000) carry a copy of this list in the same order.
+// The rule there: the founder gets the first color, a joining member the
+// first color not yet used in the household (case-insensitive); if all are
+// taken, MEMBER_COLORS[usedCount % length]. Change the list here → change it
+// there in a new migration.
 
 export const MEMBER_COLORS = [
   '#4A90E2', // Blue
@@ -19,16 +26,3 @@ export const MEMBER_COLORS = [
 ] as const
 
 export const DEFAULT_MEMBER_COLOR = MEMBER_COLORS[0]
-
-/**
- * Picks the first palette color not already used by existing members.
- * Falls back to a deterministic palette index (by used-count) if every
- * color is taken, so colors stay as distinct as possible.
- */
-export function pickMemberColor(usedColors: Array<string | null | undefined>): string {
-  const used = new Set(usedColors.filter(Boolean).map((c) => (c as string).toUpperCase()))
-  const free = MEMBER_COLORS.find((c) => !used.has(c.toUpperCase()))
-  if (free) return free
-  // All colors used: cycle deterministically by member count.
-  return MEMBER_COLORS[used.size % MEMBER_COLORS.length]
-}

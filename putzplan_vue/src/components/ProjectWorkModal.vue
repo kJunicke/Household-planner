@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
+import { COMPLETION_NOTE_MAX_LENGTH } from '@/lib/limits'
 
 interface Props {
   projectTitle: string
@@ -66,6 +67,7 @@ const handleClose = () => {
             <textarea
               id="note"
               v-model="note"
+              :maxlength="COMPLETION_NOTE_MAX_LENGTH"
               class="form-control"
               rows="4"
               placeholder="z.B. Wände gestrichen, Möbel aufgebaut, Recherche zu neuen Features..."

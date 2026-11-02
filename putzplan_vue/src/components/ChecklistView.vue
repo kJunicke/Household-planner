@@ -25,6 +25,7 @@ import CategoryCreateModal from '@/components/CategoryCreateModal.vue'
 import CategoryEditModal from '@/components/CategoryEditModal.vue'
 import ListAddBar from '@/components/ListAddBar.vue'
 import LongSheet from '@/components/LongSheet.vue'
+import { SHOPPING_ITEM_NAME_MAX_LENGTH } from '@/lib/limits'
 
 export interface ChecklistLabels {
   /** Title of the "new list" modal, e.g. 'Neue Packliste'. */
@@ -802,7 +803,7 @@ onUnmounted(() => {
                           :placeholder="
                             group.isUncategorized ? '+ hinzufügen…' : `+ zu ${group.label}…`
                           "
-                          maxlength="200"
+                          :maxlength="SHOPPING_ITEM_NAME_MAX_LENGTH"
                           @focus="onAddFocus(group.key)"
                           @blur="onAddBlur"
                           @keyup.enter="handleSectionAdd(group)"

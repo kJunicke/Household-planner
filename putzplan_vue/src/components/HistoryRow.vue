@@ -12,6 +12,12 @@ const props = defineProps<{
   /** Zeile, die aktuell aufgewischt ist — es ist immer nur eine offen. */
   swipeOpenId: string | null
   indented?: boolean
+  /**
+   * Darf der Wisch das Löschen freilegen? Nur bei eigenen Einträgen — die
+   * DB löscht fremde nicht (DELETE-Policy). Ohne Freigabe trennt die Geste
+   * nur noch Wisch von Tap, die Zeile bewegt sich nicht.
+   */
+  deletable: boolean
 }>()
 
 const emit = defineEmits<{
@@ -26,6 +32,8 @@ const { offset, revealed, hide, onPointerDown, onPointerMove, onPointerUp, onCli
     onTap: () => props.completion.completion_note && emit('toggleNote'),
     onSwipeStart: () => emit('swipeStart'),
     onHide: () => emit('swipeEnd'),
+    // Einmal beim Aufbau gelesen: wem ein Eintrag gehört, ändert sich nicht.
+    actionWidth: props.deletable ? 80 : 0,
   })
 
 // Wischt woanders eine Zeile auf, schließt sich diese hier.
@@ -61,6 +69,7 @@ const onKeydown = (e: KeyboardEvent) => {
   <div>
     <div class="row-swipe" :class="{ 'is-child': indented }">
       <button
+        v-if="deletable"
         class="row-swipe-delete"
         :tabindex="revealed ? 0 : -1"
         :aria-hidden="!revealed"

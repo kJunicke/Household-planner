@@ -2,6 +2,7 @@
 import type { Task } from '@/types/Task'
 import { ref, computed } from 'vue'
 import { canPostpone } from '@/lib/taskSchedule'
+import { TASK_TITLE_MAX_LENGTH } from '@/lib/limits'
 
 interface Props {
   task: Task
@@ -129,6 +130,7 @@ const handleClose = () => {
                 class="form-control"
                 id="title"
                 v-model="editForm.title"
+                :maxlength="TASK_TITLE_MAX_LENGTH"
                 required
               />
             </div>

@@ -2,6 +2,7 @@
 import { ref } from 'vue'
 import { useHouseholdStore } from '@/stores/householdStore'
 import { useRouter } from 'vue-router'
+import { HOUSEHOLD_NAME_MAX_LENGTH } from '@/lib/limits'
 
 const householdStore = useHouseholdStore()
 const router = useRouter()
@@ -100,6 +101,7 @@ const joinHousehold = async () => {
                 <input
                   type="text"
                   v-model="newHouseholdName"
+                  :maxlength="HOUSEHOLD_NAME_MAX_LENGTH"
                   class="form-control"
                   placeholder="z.B. WG Musterstraße"
                   :disabled="createLoading"
