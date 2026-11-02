@@ -66,9 +66,8 @@ import { useScrollQuiet } from './useScrollQuiet'
 export type PressDirection = 'up' | 'down' | 'left' | 'right'
 
 /**
- * Haltezeit bis zum Einblenden. Gesetzt, nicht gemessen: etwas unter den
- * üblichen ~500 ms, weil danach noch ein Zug folgt und die Geste sonst
- * insgesamt zäh wirkt.
+ * Haltezeit bis zum Einblenden. Gesetzt, nicht gemessen: kurz gehalten, weil
+ * danach noch ein Zug folgt und die Geste sonst insgesamt zäh wirkt.
  */
 const PRESS_MS = 420
 
@@ -156,8 +155,8 @@ export function useDirectionPress(options: {
   let startX = 0
   let startY = 0
 
-  // Der nachlaufende Klick: jeder ausgelöste Long-Press hinterlässt einen Klick, auch der Abbruch ohne
-  // Richtung. Käme er durch, klappte der Zettel als Nebenwirkung auf — auch
+  // Der nachlaufende Klick: jeder ausgelöste Long-Press hinterlässt einen
+  // Klick, auch der Abbruch ohne Richtung. Käme er durch, klappte der Zettel als Nebenwirkung auf — auch
   // dann, wenn die Geste gerade ein Modal geöffnet hat.
   //
   // **Warum ein Wächter am Fenster und keine Fahne, die ein Klick-Handler am

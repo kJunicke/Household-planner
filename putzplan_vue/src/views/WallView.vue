@@ -246,8 +246,10 @@ const setNoteEl = (taskId: string, instance: unknown) => {
  * Layouts je Zettel, linear in der Zettelzahl, in der Größenordnung eines Frames);
  * `planNoteWidths` plus `packWall` sind mit rund 0,05 ms belanglos.
  *
- * **`tappedId`** ist der angetippte Zettel beim Auf- und Zuklappen. Er steht still
- * (→ `pinnedTops`) und wird hier nur von der Flug-Animation ausgenommen.
+ * **`tappedId`** ist der angetippte Zettel beim Auf- und Zuklappen. Er steht
+ * still — beim Aufklappen über seine Vorgabe (→ `pinnedTops`), beim Zuklappen,
+ * weil er ohne Vorgabe dort landet, wo er als schmaler Zettel lag. Hier wird er
+ * nur von der Flug-Animation ausgenommen.
  *
  * Liefert `false`, wenn der Lauf nicht vollständig war (→ `runRelayout`).
  */

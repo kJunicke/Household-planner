@@ -736,7 +736,9 @@ const stampLayers = computed((): StampLayer[] => {
  * nichts wird gebucht.
  *
  * Gedrückthalten auf dem Stempel greift den Zettel; den nachlaufenden Klick
- * schluckt der Klick-Wächter (→ `isPressControl`), bevor er hier ankommt.
+ * schluckt der Klick-Wächter (→ `isPressControl`) in der Einfangphase, also
+ * vor dem `@click.stop` am Stempel. Auf Bubbling umgestellt, stempelte ein
+ * Long-Press zusätzlich.
  */
 const onStampTap = () => {
   void taskStore.cycleEmphasisLevel(props.task.task_id)
@@ -1030,7 +1032,8 @@ const handlePostponeConfirm = async (targetDate: string) => {
 
     <!-- Hier endet oft ein Zug nach unten oder rechts, und der Long-Press
          startet auch AUF diesem Knopf. Dass dabei kein Modal aufgeht, regelt der
-         Klick-Wächter am Fenster (→ `isPressControl`, `useDirectionPress`). -->
+         Klick-Wächter am Fenster in der Einfangphase, vor diesem `@click.stop`
+         (→ `isPressControl`, `useDirectionPress`). -->
     <button class="edit" title="Aufgabe bearbeiten" @click.stop="showEditModal = true">
       <i class="bi bi-pencil" aria-hidden="true"></i>
     </button>
@@ -1209,8 +1212,8 @@ const handlePostponeConfirm = async (targetDate: string) => {
 
 .title {
   margin: 0;
-  /* 15,6 px: Material 3 Body-Large 16 sp, Apple Body 17 pt — 13 px lag unter
-     jeder Richtlinie. */
+  /* 15,6 px: nahe Material 3 Body-Large 16 sp und Apple Body 17 pt; 13 px
+     wären darunter. */
   font-size: 15.6px;
   font-weight: 800;
   line-height: 1.15;
@@ -1315,8 +1318,8 @@ const handlePostponeConfirm = async (targetDate: string) => {
    absolut, zählten sie nicht zur Breite, ragten aber heraus. Deshalb liegen
    alle Lagen als Grid-Elemente in DERSELBEN Zelle (`grid-area: 1 / 1`).
 
-   **`place-items: center`, nicht `stretch`:** die Lagen sollen ihre eigene
-   natürliche Breite behalten und mittig übereinander liegen. */
+   **`place-items: center`:** die Lagen liegen mittig übereinander; auf
+   Zellbreite stehen sie über `min-width: 100%` an `.stamp-layer`. */
 .due-stamp {
   position: relative;
   display: inline-grid;
@@ -1354,7 +1357,7 @@ const handlePostponeConfirm = async (targetDate: string) => {
 }
 
 /* Eine Lage des Stapels. Die Schriftgröße ist ausdrücklich KEIN Stellknopf:
-   11 px sind die Untergrenze (Material Label-Small 11 sp), alles darunter
+   11 px sind die dokumentierte Untergrenze, alles darunter
    nähme die Anhebung der Schrift zurück (→ ADR-0003, „Den Stempel schmaler
    setzen").
 

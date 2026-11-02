@@ -27,8 +27,9 @@ Abdruckstapel freihält: [ADR-0003](adr/0003-der-stapel-haelt-seinen-platz-frei.
   stehen Fußzeilen-gebundene Zettel konstant um ~14,7 px über.
 - Ergebnis bei 4 px (Wandbreite 370, 60 Zettel): die Fußzeilen-Untergrenze hält überall
   ≥ 4,00 px Luft; Zettel mit voller `natural`-Breite haben 4,00…4,86 px (Marge plus
-  `Math.ceil`-Rest). Bei 1 px lag die knappste Restluft bei 0,50 px — nie umgebrochen, aber jede
-  Änderung an Schrift oder Polster hätte entschieden.
+  `Math.ceil`-Rest). Eine ältere Messung mit 1 px Marge (25 Zettel, noch **ohne** `chromeWidth`,
+  also ein anderes Maß und nicht mit dem obigen vergleichbar) fand 0,50 px knappste Restluft —
+  zu wenig, als dass Schrift- oder Polsteränderungen folgenlos blieben.
 - Ein Zettel kann breiter sein, als sein Titel verlangt: `minimum` sticht den 45-%-Deckel, und in
   der Fassung mit Punkten oben bindet oft `titleMinimum + cornerExtra`.
 - Die Marge geht immer nach oben: ein paar Pixel Breite sieht niemand, ein fehlendes halbes Pixel

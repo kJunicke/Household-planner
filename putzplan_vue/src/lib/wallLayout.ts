@@ -276,8 +276,8 @@ interface PackedNote {
    * Stapelreihenfolge. **Nicht** die Packreihenfolge — die folgt der Skyline
    * und weiß nichts von links und rechts. Kleineres `x` gewinnt: der linke
    * Zettel liegt über dem rechten, sein Eselsohr (untere rechte Ecke) bleibt
-   * frei statt vom rechten Nachbarn verdeckt. Bei gleichem `x` gewinnt kleineres `y` — aus derselben
-   * Begründung: zwei Zettel untereinander überlappen an der UNTEREN Kante des
+   * frei statt vom rechten Nachbarn verdeckt. Bei gleichem `x` gewinnt
+   * kleineres `y` — aus derselben Begründung: zwei Zettel untereinander überlappen an der UNTEREN Kante des
    * oberen, wo Stift und Eselsohr sitzen, also gewinnt wieder der frühere.
    * Vergeben wird `z` erst NACH dem Packen, aus der fertigen Position — siehe
    * `packWall`.
@@ -438,8 +438,8 @@ const RAD = Math.PI / 180
  *    **breitenabhängig**, und deshalb reicht kein Skalar.
  *
  * **Bewusst weggelassen:** die Zettelneigung senkt die Oberkante in der
- * Zettelmitte zusätzlich um `(H/2)·(1 − cos θ)` (bei 3 deg höchstens rund
- * 0,3 px). Der Term braucht die Zettelhöhe und macht das Ergebnis nur
+ * Zettelmitte zusätzlich um `(H/2)·(1 − cos θ)` (bei 3 deg und H ≈ 500 rund
+ * 0,3 px, wächst mit der Zettelhöhe). Der Term braucht die Zettelhöhe und macht das Ergebnis nur
  * KLEINER; ihn wegzulassen ist die konservative Seite und spart die
  * Abhängigkeit.
  *
