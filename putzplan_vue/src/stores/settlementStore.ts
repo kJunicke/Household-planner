@@ -42,9 +42,9 @@ export const useSettlementStore = defineStore('settlement', () => {
    */
   const settledByPair = computed(() => {
     const map = new Map<string, number>()
-    for (const s of settlements.value) {
-      const key = `${s.from_user_id}__${s.to_user_id}`
-      map.set(key, (map.get(key) ?? 0) + s.points_settled)
+    for (const settlement of settlements.value) {
+      const key = `${settlement.from_user_id}__${settlement.to_user_id}`
+      map.set(key, (map.get(key) ?? 0) + settlement.points_settled)
     }
     return map
   })
@@ -180,7 +180,7 @@ export const useSettlementStore = defineStore('settlement', () => {
 
       if (error) throw error
 
-      settlements.value = settlements.value.filter((s) => s.settlement_id !== settlementId)
+      settlements.value = settlements.value.filter((row) => row.settlement_id !== settlementId)
       toastStore.showToast('Ausgleich gelöscht', 'success', 2000)
     } catch (error) {
       console.error('Error deleting settlement:', error)
@@ -213,19 +213,23 @@ export const useSettlementStore = defineStore('settlement', () => {
         },
         (payload) => {
           if (payload.eventType === 'INSERT') {
-            const s = payload.new as Settlement
-            if (!settlements.value.find((x) => x.settlement_id === s.settlement_id)) {
-              settlements.value.unshift(s)
+            const changed = payload.new as Settlement
+            if (!settlements.value.find((row) => row.settlement_id === changed.settlement_id)) {
+              settlements.value.unshift(changed)
             }
           }
           if (payload.eventType === 'UPDATE') {
-            const s = payload.new as Settlement
-            const idx = settlements.value.findIndex((x) => x.settlement_id === s.settlement_id)
-            if (idx !== -1) settlements.value[idx] = s
+            const changed = payload.new as Settlement
+            const idx = settlements.value.findIndex(
+              (row) => row.settlement_id === changed.settlement_id,
+            )
+            if (idx !== -1) settlements.value[idx] = changed
           }
           if (payload.eventType === 'DELETE') {
-            const s = payload.old as Settlement
-            settlements.value = settlements.value.filter((x) => x.settlement_id !== s.settlement_id)
+            const changed = payload.old as Settlement
+            settlements.value = settlements.value.filter(
+              (row) => row.settlement_id !== changed.settlement_id,
+            )
           }
         },
       )
@@ -237,8 +241,10 @@ export const useSettlementStore = defineStore('settlement', () => {
         'postgres_changes',
         { event: 'DELETE', schema: 'public', table: 'settlements' },
         (payload) => {
-          const s = payload.old as Pick<Settlement, 'settlement_id'>
-          settlements.value = settlements.value.filter((x) => x.settlement_id !== s.settlement_id)
+          const changed = payload.old as Pick<Settlement, 'settlement_id'>
+          settlements.value = settlements.value.filter(
+            (row) => row.settlement_id !== changed.settlement_id,
+          )
         },
       )
       .subscribe()

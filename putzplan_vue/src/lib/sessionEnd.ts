@@ -15,18 +15,9 @@
  * verhindern soll.
  */
 
-type SessionEndReason =
-  /** Abmelden über die App (`authStore.logout`). */
-  | 'logout'
-  /** Sitzung von außen beendet: anderer Tab, widerrufenes Refresh-Token. */
-  | 'signed-out'
-  /** Ein anderes Konto hat übernommen, ohne Abmeldung in diesem Tab. */
-  | 'user-changed'
-
 export interface SessionEndContext {
-  /** Konto, dessen Sitzung endet. */
+  /** Konto, dessen Sitzung endet (Abmelden, Abmeldung von außen, Kontowechsel). */
   userId: string
-  reason: SessionEndReason
 }
 
 type SessionEndHandler = (context: SessionEndContext) => void

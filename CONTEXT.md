@@ -98,6 +98,11 @@ Architekturentscheidungen: [docs/adr/](docs/adr/).
 - Technisch: `completed` wird gesetzt (bleibt alleinige Antwort auf „ist die Aufgabe dran"), das **Verschiebe-Datum** liegt in einer eigenen Spalte — nur Weckruf für den Cron, keine zweite Dranheits-Quelle. „Wieder dreckig" leert sie.
 - Nicht verfügbar bei täglichen Aufgaben (setzen sich nächtlich selbst zurück) und Projekten (durchgehend bearbeitbar, sammeln keine Überfällig-Tage).
 
+### Quick-Aufgabe
+- Etwas Erledigtes, das nicht an der Wand hing, nachträglich mit Titel und Punkten verbuchen — ohne Zettel.
+- Zählt wie jede Erledigung: Punkte ins Wochenziel, Eintrag in der Historie.
+- Technisch eine einmalige Aufgabe, die schon erledigt **und** gelöscht angelegt wird (`completed`, `deleted_at`), plus eine Erledigung mit `is_quick`. Deshalb nie als Zettel und nie unter **Erledigt**.
+
 ### Wochenziel
 - Punktzahl, die der Haushalt sich gemeinsam für eine Woche vornimmt; gehört dem Haushalt, jedes Mitglied darf sie ändern.
 - Gemessen gegen die Summe aller Erledigungen der laufenden Woche: **ein** Balken für alle, ein Farbsegment je Mitglied.
@@ -123,6 +128,11 @@ Architekturentscheidungen: [docs/adr/](docs/adr/).
 - Sektionen einer Liste ordnen sich nach Zustand: Rang 0 **aktiv** (mindestens ein offener Eintrag) → Rang 1 **vollständig** (nur erledigte) → Rang 2 **leer**. Innerhalb eines Rangs steht „Unkategorisiert" **zuletzt**.
 - Kategorie-Mutationen (anlegen, umbenennen, löschen, Einträge umhängen) laufen über dieselbe Offline-Warteschlange wie Einträge. Kollidiert beim Sync ein Name mit einer bereits bestehenden Zeile (zwei Geräte legen offline denselben Namen an, oder eine Umbenennung trifft eine vorhandene Kategorie), **verschmelzen** beide zu einer Zeile statt eines Fehlers.
 - Gilt gleichermaßen für Einkauf, Packliste und To-do — dieselbe Tabellenform, derselbe Vergleicher (`compareCategoryGroups`), unterschiedlich nur die Wortwahl der Oberfläche.
+
+### Besitzer (Warteschlange)
+- Konto **und** Haushalt, denen eine ungesendete Offline-Änderung gehört (`queueOwner`).
+- Gesendet wird nur, solange genau dieser Besitzer angemeldet ist; sonst wartet sie auf dem Gerät. Wer abmeldet, verliert nichts — derselbe Besitzer reicht sie beim nächsten Anmelden nach.
+- Sonst landete die Änderung mit der `household_id` des Nachfolgers in dessen Haushalt.
 
 ### Abreißen
 - Geste zum Erledigen: den Zettel am **Eselsohr** greifen und nach unten ziehen.

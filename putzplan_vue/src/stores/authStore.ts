@@ -9,10 +9,6 @@ export const useAuthStore = defineStore('auth', () => {
   const user = ref<User | null>(null)
   const session = ref<Session | null>(null)
 
-  // Unterscheidet beim Session-Ende den Abmelde-Knopf von einer Abmeldung von
-  // außen; `signOut` meldet SIGNED_OUT, bevor sein Promise auflöst.
-  let loggingOut = false
-
   /**
    * Setzt `user`/`session` aus einer Supabase-Sitzung (Listener und logout).
    * Wechselt dabei das Konto oder endet es, räumen zuerst alle Stores und
@@ -24,10 +20,7 @@ export const useAuthStore = defineStore('auth', () => {
     const previousUserId = user.value?.id ?? null
     const nextUserId = newSession?.user?.id ?? null
     if (previousUserId !== null && previousUserId !== nextUserId) {
-      endSession({
-        userId: previousUserId,
-        reason: nextUserId !== null ? 'user-changed' : loggingOut ? 'logout' : 'signed-out',
-      })
+      endSession({ userId: previousUserId })
       // Kein `removeAllChannels()` als Kehrbesen: realtime-js trennt danach
       // bedingungslos den Socket und reißt damit auch die Kanäle ab, die das
       // neue Konto gleich anlegt. Jeder Store mit Kanal meldet ihn in seinem
@@ -55,10 +48,7 @@ export const useAuthStore = defineStore('auth', () => {
   }
   async function logout() {
     const toastStore = useToastStore()
-    loggingOut = true
-    const { error } = await supabase.auth.signOut().finally(() => {
-      loggingOut = false
-    })
+    const { error } = await supabase.auth.signOut()
 
     if (error) {
       console.error('Logout error:', error.message)

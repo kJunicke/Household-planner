@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 
 import { createSessionEndHub } from './sessionEnd'
 
-const ctx = { userId: 'u1', reason: 'logout' } as const
+const ctx = { userId: 'u1' }
 
 describe('createSessionEndHub', () => {
   it('ruft jeden angemeldeten Abmelder mit dem Kontext', () => {
@@ -61,8 +61,8 @@ describe('createSessionEndHub', () => {
     const a = vi.fn()
     hub.onSessionEnd(a)
     hub.endSession(ctx)
-    hub.endSession({ userId: 'u2', reason: 'signed-out' })
+    hub.endSession({ userId: 'u2' })
     expect(a).toHaveBeenCalledTimes(2)
-    expect(a).toHaveBeenLastCalledWith({ userId: 'u2', reason: 'signed-out' })
+    expect(a).toHaveBeenLastCalledWith({ userId: 'u2' })
   })
 })
