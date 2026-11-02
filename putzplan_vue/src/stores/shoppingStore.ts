@@ -802,10 +802,11 @@ export const useShoppingStore = defineStore('shopping', () => {
       return false
     }
 
+    // `is_priority` bleibt stehen: Wer versehentlich abhakt und zurückholt, soll
+    // den Stern wiederhaben. Gekaufte zeigen ihn ohnehin nicht (ShoppingView).
     const now = new Date().toISOString()
     updateItemOptimistic(itemId, {
       purchased: true,
-      is_priority: false,
       times_purchased: item.times_purchased + 1,
       last_purchased_at: now,
       last_purchased_by: authStore.user.id,
@@ -817,7 +818,6 @@ export const useShoppingStore = defineStore('shopping', () => {
         itemId,
         updates: {
           purchased: true,
-          is_priority: false,
           times_purchased: item.times_purchased + 1,
           last_purchased_at: now,
           last_purchased_by: authStore.user.id,
