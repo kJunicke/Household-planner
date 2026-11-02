@@ -373,6 +373,19 @@ export const useShoppingStore = defineStore('shopping', () => {
         .update(mutation.payload.updates!)
         .eq('category_id', categoryId!)
       if (error && error.code !== '23505') throw error
+      if (error) {
+        // Der neue Name gehört schon einer anderen Zeile dieser Liste:
+        // verschmelzen. Die Produkte folgen dem Namen über ihre eigenen
+        // wartenden Mutationen; die umbenannte Zeile bliebe sonst auf dem
+        // Server unter dem alten Namen stehen und käme beim Neuabgleich als
+        // leere Kategorie zurück.
+        const { error: deleteError } = await supabase
+          .from('shopping_categories')
+          .delete()
+          .eq('category_id', categoryId!)
+        if (deleteError) throw deleteError
+        categories.value = categories.value.filter((c) => c.category_id !== categoryId)
+      }
       return true
     }
 

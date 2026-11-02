@@ -313,6 +313,19 @@ export function createChecklistStore(config: ChecklistStoreConfig) {
           .update(m.payload.updates!)
           .eq('category_id', categoryId!)
         if (error && error.code !== '23505') throw error
+        if (error) {
+          // Der neue Name gehört schon einer anderen Zeile dieser Liste:
+          // verschmelzen. Die Einträge folgen dem Namen über ihre eigenen
+          // wartenden Mutationen; die umbenannte Zeile bliebe sonst auf dem
+          // Server unter dem alten Namen stehen und käme beim Neuabgleich als
+          // leere Kategorie zurück.
+          const { error: deleteError } = await supabase
+            .from(categoriesTable)
+            .delete()
+            .eq('category_id', categoryId!)
+          if (deleteError) throw deleteError
+          categories.value = categories.value.filter((c) => c.category_id !== categoryId)
+        }
         return true
       }
 
