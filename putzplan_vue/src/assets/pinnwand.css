@@ -164,8 +164,8 @@
   color: var(--color-text-primary);
 }
 
-/* Ikonen-Knoepfe aus utilities.css und der Schliessen-Knopf der Modals sind
-   bewusst flaechenlos — Modals bleiben nuechtern. */
+/* Der Loesch-Knopf `.btn-delete-ghost` aus utilities.css und der
+   Schliessen-Knopf der Modals sind bewusst flaechenlos — Modals bleiben nuechtern. */
 :root[data-design='pinnwand'] .btn-delete-ghost,
 :root[data-design='pinnwand'] .btn-close {
   border-color: transparent;

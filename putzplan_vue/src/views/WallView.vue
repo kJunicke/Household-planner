@@ -1473,7 +1473,7 @@ function revealJumpTarget() {
       // nächsten Rendern überschrieben. Der Zettel ist gedreht, der Umriss dreht
       // mit. Die Zeile liegt in einer Liste mit Rand, deshalb nach innen.
       const accent = getComputedStyle(document.documentElement).getPropertyValue('--pw-accent')
-      const ring = `3px solid ${accent.trim() || '#2b4a8f'}`
+      const ring = `3px solid ${accent.trim()}`
       const offset = note ? '4px' : '-3px'
       el.animate(
         [

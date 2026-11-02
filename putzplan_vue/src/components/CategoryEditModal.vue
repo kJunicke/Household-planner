@@ -126,7 +126,7 @@ const onDeleteClick = () => {
           </button>
 
           <!-- Beide Wege ausdrücklich benannt, mit konkreter Zahl. -->
-          <div v-else class="delete-variants me-auto">
+          <div v-else class="delete-options me-auto">
             <button class="btn btn-sm btn-outline-danger" @click="emit('delete', category, false)">
               Nur Kategorie löschen
               <small class="d-block text-muted">
@@ -185,17 +185,17 @@ const onDeleteClick = () => {
   margin-right: 6px;
   flex-shrink: 0;
 }
-.delete-variants {
+.delete-options {
   display: flex;
   flex-direction: column;
   gap: var(--spacing-sm);
   width: 100%;
 }
-.delete-variants .btn {
+.delete-options .btn {
   min-height: var(--touch-target-min);
   text-align: left;
 }
-.delete-variants small {
+.delete-options small {
   font-size: var(--font-xs);
 }
 </style>
