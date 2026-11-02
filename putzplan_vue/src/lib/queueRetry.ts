@@ -4,7 +4,7 @@
 // lässt. Was eine einzelne Mutation tut, bleibt Sache des Stores (`process`).
 
 import type { PendingMutation } from '@/types/PendingMutation'
-import { isTransientFailure } from './networkError'
+import { isRetryLater } from './networkError'
 
 /**
  * Fehlversuche, die kürzer als dieser Abstand nach dem letzten gezählten
@@ -25,22 +25,6 @@ export const SERVER_COUNT_GAP_MS = 10 * 60_000
 export const MAX_SERVER_RETRIES = 6
 /** Ab dieser Zählung sagt die App einmal, dass Änderungen auf den Server warten. */
 const SERVER_NOTICE_AT = 2
-
-/**
- * Fehler, nach denen ein späterer Versuch sicher anders ausgeht: kein Netz,
- * ein Gateway- oder Verbindungsfehler (→ `isTransientFailure`) oder ein
- * abgelaufenes Token, das supabase-js gleich erneuert. Sie verbrauchen keinen
- * Versuch — sonst verwirft die Warteschlange gerade die Änderungen, für die es
- * sie gibt.
- */
-export function isTransientError(error: unknown): boolean {
-  if (typeof navigator !== 'undefined' && navigator.onLine === false) return true
-  if (!error) return false
-  if (isTransientFailure(error)) return true
-  const message = String((error as { message?: unknown }).message ?? error)
-  const code = String((error as { code?: unknown }).code ?? '')
-  return code === 'PGRST301' || code === 'PGRST303' || message.toLowerCase().includes('jwt expired')
-}
 
 /**
  * SQLSTATEs, die PostgREST mit 5xx meldet, obwohl ein zweiter Versuch genauso
@@ -87,7 +71,7 @@ export function judgeFailure(
     lastServerFailedAt: m.lastServerFailedAt,
     serverNotice: false,
   }
-  if (isTransientError(error)) return { verdict: 'later', ...unchanged }
+  if (isRetryLater(error)) return { verdict: 'later', ...unchanged }
 
   const code = String((error as { code?: unknown }).code ?? '')
   if (isServerStatus(error) && !isPermanentCode(code)) {

@@ -7,12 +7,12 @@ import {
   MAX_SERVER_RETRIES,
   SERVER_COUNT_GAP_MS,
   dependentsOf,
-  isTransientError,
   judgeFailure,
   pendingCategoryIds,
   runQueuePass,
   type QueuePassIO,
 } from './queueRetry'
+import { isRetryLater } from './networkError'
 
 let nextId = 0
 const mutation = (overrides: Partial<PendingMutation> = {}): PendingMutation => ({
@@ -30,21 +30,21 @@ const fetchFailed = { message: 'TypeError: Failed to fetch', details: '', hint: 
 const safariFetchFailed = { message: 'TypeError: Load failed', details: '', hint: '', code: '' }
 const serverError = { message: 'new row violates check constraint', code: '23514' }
 
-describe('isTransientError', () => {
+describe('isRetryLater', () => {
   it('erkennt die Netzfehler-Hülle von supabase-js', () => {
-    expect(isTransientError(fetchFailed)).toBe(true)
-    expect(isTransientError(safariFetchFailed)).toBe(true)
+    expect(isRetryLater(fetchFailed)).toBe(true)
+    expect(isRetryLater(safariFetchFailed)).toBe(true)
   })
 
   it('erkennt ein abgelaufenes Token', () => {
-    expect(isTransientError({ code: 'PGRST303', message: 'JWT expired' })).toBe(true)
+    expect(isRetryLater({ code: 'PGRST303', message: 'JWT expired' })).toBe(true)
   })
 
   it('zählt Server- und Programmfehler nicht als vorübergehend', () => {
-    expect(isTransientError(serverError)).toBe(false)
-    expect(
-      isTransientError(new TypeError("Cannot read properties of undefined (reading 'x')")),
-    ).toBe(false)
+    expect(isRetryLater(serverError)).toBe(false)
+    expect(isRetryLater(new TypeError("Cannot read properties of undefined (reading 'x')"))).toBe(
+      false,
+    )
   })
 })
 

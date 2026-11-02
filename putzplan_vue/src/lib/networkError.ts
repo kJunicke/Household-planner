@@ -1,5 +1,7 @@
-// Netzfehler erkennen, ohne den Supabase-Client zu laden: die Offline-Warteschlange
+// Fehler einordnen, ohne den Supabase-Client zu laden: die Offline-Warteschlange
 // und ihre Tests brauchen nur die Einordnung, nicht die Verbindung.
+// Zwei Fragen: Ist das Netz weg (`isNetworkError`)? Später erneut versuchen,
+// ohne zu zählen (`isRetryLater`)?
 
 /**
  * Netzfehler? Dann ist ein Nachlade-SELECT sinnlos — er läuft in dieselben
@@ -55,30 +57,39 @@ const TRANSIENT_CODES = new Set(['40001', '40P01', 'PGRST000', 'PGRST001', 'PGRS
 const TRANSIENT_CLASSES = ['08', '53']
 
 /**
- * Wird ein späterer Versuch derselben Anfrage wahrscheinlich gelingen? Ja bei
- * Netzfehlern (auch mit `navigator.onLine === true`: Funkloch, Captive Portal)
- * und bei den Störungen oben. Andere 5xx sind es nicht sicher — die zählt die
- * Warteschlange in einem eigenen Budget (`judgeFailure`).
+ * Später erneut versuchen, ohne einen Versuch zu zählen? Ja, wenn ein späterer
+ * Versuch derselben Anfrage sicher anders ausgeht: kein Netz (auch mit
+ * `navigator.onLine === true`: Funkloch, Captive Portal), die Störungen oben
+ * oder ein abgelaufenes Token, das supabase-js gleich erneuert. Andere 5xx sind
+ * es nicht sicher — die zählt die Warteschlange in einem eigenen Budget
+ * (`judgeFailure`). Zählten diese hier, verwürfe die Warteschlange gerade die
+ * Änderungen, für die es sie gibt.
  *
  * Ein echter `TypeError` aus einem Programmfehler ist eine Error-Instanz ohne
  * die Hülle oben und gilt nicht als vorübergehend — sonst hielte er die
  * Offline-Warteschlange für immer an, statt nach ein paar Versuchen verworfen
- * zu werden.
+ * zu werden. Darin unterscheidet sich das hier von `isNetworkError`.
  *
  * Den HTTP-Status kennt nur die Antwort, nicht ihr `error`; wer ihn auswerten
  * lassen will, wirft `withStatus(error, status)`.
  */
-export function isTransientFailure(error: unknown): boolean {
+export function isRetryLater(error: unknown): boolean {
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) return true
   if (!error) return false
   const status = (error as { status?: unknown }).status
   if (typeof status === 'number' && TRANSIENT_STATUSES.has(status)) return true
 
   const message = String((error as { message?: unknown }).message ?? error)
-  if (isNetworkMessage(message)) return true
+  if (isNetworkMessage(message) || message.toLowerCase().includes('jwt expired')) return true
 
   const code = (error as { code?: unknown }).code
   if (typeof code === 'string' && code !== '') {
-    return TRANSIENT_CODES.has(code) || TRANSIENT_CLASSES.some((c) => code.startsWith(c))
+    return (
+      TRANSIENT_CODES.has(code) ||
+      TRANSIENT_CLASSES.some((c) => code.startsWith(c)) ||
+      code === 'PGRST301' ||
+      code === 'PGRST303'
+    )
   }
   if (error instanceof Error) return false
   return WRAPPED_FETCH_FAILURE.test(message)
