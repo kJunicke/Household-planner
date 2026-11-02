@@ -69,7 +69,7 @@
    startet leer und damit `disabled`. Die Gegenmassnahme ist nicht Uebermalen,
    sondern hoehere Spezifitaet: die `.btn-*:disabled`-Regeln weiter unten sind
    (0,4,0) und setzen dieselbe Fuellung wie im aktiven Zustand. Bleibt ein
-   `.btn` ohne Variante (z. B. `.btn-icon`), greift Bootstraps eigener
+   `.btn` ohne Variante, greift Bootstraps eigener
    Vorgabewert `--bs-btn-disabled-bg: transparent` — passt. Diese Regel hier
    regelt daher nur Kontur und Zustandsoptik. */
 :root[data-design='pinnwand'] .btn:disabled,
@@ -164,35 +164,14 @@
   color: var(--color-text-primary);
 }
 
-/* Textlinks bleiben Text: keine Kontur, kein Schatten, kein Versatz. */
-:root[data-design='pinnwand'] .btn-link,
-:root[data-design='pinnwand'] .btn-link:disabled {
-  background-color: transparent;
-  border-color: transparent;
-  box-shadow: none;
-  color: var(--color-primary);
-  font-weight: 600;
-}
-
-:root[data-design='pinnwand'] .btn-link:hover,
-:root[data-design='pinnwand'] .btn-link:active {
-  background-color: transparent;
-  box-shadow: none;
-  transform: none;
-  color: var(--color-primary-dark);
-  text-decoration: underline;
-}
-
 /* Ikonen-Knoepfe aus utilities.css und der Schliessen-Knopf der Modals sind
    bewusst flaechenlos — Modals bleiben nuechtern. */
-:root[data-design='pinnwand'] .btn-icon,
 :root[data-design='pinnwand'] .btn-delete-ghost,
 :root[data-design='pinnwand'] .btn-close {
   border-color: transparent;
   box-shadow: none;
 }
 
-:root[data-design='pinnwand'] .btn-icon:hover,
 :root[data-design='pinnwand'] .btn-delete-ghost:hover,
 :root[data-design='pinnwand'] .btn-close:hover {
   transform: none;
@@ -494,71 +473,6 @@
     59px 53px,
     83px 79px,
     37px 41px;
-}
-
-/* Zettel: das Grundelement der Wand. */
-:root[data-design='pinnwand'] .pw-note {
-  position: relative;
-  border: 2px solid var(--pw-line);
-  border-radius: var(--radius-sm);
-  background-color: var(--pw-paper);
-  color: var(--color-text-primary);
-  padding: var(--spacing-sm);
-  box-shadow: var(--pw-shadow);
-}
-
-/* Taegliche Aufgaben: gelber Notizblock. */
-:root[data-design='pinnwand'] .pw-note--day {
-  background-color: var(--pw-paper-day);
-}
-
-/* Projekte: Packpapier. */
-:root[data-design='pinnwand'] .pw-note--proj {
-  background-color: var(--pw-paper-proj);
-}
-
-/* Ein angehobener Zettel (Drag, offenes Detail) wirft einen laengeren
-   Schatten und kippt minimal aus der Achse. */
-:root[data-design='pinnwand'] .pw-note--lifted {
-  box-shadow: var(--pw-shadow-lift);
-  transform: rotate(-1deg) translate(-2px, -3px);
-}
-
-/* Klebeband-Leiste: liegt als Kind ueber der Oberkante eines Zettels.
-   Der Elternteil braucht `position: relative` — `.pw-note` hat das. */
-:root[data-design='pinnwand'] .pw-tape {
-  position: absolute;
-  top: -10px;
-  left: 50%;
-  width: 62px;
-  height: 20px;
-  transform: translateX(-50%) rotate(-2deg);
-  background-color: var(--pw-tape);
-  border: 1px solid rgba(36, 31, 26, 0.28);
-  opacity: 0.9;
-  pointer-events: none;
-}
-
-:root[data-design='pinnwand'] .pw-tape--left {
-  left: 14px;
-  transform: rotate(-8deg);
-}
-
-:root[data-design='pinnwand'] .pw-tape--right {
-  right: 14px;
-  left: auto;
-  transform: rotate(7deg);
-}
-
-/* Klebeband als durchgehende Leiste, z. B. als Abschnittstrenner auf der Wand. */
-:root[data-design='pinnwand'] .pw-tape-strip {
-  display: block;
-  height: 22px;
-  background-color: var(--pw-tape);
-  border-top: 1px solid rgba(36, 31, 26, 0.28);
-  border-bottom: 1px solid rgba(36, 31, 26, 0.28);
-  opacity: 0.92;
-  transform: rotate(-0.4deg);
 }
 
 /* ----------------------------------------------------------------------------

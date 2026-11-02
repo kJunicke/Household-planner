@@ -468,12 +468,7 @@ type FastenerAnchor = 'center' | 'left' | 'right'
  * Kopplung deshalb durch Kommentare an BEIDEN Enden: die CSS-Regeln in
  * `WallNote.vue` (`.zettel`, `.pin`, `.tape`, `.clip`) verweisen hierher.
  *
- * **Nicht enthalten:** `.pw-tape` aus `pinnwand.css` (62 × 20 px, `top: -10px`)
- * hätte den größten Überstand von allen, ist aber **toter Code** — die Klasse
- * kommt in keinem Markup vor, nur die gleichnamige CSS-Variable wird benutzt.
- * Sollte sie je in Gebrauch kommen, gehört sie in diese Tabelle.
- *
- * **Ebenfalls nicht enthalten: Schlagschatten** (alle werfen nach unten) und
+ * **Nicht enthalten: Schlagschatten** (alle werfen nach unten) und
  * die zusätzlichen Neigungen der Griff-Zustände (`.zettel--tearing` u. a., bis
  * +9 deg).
  *
