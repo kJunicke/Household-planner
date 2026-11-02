@@ -328,6 +328,8 @@ const suggestionsFor = (group: ShoppingCategoryGroup): string[] => {
   return out
 }
 
+// Auch beim Tippen öffnen: ein Vorschlag schließt die Liste, das Feld behält
+// aber den Fokus — ein Fokus-Ereignis kommt bis zum nächsten Feldwechsel nicht.
 const onSectionAddFocus = (key: string) => {
   suggestFocusKey.value = key
 }
@@ -778,6 +780,7 @@ onUnmounted(() => {
                           "
                           :maxlength="SHOPPING_ITEM_NAME_MAX_LENGTH"
                           @focus="onSectionAddFocus(group.key)"
+                          @input="onSectionAddFocus(group.key)"
                           @blur="onSectionAddBlur"
                           @keyup.enter="handleSectionAdd(group)"
                         />
