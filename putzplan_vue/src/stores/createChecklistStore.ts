@@ -18,6 +18,7 @@ import { supabase } from '@/lib/supabase'
 import { useHouseholdStore } from './householdStore'
 import { useAuthStore } from './authStore'
 import { useToastStore } from './toastStore'
+import { onSessionEnd } from '@/lib/sessionEnd'
 import type { RealtimeChannel } from '@supabase/supabase-js'
 
 /**
@@ -1284,7 +1285,7 @@ export function createChecklistStore(config: ChecklistStoreConfig) {
     }
 
     /**
-     * Beim Session-Ende aufrufen (Abmelden, SIGNED_OUT): Listen, Einträge,
+     * Läuft beim Session-Ende (Abmelden, SIGNED_OUT, Kontowechsel): Listen, Einträge,
      * Kategorien und Abos leeren, damit der nächste Nutzer nichts davon sieht.
      * Die Warteschlange bleibt unter Nutzer + Haushalt gespeichert und verlässt
      * den Speicher von selbst, sobald der Besitzer wechselt.
@@ -1296,6 +1297,9 @@ export function createChecklistStore(config: ChecklistStoreConfig) {
       categories.value = []
       currentListId.value = null
     }
+    // Meldet sich erst an, wenn die Ansicht den Store einmal angelegt hat;
+    // vorher liegt nichts im Speicher, das zu räumen wäre.
+    onSessionEnd(resetForSessionEnd)
 
     // ==========================================================================
     // Public API
@@ -1342,7 +1346,6 @@ export function createChecklistStore(config: ChecklistStoreConfig) {
       subscribe,
       unsubscribe,
       syncMutations: queue.sync,
-      resetForSessionEnd,
     }
   })
 }

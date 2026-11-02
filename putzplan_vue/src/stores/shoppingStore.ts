@@ -25,6 +25,7 @@ import { useHouseholdStore } from './householdStore'
 import { useAuthStore } from './authStore'
 import { useToastStore } from './toastStore'
 import { registerSyncSource } from '@/composables/useSyncStatus'
+import { onSessionEnd } from '@/lib/sessionEnd'
 import type { RealtimeChannel } from '@supabase/supabase-js'
 
 // localStorage Keys
@@ -1254,7 +1255,7 @@ export const useShoppingStore = defineStore('shopping', () => {
   }
 
   /**
-   * Beim Session-Ende aufrufen (Abmelden, SIGNED_OUT). Leert, was der nächste
+   * Läuft beim Session-Ende (Abmelden, SIGNED_OUT, Kontowechsel). Leert, was der nächste
    * Nutzer auf diesem Gerät sonst sähe: Artikel, Listen, Kategorien, Abos und
    * den Artikel-Cache im localStorage.
    *
@@ -1277,6 +1278,7 @@ export const useShoppingStore = defineStore('shopping', () => {
       console.error('Failed to clear item cache:', error)
     }
   }
+  onSessionEnd(resetForSessionEnd)
 
   // ============================================================================
   // Return - Public API
@@ -1315,6 +1317,5 @@ export const useShoppingStore = defineStore('shopping', () => {
     subscribeToItems,
     unsubscribeFromItems,
     syncMutations,
-    resetForSessionEnd,
   }
 })
