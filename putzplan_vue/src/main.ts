@@ -11,10 +11,12 @@ import { useVisualViewportHeight } from './composables/useVisualViewportHeight'
 
 import App from './App.vue'
 
-// Den Schlüssel des früheren Aussehen-Umschalters wegräumen. Gelesen wird er
-// nicht mehr; das Attribut steht fest in index.html.
+// Schlüssel des früheren klassischen Aussehens wegräumen (Aussehen-Umschalter,
+// Kategorie-Filter). Gelesen werden sie nicht mehr; `data-design` steht fest
+// in index.html.
 try {
   localStorage.removeItem('putzplan.design')
+  localStorage.removeItem('putzplan_active_category')
 } catch {
   // localStorage gesperrt — dann liegt dort auch nichts
 }
