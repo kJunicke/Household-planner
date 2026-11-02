@@ -153,6 +153,10 @@
   align-items: center;
   justify-content: center;
   transition: color var(--transition-base);
+  /* Bootstrap dimmt auf `.5` — das drückt `--color-text-secondary` auf Papier unter
+     3:1 (2,4:1). Voll deckend: 8,5:1 (Pinnwand), 4,8:1 (klassisch). Den Zustand
+     „gesperrt" (`.25`) setzt Bootstrap mit höherer Spezifität und bleibt. */
+  opacity: 1;
 }
 
 /* Das × zeichnet der Knopf selbst — `<button class="btn-close" aria-label="Schließen">`
@@ -170,6 +174,8 @@
 
 .btn-close:hover {
   color: var(--color-text-primary);
+  /* Bootstraps `:hover` (`.75`) hat dieselbe Spezifität und hellte sonst auf. */
+  opacity: 1;
 }
 
 /* Mobile optimizations for modals */
