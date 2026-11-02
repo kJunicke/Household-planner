@@ -36,7 +36,7 @@ export function isTransientError(error: unknown): boolean {
 }
 
 /** 'later' = Durchlauf abbrechen, nichts zählen · 'retry' = liegen lassen · 'discard' = aufgeben. */
-export type FailureVerdict = 'later' | 'retry' | 'discard'
+type FailureVerdict = 'later' | 'retry' | 'discard'
 
 export interface FailureJudgement {
   verdict: FailureVerdict
@@ -79,7 +79,7 @@ export function dependentsOf(queue: PendingMutation[], m: PendingMutation): Pend
  * Warteschlange jedes Mal neu: Was während des Laufs dazukommt, wird mit
  * abgearbeitet, statt bis zur nächsten Aktion liegen zu bleiben.
  */
-export function nextPending(
+function nextPending(
   queue: PendingMutation[],
   attempted: Set<string>,
 ): PendingMutation | undefined {
