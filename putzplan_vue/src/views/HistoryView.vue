@@ -208,10 +208,8 @@ onUnmounted(() => {
 }
 
 /* Kartenstapel statt einzeln schwebender Karten.
-   Rechnung, warum kein Zwischenraum: 59 Zeilen à 40px + 18 Kopfzeilen à 30px +
-   17 Sektionsabstände à 8px sind bereits 3036px — mehr als die 2992,7px der
-   alten Ansicht. Zeilenhöhe, Kopfzeilenhöhe und Sektionsabstand sind aus
-   Etappe 2 gesetzt, also muss der Rest kommen: die Karten sitzen ohne Lücke
+   Zeilenhöhe, Kopfzeilenhöhe und Sektionsabstand liegen fest; Höhe spart nur
+   noch der Zwischenraum zwischen den Karten. Deshalb sitzen sie ohne Lücke
    aufeinander und teilen sich ihre Trennlinie (-1px). Der Kartenlook bleibt —
    erhöhter Hintergrund, Rahmen, gerundete Enden je Tagesgruppe. */
 .completion-group {
@@ -245,9 +243,9 @@ onUnmounted(() => {
   border-bottom-right-radius: var(--radius-sm);
 }
 
-/* Tages-Kopfzeile im Kopfzeilen-Maß aus Etappe 2: 30px Mindesthöhe, keine Box,
+/* Tages-Kopfzeile im gemeinsamen Kopfzeilen-Maß: 30px Mindesthöhe, keine Box,
    kein Rahmen, keine eigene Färbung — sie sitzt auf dem Seitenhintergrund wie
-   die Kategorie-Kopfzeile im Einkauf. Sie klebt weiterhin oben; der
+   die Kategorie-Kopfzeile im Einkauf. Sie klebt oben; der
    Hintergrund ist exakt der Seitenhintergrund, damit die Karten im geklebten
    Zustand nicht durchscheinen, die Kopfzeile aber trotzdem keine Box bildet. */
 .date-header {

@@ -1565,8 +1565,8 @@ const handleCreateQuickTask = async (data: {
 
 /* Sichtbar 24px, damit das Feld seine Höhe behält; die Trefferfläche wächst per
    Pseudo-Element auf 48px. Sie ragt je 12px über den Knopf und bleibt damit
-   innerhalb von Innenabstand plus Rand der Hülle — rechts davon liegen noch die
-   12px Abstand zum Schließen-Knopf, den sie nicht erreicht. */
+   innerhalb der Hülle (rechts im Innenabstand) — die Fläche des Schließen-Knopfs
+   erreicht sie nicht. */
 .search-clear-btn::after {
   content: '';
   position: absolute;

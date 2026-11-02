@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * Der Fetzen über der Erledigt-Liste (Pinnwand-Redesign, Etappe 4, Ticket 11).
+ * Der Fetzen über der Erledigt-Liste.
  *
  * Ein abgerissener Zettel hinterlässt einen Fetzen: den Rest, der beim Abreißen
  * hängen bleibt. Ein Tipp klebt ihn zurück — die Aufgabe ist wieder dran, die

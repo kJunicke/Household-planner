@@ -4,8 +4,7 @@ import { createJoinReloadGate } from './joinReload'
 
 describe('createJoinReloadGate', () => {
   // Ob der Erstlauf beim Beitritt noch läuft oder schon fertig ist, spielt
-  // keine Rolle — der Fall „fertig, die Wand wartet noch auf die Summen“ lud
-  // doppelt.
+  // keine Rolle — auch ein fertiger Lauf hat alles bis zu seinem Start gesehen.
   it('erster Beitritt nach einem seit dem Abo gestarteten Ladelauf lädt nicht nach', () => {
     const gate = createJoinReloadGate()
     gate.loadStarted()

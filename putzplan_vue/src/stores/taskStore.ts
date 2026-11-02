@@ -705,8 +705,7 @@ export const useTaskStore = defineStore('tasks', () => {
   }
 
   /**
-   * ZURÜCKKLEBEN — die jüngste eigene Erledigung dieser Aufgabe zurücknehmen
-   * (Pinnwand-Redesign, Etappe 4, Ticket 11).
+   * ZURÜCKKLEBEN — die jüngste eigene Erledigung dieser Aufgabe zurücknehmen.
    *
    * **Was „rückgängig" auf Datenebene heißt.** `task_completions` ist
    * append-only und die einzige Quelle der Punkte. Beides gilt weiter — aber

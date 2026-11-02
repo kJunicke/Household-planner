@@ -1243,10 +1243,9 @@ onUnmounted(() => {
 }
 
 /* ---- Category Section ----
-   Etappe 2: die Sektions-Box entfällt vollständig — kein Rahmen, kein
-   Hintergrund, kein Innenabstand. Die Kategorie wird nur noch durch ihre
-   Kopfzeile auf dem Seitenhintergrund und den größeren Abstand nach unten
-   gegen die nächste abgegrenzt. */
+   Keine Sektions-Box — kein Rahmen, kein Hintergrund, kein Innenabstand.
+   Die Kategorie wird nur durch ihre Kopfzeile auf dem Seitenhintergrund und
+   den größeren Abstand nach unten gegen die nächste abgegrenzt. */
 .cat-section {
   margin-bottom: 8px;
   scroll-margin-top: 72px;

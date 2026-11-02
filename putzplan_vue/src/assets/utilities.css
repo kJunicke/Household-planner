@@ -153,9 +153,9 @@
   align-items: center;
   justify-content: center;
   transition: color var(--transition-base);
-  /* Bootstrap dimmt auf `.5` — das drückt `--color-text-secondary` auf Papier unter
-     3:1 (2,4:1). Voll deckend: 8,5:1 (Pinnwand), 4,8:1 (klassisch). Den Zustand
-     „gesperrt" (`.25`) setzt Bootstrap mit höherer Spezifität und bleibt. */
+  /* Bootstrap dimmt auf `.5` — damit fiele `--color-text-secondary` auf Papier unter
+     den Mindestkontrast für Bedienelemente (3:1). Den Zustand „gesperrt" (`.25`)
+     setzt Bootstrap mit höherer Spezifität und bleibt. */
   opacity: 1;
 }
 

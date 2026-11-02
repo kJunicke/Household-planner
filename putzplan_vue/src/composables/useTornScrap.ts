@@ -2,7 +2,7 @@ import { readonly, ref } from 'vue'
 import { useTaskStore } from '@/stores/taskStore'
 
 /**
- * Der Fetzen (Pinnwand-Redesign, Etappe 4, Ticket 11).
+ * Der Fetzen.
  *
  * Wer einen Zettel abreißt, hat ihn schon abgerissen, bevor er darüber
  * nachgedacht hat. Der abgerissene Zettel bleibt deshalb als **Fetzen** über der

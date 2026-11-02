@@ -4,8 +4,8 @@
  * sections with entries ("Einträge"), quick-nav rail and all modals.
  *
  * Everything list-type-specific arrives via props: the store instance (from
- * `createChecklistStore`) and the labels/icons. `PackingView` is a thin shell
- * around this; Etappe 5 Teil B docks the To-do view on the same seam.
+ * `createChecklistStore`) and the labels/icons. `PackingView` and `TodoView`
+ * are thin shells around this.
  */
 import { onMounted, onUnmounted, ref, computed, watch } from 'vue'
 import type { ChecklistStore } from '@/stores/createChecklistStore'
@@ -1221,7 +1221,7 @@ onUnmounted(() => {
 }
 
 /* ---- Category Section ----
-   Etappe 2: dieselbe Verdichtung wie im Einkauf — die Sektions-Box entfällt,
+   Dieselbe Verdichtung wie im Einkauf — keine Sektions-Box,
    die Kopfzeile sitzt ohne Rahmen auf dem Seitenhintergrund. */
 .cat-section {
   margin-bottom: 8px;

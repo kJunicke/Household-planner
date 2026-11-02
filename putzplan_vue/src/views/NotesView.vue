@@ -283,8 +283,9 @@ onUnmounted(() => {
 
 .note-actions {
   display: flex;
-  /* Nicht kleiner: die 48px-Treffflächen der Knöpfe (unten) ragen je etwa 5px
-     über den Knopf hinaus und dürfen sich im Abstand nicht überlappen. */
+  /* Nicht kleiner: die 48px-Treffflächen der Knöpfe (unten) sind breiter als die
+     Knöpfe; der Abstand muss den Überstand beider Nachbarn aufnehmen, sonst
+     überlappen sie. */
   gap: var(--spacing-sm);
   align-items: flex-start;
 }
