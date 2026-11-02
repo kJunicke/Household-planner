@@ -129,16 +129,6 @@ export const useShoppingStore = defineStore('shopping', () => {
     return items.value.filter((item) => item.list_id === currentListId.value)
   })
 
-  const unpurchasedItems = computed(() => {
-    return currentListItems.value
-      .filter((item) => !item.purchased)
-      .sort((a, b) => {
-        if (a.is_priority && !b.is_priority) return -1
-        if (!a.is_priority && b.is_priority) return 1
-        return a.name.localeCompare(b.name)
-      })
-  })
-
   const purchasedItems = computed(() => {
     return currentListItems.value
       .filter((item) => item.purchased)
@@ -1198,7 +1188,6 @@ export const useShoppingStore = defineStore('shopping', () => {
     hasPendingMutations,
     currentListItems,
     currentListCategories,
-    unpurchasedItems,
     purchasedItems,
     itemsByCategory,
     purchasedPerCategory,

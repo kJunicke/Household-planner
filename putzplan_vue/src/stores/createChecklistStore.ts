@@ -1281,7 +1281,6 @@ export function createChecklistStore(config: ChecklistStoreConfig) {
       suggestCategoryFor,
       importSourcesFor,
       importPreview,
-      importCategory,
       loadItems,
       addItem,
       togglePacked,

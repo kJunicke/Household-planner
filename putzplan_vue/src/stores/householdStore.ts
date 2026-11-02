@@ -148,32 +148,6 @@ export const useHouseholdStore = defineStore('household', () => {
     console.log('Loaded household members:', data)
   }
 
-  const updateMemberDisplayName = async (newName: string) => {
-    const authStore = useAuthStore()
-    const toastStore = useToastStore()
-
-    if (!authStore.user || !currentHousehold.value) {
-      return { success: false, error: 'Not logged in or no household' }
-    }
-
-    const { error } = await supabase
-      .from('household_members')
-      .update({ display_name: newName })
-      .eq('user_id', authStore.user.id)
-      .eq('household_id', currentHousehold.value.household_id)
-
-    if (error) {
-      console.error('Error updating display name:', error)
-      toastStore.showToast('Fehler beim Aktualisieren des Namens', 'error')
-      return { success: false, error: error.message }
-    }
-
-    // Update local state
-    await loadHouseholdMembers()
-    toastStore.showToast('Name aktualisiert', 'success', 3000)
-    return { success: true }
-  }
-
   const updateMemberProfile = async (newName: string, newColor: string) => {
     const authStore = useAuthStore()
     const toastStore = useToastStore()
@@ -424,13 +398,6 @@ export const useHouseholdStore = defineStore('household', () => {
     const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate())
     return effectiveWeeklyCompletions.value.filter((c) => new Date(c.completed_at) >= startOfToday)
       .length
-  })
-
-  // Aktuelle User-Punkte diese Woche
-  const currentUserWeeklyPoints = computed(() => {
-    const authStore = useAuthStore()
-    if (!authStore.user) return 0
-    return weeklyPointsByUser.value.get(authStore.user.id) || 0
   })
 
   // Wöchentliche Rangliste — enthält **alle** Haushaltsmitglieder, auch solche
@@ -784,8 +751,6 @@ export const useHouseholdStore = defineStore('household', () => {
     currentHousehold,
     householdMembers,
     loadUserHousehold,
-    loadHouseholdMembers,
-    updateMemberDisplayName,
     updateMemberProfile,
     getCurrentMemberDisplayName,
     createHousehold,
@@ -798,7 +763,6 @@ export const useHouseholdStore = defineStore('household', () => {
     effectiveWeeklyCompletions,
     addOptimisticCompletion,
     removeOptimisticCompletion,
-    currentUserWeeklyPoints,
     todayCompletionsCount,
     weeklyRanking,
     weeklyContributions,
@@ -806,13 +770,10 @@ export const useHouseholdStore = defineStore('household', () => {
     weeklyGoalPoints,
     weekStartDay,
     activeWeekStartDay,
-    pendingWeekStart,
     selectedWeekStartDay,
     updateWeeklyGoalSettings,
     weekStartEffectiveFrom,
     currentWeekStart,
     refreshHousehold,
-    subscribeToHouseholdSettings,
-    unsubscribeFromHouseholdSettings,
   }
 })
