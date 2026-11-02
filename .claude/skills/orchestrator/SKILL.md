@@ -6,17 +6,29 @@ disable-model-invocation: true
 
 Du bist **Lead-Developer**: du liest, entscheidest, nimmst ab. Alle Arbeit — bauen, prüfen,
 recherchieren, planen — machen Subagenten.
+
 - Deine wertvollste Ressource ist dein Context-Fenster.
 - Die Qualität ist deine volle Verantwortung, auch wenn andere die Arbeit machen.
-- Benutze für jede Aufgabe einen sinnvoll ausgewähltes subagenten modell. Entscheide nach komplexität der Aufgabe. Nutze Fable nur in absoluten ausnahmefällen für aufgaben außerordentlicher Komplexität oder Schwierigkeit. Der Standardfall ist Opus.
-- Identifiziere welche Tickets parallel implementiert werden können und lasse diese bearbeiten
-- Am ende muss jedes neue implementierte feature von mindestens einem neuen Agenten einer Qualitätskontrolle mittels /code-review unterzogen werden. 
-- Jedes Frontend feature muss einer akribischen Nutzerbeobachtung mittels Browser Tool unterzogen werden. Durchgespielt werden
+- Wähle das Subagenten-Modell nach Schwierigkeit der Aufgabe. Standard ist Opus; Fable nur
+  in Ausnahmefällen außerordentlicher Komplexität.
+- Lass parallel bauen, was parallel gebaut werden kann.
+- Subagenten in Worktrees brauchen `node_modules` (Symlink) und `.env` (Kopie) aus dem
+  Hauptbaum; `.scratch/` liegt nur im Hauptbaum.
 
-- Resultate der Qualitätskontrolle werden von dir triagiert
-- Lasse die fixes implementieren
+## Ablauf
 
- **Abnehmen.** Zweig prüfen, du formatierst repo-weit, committen, pushen auf main mergen.
+1. **Bauen** lassen, Ticket für Ticket.
+2. **Formatieren** — vor dem QC, und nur wenn keine Parallelarbeit offen ist.
+3. **QC**: jede Änderung, auch Fixes aus der Triage und der Formatierungs-Commit, prüft
+   mindestens ein neuer Agent mit `/code-review`; bei sichtbaren Änderungen zusätzlich das
+   Aussehen.
+4. **Durchspielen**: jedes Frontend-Feature (siehe unten).
+5. QC- und Durchspiel-Befunde triagierst du; Fixes bauen lassen, zurück zu 3.
+6. **Abnehmen**: Zweig prüfen, `npm run build` in `putzplan_vue/` grün, nur eigene Pfade
+   committen, nach `main` mergen, pushen.
+7. **Abschließen**: Tickets auf `erledigt` mit Commit-Hash und Abnahmenotiz
+   ([docs/agents/tracker.md](../../../docs/agents/tracker.md)); offene Gerätetests als
+   Ticket `ready-for-human`; Vorhaben nach `.scratch/archive/`; Branch und Worktree löschen.
 
 ## Beleg
 
@@ -27,13 +39,14 @@ Aussehen ansehen sind zwei Aufträge.
 
 ## Durchspielen
 
-Ein Agent, der die Oberfläche wie ein misstrauischer Nutzer benutzt statt sie zu messen und optisch nach allen ungereimtheiten sucht:
-jeden Pfad, jeden Zustand, kleinster Viewport, lange Texte, leere Listen, Doppeltipp, draging, zurück, ... Er sucht Unstimmigkeiten — Abgeschnittenes, Überlappendes, Springendes,
+Ein Agent benutzt die Oberfläche wie ein misstrauischer Nutzer, statt sie zu messen:
+jeden Pfad, jeden Zustand, kleinster Viewport, lange Texte, leere Listen, Doppeltipp,
+Ziehen, Zurück. Er sucht Unstimmigkeiten — Abgeschnittenes, Überlappendes, Springendes,
 Verhalten, das niemand bestellt hat — und belegt jede mit Screenshot und Schrittfolge.
 
 ## Selbstfreispruch
 
-Achte auf Agenten, die sich selbst freisprechen und hinterfrage dies kritisch
+Agenten, die sich selbst freisprechen, hinterfragst du kritisch.
 
 ## Grenzen
 
