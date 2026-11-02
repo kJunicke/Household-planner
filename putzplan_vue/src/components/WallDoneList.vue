@@ -5,8 +5,7 @@
  * Erledigte Aufgaben hängen nicht an der Wand — sie kosten dort den Überblick
  * über das, was noch offen ist. Sie stehen darunter als kompakter Streifen:
  * eine Zeile je Aufgabe, Titel durchgestrichen, Personenfarbe als Punkt,
- * Uhrzeit rechts. Aufbau und Reihenfolge sind die des klassischen
- * Erledigt-Tabs (`useTaskBoard.completedTasks`), nur in der neuen Formsprache.
+ * Uhrzeit rechts. Die Reihenfolge kommt aus `useTaskBoard.completedTasks`.
  *
  * **„wieder dreckig" gehört hierher**, nicht an den Zettel: es betrifft
  * ausschließlich erledigte Aufgaben.
@@ -104,7 +103,7 @@ const formatStamp = (iso: string): string => {
  * Kompakte Variante des Verschiebe-Kennzeichens: nur Pfeil + Tag.Monat, ohne
  * Wortlaut und ohne Wochentag (QC-Befund 3, Ticket 04, dritte Runde).
  * `formatPostponeDate` (Zeitplan-Modul) bleibt dafür unangetastet — Toast,
- * Dialogvorschau und klassische Karte haben Platz für die lange Form
+ * und Dialogvorschau haben Platz für die lange Form
  * „Donnerstag, 20.08." und behalten sie.
  *
  * **Warum hier kein Wort mehr, nicht einmal „verschoben auf":** die Zeile
@@ -343,6 +342,7 @@ const handlePostponeConfirm = async (targetDate: string) => {
         v-for="row in rows"
         :key="row.task.task_id"
         class="done-row"
+        :data-task-id="row.task.task_id"
         :class="{ 'done-row--postponed': row.postponed }"
         :style="row.color ? { '--dot': row.color } : undefined"
       >

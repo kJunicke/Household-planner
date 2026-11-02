@@ -56,16 +56,6 @@ const emit = defineEmits<Emits>()
 //   Altdaten aus Befund 2 — zeigt den Knopf hier ebenfalls wieder. Das ist
 //   kein neuer Fehler, sondern der Weg, genau diese Zeilen zu bereinigen.)
 //
-// **Betrifft auch das klassische Aussehen**, nicht nur die Pinnwand:
-// `TaskCard.vue` rendert den Bearbeiten-Stift ohne `completed`-Bedingung,
-// verschobene Aufgaben laufen dort unter der Kategorie „Erledigt" und nutzen
-// dasselbe Modal. Ohne den `postponed_until`-Zweig ließe sich dort ein
-// bereits gesetztes Verschiebe-Datum nicht mehr ändern oder aufheben, ohne
-// den Umweg über „wieder dreckig" — das war vor diesem Kommentar kurzzeitig
-// genau der Stand, und Ticket 04 nennt nur die Pinnwand. Wer diese Bedingung
-// künftig anfasst, MUSS beide Ansichten im Kopf haben, nicht nur den
-// Erledigt-Streifen.
-//
 // `canPostpone` prüft nur den `task_type` und kennt keinen der drei
 // Zustände oben — dieser zweite Teil der Bedingung ist deshalb Pflicht,
 // nicht optional.

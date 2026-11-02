@@ -8,15 +8,18 @@ import { useAuthStore } from './stores/authStore'
 import { useHouseholdStore } from './stores/householdStore'
 import { useShoppingStore } from './stores/shoppingStore'
 import { useVisualViewportHeight } from './composables/useVisualViewportHeight'
-import { initializeDesign } from './lib/design'
 
 import App from './App.vue'
 
-// Das Attribut ist zu diesem Zeitpunkt schon vom Inline-Script im <head> von
-// index.html gesetzt (dort, weil das gebaute CSS render-blockierend ist und
-// dieses Modul deferred läuft). Der Aufruf hier normalisiert nur noch: ein
-// kaputter localStorage-Wert wird auf 'classic' zurückgesetzt.
-initializeDesign()
+// Schlüssel des früheren klassischen Aussehens wegräumen (Aussehen-Umschalter,
+// Kategorie-Filter). Gelesen werden sie nicht mehr; `data-design` steht fest
+// in index.html.
+try {
+  localStorage.removeItem('putzplan.design')
+  localStorage.removeItem('putzplan_active_category')
+} catch {
+  // localStorage gesperrt — dann liegt dort auch nichts
+}
 
 // Visual-Viewport-Höhe global bereitstellen (--visual-viewport-height).
 // Das geteilte Modal-Muster bemisst sich daran, damit die Bildschirmtastatur

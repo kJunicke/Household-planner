@@ -109,11 +109,10 @@ export function useOverlayHistoryEntry<R = string>(
    * nichts — stumm.
    *
    * Getragen wird die Eindeutigkeit heute davon, dass es **genau eine**
-   * Instanz je `name` gibt: `HomeView` rendert `WallView` **oder**
-   * `CleaningView` (`v-if`/`v-else`, kein `keep-alive`), und `open()` steigt
-   * aus, solange `isOpen` schon gilt. Wer daran rührt — zweites Overlay mit
-   * demselben `name`, `keep-alive`, ein Umschalter, der beide Views kurz
-   * gleichzeitig hält — nimmt diese Voraussetzung weg.
+   * Instanz je `name` gibt: nur `WallView` hält die Suche (kein
+   * `keep-alive`), und `open()` steigt aus, solange `isOpen` schon gilt. Wer
+   * daran rührt — zweites Overlay mit demselben `name`, `keep-alive` — nimmt
+   * diese Voraussetzung weg.
    */
   const onPopState = () => {
     closing = false

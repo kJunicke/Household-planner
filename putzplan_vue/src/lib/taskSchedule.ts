@@ -27,12 +27,6 @@ export type TaskSchedule = {
   postponedUntil: string | null // ISO-Datum (YYYY-MM-DD), nur im Zustand 'postponed'
 }
 
-// Überfällig im Sinne der Anzeige: die Kadenz ist gerissen oder es gab sie nie.
-// Steht hier, damit Karte und Status-Zeile dieselbe Menge meinen.
-export function isOverdue(schedule: TaskSchedule): boolean {
-  return schedule.status === 'overdue' || schedule.status === 'never-done'
-}
-
 const MS_PER_DAY = 1000 * 60 * 60 * 24
 
 // Kalendertage, nicht 24h-Perioden: gestern 23:00 erledigt ist heute 07:00 ein Tag her.

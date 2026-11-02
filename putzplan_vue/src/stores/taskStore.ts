@@ -1020,7 +1020,7 @@ export const useTaskStore = defineStore('tasks', () => {
   }
 
   // REALTIME - Subscribe zu Änderungen an tasks & task_completions
-  // Muss manuell aufgerufen werden (z.B. in HomeView.onMounted)
+  // Muss manuell aufgerufen werden (z.B. in WallView.onMounted)
   const subscribeToTasks = () => {
     const householdStore = useHouseholdStore()
 
@@ -1171,7 +1171,7 @@ export const useTaskStore = defineStore('tasks', () => {
   }
 
   // REALTIME - Unsubscribe von Änderungen
-  // Muss beim Component Cleanup aufgerufen werden (z.B. HomeView.onUnmounted)
+  // Muss beim Component Cleanup aufgerufen werden (z.B. WallView.onUnmounted)
   const unsubscribeFromTasks = () => {
     if (realtimeChannel) {
       console.log('🔴 Unsubscribing from tasks')
@@ -1406,53 +1406,11 @@ export const useTaskStore = defineStore('tasks', () => {
       .filter((t) => t.parent_task_id === parentTaskId)
       .sort((a, b) => a.order_index - b.order_index)
 
-  // RESET SUBTASKS - Setze alle Subtasks einer Parent Task auf uncompleted
-  const resetSubtasks = async (parentTaskId: string) => {
-    const toastStore = useToastStore()
-    const subtasks = getSubtasks(parentTaskId)
-
-    if (subtasks.length === 0) {
-      return true
-    }
-
-    const subtaskIds = subtasks.map((s) => s.task_id)
-
-    const { error } = await supabase
-      .from('tasks')
-      .update({ completed: false })
-      .in('task_id', subtaskIds)
-
-    if (error) {
-      console.error('Error resetting subtasks:', error)
-      toastStore.showToast('Fehler beim Zurücksetzen der Unteraufgaben', 'error')
-      return false
-    }
-
-    // Reload tasks vom Backend (Source of Truth)
-    await loadTasks()
-    return true
-  }
-
-  // PROJECTS - Calculate total effort contributed to a project from subtask completions
-  const getProjectEffort = (projectId: string): number => {
-    const subtasks = getSubtasks(projectId)
-    const subtaskIds = subtasks.map((s) => s.task_id)
-
-    // Sum up effort from all completions of project subtasks
-    // UNIFIED SOLUTION: Use effort_override (ALWAYS set, Single Source of Truth)
-    return completions.value
-      .filter((c) => subtaskIds.includes(c.task_id))
-      .reduce((total, completion) => {
-        return total + completion.effort_override
-      }, 0)
-  }
-
   /**
    * Punktesummen der Projekte — **unabhängig von `completions`**.
    *
-   * `getProjectEffort()` oben rechnet aus `completions.value`. Das trägt nur
-   * im klassischen Aussehen, das seine Erledigungen selbst lädt; die Pinnwand
-   * lädt gar keine (`WallView.onMounted`: `loadTasks` + `subscribeToTasks` +
+   * Aus `completions.value` ginge es nicht: die Pinnwand lädt keine
+   * (`WallView.onMounted`: `loadTasks` + `subscribeToTasks` +
    * `loadWeeklyCompletions`), und die Wochenliste liegt ohnehin im
    * `householdStore` und deckt nur die laufende Woche ab. Ein Projekt sammelt
    * über Monate. Deshalb eine eigene, schmale Abfrage.
@@ -1465,8 +1423,8 @@ export const useTaskStore = defineStore('tasks', () => {
   const projectEffortTotals = ref<Record<string, number>>({})
 
   // Erst wenn die Wand die Summen einmal geholt hat, hält `refreshProjectEffortTotals`
-  // sie nach. Ohne diese Sperre feuerte das klassische Aussehen bei jeder
-  // Erledigung zwei überflüssige Abfragen — es rechnet aus `completions`.
+  // sie nach. Ohne diese Sperre feuerten Erledigungen und Löschungen auf den
+  // anderen Routen Abfragen, deren Ergebnis niemand liest.
   let projectEffortTotalsActive = false
 
   const loadProjectEffortTotals = async (): Promise<void> => {
@@ -1585,9 +1543,9 @@ export const useTaskStore = defineStore('tasks', () => {
 
   /**
    * Gegenstück zu `loadProjectEffortTotals()`: die Wand meldet sich beim
-   * Verlassen ab. Ohne das feuerte das klassische Aussehen, sobald es einmal
-   * die Wand gesehen hat, bei jeder Erledigung Abfragen für Summen, die
-   * niemand mehr liest — es rechnet aus `completions`.
+   * Verlassen ab. Ohne das feuerten die anderen Routen, sobald die Wand
+   * einmal offen war, bei jeder Erledigung Abfragen für Summen, die niemand
+   * mehr liest.
    */
   const stopProjectEffortTotals = () => {
     projectEffortTotalsActive = false
@@ -1617,9 +1575,7 @@ export const useTaskStore = defineStore('tasks', () => {
     deleteAllCompletions,
     // Subtasks
     getSubtasks,
-    resetSubtasks,
     // Projects
-    getProjectEffort,
     projectEffortTotals,
     loadProjectEffortTotals,
     getProjectEffortTotal,
