@@ -1069,6 +1069,10 @@ export const useShoppingStore = defineStore('shopping', () => {
 
     const hhId = householdStore.currentHousehold.household_id
 
+    // DELETE läuft je Tabelle über ein eigenes, ungefiltertes Abo: Das alte
+    // Zeilenbild trägt nur den Primärschlüssel, ein household_id-Filter verwirft
+    // das Ereignis, und ein fremd gelöschter Artikel bliebe hier stehen. Ein
+    // DELETE aus einem anderen Haushalt trifft lokal keine ID und ändert nichts.
     realtimeCategoriesChannel = supabase
       .channel(`shopping-categories-changes-${Date.now()}`)
       .on(
@@ -1094,11 +1098,14 @@ export const useShoppingStore = defineStore('shopping', () => {
             const index = categories.value.findIndex((c) => c.category_id === row.category_id)
             if (index !== -1) categories.value[index] = row
           }
-
-          if (payload.eventType === 'DELETE') {
-            const row = payload.old as ShoppingCategory
-            categories.value = categories.value.filter((c) => c.category_id !== row.category_id)
-          }
+        },
+      )
+      .on(
+        'postgres_changes',
+        { event: 'DELETE', schema: 'public', table: 'shopping_categories' },
+        (payload) => {
+          const row = payload.old as Pick<ShoppingCategory, 'category_id'>
+          categories.value = categories.value.filter((c) => c.category_id !== row.category_id)
         },
       )
       .subscribe()
@@ -1135,13 +1142,16 @@ export const useShoppingStore = defineStore('shopping', () => {
             )
             if (index !== -1) items.value[index] = updatedItem
           }
-
-          if (payload.eventType === 'DELETE') {
-            const deletedItem = payload.old as ShoppingItem
-            items.value = items.value.filter(
-              (i) => i.shopping_item_id !== deletedItem.shopping_item_id,
-            )
-          }
+        },
+      )
+      .on(
+        'postgres_changes',
+        { event: 'DELETE', schema: 'public', table: 'shopping_items' },
+        (payload) => {
+          const deletedItem = payload.old as Pick<ShoppingItem, 'shopping_item_id'>
+          items.value = items.value.filter(
+            (i) => i.shopping_item_id !== deletedItem.shopping_item_id,
+          )
         },
       )
       .subscribe()
@@ -1171,14 +1181,17 @@ export const useShoppingStore = defineStore('shopping', () => {
             const index = lists.value.findIndex((l) => l.list_id === updatedList.list_id)
             if (index !== -1) lists.value[index] = updatedList
           }
-
-          if (payload.eventType === 'DELETE') {
-            const deletedList = payload.old as ShoppingList
-            lists.value = lists.value.filter((l) => l.list_id !== deletedList.list_id)
-            items.value = items.value.filter((i) => i.list_id !== deletedList.list_id)
-            if (currentListId.value === deletedList.list_id) {
-              currentListId.value = lists.value[0]?.list_id ?? null
-            }
+        },
+      )
+      .on(
+        'postgres_changes',
+        { event: 'DELETE', schema: 'public', table: 'shopping_lists' },
+        (payload) => {
+          const deletedList = payload.old as Pick<ShoppingList, 'list_id'>
+          lists.value = lists.value.filter((l) => l.list_id !== deletedList.list_id)
+          items.value = items.value.filter((i) => i.list_id !== deletedList.list_id)
+          if (currentListId.value === deletedList.list_id) {
+            currentListId.value = lists.value[0]?.list_id ?? null
           }
         },
       )

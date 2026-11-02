@@ -1181,22 +1181,30 @@ export function createChecklistStore(config: ChecklistStoreConfig) {
               const idx = lists.value.findIndex((l) => l.list_id === updated.list_id)
               if (idx !== -1) lists.value[idx] = updated
             }
-            if (payload.eventType === 'DELETE') {
-              const deleted = payload.old as ChecklistList
-              lists.value = lists.value.filter((l) => l.list_id !== deleted.list_id)
-              items.value = items.value.filter((i) => i.list_id !== deleted.list_id)
-              categories.value = categories.value.filter((c) => c.list_id !== deleted.list_id)
-              if (currentListId.value === deleted.list_id) {
-                currentListId.value = lists.value[0]?.list_id ?? null
-              }
+          },
+        )
+        // DELETE über ein eigenes, ungefiltertes Abo: Das alte Zeilenbild trägt
+        // nur den Primärschlüssel, der household_id-Filter verwirft das
+        // Ereignis, und eine fremd gelöschte Liste bliebe hier stehen. Ein
+        // DELETE aus einem anderen Haushalt trifft lokal keine ID.
+        .on(
+          'postgres_changes',
+          { event: 'DELETE', schema: 'public', table: listsTable },
+          (payload) => {
+            const deleted = payload.old as Pick<ChecklistList, 'list_id'>
+            lists.value = lists.value.filter((l) => l.list_id !== deleted.list_id)
+            items.value = items.value.filter((i) => i.list_id !== deleted.list_id)
+            categories.value = categories.value.filter((c) => c.list_id !== deleted.list_id)
+            if (currentListId.value === deleted.list_id) {
+              currentListId.value = lists.value[0]?.list_id ?? null
             }
           },
         )
         .subscribe()
 
       // Die Item-Kanäle bleiben ungefiltert: `*_items` hat keine household_id,
-      // RLS filtert. Der Kategorie-Kanal filtert wie im Einkauf über household_id
-      // — DELETE-Ereignisse kommen dort nur mit REPLICA IDENTITY FULL an.
+      // RLS filtert. Listen und Kategorien filtern über household_id und holen
+      // DELETE deshalb über ein zweites, ungefiltertes Abo.
       realtimeItemsChannel = supabase
         .channel(`${channelPrefix}-items-${Date.now()}`)
         .on('postgres_changes', { event: '*', schema: 'public', table: itemsTable }, (payload) => {
@@ -1244,10 +1252,14 @@ export function createChecklistStore(config: ChecklistStoreConfig) {
               const idx = categories.value.findIndex((c) => c.category_id === row.category_id)
               if (idx !== -1) categories.value[idx] = row
             }
-            if (payload.eventType === 'DELETE') {
-              const row = payload.old as CategoryRow
-              categories.value = categories.value.filter((c) => c.category_id !== row.category_id)
-            }
+          },
+        )
+        .on(
+          'postgres_changes',
+          { event: 'DELETE', schema: 'public', table: categoriesTable },
+          (payload) => {
+            const row = payload.old as Pick<CategoryRow, 'category_id'>
+            categories.value = categories.value.filter((c) => c.category_id !== row.category_id)
           },
         )
         .subscribe()
