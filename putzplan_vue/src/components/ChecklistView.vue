@@ -1105,7 +1105,15 @@ onUnmounted(() => {
   color: var(--color-text-secondary);
 }
 
+/* Sichtbar 27×32, damit die Fortschrittszeile schlank bleibt; die Trefferfläche
+   wird per Pseudo-Element auf 48×48 erweitert — dasselbe Muster wie
+   `.history-search-clear` (HistoryView), nur rechtsbündig statt mittig: der
+   Knopf sitzt an der Innenkante von `.container-fluid` (klassisch 8px Rand),
+   mittig zentriert ragte die Fläche 10,5px nach rechts und damit 2,5px über
+   den Viewport — horizontales Scrollen auf dem Telefon. Nach links wächst sie
+   über die Lücke zur Zählung, dort liegt nichts Bedienbares. */
 .reset-inline-btn {
+  position: relative;
   margin-left: auto;
   background: none;
   border: none;
@@ -1114,6 +1122,15 @@ onUnmounted(() => {
   padding: 4px 6px;
   border-radius: var(--radius-sm);
   font-size: var(--font-base);
+}
+.reset-inline-btn::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  right: 0;
+  width: var(--touch-target-min, 48px);
+  height: var(--touch-target-min, 48px);
+  transform: translateY(-50%);
 }
 .reset-inline-btn:hover {
   color: var(--color-warning-dark);

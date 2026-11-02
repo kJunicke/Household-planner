@@ -170,7 +170,7 @@ const onDeleteClick = () => {
             <span class="text-danger me-2">
               {{
                 itemCount > 0
-                  ? `Kategorie + ${itemCount} ${itemCount === 1 ? 'Item' : 'Items'} löschen?`
+                  ? `Kategorie + ${itemCount} ${noun(itemCount)} löschen?`
                   : 'Kategorie löschen?'
               }}
             </span>
