@@ -16,6 +16,7 @@ import {
   serializeMutation,
 } from '@/lib/optimistic'
 import { createLatestRunGuard } from '@/lib/latestRun'
+import { mergeLoadedRows, type ChangeDuringLoad } from '@/lib/rowMerge'
 
 /**
  * Optimistische Completion: trägt eine Client-Kennung, weil die `completion_id`
@@ -94,6 +95,7 @@ export const useTaskStore = defineStore('tasks', () => {
 
   // Realtime subscription channel (wird in subscribe() initialisiert)
   let realtimeChannel: RealtimeChannel | null = null
+  let tasksVisibilityHandler: (() => void) | null = null
 
   // Aufgaben, deren Abschluss gerade beim Server liegt — Doppel-Tap-Schutz,
   // siehe completeTask.
@@ -114,6 +116,14 @@ export const useTaskStore = defineStore('tasks', () => {
   // holen, die er selbst geschrieben hat. Der Schutz bleibt für alle anderen
   // Quellen (Realtime, fremde Reloads) bis zur Freigabe bestehen.
   let pendingBypass = new Set<string>()
+
+  // Realtime-Meldungen, die eintreffen, während `runLoadTasks` auf sein SELECT
+  // wartet. Sie können neuer sein als dessen Momentaufnahme und werden beim
+  // Mergen bevorzugt (→ `mergeLoadedRows`). `null` = gerade kein Ladevorgang.
+  let tasksChangedDuringLoad: Map<string, ChangeDuringLoad<Task>> | null = null
+  const noteTaskChange = (taskId: string, change: ChangeDuringLoad<Task>) => {
+    tasksChangedDuringLoad?.set(taskId, change)
+  }
 
   const loadTasks = (bypassIds: string[] = []): Promise<void> => {
     for (const id of bypassIds) pendingBypass.add(id)
@@ -156,6 +166,8 @@ export const useTaskStore = defineStore('tasks', () => {
     }
 
     isLoading.value = true
+    const changedDuringLoad = new Map<string, ChangeDuringLoad<Task>>()
+    tasksChangedDuringLoad = changedDuringLoad
 
     try {
       // Nur aktive Tasks laden (deleted_at IS NULL = nicht soft-deleted)
@@ -167,12 +179,16 @@ export const useTaskStore = defineStore('tasks', () => {
 
       if (tasksError) throw tasksError
 
-      // Echo-Schutz: Zeilen, deren Mutation gerade unterwegs ist, behalten
-      // ihren optimistischen Zustand — sonst springt die Karte kurz zurück,
-      // weil der Server die Änderung noch nicht geschrieben hat.
-      tasks.value = (tasksData || []).map((row: Task) => {
-        if (bypass.has(row.task_id) || !isInFlight(row.task_id)) return row
-        return tasks.value.find((t) => t.task_id === row.task_id) ?? row
+      // Mergen statt ersetzen: eine fremde Änderung, die während des SELECT
+      // per Realtime kam, ist neuer als dessen Antwort. Echo-Schutz: Zeilen,
+      // deren eigene Mutation gerade unterwegs ist, behalten ihren
+      // optimistischen Zustand — sonst springt die Karte kurz zurück.
+      tasks.value = mergeLoadedRows({
+        loaded: (tasksData || []) as Task[],
+        current: tasks.value,
+        keyOf: (t) => t.task_id,
+        keepLocal: (id) => !bypass.has(id) && isInFlight(id),
+        changedDuringLoad,
       })
       console.log('Loaded tasks:', tasks.value)
       // Completions werden NICHT hier geladen - fetchCompletions() ist dafür zuständig
@@ -181,6 +197,7 @@ export const useTaskStore = defineStore('tasks', () => {
       console.error('Error loading tasks:', error)
       toastStore.showToast('Fehler beim Laden der Aufgaben', 'error')
     } finally {
+      if (tasksChangedDuringLoad === changedDuringLoad) tasksChangedDuringLoad = null
       isLoading.value = false
     }
   }
@@ -1031,9 +1048,7 @@ export const useTaskStore = defineStore('tasks', () => {
     }
 
     // Alte Subscription cleanup (falls vorhanden)
-    if (realtimeChannel) {
-      supabase.removeChannel(realtimeChannel)
-    }
+    unsubscribeFromTasks()
 
     console.log(
       '🔴 Subscribing to tasks for household:',
@@ -1059,7 +1074,11 @@ export const useTaskStore = defineStore('tasks', () => {
             const newTask = payload.new as Task
             // Quick-Aufgaben kommen gleich gelöscht an; ohne diese Prüfung
             // stünden sie als „Erledigt"-Zettel auf der Wand.
-            if (newTask.deleted_at) return
+            if (newTask.deleted_at) {
+              noteTaskChange(newTask.task_id, { kind: 'remove' })
+              return
+            }
+            noteTaskChange(newTask.task_id, { kind: 'upsert', row: newTask })
             // Nur hinzufügen wenn nicht schon vorhanden (Race Condition vermeiden)
             if (!tasks.value.find((t) => t.task_id === newTask.task_id)) {
               tasks.value.push(newTask)
@@ -1073,6 +1092,7 @@ export const useTaskStore = defineStore('tasks', () => {
             // eine gelöschte Zeile darf auch eine laufende Mutation nicht
             // auf der Wand halten.
             if (updatedTask.deleted_at) {
+              noteTaskChange(updatedTask.task_id, { kind: 'remove' })
               tasks.value = tasks.value.filter((t) => t.task_id !== updatedTask.task_id)
               return
             }
@@ -1080,6 +1100,7 @@ export const useTaskStore = defineStore('tasks', () => {
             // unterwegs ist, wird nicht überschrieben — sonst springt
             // der optimistische Zustand kurz zurück.
             if (isInFlight(updatedTask.task_id)) return
+            noteTaskChange(updatedTask.task_id, { kind: 'upsert', row: updatedTask })
             const index = tasks.value.findIndex((t) => t.task_id === updatedTask.task_id)
             if (index !== -1) {
               tasks.value[index] = updatedTask
@@ -1089,6 +1110,7 @@ export const useTaskStore = defineStore('tasks', () => {
           // DELETE - Task wurde gelöscht
           if (payload.eventType === 'DELETE') {
             const deletedTask = payload.old as Task
+            noteTaskChange(deletedTask.task_id, { kind: 'remove' })
             tasks.value = tasks.value.filter((t) => t.task_id !== deletedTask.task_id)
           }
         },
@@ -1099,6 +1121,7 @@ export const useTaskStore = defineStore('tasks', () => {
       // Fremde PKs treffen nichts.
       .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'tasks' }, (payload) => {
         const deletedTask = payload.old as Pick<Task, 'task_id'>
+        noteTaskChange(deletedTask.task_id, { kind: 'remove' })
         tasks.value = tasks.value.filter((t) => t.task_id !== deletedTask.task_id)
       })
       .on(
@@ -1179,6 +1202,11 @@ export const useTaskStore = defineStore('tasks', () => {
 
         if (status === 'SUBSCRIBED') {
           console.log('✅ Successfully subscribed to tasks and completions')
+          // Bei JEDEM Beitritt nachladen, auch dem ersten: Ereignisse zwischen
+          // einem SELECT und dem Beitritt kommen nie an, und nach einem
+          // Verbindungsabriss (Funkloch, Standby) fehlt alles dazwischen.
+          void loadTasks()
+          refreshProjectEffortTotals()
         } else if (status === 'CHANNEL_ERROR') {
           console.error('❌ Channel subscription error')
         } else if (status === 'TIMED_OUT') {
@@ -1187,6 +1215,16 @@ export const useTaskStore = defineStore('tasks', () => {
           console.warn('⚠️ Channel was closed')
         }
       })
+
+    // iOS und Android frieren eine PWA im Hintergrund ein; bis die Realtime-
+    // Verbindung den Abriss bemerkt und neu beitritt, vergehen Sekunden bis
+    // Minuten. Sichtbarwerden ist der frühere Anlass zum Nachladen.
+    tasksVisibilityHandler = () => {
+      if (document.visibilityState !== 'visible') return
+      void loadTasks()
+      refreshProjectEffortTotals()
+    }
+    document.addEventListener('visibilitychange', tasksVisibilityHandler)
   }
 
   // REALTIME - Unsubscribe von Änderungen
@@ -1196,6 +1234,10 @@ export const useTaskStore = defineStore('tasks', () => {
       console.log('🔴 Unsubscribing from tasks')
       supabase.removeChannel(realtimeChannel)
       realtimeChannel = null
+    }
+    if (tasksVisibilityHandler) {
+      document.removeEventListener('visibilitychange', tasksVisibilityHandler)
+      tasksVisibilityHandler = null
     }
   }
 

@@ -1342,11 +1342,13 @@ let resizeObserver: ResizeObserver | null = null
 let lastWidth = 0
 
 onMounted(async () => {
+  // Zuerst abonnieren, dann laden: was zwischen dem Ende des SELECT und dem
+  // Beitritt geschieht, käme sonst nie an. Der Beitritt lädt selbst nach.
+  taskStore.subscribeToTasks()
   // Parallel: die Projekt-Punktesummen kommen aus einer EIGENEN Abfrage (die
   // Wand lädt keine Erledigungen), und sie müssen vor dem ersten `relayout`
   // stehen — die Stellenzahl am Abzeichen geht in die gemessene Zettelbreite ein.
   await Promise.all([taskStore.loadTasks(), taskStore.loadProjectEffortTotals()])
-  taskStore.subscribeToTasks()
   householdStore.loadWeeklyCompletions()
 
   scheduleRelayout(false)
