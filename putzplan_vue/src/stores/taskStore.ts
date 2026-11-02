@@ -27,6 +27,13 @@ import { onSessionEnd } from '@/lib/sessionEnd'
  */
 type OptimisticCompletion = TaskCompletion & { clientMutationId: string }
 
+/**
+ * Seitengröße beim Blättern durch `task_completions` = `max_rows` von
+ * PostgREST (1000): größer kappt der Server ohnehin, kleiner kostet nur
+ * Anfragen.
+ */
+const COMPLETIONS_PAGE = 1000
+
 const isOptimistic = (c: TaskCompletion | EnrichedCompletion): c is OptimisticCompletion =>
   'clientMutationId' in c
 
@@ -1317,12 +1324,9 @@ export const useTaskStore = defineStore('tasks', () => {
     //
     // ALLE Zeilen, geblättert: PostgREST kappt jede Antwort bei `max_rows`
     // (1000), und die Bilanz im Ausgleich rechnet über die ganze Historie —
-    // ohne Blättern fielen die ältesten Erledigungen still weg. Seitengröße =
-    // `max_rows`: größer kappt der Server ohnehin, kleiner kostet nur Anfragen.
-    // Geblättert wird über den PK (Keyset, → `collectKeysetPages`), sortiert
+    // ohne Blättern fielen die ältesten Erledigungen still weg. Geblättert wird über den PK (Keyset, → `collectKeysetPages`), sortiert
     // für die Ansichten erst danach.
     const householdId = householdStore.currentHousehold.household_id
-    const PAGE = 1000
     let data
     try {
       data = await collectKeysetPages(
@@ -1348,7 +1352,7 @@ export const useTaskStore = defineStore('tasks', () => {
             .eq('tasks.household_id', householdId)
             .in('user_id', householdUserIds)
             .order('completion_id', { ascending: true })
-            .limit(PAGE)
+            .limit(COMPLETIONS_PAGE)
           if (after !== null) query = query.gt('completion_id', after)
           const { data: page, error } = await query
           if (error) throw error
@@ -1604,52 +1608,49 @@ export const useTaskStore = defineStore('tasks', () => {
     //
     // - `CHUNK` teilt die `in`-Liste, damit die URL nicht zu lang wird.
     //   Das begrenzt die Zahl der ABGEFRAGTEN IDs, nicht die der Zeilen.
-    // - `PAGE` blättert die Antwort. PostgREST deckelt jede Antwort bei
-    //   `max_rows` (`supabase/config.toml`: 1000). Eine Scheibe mit 150
-    //   Unteraufgaben kann in einem gewachsenen Haushalt weit mehr als 1000
-    //   Erledigungen tragen — ohne Blättern fiele der Rest weg, die Summe
-    //   wäre zu NIEDRIG und niemand sähe einen Fehler.
+    // - `COMPLETIONS_PAGE` blättert die Antwort über den PK (Keyset, →
+    //   `collectKeysetPages`). PostgREST deckelt jede Antwort bei `max_rows`
+    //   (`supabase/config.toml`: 1000). Eine Scheibe mit 150 Unteraufgaben
+    //   kann in einem gewachsenen Haushalt weit mehr als 1000 Erledigungen
+    //   tragen — ohne Blättern fiele der Rest weg, die Summe wäre zu NIEDRIG
+    //   und niemand sähe einen Fehler. Keyset statt Offset: eine zwischen
+    //   zwei Seiten eingefügte oder zurückgeklebte Erledigung verschöbe beim
+    //   Offset die Grenze, eine Zeile zählte doppelt oder gar nicht.
     const CHUNK = 150
-    const PAGE = 1000
     for (let i = 0; i < subtaskIds.length; i += CHUNK) {
       const chunk = subtaskIds.slice(i, i + CHUNK)
 
-      let offset = 0
-      for (;;) {
-        const { data: completionRows, error: completionError } = await supabase
-          .from('task_completions')
-          .select('task_id, effort_override')
-          .in('task_id', chunk)
-          // Ohne feste Ordnung ist Blättern sinnlos: PostgREST gibt
-          // die Zeilen sonst in beliebiger Reihenfolge zurück, und
-          // zwischen zwei Seiten darf sie sich ändern. Dieselbe Zeile
-          // käme dann doppelt oder gar nicht — die Summe wäre still
-          // falsch, genau der Fehler, gegen den das Blättern hier
-          // überhaupt gebaut ist. `completion_id` ist der PK, also
-          // eindeutig und damit eine vollständige Ordnung.
-          .order('completion_id')
-          .range(offset, offset + PAGE - 1)
-
+      let rows: Pick<TaskCompletion, 'completion_id' | 'task_id' | 'effort_override'>[]
+      try {
+        rows = await collectKeysetPages(
+          async (after) => {
+            let query = supabase
+              .from('task_completions')
+              .select('completion_id, task_id, effort_override')
+              .in('task_id', chunk)
+              .order('completion_id', { ascending: true })
+              .limit(COMPLETIONS_PAGE)
+            if (after !== null) query = query.gt('completion_id', after)
+            const { data, error } = await query
+            if (error) throw error
+            return (data ?? []) as Pick<
+              TaskCompletion,
+              'completion_id' | 'task_id' | 'effort_override'
+            >[]
+          },
+          (row) => row.completion_id,
+        )
+      } catch (completionError) {
         if (!isLatest()) return
-        if (completionError) {
-          console.error('Error loading completions for project effort totals:', completionError)
-          return
-        }
+        console.error('Error loading completions for project effort totals:', completionError)
+        return
+      }
+      if (!isLatest()) return
 
-        const rows = (completionRows ?? []) as Pick<TaskCompletion, 'task_id' | 'effort_override'>[]
-        for (const row of rows) {
-          const parentId = parentOf.get(row.task_id)
-          if (!parentId) continue
-          totals[parentId] = (totals[parentId] ?? 0) + (row.effort_override ?? 0)
-        }
-
-        // Abbruch erst bei einer LEEREN Seite, und weitergezählt wird
-        // um das, was wirklich kam. `rows.length < PAGE` wäre falsch,
-        // sobald `max_rows` unter `PAGE` liegt: der Server kürzte dann
-        // jede Seite, die erste Runde sähe wie die letzte aus und der
-        // Rest fiele still weg.
-        if (rows.length === 0) break
-        offset += rows.length
+      for (const row of rows) {
+        const parentId = parentOf.get(row.task_id)
+        if (!parentId) continue
+        totals[parentId] = (totals[parentId] ?? 0) + (row.effort_override ?? 0)
       }
     }
 
