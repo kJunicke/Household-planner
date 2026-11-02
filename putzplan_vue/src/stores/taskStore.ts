@@ -15,7 +15,7 @@ import {
   runOptimistic,
   serializeMutation,
 } from '@/lib/optimistic'
-import { createLatestRunGuard } from '@/lib/latestRun'
+import { createLatestRunner } from '@/lib/latestRun'
 import { mergeLoadedRows, type ChangeDuringLoad } from '@/lib/rowMerge'
 import { collectKeysetPages } from '@/lib/keysetPages'
 import { onSessionEnd } from '@/lib/sessionEnd'
@@ -1055,6 +1055,7 @@ export const useTaskStore = defineStore('tasks', () => {
 
     // Alte Subscription cleanup (falls vorhanden)
     unsubscribeFromTasks()
+    let joinedOnce = false
 
     console.log(
       '🔴 Subscribing to tasks for household:',
@@ -1208,11 +1209,21 @@ export const useTaskStore = defineStore('tasks', () => {
 
         if (status === 'SUBSCRIBED') {
           console.log('✅ Successfully subscribed to tasks and completions')
-          // Bei JEDEM Beitritt nachladen, auch dem ersten: Ereignisse zwischen
-          // einem SELECT und dem Beitritt kommen nie an, und nach einem
-          // Verbindungsabriss (Funkloch, Standby) fehlt alles dazwischen.
-          void loadTasks()
-          refreshProjectEffortTotals()
+          // Bei jedem Beitritt nachladen: Ereignisse zwischen einem SELECT und
+          // dem Beitritt kommen nie an, und nach einem Verbindungsabriss
+          // (Funkloch, Standby) fehlt alles dazwischen.
+          //
+          // Ausnahme: der erste Beitritt, solange der Erstlauf der Ansicht noch
+          // unterwegs ist. Ein Nachladen jetzt hängte an `loadTasks` einen
+          // zweiten SELECT, auf den die Wand mitwartet, und ein neuer
+          // Summen-Lauf liefe ihr unter dem ersten Packen hindurch — doppelte
+          // Anfragen und ein Layoutsprung. Der bewusst gezahlte Preis: was
+          // zwischen dem SELECT des Erstlaufs und dem Beitritt geschieht, fehlt
+          // bis zum nächsten vollen Nachladen (Sichtbarwerden, Neubeitritt).
+          const firstJoin = !joinedOnce
+          joinedOnce = true
+          if (!(firstJoin && loadTasksRun)) void loadTasks()
+          if (!(firstJoin && projectTotalsRunner.isRunning())) refreshProjectEffortTotals()
         } else if (status === 'CHANNEL_ERROR') {
           console.error('❌ Channel subscription error')
         } else if (status === 'TIMED_OUT') {
@@ -1536,15 +1547,20 @@ export const useTaskStore = defineStore('tasks', () => {
   let projectEffortTotalsActive = false
 
   // Jeder Realtime-INSERT stößt einen mehrseitigen Lauf an. Ohne Schutz setzte
-  // der zuletzt FERTIGE Lauf die Summen, nicht der zuletzt gestartete.
-  const projectTotalsGuard = createLatestRunGuard()
+  // der zuletzt FERTIGE Lauf die Summen, nicht der zuletzt gestartete. Und die
+  // Wand wartet vor dem ersten Packen auf die Summen: überholt ein neuerer Lauf
+  // den, auf den sie wartet, wartet sie bis zu dessen Ende mit.
+  const projectTotalsRunner = createLatestRunner((isLatest) => fetchProjectEffortTotals(isLatest))
 
-  const loadProjectEffortTotals = async (): Promise<void> => {
+  const loadProjectEffortTotals = (): Promise<void> => {
+    if (!useHouseholdStore().currentHousehold) return Promise.resolve()
+    projectEffortTotalsActive = true
+    return projectTotalsRunner.run()
+  }
+
+  const fetchProjectEffortTotals = async (isLatest: () => boolean): Promise<void> => {
     const householdStore = useHouseholdStore()
     if (!householdStore.currentHousehold) return
-
-    projectEffortTotalsActive = true
-    const isLatest = projectTotalsGuard.start()
 
     // Schritt 1: alle Unteraufgaben des Haushalts mit ihrem Elternteil.
     //
@@ -1686,7 +1702,7 @@ export const useTaskStore = defineStore('tasks', () => {
   onSessionEnd(() => {
     unsubscribeFromTasks()
     stopProjectEffortTotals()
-    projectTotalsGuard.invalidate()
+    projectTotalsRunner.invalidate()
     tasks.value = []
     completions.value = []
     projectEffortTotals.value = {}
