@@ -11,5 +11,5 @@ node_modules/
 .claude/settings.local.json
 .claude/worktrees/
 
-# Lokaler Issue-Tracker (Specs & Tickets, siehe docs/agents/tracker.md)
+# Alter lokaler Issue-Tracker (abgelöst durch mastermind task-tracker/HouseholdPlanner/)
 .scratch/

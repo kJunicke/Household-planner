@@ -22,7 +22,7 @@ Push auf `main` deployt sofort (GitHub Pages). Umgebung: Linux Mint, VS Code.
 - **Eine Messung ist kein Blick.** Geometrie messen und Aussehen ansehen sind zwei Aufträge;
   beide vergeben.
 - Vor jedem Push auf `main`: `npm test` und `npm run build` in `putzplan_vue/`. Nur eigene Pfade stagen.
-- Nennt der User einen Skill, der zu fehlen scheint: erst danach suchen (`.claude/skills/`),
+- Nennt der User einen Skill, der zu fehlen scheint: erst danach suchen (`~/.claude/skills/`, aus mastermind `agents/skills/`),
   dann entscheiden.
 
 ## Kommentare
@@ -41,13 +41,15 @@ Push auf `main` deployt sofort (GitHub Pages). Umgebung: Linux Mint, VS Code.
 - Entscheidungen: [docs/adr/](docs/adr/). Ein ADR gilt, bis er ausdrücklich zurückgezogen ist;
   wer ihm widerspricht, schreibt das in den ADR. Wer eine Festlegung ersetzt, liest vorher,
   was in der ersetzten Quelle wirklich steht.
-- Getrackte Dateien verlinken nicht in `.scratch/` — Wesentliches wird übernommen.
+- Getrackte Dateien verlinken nicht in den Tracker — Wesentliches wird übernommen.
 
 ## Tracker
 
-Lokal unter `.scratch/` (gitignored); Ordner, Pflichtzeilen und `Status:`-Werte:
-[docs/agents/tracker.md](docs/agents/tracker.md).
+Tickets und Specs liegen in mastermind unter `task-tracker/HouseholdPlanner/` (Boards) und im
+gemeinsamen `task-tracker/scratch/`, nie in diesem Repo. Regeln, Status-Werte und
+Ticket-Format: Skill `task-tracker`.
 
-- Backlog: `.scratch/backlog/` (Einstieg `README.md`). Vorhaben: `.scratch/<slug>/`.
-- Abgeschlossenes Vorhaben → ganzer Ordner nach `.scratch/archive/`. Das Archiv nur auf
-  Verweis lesen.
+- `6-done` erst nach Abnahme durch den Lead: QC grün, auf `main`, Abnahmenotiz im Ticket
+  (Commit-Hash, was belegt funktioniert, welche Restbefunde bewusst bleiben). Was nur am
+  Gerät prüfbar ist, wird vorher ein eigenes Ticket `3-ready` + `owner: human` mit Link auf
+  die Testanleitung.
