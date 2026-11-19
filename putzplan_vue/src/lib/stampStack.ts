@@ -57,11 +57,36 @@ const STAMP_TILT = 9
 const STAMP_TILT_JITTER = 5
 
 /**
- * Versatz einer Lage, in Pixeln: ±5,5. **Ein Messergebnis, kein Geschmack:** bei
- * 3 px verschwinden die unteren Lagen unter der deckenden obersten, und die
- * Stapelhöhe soll die Aussage tragen. Nicht „aufräumen".
+ * Waagerechter Versatz einer Lage, in Pixeln: ±5,5. **Ein Messergebnis, kein
+ * Geschmack:** bei 3 px verschwinden die unteren Lagen unter der deckenden
+ * obersten. Nicht „aufräumen".
  */
 const STAMP_OFFSET = 5.5
+
+/**
+ * Senkrechter Versatz je Lage, in Pixeln — **nach Stufe gefächert, nicht frei
+ * gestreut.** Mit ±5,5 px Zufall je Lage lagen zwei Lagen oft fast deckungsgleich,
+ * und unter dem Halo der obersten war nur das oberste Wort lesbar (Browser-QC
+ * vom 19.11.2026, Story 15). Jetzt:
+ *
+ *   Lage 0  7 ± 1 px zur einen Seite der Mitte
+ *   Lage 1  7 ± 1 px zur anderen Seite
+ *   Lage 2  ± 1,5 px um die Mitte
+ *
+ * So liegen je zwei Lagen mindestens 4,5 px auseinander, und von jeder unteren
+ * lugt über oder unter der obersten ein Streifen hervor. Welche Seite Lage 0
+ * nimmt, hängt an der Kennung, sonst stünde jeder Grundabdruck der Wand gleich.
+ * Die Fußzeile ist 44 px hoch, eine Zeile rund 12 px: ±8 px bleiben darin.
+ */
+const STAMP_FAN = 7
+const STAMP_FAN_JITTER = 1
+const STAMP_TOP_JITTER = 1.5
+
+const dyOf = (id: string, index: number): number => {
+  if (index === 2) return jitterOf(id, 'stamp-dy2', STAMP_TOP_JITTER)
+  const side = (jitterOf(id, 'stamp-side', 1) < 0 ? -1 : 1) * (index === 0 ? 1 : -1)
+  return side * (STAMP_FAN + jitterOf(id, `stamp-dy${index}`, STAMP_FAN_JITTER))
+}
 
 /**
  * Nach links oder rechts geneigt — deterministisch aus der Aufgaben-Kennung.
@@ -127,7 +152,7 @@ export function stampStackOf(task: StampCarrier, options: { loose?: boolean } = 
     text,
     top: index === level,
     dx: jitterOf(id, `stamp-dx${index}`, STAMP_OFFSET),
-    dy: jitterOf(id, `stamp-dy${index}`, STAMP_OFFSET),
+    dy: dyOf(id, index),
     tilt:
       tiltSignOf(id, index) * (STAMP_TILT + jitterOf(id, `stamp-rot${index}`, STAMP_TILT_JITTER)),
   }))

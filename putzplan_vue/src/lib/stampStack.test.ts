@@ -62,9 +62,23 @@ describe('stampStackOf', () => {
     expect(stampStackOf(task({ task_id: 'a', emphasis_level: 2 }))).toEqual(a)
     for (const layer of a) {
       expect(Math.abs(layer.dx)).toBeLessThanOrEqual(5.5)
-      expect(Math.abs(layer.dy)).toBeLessThanOrEqual(5.5)
+      expect(Math.abs(layer.dy)).toBeLessThanOrEqual(8)
       expect(Math.abs(layer.tilt)).toBeGreaterThanOrEqual(4)
       expect(Math.abs(layer.tilt)).toBeLessThanOrEqual(14)
+    }
+  })
+
+  it('jede untere Lage lugt hervor: senkrecht mindestens 4 px neben jeder anderen', () => {
+    // Die oberste Lage deckt mit ihrem Papier-Halo; was von einer unteren zu
+    // sehen ist, steht über oder unter ihr. Ein Drittel der rund 12 px hohen
+    // Zeile ist die Untergrenze, ab der sich ein Wort noch erkennen lässt.
+    for (let i = 0; i < 500; i++) {
+      const stack = stampStackOf(task({ task_id: `aufgabe-${i}`, emphasis_level: 2 }))
+      for (const a of stack) {
+        for (const b of stack) {
+          if (a.level < b.level) expect(Math.abs(a.dy - b.dy)).toBeGreaterThanOrEqual(4)
+        }
+      }
     }
   })
 

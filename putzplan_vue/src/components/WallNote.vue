@@ -1380,22 +1380,30 @@ const handlePostponeConfirm = async (targetDate: string) => {
    „aufräumen". Ohne Polster sitzt der Halo knapp am Wort; die unteren Lagen
    lugen über ihren Versatz und ihre eigene Neigung daneben hervor.
 
+   `line-height: 1` zieht den Halo senkrecht auf die Schriftgröße zusammen
+   (geerbt wären 1,1): er deckt so wenig wie möglich von den unteren Lagen, die
+   `stampStackOf` 7 px über und unter die Mitte fächert. Umlautpunkte dürfen über
+   den Halo hinausstehen; sie werden trotzdem gezeichnet.
+
    `--note-paper` kommt vom `.zettel` und wird vererbt (weiß / gelb /
    Packpapier je nach Typ). */
 .stamp-layer--top {
   background: var(--note-paper);
+  line-height: 1;
 }
 
 /* Die unteren Lagen bleiben durchsichtig und lugen an den Rändern hervor —
-   dort, und nur dort, steckt die sichtbare Stapelhöhe. 40 % für Lage 0,
-   60 % für Lage 1; nach oben immer prominenter. Die Regel hängt an der STUFE,
-   nicht am Wort (am Projekt ist Lage 1 ein Projektspruch). */
+   dort, und nur dort, steckt die sichtbare Stapelhöhe. 55 % für Lage 0,
+   75 % für Lage 1; nach oben immer prominenter, aber auch die unterste noch
+   als Wort lesbar (bei 40 % las sich nur das oberste, Browser-QC vom
+   19.11.2026). Die Regel hängt an der STUFE, nicht am Wort (am Projekt ist
+   Lage 1 ein Projektspruch). */
 .stamp-layer--under.stamp-layer--l0 {
-  opacity: 0.4;
+  opacity: 0.55;
 }
 
 .stamp-layer--under.stamp-layer--l1 {
-  opacity: 0.6;
+  opacity: 0.75;
 }
 
 /* --- Punkte als aufgeklebter Sticker ----------------------------------------

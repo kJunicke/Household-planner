@@ -73,4 +73,9 @@ dem 320-px-Gerät. Die Lagen liegen absolut darin, am linken Rand verankert, und
 - **Nur gestempelte Lagen im DOM:** die unsichtbaren Platzhalter für die Breite
   (ADR-0003) entfallen.
 - **Halo bleibt:** die oberste Lage ist deckend auf Papierfarbe, sonst scheinen die unteren
-  Wörter durch ihre Buchstaben. Ohne Polster sitzt er knapp am Wort.
+  Wörter durch ihre Buchstaben. Ohne Polster und mit `line-height: 1` sitzt er knapp am Wort.
+- **Senkrecht gefächert** (`stampStackOf`): Lage 0 liegt 7 ± 1 px zur einen Seite der Mitte,
+  Lage 1 zur anderen, Lage 2 ± 1,5 px um die Mitte. Je zwei Lagen liegen so mindestens 4,5 px
+  auseinander, und von jeder unteren lugt ein Streifen unter dem Halo hervor. Mit ±5,5 px
+  freiem Zufall je Lage lagen zwei oft deckungsgleich, lesbar war nur das oberste Wort
+  (Browser-QC vom 19.11.2026). Die unteren Lagen stehen mit 55 % und 75 % Deckkraft.
