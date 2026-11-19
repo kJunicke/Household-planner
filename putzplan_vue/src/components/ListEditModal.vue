@@ -3,7 +3,6 @@ import { ref } from 'vue'
 
 const props = defineProps<{
   list: { list_id: string; name: string }
-  canDelete: boolean
 }>()
 
 const emit = defineEmits<{
@@ -49,7 +48,7 @@ const handleDelete = () => {
 
         <div class="modal-footer">
           <button
-            v-if="canDelete && !showDeleteConfirm"
+            v-if="!showDeleteConfirm"
             class="btn btn-outline-danger me-auto"
             @click="showDeleteConfirm = true"
           >
