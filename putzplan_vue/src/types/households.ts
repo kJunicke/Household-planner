@@ -13,6 +13,8 @@ export interface Household {
   // der Wechseltag am Haushalt — haushaltsweit, nicht pro Gerät.
   week_start_day_pending?: number | null
   week_start_pending_from?: string | null // 'YYYY-MM-DD'
+  // Kurs für den Euro-Vorschlag beim Geld-Ausgleich, Euro je Punkt.
+  euros_per_point?: number | string | null
 }
 
 export interface HouseholdMember {

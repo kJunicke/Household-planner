@@ -8,6 +8,7 @@ import { useToastStore } from './toastStore'
 import { useTaskStore } from './taskStore'
 import type { RealtimeChannel } from '@supabase/supabase-js'
 import { onSessionEnd } from '@/lib/sessionEnd'
+import type { PairBalance } from '@/lib/settlementAmount'
 
 interface CompletionForBalance {
   user_id: string
@@ -59,7 +60,7 @@ export const useSettlementStore = defineStore('settlement', () => {
   const pairBalances = computed(() => {
     const householdStore = useHouseholdStore()
     const members = householdStore.householdMembers
-    const result: { userAId: string; userBId: string; balance: number }[] = []
+    const result: PairBalance[] = []
 
     for (let i = 0; i < members.length; i++) {
       for (let j = i + 1; j < members.length; j++) {
@@ -132,6 +133,7 @@ export const useSettlementStore = defineStore('settlement', () => {
     toUserId: string
     pointsSettled: number
     method: SettlementMethod
+    paidEuros?: number
     description?: string
     settledAt?: string
   }) => {
@@ -150,6 +152,8 @@ export const useSettlementStore = defineStore('settlement', () => {
           to_user_id: payload.toUserId,
           points_settled: payload.pointsSettled,
           method: payload.method,
+          // Nur Geld trägt einen Betrag (CHECK settlements_paid_euros_only_money).
+          paid_euros: payload.method === 'money' ? (payload.paidEuros ?? null) : null,
           description: payload.description?.trim() || null,
           settled_at: payload.settledAt ?? new Date().toISOString(),
           created_by: authStore.user.id,

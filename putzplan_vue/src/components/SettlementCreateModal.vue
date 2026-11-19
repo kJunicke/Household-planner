@@ -1,8 +1,16 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import type { SettlementMethod } from '@/types/Settlement'
 import { useHouseholdStore } from '@/stores/householdStore'
 import { useAuthStore } from '@/stores/authStore'
+import { useSettlementStore } from '@/stores/settlementStore'
+import {
+  MAX_PAID_EUROS,
+  formatEuroInput,
+  openBalance,
+  parseEuroInput,
+  suggestEuros,
+} from '@/lib/settlementAmount'
 
 const props = defineProps<{
   preselectedFromId?: string
@@ -16,6 +24,7 @@ const emit = defineEmits<{
       toUserId: string
       pointsSettled: number
       method: SettlementMethod
+      paidEuros?: number
       description?: string
       settledAt?: string
     },
@@ -25,13 +34,54 @@ const emit = defineEmits<{
 
 const householdStore = useHouseholdStore()
 const authStore = useAuthStore()
+const settlementStore = useSettlementStore()
+
+const MAX_SETTLEMENT_POINTS = 9999
 
 const fromUserId = ref(props.preselectedFromId ?? authStore.user?.id ?? '')
 const toUserId = ref(props.preselectedToId ?? '')
-const pointsSettled = ref(1)
+// Leeres Feld statt 0, wenn nichts offen ist: dann trägt man selbst ein.
+const pointsSettled = ref<number | ''>('')
 const method = ref<SettlementMethod>('activity')
+const eurosText = ref('')
 const description = ref('')
 const settledAt = ref(new Date().toISOString().slice(0, 16)) // datetime-local format
+
+// Vorbelegt ist die ganze offene Bilanz des Paars; verringern = Teilausgleich.
+watch(
+  [fromUserId, toUserId],
+  () => {
+    const open = openBalance(settlementStore.pairBalances, fromUserId.value, toUserId.value)
+    pointsSettled.value = open > 0 ? open : ''
+  },
+  { immediate: true },
+)
+
+const validPoints = computed(() => {
+  const p = pointsSettled.value
+  return typeof p === 'number' && Number.isInteger(p) && p > 0 && p <= MAX_SETTLEMENT_POINTS
+    ? p
+    : null
+})
+
+// Euro-Vorschlag folgt den Punkten. Der Betrag selbst wirkt nie auf die
+// Punkte zurück: die Punkte gleichen die Bilanz aus, der Betrag hält fest,
+// was floss (CONTEXT.md § Ausgleich).
+watch(
+  [validPoints, method],
+  ([points, m]) => {
+    if (m !== 'money' || points === null) return
+    eurosText.value = formatEuroInput(suggestEuros(points, householdStore.eurosPerPoint))
+  },
+  { immediate: true },
+)
+
+const paidEuros = computed(() => {
+  const value = parseEuroInput(eurosText.value)
+  return value !== null && value <= MAX_PAID_EUROS ? value : null
+})
+
+const rateLabel = computed(() => formatEuroInput(householdStore.eurosPerPoint))
 
 const methods: { value: SettlementMethod; label: string; icon: string }[] = [
   { value: 'activity', label: 'Aktivität', icon: 'bi-bullseye' },
@@ -49,7 +99,8 @@ const isValid = computed(
     fromUserId.value &&
     toUserId.value &&
     fromUserId.value !== toUserId.value &&
-    pointsSettled.value > 0,
+    validPoints.value !== null &&
+    (method.value !== 'money' || paidEuros.value !== null),
 )
 
 const handleFromChange = () => {
@@ -59,12 +110,13 @@ const handleFromChange = () => {
 }
 
 const handleSubmit = () => {
-  if (!isValid.value) return
+  if (!isValid.value || validPoints.value === null) return
   emit('submit', {
     fromUserId: fromUserId.value,
     toUserId: toUserId.value,
-    pointsSettled: pointsSettled.value,
+    pointsSettled: validPoints.value,
     method: method.value,
+    paidEuros: method.value === 'money' ? (paidEuros.value ?? undefined) : undefined,
     description: description.value.trim() || undefined,
     settledAt: new Date(settledAt.value).toISOString(),
   })
@@ -118,7 +170,9 @@ const getMemberName = (userId: string) => {
               type="number"
               class="form-control"
               min="1"
-              max="9999"
+              :max="MAX_SETTLEMENT_POINTS"
+              step="1"
+              inputmode="numeric"
             />
           </div>
 
@@ -139,16 +193,33 @@ const getMemberName = (userId: string) => {
             </div>
           </div>
 
-          <!-- Beschreibung -->
+          <!-- Betrag (nur Geld) -->
+          <div v-if="method === 'money'" class="form-group">
+            <label class="form-label">
+              Betrag
+              <span class="text-muted">(Vorschlag: Punkte × {{ rateLabel }} €)</span>
+            </label>
+            <div class="euro-input">
+              <input
+                v-model="eurosText"
+                type="text"
+                inputmode="decimal"
+                class="form-control"
+                :class="{ 'is-invalid': eurosText !== '' && paidEuros === null }"
+                autocomplete="off"
+              />
+              <span class="euro-sign">€</span>
+            </div>
+          </div>
+
+          <!-- Kommentar -->
           <div class="form-group">
-            <label class="form-label"
-              >Beschreibung <span class="text-muted">(optional)</span></label
-            >
+            <label class="form-label">Kommentar <span class="text-muted">(optional)</span></label>
             <input
               v-model="description"
               type="text"
               class="form-control"
-              placeholder="z.B. 20€ überwiesen, heute Abend kochen..."
+              placeholder="z.B. aufgerundet, heute Abend kochen..."
               maxlength="500"
             />
           </div>
@@ -165,8 +236,11 @@ const getMemberName = (userId: string) => {
             <span>
               <strong>{{ getMemberName(fromUserId) }}</strong>
               gleicht
-              <strong>{{ pointsSettled }}</strong> Punkte aus für
+              <strong>{{ validPoints }}</strong> Punkte aus für
               <strong>{{ getMemberName(toUserId) }}</strong>
+              <template v-if="method === 'money'">
+                mit <strong>{{ formatEuroInput(paidEuros ?? 0) }} €</strong>
+              </template>
             </span>
           </div>
         </div>
@@ -241,6 +315,17 @@ const getMemberName = (userId: string) => {
   background: var(--color-primary);
   border-color: var(--color-primary);
   color: white;
+}
+
+.euro-input {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.euro-sign {
+  color: var(--color-text-secondary);
+  flex-shrink: 0;
 }
 
 .preview-box {
