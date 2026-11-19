@@ -537,6 +537,7 @@ const cancelDeferredRelayout = () => {
 const runRelayout = (animate: boolean, tappedId?: string) => {
   if (relayout(animate, tappedId)) {
     cancelDeferredRelayout()
+    layoutSettled()
     return
   }
 
@@ -550,6 +551,7 @@ const runRelayout = (animate: boolean, tappedId?: string) => {
     if (!relayoutDeferred) return
     if (relayout(false)) {
       cancelDeferredRelayout()
+      layoutSettled()
       return
     }
     // Bremse 1 — ab hier wartet der Observer. `relayoutDeferred` bleibt dabei
@@ -563,8 +565,22 @@ const runRelayout = (animate: boolean, tappedId?: string) => {
   deferFrame = requestAnimationFrame(step)
 }
 
+/**
+ * Steht ein Packlauf aus — angefordert, aber noch nicht geglückt (auch
+ * vertagt)? Daran wartet `revealNote`: vorher stimmen weder die Höhe der Wand
+ * noch die Lage der Erledigt-Liste darunter.
+ */
+let relayoutPending = false
+
 const scheduleRelayout = (animate: boolean) => {
+  relayoutPending = true
   nextTick(() => runRelayout(animate))
+}
+
+/** Ein Packlauf ist geglückt: ein wartendes Zeigen darf jetzt laufen. */
+const layoutSettled = () => {
+  relayoutPending = false
+  flushReveal()
 }
 
 /**
@@ -683,10 +699,45 @@ const JUMP_PULSE_Z = '799'
  *
  * Erst nach dem Schließen: das läuft über einen Verlaufssprung, und ein
  * Scrollen davor könnte die Scroll-Wiederherstellung des Browsers
- * zurücksetzen. Und erst nach dem Neupacken der vollen Wand — der `nextTick`
- * hier kommt nach dem des Packlaufs, das `requestAnimationFrame` danach.
+ * zurücksetzen.
+ *
+ * **Und erst nach dem Packlauf der vollen Wand**, nicht nach einem bloßen
+ * `nextTick`: bis dahin ist die Seite so hoch wie die Treffer, und alles unter
+ * der Wand steht hunderte Pixel zu weit oben. Gescrollt wurde dorthin, die
+ * Wand wuchs danach, und das Ziel lag außer Sicht (Browser-QC2 N9: Seite
+ * 1213 → 1651 px, Erledigt-Zeile 486 → 1332). Darum merkt sich `revealNote` das
+ * Ziel nur; gezeigt wird in `flushReveal`, sobald kein Packlauf mehr aussteht
+ * (→ `layoutSettled`). Das `nextTick` hier wartet auf die Beobachter, die das
+ * Schließen auslöst — erst danach weiß `relayoutPending`, ob einer kommt.
  */
+let revealTargetId: string | null = null
+
 function revealNote(id: string) {
+  revealTargetId = id
+  void nextTick(() => {
+    if (!relayoutPending) flushReveal()
+  })
+}
+
+/**
+ * Oberkante im Dokument aus der Layoutlage (`offsetTop` die Kette hinauf),
+ * nicht aus `getBoundingClientRect`: ein Zettel kann nach dem Packlauf noch in
+ * seiner FLIP-Bewegung stecken, und die zählte dort mit.
+ */
+const documentTopOf = (el: HTMLElement): number => {
+  let top = 0
+  for (let node: HTMLElement | null = el; node; node = node.offsetParent as HTMLElement | null) {
+    top += node.offsetTop
+  }
+  return top
+}
+
+function flushReveal() {
+  const id = revealTargetId
+  if (!id) return
+  revealTargetId = null
+  // `nextTick`: der Packlauf hat `wallHeight` gesetzt, Vue schreibt die Höhe
+  // erst beim nächsten Rendern. Das Bild danach misst die fertige Seite.
   void nextTick(() =>
     requestAnimationFrame(() => {
       const note = noteEls.get(id)
@@ -699,7 +750,10 @@ function revealNote(id: string) {
         document.querySelector<HTMLElement>('.scrap')
       if (!el) return
       const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
-      el.scrollIntoView({ block: 'center', behavior: reduceMotion ? 'auto' : 'smooth' })
+      window.scrollTo({
+        top: Math.max(0, documentTopOf(el) + el.offsetHeight / 2 - window.innerHeight / 2),
+        behavior: reduceMotion ? 'auto' : 'smooth',
+      })
       // Per Web Animations statt per Klasse: `class` gehört Vue und würde beim
       // nächsten Rendern überschrieben. Der Zettel ist gedreht, der Umriss dreht
       // mit. Die Zeile liegt in einer Liste mit Rand, deshalb nach innen.
