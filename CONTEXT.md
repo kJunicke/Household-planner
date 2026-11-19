@@ -117,6 +117,49 @@ Architekturentscheidungen: [docs/adr/](docs/adr/).
 - Zählt wie jede Erledigung: Punkte ins Wochenziel, Eintrag in der Historie.
 - Technisch eine einmalige Aufgabe, die schon erledigt **und** gelöscht angelegt wird (`completed`, `deleted_at`), plus eine Erledigung mit `is_quick`. Deshalb nie als Zettel und nie unter **Erledigt**.
 
+### Punkte
+- Maß für die **Leistung** einer Erledigung: Zeit **und** Anstrengung zusammen, nicht reine Zeit. Eine kurze, eklige Aufgabe darf mehr zählen als eine lange, leichte.
+- Anker: 1 Punkt ≈ 5 Minuten leichter Arbeit — der kleinste Wert, den eine Aufgabe haben kann. Nach oben **keine feste Grenze**.
+- Die Skala eicht der Haushalt selbst über **Richtwerte** mit Beispielaufgaben, nicht über eine Formel: was wie viel wert ist, legt er gemeinsam fest und kann es jederzeit ändern.
+
+### Umrechnung
+- Kurs Punkte → Geld für die **Bilanz**: 1 Punkt Differenz ≈ 1 € als Startwert; der Haushalt kann ihn ändern.
+- Die App schlägt damit bei einem **Ausgleich** in Geld den Betrag vor.
+- Hergeleitet aus ~20 €/h und 12 Punkten/h (≈ 1,67 €/Punkt); halbiert, weil wer eine geteilte Aufgabe übernimmt, die Hälfte davon ohnehin selbst schuldet; aufgerundet zur Merkeinheit.
+- Wann und womit ausgeglichen wird, entscheidet der Haushalt selbst.
+
+### Standardpunkte
+- Die **Punkte**, mit denen eine bestimmte Aufgabe bei jeder Erledigung zählt. Fehlen sie, ist die Aufgabe **unbewertet**.
+- Nicht an einen **Richtwert** gebunden: ändert sich die Richtwert-Liste, behält jede Aufgabe ihre Standardpunkte.
+
+### Richtwert
+- Eine Punktzahl auf der Liste des Haushalts, mit Beispielaufgaben, die so viel wert sind. Die Liste ist die gemeinsame Eichung der Skala.
+- Gepflegt vom Haushalt in der App; beliebige Werte, beliebig viele Beispiele je Wert.
+
+### Schnelloption
+- Ein **Richtwert**, der als Knopf in jeder Punktwahl erscheint. Daneben gibt es immer ein freies Feld für jede andere Zahl.
+- Deaktivieren nimmt nur den Knopf weg — Richtwert und Beispiele bleiben.
+
+### Abweichung
+- Eine Erledigung, die mit anderen Punkten zählt als den **Standardpunkten** der Aufgabe („war viel dreckiger als sonst").
+- Braucht **immer eine Begründung**. Die Standardpunkte ändern sich dadurch nicht.
+
+### unbewertet
+- Aufgabe ohne **Standardpunkte** — Zustand **jeder** Aufgabe nach dem Wechsel auf die neue Punkteskala, auch Projekte und Unteraufgaben → [ADR-0005](docs/adr/0005-skalenwechsel-per-stichtag-ohne-umrechnung.md).
+- Lässt sich nicht erledigen, ohne erst bewertet zu werden: jeder Weg zum Erledigen (Abreißen, Kranz, Suche) öffnet zuerst die Punktwahl. Abbrechen erledigt nichts; der Zettel bleibt hängen.
+- Der gewählte Wert werden die **Standardpunkte** der Aufgabe und gilt für alle künftigen Erledigungen — gefragt wird einmal je Aufgabe.
+
+### Bilanz
+- Offene Punktdifferenz zwischen zwei Haushaltsmitgliedern über die **ganze** Historie, minus alle **Ausgleiche** zwischen ihnen. Kein Zeitraum, kein Monatsschnitt.
+- Gezählt wird die rohe Differenz, nicht der Anteil über der fairen Hälfte — deshalb ist die **Umrechnung** je Punkt halbiert.
+
+### Ausgleich
+- Eingetragene Gegenleistung, die die **Bilanz** um eine Punktzahl verringert: Geld, Aktivität, Überraschung oder Sonstiges.
+- Wann ausgeglichen wird, legt die App nicht fest.
+- Vorausgefüllt ist die ganze offene **Bilanz**; Teilausgleiche sind erlaubt.
+- In Geld: die App schlägt den Betrag nach der **Umrechnung** vor; der Haushalt darf sich auf mehr oder weniger einigen. Punkte und gezahlter Betrag sind dann **unabhängig** — die Punkte gleichen die Bilanz aus, der Betrag hält fest, was tatsächlich floss, auch wenn sich der Kurs später ändert. Ein Kommentar ist möglich.
+- In der Bilanz-Übersicht steht kein Geld — Euro erscheint erst, wenn ausgeglichen wird.
+
 ### Wochenziel
 - Punktzahl, die der Haushalt sich gemeinsam für eine Woche vornimmt; gehört dem Haushalt, jedes Mitglied darf sie ändern.
 - Gemessen gegen die Summe aller Erledigungen der laufenden Woche: **ein** Balken für alle, ein Farbsegment je Mitglied.
