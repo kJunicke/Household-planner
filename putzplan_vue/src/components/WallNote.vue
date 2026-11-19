@@ -2088,9 +2088,16 @@ const handlePostponeConfirm = async (targetDate: string) => {
    (wieder dreckig), deshalb anders als `.pin` MIT Trefffläche: 44 × 36 px, mittig
    über der Oberkante. Sie ragt 8 px über die Padding-Box, 6 px über das Papier;
    die Wand hält oben Platz dafür frei. Wer Lage oder Maße ändert, ändert die
-   Zeile `.pin-spot` in `FASTENERS` (`src/lib/wallLayout.ts`) mit. */
+   Zeile `.pin-spot` in `FASTENERS` (`src/lib/wallLayout.ts`) mit.
+
+   `z-index: 1` legt die ganze Fläche über den Kopf: `.head` ist positioniert
+   und steht im DOM später, ohne diese Zeile nahm der Titel ab 12 px unter der
+   Oberkante jeden Tipp, und vom Ziel blieben 44 × 12 px, halb über dem Kork
+   (Browser-QC M7). Am Titel selbst hängt keine eigene Aktion; aufklappen
+   lässt sich der Zettel über die übrige Fläche und das Unteraufgaben-Zeichen. */
 .pin-spot {
   position: absolute;
+  z-index: 1;
   top: -8px;
   left: 50%;
   margin-left: -22px;
