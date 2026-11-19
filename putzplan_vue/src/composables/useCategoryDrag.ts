@@ -1,6 +1,8 @@
 import { onBeforeUnmount } from 'vue'
 import Sortable from 'sortablejs'
 
+import { useDragAutoScroll } from './useDragAutoScroll'
+
 /**
  * Produkte per Halten und Ziehen zwischen Kategorie-Sektionen verschieben.
  *
@@ -22,6 +24,7 @@ export function useCategoryDrag(options: {
   onMove: (itemId: string, category: string | null) => void
 }) {
   const instances = new Map<string, Sortable>()
+  const autoScroll = useDragAutoScroll()
   /** Ursprung der gerade gezogenen Zeile — in `onStart` gemerkt, in `onEnd` benutzt. */
   let originParent: HTMLElement | null = null
   let originNext: Node | null = null
@@ -60,8 +63,10 @@ export function useCategoryDrag(options: {
         // Bedienung, zwei Implementierungen wollen wir nicht.
         forceFallback: true,
         fallbackOnBody: true,
-        scroll: true,
-        scrollSensitivity: 80,
+        // Eigenes Auto-Scrollen (`useDragAutoScroll`): das eingebaute läuft mit
+        // fester Geschwindigkeit, und seine untere Zone liegt hinter der
+        // Navigationsleiste.
+        scroll: false,
         ghostClass: 'drag-ghost',
         chosenClass: 'drag-chosen',
         // Der Nachbar VOR dem Ziehen ist die Marke zum Zurückrollen — nicht der
@@ -75,8 +80,10 @@ export function useCategoryDrag(options: {
         onStart: (evt) => {
           originParent = evt.from as HTMLElement
           originNext = (evt.item as HTMLElement).nextSibling
+          autoScroll.start()
         },
         onEnd: (evt) => {
+          autoScroll.stop()
           const from = evt.from as HTMLElement
           const to = evt.to as HTMLElement
           const itemId = (evt.item as HTMLElement).dataset.itemId
