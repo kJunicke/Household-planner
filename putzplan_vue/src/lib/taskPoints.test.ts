@@ -7,10 +7,12 @@ import {
   estimateCompletionPoints,
   estimateParentPoints,
   examplesFor,
+  initialCompletionPoints,
   isDeviation,
   isProjectWork,
   isUnrated,
   isValidPoints,
+  newProjectWorkSubtask,
   quickOptions,
 } from './taskPoints'
 
@@ -207,5 +209,36 @@ describe('estimateCompletionPoints', () => {
 
   it('unbewertet ohne Wahl: null Punkte', () => {
     expect(estimateCompletionPoints(sub({ parent_task_id: null, effort: null }), [])).toBe(0)
+  })
+})
+
+describe('initialCompletionPoints (Vorauswahl im Erledigungs-Dialog)', () => {
+  const buttons = [1, 2, 3, 5, 8, 12]
+
+  it('Standard ohne Knopf (7): steht von Anfang an gewählt im freien Feld', () => {
+    expect(initialCompletionPoints(7, buttons)).toBe(7)
+  })
+
+  it('Standard mit Knopf (5): nichts gewählt, der Knopf ist markiert', () => {
+    expect(initialCompletionPoints(5, buttons)).toBeNull()
+  })
+
+  it('unbewertet: nichts gewählt', () => {
+    expect(initialCompletionPoints(null, buttons)).toBeNull()
+  })
+})
+
+describe('newProjectWorkSubtask (Arbeits-Unteraufgabe eines neuen Projekts)', () => {
+  const row = newProjectWorkSubtask({ projectTaskId: 'p1', householdId: 'h1' })
+
+  it('entsteht unbewertet: die erste Projekt-Arbeit fragt nach ihren Punkten', () => {
+    expect(row.effort).toBeNull()
+    expect(isUnrated(row)).toBe(true)
+  })
+
+  it('ist die Projekt-Arbeit des Projekts', () => {
+    expect(isProjectWork({ title: row.title, parentTaskType: 'project' })).toBe(true)
+    expect(row.parent_task_id).toBe('p1')
+    expect(row.household_id).toBe('h1')
   })
 })

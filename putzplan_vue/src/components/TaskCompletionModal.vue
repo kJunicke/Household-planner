@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import { COMPLETION_NOTE_MAX_LENGTH } from '@/lib/limits'
-import { isDeviation } from '@/lib/taskPoints'
+import { initialCompletionPoints, isDeviation } from '@/lib/taskPoints'
+import { usePointBenchmarkStore } from '@/stores/pointBenchmarkStore'
 import PointPicker from './PointPicker.vue'
 
 interface Props {
@@ -19,7 +20,12 @@ interface Emits {
 const props = defineProps<Props>()
 const emit = defineEmits<Emits>()
 
-const selectedEffort = ref<number | null>(null)
+const benchmarkStore = usePointBenchmarkStore()
+// Standard ohne Knopf (z. B. 7): von Anfang an im freien Feld gewählt, sonst
+// wäre er im Dialog nirgends zu sehen (→ `initialCompletionPoints`).
+const selectedEffort = ref<number | null>(
+  initialCompletionPoints(props.defaultEffort, benchmarkStore.quickOptionPoints),
+)
 const note = ref('')
 
 // Andere Punkte als die Standardpunkte: die Notiz wird zur Pflicht-Begründung
