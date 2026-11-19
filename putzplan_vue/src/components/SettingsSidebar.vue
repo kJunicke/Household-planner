@@ -12,7 +12,8 @@ import PointBenchmarkSettings from './PointBenchmarkSettings.vue'
 import { useShoppingStore } from '../stores/shoppingStore'
 import { usePackingStore } from '../stores/packingStore'
 import { useTodoStore } from '../stores/todoStore'
-import { DISPLAY_NAME_MAX_LENGTH } from '@/lib/limits'
+import { DISPLAY_NAME_MAX_LENGTH, HOUSEHOLD_NAME_MAX_LENGTH } from '@/lib/limits'
+import { normalizeHouseholdName } from '@/lib/householdName'
 
 const props = defineProps<{
   open: boolean
@@ -119,6 +120,35 @@ const currentMemberColor = computed(() => {
 })
 
 // ---------------------------------------------------------------
+// Haushaltsname
+//
+// Jedes Mitglied darf umbenennen; der neue Name kommt beim anderen über
+// Realtime an (bzw. über `refreshHousehold()` beim Öffnen der Sidebar).
+// ---------------------------------------------------------------
+const isEditingHouseholdName = ref(false)
+const householdNameInput = ref('')
+const savingHouseholdName = ref(false)
+
+const householdNameValid = computed(() => normalizeHouseholdName(householdNameInput.value) !== null)
+
+const startEditingHouseholdName = () => {
+  householdNameInput.value = householdStore.currentHousehold?.name ?? ''
+  isEditingHouseholdName.value = true
+}
+
+const cancelEditingHouseholdName = () => {
+  isEditingHouseholdName.value = false
+}
+
+const saveHouseholdName = async () => {
+  if (!householdNameValid.value || savingHouseholdName.value) return
+  savingHouseholdName.value = true
+  const ok = await householdStore.renameHousehold(householdNameInput.value)
+  savingHouseholdName.value = false
+  if (ok) isEditingHouseholdName.value = false
+}
+
+// ---------------------------------------------------------------
 // Wochenziel
 //
 // Bearbeitet wird bewusst hier und nicht in der Statusleiste: die Änderung
@@ -187,6 +217,7 @@ watch(
   async (isOpen) => {
     if (!isOpen) {
       showGoalConfirm.value = false
+      isEditingHouseholdName.value = false
       return
     }
     resetGoalForm()
@@ -263,7 +294,44 @@ const buildDate = __BUILD_DATE__
             <h3>Haushalt</h3>
             <div class="info-item">
               <span class="info-label">Name:</span>
-              <span class="info-value">{{ householdStore.currentHousehold?.name }}</span>
+              <span v-if="!isEditingHouseholdName" class="info-value-row">
+                <span class="info-value">{{ householdStore.currentHousehold?.name }}</span>
+                <button
+                  class="copy-btn"
+                  @click="startEditingHouseholdName"
+                  title="Haushalt umbenennen"
+                  aria-label="Haushalt umbenennen"
+                >
+                  <i class="bi bi-pencil"></i>
+                </button>
+              </span>
+              <div v-else class="household-name-edit">
+                <input
+                  v-model="householdNameInput"
+                  :maxlength="HOUSEHOLD_NAME_MAX_LENGTH"
+                  type="text"
+                  class="form-control"
+                  placeholder="Name des Haushalts"
+                  @keyup.enter="saveHouseholdName"
+                  @keyup.escape="cancelEditingHouseholdName"
+                />
+                <p v-if="!householdNameValid" class="goal-error">Der Name darf nicht leer sein</p>
+                <div class="d-flex gap-2">
+                  <button
+                    @click="saveHouseholdName"
+                    class="btn btn-primary btn-sm flex-1"
+                    :disabled="!householdNameValid || savingHouseholdName"
+                  >
+                    <i class="bi bi-check-lg"></i> Speichern
+                  </button>
+                  <button
+                    @click="cancelEditingHouseholdName"
+                    class="btn btn-secondary btn-sm flex-1"
+                  >
+                    <i class="bi bi-x-lg"></i> Abbrechen
+                  </button>
+                </div>
+              </div>
             </div>
             <div class="info-item">
               <span class="info-label">Einladungs-Code:</span>
@@ -631,6 +699,12 @@ const buildDate = __BUILD_DATE__
   border-color: var(--color-primary);
   color: var(--color-primary);
   background: var(--color-background);
+}
+
+.household-name-edit {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
 }
 
 /* Members List */
