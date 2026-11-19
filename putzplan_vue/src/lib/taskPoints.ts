@@ -28,6 +28,27 @@ export function estimateParentPoints(effort: number, subtasks: readonly Task[]):
   return Math.max(0, effort - deductSum)
 }
 
+/**
+ * Punkte, die eine Erledigung voraussichtlich bringt — die eine Schätzung für
+ * Wochenbalken, fliegende Zahl und Fetzen. `effortOverride` (angepasste Punkte)
+ * ersetzt die Rechnung; `standardPoints` (erstes Bewerten) tritt an die Stelle
+ * der fehlenden Standardpunkte. Eine Unteraufgabe bringt ihre Standardpunkte,
+ * eine `checklist`-Unteraufgabe nichts; eine Hauptaufgabe rechnet über
+ * `estimateParentPoints` mit ihren Unteraufgaben (`subtasks`).
+ */
+export function estimateCompletionPoints(
+  task: Pick<Task, 'effort' | 'parent_task_id' | 'subtask_points_mode'>,
+  subtasks: readonly Task[],
+  options: { effortOverride?: number; standardPoints?: number } = {},
+): number {
+  if (options.effortOverride !== undefined) return options.effortOverride
+  const effort = task.effort ?? options.standardPoints ?? 0
+  if (task.parent_task_id !== null) {
+    return task.subtask_points_mode === 'checklist' ? 0 : effort
+  }
+  return estimateParentPoints(effort, subtasks)
+}
+
 /** Obergrenze jeder Punktzahl — fängt Tippfehler wie „50000“ ab. Dieselbe Zahl wie die CHECKs der Migration 20261119120000. */
 export const POINTS_MAX = 999
 
@@ -68,10 +89,23 @@ export function examplesFor(
   return benchmarks.find((b) => b.points === points)?.examples ?? []
 }
 
+/** Titel der Unteraufgabe eines Projekts, über die Projekt-Arbeit gebucht wird. */
+export const PROJECT_WORK_TITLE = 'Am Projekt arbeiten'
+
+/**
+ * **Projekt-Arbeit**: die Unteraufgabe „Am Projekt arbeiten“ eines Projekts —
+ * und nur sie. Das Projekt selbst und seine anderen Unteraufgaben sind
+ * gewöhnliche Aufgaben. Dieselbe Regel prüft die Edge Function `complete-task`
+ * (Titel und Typ des Elternknotens); wer eine ändert, ändert beide.
+ */
+export function isProjectWork(input: { title: string; parentTaskType: string | null }): boolean {
+  return input.parentTaskType === 'project' && input.title === PROJECT_WORK_TITLE
+}
+
 /**
  * Wie eine Erledigung entsteht: `task` = eine Aufgabe mit Standardpunkten
- * (Abreißen, Erledigungs-Dialog, Suche), `project` = Arbeit an einem Projekt,
- * `quick` = Quick-Aufgabe.
+ * (Abreißen, Erledigungs-Dialog, Suche), `project` = Projekt-Arbeit
+ * (`isProjectWork`, Arbeitsfenster), `quick` = Quick-Aufgabe.
  */
 export type CompletionKind = 'task' | 'project' | 'quick'
 
@@ -80,7 +114,8 @@ export type CompletionKind = 'task' | 'project' | 'quick'
  * eine Erledigung zählt andere Punkte als die Standardpunkte der Aufgabe.
  *
  * Nie eine Abweichung, weil es keinen Standard gibt, von dem man abwiche:
- * Projekt-Arbeit, Quick-Aufgabe und das erste Bewerten einer **unbewerteten**
+ * Projekt-Arbeit (nur die Unteraufgabe „Am Projekt arbeiten“, → `isProjectWork`;
+ * Projekt und andere Unteraufgaben sind `task`), Quick-Aufgabe und das erste Bewerten einer **unbewerteten**
  * Aufgabe (`standardPoints === null`). Solange nichts gewählt ist
  * (`chosenPoints === null`), auch nicht — die Punktwahl sperrt dann ohnehin.
  *

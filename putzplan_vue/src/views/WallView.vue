@@ -21,7 +21,7 @@ import WallScrap from '../components/WallScrap.vue'
 import TaskCreateModal from '../components/TaskCreateModal.vue'
 import QuickTaskModal from '../components/QuickTaskModal.vue'
 import TaskRatingModal from '../components/TaskRatingModal.vue'
-import { estimateParentPoints, isUnrated } from '@/lib/taskPoints'
+import { isUnrated } from '@/lib/taskPoints'
 import { useTaskStore } from '../stores/taskStore'
 import { useHouseholdStore } from '../stores/householdStore'
 import { useTaskBoard } from '@/composables/useTaskBoard'
@@ -1092,11 +1092,8 @@ const completeFromSearch = async (task: Task, standardPoints?: number) => {
   }
   searchBusyId.value = task.task_id
   try {
-    const points =
-      standardPoints === undefined
-        ? taskStore.estimateCompletionEffort(task)
-        : estimateParentPoints(standardPoints, taskStore.getSubtasks(task.task_id))
-    if (!(await taskStore.completeTask(task.task_id, undefined, undefined, standardPoints))) {
+    const points = taskStore.estimateCompletionEffort(task, { standardPoints })
+    if (!(await taskStore.completeTask(task.task_id, { standardPoints }))) {
       searchBusyId.value = null
       return
     }

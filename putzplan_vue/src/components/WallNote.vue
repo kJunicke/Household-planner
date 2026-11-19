@@ -46,7 +46,7 @@ import TaskAssignmentModal from './TaskAssignmentModal.vue'
 import SubtaskManagementModal from './SubtaskManagementModal.vue'
 import TaskPostponeModal from './TaskPostponeModal.vue'
 import TaskRatingModal from './TaskRatingModal.vue'
-import { estimateParentPoints, isUnrated } from '@/lib/taskPoints'
+import { estimateParentPoints, isProjectWork, isUnrated } from '@/lib/taskPoints'
 
 const props = defineProps<{
   task: Task
@@ -90,7 +90,7 @@ const isProject = computed(() => props.task.task_type === 'project')
 const subtasks = computed(() => {
   const all = taskStore.getSubtasks(props.task.task_id)
   // "Am Projekt arbeiten" ist Buchhaltung, kein Zettel.
-  return isProject.value ? all.filter((s) => s.title !== 'Am Projekt arbeiten') : all
+  return all.filter((s) => !isProjectWork({ title: s.title, parentTaskType: props.task.task_type }))
 })
 
 /** Nur ein Zettel MIT Unteraufgaben klappt auf. */
@@ -258,7 +258,9 @@ const isLoggingWork = ref(false)
 const projectWorkSubtask = computed(() => {
   if (!isProject.value) return null
   return (
-    taskStore.getSubtasks(props.task.task_id).find((s) => s.title === 'Am Projekt arbeiten') ?? null
+    taskStore
+      .getSubtasks(props.task.task_id)
+      .find((s) => isProjectWork({ title: s.title, parentTaskType: props.task.task_type })) ?? null
   )
 })
 
@@ -299,12 +301,11 @@ const handleProjectWork = async (effort: number, note: string) => {
   // Standardpunkten der Arbeits-Unteraufgabe und ist beim nächsten Mal
   // vorausgewählt (→ `ProjectWorkModal`, `standardPoints`).
   const rateNow = projectWorkSubtask.value ? isUnrated(projectWorkSubtask.value) : false
-  const applied = await taskStore.completeTask(
-    subtaskId,
-    effort,
-    note,
-    rateNow ? effort : undefined,
-  )
+  const applied = await taskStore.completeTask(subtaskId, {
+    effortOverride: effort,
+    completionNote: note,
+    standardPoints: rateNow ? effort : undefined,
+  })
   isLoggingWork.value = false
   if (!applied) return
   showProjectWorkModal.value = false
@@ -351,7 +352,7 @@ const finishSubtaskTear = async (
 ): Promise<boolean> => {
   const subtask = subtasks.value.find((s) => s.task_id === subtaskId)
   markTorn(subtaskId)
-  const applied = await taskStore.completeTask(subtaskId, undefined, undefined, standardPoints)
+  const applied = await taskStore.completeTask(subtaskId, { standardPoints })
   if (!applied || !subtask) return applied
   if (subtask.subtask_points_mode === 'checklist') return applied
   flyPoints(`+${subtask.effort ?? standardPoints ?? 0} P`, origin)
@@ -391,16 +392,8 @@ const finishNoteTear = async (
   origin: { x: number; y: number },
   standardPoints?: number,
 ): Promise<boolean> => {
-  const points =
-    standardPoints === undefined
-      ? effectivePoints.value
-      : estimateParentPoints(standardPoints, taskStore.getSubtasks(props.task.task_id))
-  const applied = await taskStore.completeTask(
-    props.task.task_id,
-    undefined,
-    undefined,
-    standardPoints,
-  )
+  const points = taskStore.estimateCompletionEffort(props.task, { standardPoints })
+  const applied = await taskStore.completeTask(props.task.task_id, { standardPoints })
   if (!applied) return false
   if (points > 0) flyPoints(`+${points} P`, origin)
   else flyPoints('erledigt', origin, { muted: true })
@@ -881,7 +874,10 @@ const showCompletionModal = ref(false)
 const handleCustomCompletion = async (effortOverride: number, note: string) => {
   const el = root.value
   const origin = el ? centerOf(el) : null
-  const applied = await taskStore.completeTask(props.task.task_id, effortOverride, note)
+  const applied = await taskStore.completeTask(props.task.task_id, {
+    effortOverride,
+    completionNote: note,
+  })
   if (!applied) return
   showCompletionModal.value = false
   if (origin && effortOverride > 0) flyPoints(`+${effortOverride} P`, origin)

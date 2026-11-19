@@ -21,6 +21,19 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
+/** Antwort mit JSON-Körper und CORS-Headern. */
+const json = (status: number, body: unknown) =>
+  new Response(JSON.stringify(body), {
+    status,
+    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+  })
+
+/**
+ * Titel der Unteraufgabe, über die Projekt-Arbeit gebucht wird. Derselbe Titel
+ * steht in `PROJECT_WORK_TITLE` in src/lib/taskPoints.ts.
+ */
+const PROJECT_WORK_TITLE = 'Am Projekt arbeiten'
+
 Deno.serve(async (req) => {
   // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
@@ -37,10 +50,7 @@ Deno.serve(async (req) => {
 
     // 2. Validate input
     if (!taskId) {
-      return new Response(JSON.stringify({ error: 'taskId is required' }), {
-        status: 400,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      })
+      return json(400, { error: 'taskId is required' })
     }
 
     // Punkte einer Erledigung: ganzzahlig 0–999. Dieselbe Grenze wie der CHECK
@@ -52,10 +62,7 @@ Deno.serve(async (req) => {
       effortOverride !== undefined &&
       !(Number.isInteger(effortOverride) && effortOverride >= 0 && effortOverride <= 999)
     ) {
-      return new Response(
-        JSON.stringify({ error: 'effortOverride must be an integer from 0 to 999' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
-      )
+      return json(400, { error: 'effortOverride must be an integer from 0 to 999' })
     }
 
     // Standardpunkte: ganzzahlig 1–999, wie der CHECK auf tasks.effort und
@@ -64,10 +71,7 @@ Deno.serve(async (req) => {
       standardPoints !== undefined &&
       !(Number.isInteger(standardPoints) && standardPoints >= 1 && standardPoints <= 999)
     ) {
-      return new Response(
-        JSON.stringify({ error: 'standardPoints must be an integer from 1 to 999' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
-      )
+      return json(400, { error: 'standardPoints must be an integer from 1 to 999' })
     }
 
     // Note: effortOverride and completionNote are both optional and independent
@@ -76,10 +80,7 @@ Deno.serve(async (req) => {
     // 3. Create authenticated Supabase client (uses user's JWT from Authorization header)
     const authHeader = req.headers.get('Authorization')
     if (!authHeader) {
-      return new Response(JSON.stringify({ error: 'Missing authorization header' }), {
-        status: 401,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      })
+      return json(401, { error: 'Missing authorization header' })
     }
 
     const supabase = createClient(
@@ -94,25 +95,20 @@ Deno.serve(async (req) => {
       error: userError,
     } = await supabase.auth.getUser()
     if (userError || !user) {
-      return new Response(JSON.stringify({ error: 'Unauthorized' }), {
-        status: 401,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      })
+      return json(401, { error: 'Unauthorized' })
     }
 
-    // 5. Fetch task details (for parent_task_id check + assignment_permanent + task_type + subtask_points_mode)
+    // 5. Fetch task details (for parent_task_id check + assignment_permanent + task_type + subtask_points_mode,
+    //    title for project work)
     const { data: taskDetails, error: fetchError } = await supabase
       .from('tasks')
-      .select('effort, parent_task_id, assignment_permanent, task_type, subtask_points_mode')
+      .select('title, effort, parent_task_id, assignment_permanent, task_type, subtask_points_mode')
       .eq('task_id', taskId)
       .single()
 
     if (fetchError || !taskDetails) {
       console.error('Error fetching task details:', fetchError)
-      return new Response(
-        JSON.stringify({ error: 'Task not found', details: fetchError?.message }),
-        { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
-      )
+      return json(404, { error: 'Task not found', details: fetchError?.message })
     }
 
     // Unbewertet (CONTEXT.md § unbewertet): ohne Standardpunkte wird nichts
@@ -124,16 +120,16 @@ Deno.serve(async (req) => {
     // ändert, ändert beide.
     const isUnrated = taskDetails.effort === null
     if (isUnrated && standardPoints === undefined) {
-      return new Response(
-        JSON.stringify({ error: 'standardPoints is required: the task is unrated' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
-      )
+      return json(400, { error: 'standardPoints is required: the task is unrated' })
     }
     if (!isUnrated && standardPoints !== undefined) {
-      return new Response(
-        JSON.stringify({ error: 'standardPoints is only allowed while the task is unrated' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
-      )
+      // Der Client hielt die Aufgabe für unbewertet, jemand anderes hat sie
+      // inzwischen bewertet: die Meldung geht so in den Toast
+      // (`code: 'already_rated'`, → taskStore.completeTask).
+      return json(400, {
+        error: 'Die Aufgabe wurde inzwischen bewertet — neu laden',
+        code: 'already_rated',
+      })
     }
     // Die Standardpunkte, mit denen ab hier gerechnet wird: die gespeicherten
     // oder die eben gewählten. Geschrieben werden sie mit dem Task-Update unten.
@@ -157,19 +153,20 @@ Deno.serve(async (req) => {
           `Task: ${taskId}, Mode: ${taskDetails.subtask_points_mode}, Parent Type: ${parentTaskType}`,
         )
         // Optional: Force bonus behavior oder Error werfen für strikte Validation
-        // return new Response(JSON.stringify({ error: 'Daily task subtasks must be bonus mode' }), ...)
+        // return json(400, { error: 'Daily task subtasks must be bonus mode' })
       }
     }
 
     // Abweichung braucht Begründung (CONTEXT.md § Abweichung): wer andere Punkte
     // gibt als die Standardpunkte der Aufgabe, muss eine Notiz mitschicken.
-    // Ausgenommen ist Projekt-Arbeit — sie läuft über die Unteraufgabe „Am
-    // Projekt arbeiten“, deshalb zählt auch der Typ des Elternknotens. Quick-
-    // Aufgaben kommen nie hierher (der Client schreibt sie direkt), und ohne
-    // Standardpunkte (unbewertet) gibt es nichts, wovon man abwiche.
-    // Dieselbe Regel steht in `isDeviation` in src/lib/taskPoints.ts — wer eine
-    // ändert, ändert beide.
-    const isProjectWork = taskDetails.task_type === 'project' || parentTaskType === 'project'
+    // Ausgenommen ist allein Projekt-Arbeit: die Unteraufgabe „Am Projekt
+    // arbeiten“ eines Projekts. Das Projekt selbst und seine anderen
+    // Unteraufgaben folgen der Regel wie jede Aufgabe. Quick-Aufgaben kommen nie
+    // hierher (der Client schreibt sie direkt), und ohne Standardpunkte
+    // (unbewertet) gibt es nichts, wovon man abwiche.
+    // Dieselbe Regel steht in `isProjectWork` und `isDeviation` in
+    // src/lib/taskPoints.ts — wer eine ändert, ändert beide.
+    const isProjectWork = parentTaskType === 'project' && taskDetails.title === PROJECT_WORK_TITLE
     const hasNote = typeof completionNote === 'string' && completionNote.trim().length > 0
     if (
       effortOverride !== undefined &&
@@ -178,12 +175,9 @@ Deno.serve(async (req) => {
       effortOverride !== taskDetails.effort &&
       !hasNote
     ) {
-      return new Response(
-        JSON.stringify({
-          error: 'completionNote is required when effortOverride differs from the task effort',
-        }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
-      )
+      return json(400, {
+        error: 'completionNote is required when effortOverride differs from the task effort',
+      })
     }
 
     // 7. Handle CHECKLIST-MODE SUBTASKS: Award 0 points when completed individually
@@ -204,13 +198,10 @@ Deno.serve(async (req) => {
 
         if (completionError) {
           console.error('Error creating completion:', completionError)
-          return new Response(
-            JSON.stringify({
-              error: 'Failed to create completion',
-              details: completionError.message,
-            }),
-            { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
-          )
+          return json(500, {
+            error: 'Failed to create completion',
+            details: completionError.message,
+          })
         }
 
         // Mark subtask as completed (but award 0 points)
@@ -225,16 +216,10 @@ Deno.serve(async (req) => {
 
         if (updateError) {
           console.error('Error updating task:', updateError)
-          return new Response(
-            JSON.stringify({ error: 'Failed to update task', details: updateError.message }),
-            { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
-          )
+          return json(500, { error: 'Failed to update task', details: updateError.message })
         }
 
-        return new Response(JSON.stringify({ success: true }), {
-          status: 200,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        })
+        return json(200, { success: true })
       }
     }
 
@@ -305,10 +290,7 @@ Deno.serve(async (req) => {
 
     if (completionError) {
       console.error('Error creating completion:', completionError)
-      return new Response(
-        JSON.stringify({ error: 'Failed to create completion', details: completionError.message }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
-      )
+      return json(500, { error: 'Failed to create completion', details: completionError.message })
     }
 
     // 9. UPDATE tasks (replaces trigger logic!)
@@ -367,10 +349,7 @@ Deno.serve(async (req) => {
 
     if (updateError) {
       console.error('Error updating task:', updateError)
-      return new Response(
-        JSON.stringify({ error: 'Failed to update task', details: updateError.message }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
-      )
+      return json(500, { error: 'Failed to update task', details: updateError.message })
     }
 
     // 10. Reset all subtasks to uncompleted (für saubere Punkteberechnung bei erneutem Putzen)
@@ -392,19 +371,13 @@ Deno.serve(async (req) => {
     }
 
     // 11. Success (with optional warning)
-    return new Response(
-      JSON.stringify({
-        success: true,
-        warning: subtaskResetWarning, // null if no issues, string if subtask reset failed
-      }),
-      { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
-    )
+    return json(200, {
+      success: true,
+      warning: subtaskResetWarning, // null if no issues, string if subtask reset failed
+    })
   } catch (error) {
     console.error('Unexpected error:', error)
-    return new Response(
-      JSON.stringify({ error: 'Internal server error', details: (error as Error).message }),
-      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
-    )
+    return json(500, { error: 'Internal server error', details: (error as Error).message })
   }
 })
 
@@ -447,7 +420,8 @@ Deno.serve(async (req) => {
     --data '{"taskId":"task-with-effort-3","effortOverride":3}'
 
   7. Project work (the project's "Am Projekt arbeiten" subtask) with other points and
-     no note → 200 (the app itself always sends a note there):
+     no note → 200 (the app itself always sends a note there). Any other subtask of a
+     project, and the project row itself, needs a note like every task:
 
   curl -i --location --request POST 'http://127.0.0.1:54321/functions/v1/complete-task' \
     --header 'Authorization: Bearer YOUR_USER_JWT_TOKEN' \
@@ -456,15 +430,25 @@ Deno.serve(async (req) => {
 
   8. Unbewertete Aufgabe (tasks.effort NULL) ohne standardPoints → 400:
 
-  curl -i --location --request POST 'http://127.0.0.1:54321/functions/v1/complete-task'     --header 'Authorization: Bearer YOUR_USER_JWT_TOKEN'     --header 'Content-Type: application/json'     --data '{"taskId":"unrated-task-uuid"}'
+  curl -i --location --request POST 'http://127.0.0.1:54321/functions/v1/complete-task' \
+    --header 'Authorization: Bearer YOUR_USER_JWT_TOKEN' \
+    --header 'Content-Type: application/json' \
+    --data '{"taskId":"unrated-task-uuid"}'
 
   9. Unbewertete Aufgabe mit standardPoints → 200, erledigt, tasks.effort = 5,
      effort_override = 5 (erstes Bewerten ist keine Abweichung):
 
-  curl -i --location --request POST 'http://127.0.0.1:54321/functions/v1/complete-task'     --header 'Authorization: Bearer YOUR_USER_JWT_TOKEN'     --header 'Content-Type: application/json'     --data '{"taskId":"unrated-task-uuid","standardPoints":5}'
+  curl -i --location --request POST 'http://127.0.0.1:54321/functions/v1/complete-task' \
+    --header 'Authorization: Bearer YOUR_USER_JWT_TOKEN' \
+    --header 'Content-Type: application/json' \
+    --data '{"taskId":"unrated-task-uuid","standardPoints":5}'
 
-  10. standardPoints an einer bewerteten Aufgabe → 400:
+  10. standardPoints an einer bewerteten Aufgabe → 400 „wurde inzwischen bewertet — neu laden“
+      (code already_rated):
 
-  curl -i --location --request POST 'http://127.0.0.1:54321/functions/v1/complete-task'     --header 'Authorization: Bearer YOUR_USER_JWT_TOKEN'     --header 'Content-Type: application/json'     --data '{"taskId":"task-with-effort-3","standardPoints":5}'
+  curl -i --location --request POST 'http://127.0.0.1:54321/functions/v1/complete-task' \
+    --header 'Authorization: Bearer YOUR_USER_JWT_TOKEN' \
+    --header 'Content-Type: application/json' \
+    --data '{"taskId":"task-with-effort-3","standardPoints":5}'
 
 */

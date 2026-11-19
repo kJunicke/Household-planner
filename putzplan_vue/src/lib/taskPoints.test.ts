@@ -4,9 +4,11 @@ import type { PointBenchmark } from '@/types/PointBenchmark'
 import type { Task } from '@/types/Task'
 
 import {
+  estimateCompletionPoints,
   estimateParentPoints,
   examplesFor,
   isDeviation,
+  isProjectWork,
   isUnrated,
   isValidPoints,
   quickOptions,
@@ -158,5 +160,52 @@ describe('isDeviation (braucht Begründung?)', () => {
 
   it('unbewertete Aufgabe (erstes Bewerten): nein, es gibt keinen Standard', () => {
     expect(isDeviation({ standardPoints: null, chosenPoints: 5, kind: 'task' })).toBe(false)
+  })
+})
+
+describe('isProjectWork (Projekt-Arbeit, ohne Begründungspflicht)', () => {
+  it('die Arbeits-Unteraufgabe eines Projekts: ja', () => {
+    expect(isProjectWork({ title: 'Am Projekt arbeiten', parentTaskType: 'project' })).toBe(true)
+  })
+
+  it('eine andere Unteraufgabe eines Projekts: nein', () => {
+    expect(isProjectWork({ title: 'Farbe kaufen', parentTaskType: 'project' })).toBe(false)
+  })
+
+  it('das Projekt selbst (ohne Elternknoten): nein', () => {
+    expect(isProjectWork({ title: 'Am Projekt arbeiten', parentTaskType: null })).toBe(false)
+  })
+
+  it('gleicher Titel unter einer normalen Aufgabe: nein', () => {
+    expect(isProjectWork({ title: 'Am Projekt arbeiten', parentTaskType: 'recurring' })).toBe(false)
+  })
+})
+
+describe('estimateCompletionPoints', () => {
+  const parent = sub({ task_id: 'p', parent_task_id: null, effort: 5 })
+  const doneDeduct = sub({ completed: true, subtask_points_mode: 'deduct', effort: 2 })
+
+  it('Hauptaufgabe: Standardpunkte abzüglich erledigter deduct-Unteraufgaben', () => {
+    expect(estimateCompletionPoints(parent, [doneDeduct])).toBe(3)
+  })
+
+  it('angepasste Punkte ersetzen die Rechnung', () => {
+    expect(estimateCompletionPoints(parent, [doneDeduct], { effortOverride: 8 })).toBe(8)
+  })
+
+  it('erstes Bewerten: rechnet mit den gewählten Standardpunkten', () => {
+    const unrated = sub({ task_id: 'p', parent_task_id: null, effort: null })
+    expect(estimateCompletionPoints(unrated, [doneDeduct], { standardPoints: 7 })).toBe(5)
+  })
+
+  it('Unteraufgabe: ihre Standardpunkte, checklist zählt nichts', () => {
+    expect(estimateCompletionPoints(sub({ subtask_points_mode: 'bonus', effort: 4 }), [])).toBe(4)
+    expect(estimateCompletionPoints(sub({ subtask_points_mode: 'checklist', effort: 4 }), [])).toBe(
+      0,
+    )
+  })
+
+  it('unbewertet ohne Wahl: null Punkte', () => {
+    expect(estimateCompletionPoints(sub({ parent_task_id: null, effort: null }), [])).toBe(0)
   })
 })

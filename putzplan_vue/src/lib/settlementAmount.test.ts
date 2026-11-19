@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest'
 
-import { formatEuroInput, openBalance, parseEuroInput, suggestEuros } from './settlementAmount'
+import {
+  euroAmountFromWire,
+  formatEuroInput,
+  openBalance,
+  parseEuroInput,
+  suggestEuros,
+} from './settlementAmount'
 
 describe('suggestEuros', () => {
   it('rechnet Punkte mal Kurs', () => {
@@ -58,5 +64,24 @@ describe('openBalance', () => {
 
   it('ist 0 ohne offenes Paar', () => {
     expect(openBalance(pairs, 'a', 'c')).toBe(0)
+  })
+})
+
+describe('euroAmountFromWire', () => {
+  it('NUMERIC als Text (Realtime) wird zur Zahl', () => {
+    expect(euroAmountFromWire('5.81')).toBe(5.81)
+  })
+
+  it('eine Zahl bleibt, wie sie ist', () => {
+    expect(euroAmountFromWire(12)).toBe(12)
+  })
+
+  it('kein Betrag bleibt kein Betrag', () => {
+    expect(euroAmountFromWire(null)).toBeNull()
+    expect(euroAmountFromWire(undefined)).toBeNull()
+  })
+
+  it('Unlesbares wird kein Betrag statt NaN', () => {
+    expect(euroAmountFromWire('abc')).toBeNull()
   })
 })
