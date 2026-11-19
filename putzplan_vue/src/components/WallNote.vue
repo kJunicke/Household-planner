@@ -27,6 +27,14 @@
  * Das Aufklappen wird nur **gemeldet** (`toggle`), den Zustand hält `WallView`:
  * sie muss ihn vor dem Packen kennen, weil ein aufgeklappter Zettel die volle
  * Wandbreite bekommt.
+ *
+ * **Lose Zettel** (`loose`, nur in der Suche): erledigte Treffer, die nicht an
+ * der Wand hängen (→ CONTEXT.md „Suche"). Dieselbe Komponente mit denselben
+ * Gesten, bis auf drei Stellen: keine Befestigung, sondern an ihrer Stelle die
+ * **Nadelstelle**, deren Tipp **wieder dreckig** meldet (`repin`); der Stempel
+ * trägt nur ERLEDIGT und lässt sich nicht überstempeln; „verschieben" im Kranz
+ * tut nichts, weil eine erledigte Aufgabe nicht verschoben wird. Abreißen
+ * erledigt die Aufgabe noch einmal, mit Punkten und Fetzen wie an der Wand.
  */
 import { computed, ref, watch } from 'vue'
 import type { Task } from '@/types/Task'
@@ -51,6 +59,8 @@ import { estimateParentPoints, isProjectWork, isUnrated } from '@/lib/taskPoints
 const props = defineProps<{
   task: Task
   expanded?: boolean
+  /** Loser Zettel in der Suche: erledigt, hängt nicht an der Wand. */
+  loose?: boolean
 }>()
 /**
  * `gesture-start` / `gesture-end`: solange der Finger auf diesem Zettel eine
@@ -63,6 +73,12 @@ const emit = defineEmits<{
   (e: 'toggle', taskId: string): void
   (e: 'gesture-start', taskId: string): void
   (e: 'gesture-end', taskId: string): void
+  /**
+   * Tipp auf die Nadelstelle eines losen Zettels: **wieder dreckig**. Nur
+   * gemeldet — `WallView` setzt zurück, weil sie danach zu diesem Zettel
+   * scrollen muss, wenn die Suche schließt.
+   */
+  (e: 'repin', taskId: string): void
 }>()
 
 const taskStore = useTaskStore()
@@ -574,8 +590,11 @@ const onPressDirection = (direction: PressDirection) => {
     if (el) void tearNote(el)
     return
   }
-  if (direction === 'up') showPostponeModal.value = true
-  else if (direction === 'left') showAssignmentModal.value = true
+  if (direction === 'up') {
+    // Ein loser Zettel ist erledigt, und „erledigt UND verschoben" darf nicht
+    // entstehen (→ `showPostpone` in `TaskEditModal.vue`). Erst anpinnen.
+    if (!props.loose) showPostponeModal.value = true
+  } else if (direction === 'left') showAssignmentModal.value = true
   // Unbewertet gibt es keine Standardpunkte, von denen man abwiche: auch
   // „rechts“ ist dann das erste Bewerten (→ `tearNote`).
   else if (unrated.value) {
@@ -687,6 +706,7 @@ const emphasisLabel = computed((): string | null => {
  * eine Farbe — dort wird sie gezählt statt benannt.
  */
 const stampTitle = computed((): string => {
+  if (props.loose) return 'Erledigt — erst anpinnen, dann überstempeln'
   if (props.task.emphasis_level === 0) return 'Tippen: überstempeln'
   if (emphasisLabel.value) return `Überstempelt: ${emphasisLabel.value} — tippen zum Weiterdrehen`
   return `Überstempelt: ${props.task.emphasis_level}× — tippen zum Weiterdrehen`
@@ -702,7 +722,7 @@ const stampTitle = computed((): string => {
  * sie auf die Mitte der Fußzeile — `top: 50%` allein setzte ihre Oberkante dorthin.
  */
 const stampLayers = computed(() =>
-  stampStackOf(props.task).map((layer) => ({
+  stampStackOf(props.task, { loose: props.loose }).map((layer) => ({
     ...layer,
     transform: `translate(${layer.dx}px, calc(-50% + ${layer.dy}px)) rotate(${layer.tilt}deg)`,
   })),
@@ -728,6 +748,10 @@ const stampLayers = computed(() =>
  * Long-Press zusätzlich.
  */
 const onStampTap = () => {
+  // Am losen Zettel verfiele der Nachdruck ohnehin mit dem nächsten Erledigen
+  // (→ CONTEXT.md „Stempel"). Der Tipp wird trotzdem am Stempel geschluckt
+  // (`@click.stop`), damit er nicht aufklappt.
+  if (props.loose) return
   void taskStore.cycleEmphasisLevel(props.task.task_id)
 }
 
@@ -843,6 +867,7 @@ const handlePostponeConfirm = async (targetDate: string) => {
         'zettel--tear-ready': isTearReady,
         'zettel--pressed': pressOpen,
         'zettel--assigned': isAssigned,
+        'zettel--loose': props.loose,
       },
     ]"
     :style="noteStyle"
@@ -856,8 +881,18 @@ const handlePostponeConfirm = async (targetDate: string) => {
     @contextmenu.prevent
   >
     <!-- Befestigung: Reißzwecke / Klebeband / Büroklammern.
-         Sie ist das Typ-Signal, deshalb kein Text daneben. -->
-    <span v-if="kind === 'open'" class="pin" aria-hidden="true"></span>
+         Sie ist das Typ-Signal, deshalb kein Text daneben.
+
+         Ein loser Zettel hat keine. An ihrer Stelle sitzt die **Nadelstelle**,
+         ein Knopf: ein Tipp ist „wieder dreckig" und pinnt ihn an. `.stop`, damit
+         der Tipp nicht zugleich aufklappt. -->
+    <button
+      v-if="props.loose"
+      class="pin-spot"
+      :title="`„${props.task.title}“ wieder dreckig — anpinnen`"
+      @click.stop="emit('repin', props.task.task_id)"
+    ></button>
+    <span v-else-if="kind === 'open'" class="pin" aria-hidden="true"></span>
     <span v-else-if="kind === 'daily'" class="tape" aria-hidden="true"></span>
     <template v-else>
       <span class="clip clip--l" aria-hidden="true"></span>
@@ -936,6 +971,7 @@ const handlePostponeConfirm = async (targetDate: string) => {
            `isPressControl` — Begründung dort. -->
       <span
         class="due-stamp"
+        :class="{ 'due-stamp--locked': props.loose }"
         :data-emphasis="props.task.emphasis_level"
         :title="stampTitle"
         @click.stop="onStampTap"
@@ -2041,6 +2077,62 @@ const handlePostponeConfirm = async (targetDate: string) => {
  * Zettels und die aufleuchtende Perforationslinie. */
 .zettel--tear-ready .ear::before {
   width: 27px;
+}
+
+/* --- Loser Zettel (Suche): erledigt, ohne Befestigung ----------------------
+   Leicht verblasst, damit er sich auf einen Blick von den angepinnten Treffern
+   abhebt. Über `opacity` am ganzen Zettel: die Dialoge sind nach `body`
+   teleportiert und verblassen nicht mit. Der flachere Schatten sagt „liegt
+   lose auf", nicht „hängt". */
+.zettel--loose {
+  opacity: 0.72;
+}
+
+/* Nur in Ruhe: beim Abreißen und unter dem Kranz hebt er sich ab wie jeder. */
+.zettel--loose:not(.zettel--tearing, .zettel--pressed) {
+  box-shadow: 1px 2px 0 rgba(36, 31, 26, 0.18);
+}
+
+/* Der lose Zettel lässt sich nicht überstempeln — kein Hand-Zeiger. */
+.due-stamp--locked {
+  cursor: default;
+}
+
+/* Die **Nadelstelle**: wo die Reißzwecke säße, ein leeres Nadelloch. Ein Knopf
+   (wieder dreckig), deshalb anders als `.pin` MIT Trefffläche: 44 × 36 px, mittig
+   über der Oberkante. Sie ragt 8 px über den Zettel — weniger als jede
+   Befestigung, für die die Wand oben Platz hält (Gruppe 3 bekommt in
+   `wallLayout.ts` das Polster der ungünstigsten). */
+.pin-spot {
+  position: absolute;
+  top: -8px;
+  left: 50%;
+  margin-left: -22px;
+  width: 44px;
+  height: 36px;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+}
+
+/* Das Loch selbst: ein gestanzter Kreis mit dunkler Mitte, gestrichelt umrandet,
+   wo der Kopf der Zwecke säße. */
+.pin-spot::before {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 50%;
+  margin-left: -8px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 2px dashed var(--pw-line);
+  background: radial-gradient(circle, rgba(36, 31, 26, 0.55) 0 2px, transparent 3px);
+}
+
+.pin-spot:active::before {
+  transform: translateY(1px);
 }
 
 /* --- Typ 1: offene Putzaufgabe — weißes Papier, Reißzwecke ---------------- */

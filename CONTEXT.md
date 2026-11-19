@@ -88,7 +88,7 @@ Architekturentscheidungen: [docs/adr/](docs/adr/).
 ### wieder dreckig
 - Manuelle Aktion: setzt eine erledigte Aufgabe wieder auf dran, obwohl die Kadenz noch läuft.
 - Die Einschätzung des Haushalts hat Vorrang vor dem Zeitplan; die App setzt sie nicht zurück.
-- Zwei Zugänge: der Knopf in der Erledigt-Liste und der Stecknadel-Knopf an einem **Treffer** der **Suche** — die Nadel, weil der Zettel damit zurück an die Wand kommt.
+- Zwei Zugänge: der Knopf in der Erledigt-Liste und die Nadelstelle eines **losen Zettels** in der **Suche** — die Nadel, weil der Zettel damit zurück an die Wand kommt.
 
 ### Hauptaufgabe
 - Aufgabe ohne Elternaufgabe (`parent_task_id` leer) — das, was als Zettel an der Wand hängt. Gegenbegriff: Unteraufgabe (Zettelchen).

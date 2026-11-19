@@ -61,7 +61,8 @@ const wallTasks = computed((): Task[] => [
  * es schließt, statt die Ansicht zu wechseln (→ `useOverlayHistoryEntry`).
  * Der Grund des Schließens kommt als Argument zurück: beim Weitergehen ins
  * Modal bleibt die Eingabe als Titelvorschlag stehen, sonst wird sie geleert
- * und die Wand zeigt den zuletzt in der Suche erledigten Zettel.
+ * und die Wand zeigt den zuletzt in der Suche erledigten oder angepinnten
+ * Zettel.
  */
 const searchQuery = ref('')
 const searchInputEl = ref<HTMLInputElement | null>(null)
@@ -84,24 +85,57 @@ const wallSearch = computed(() =>
 )
 
 /**
- * Die Zettel, die gerade an der Wand stehen: alle, oder nur die Treffer.
- * Die Reihenfolge ist egal — `layoutWall` sortiert selbst.
+ * Die Zettel, die gerade an der Wand stehen: alle, oder nur die Treffer — die
+ * angepinnten und dahinter die **losen Zettel** (erledigte Treffer, die nicht an
+ * der Wand hängen). Die Reihenfolge ist egal — `layoutWall` sortiert selbst;
+ * dass die losen nach den angepinnten kommen, sagt ihre Gruppe (`LOOSE_GROUP`).
  */
 const shownTasks = computed((): Task[] => {
   const search = wallSearch.value
   if (!search) return wallTasks.value
   const hits = new Set(search.pinned.map((task) => task.task_id))
-  return wallTasks.value.filter((task) => hits.has(task.task_id))
+  return [...wallTasks.value.filter((task) => hits.has(task.task_id)), ...search.loose]
 })
+
+/** Die gerade gezeigten losen Zettel — leer, solange nichts gesucht wird. */
+const looseIds = computed(() => new Set(wallSearch.value?.loose.map((task) => task.task_id) ?? []))
+
+/**
+ * Gruppe der losen Zettel für `layoutWall`: nach fällig (0), täglich (1) und
+ * Projekt (2). Als unbekannte Gruppe bekommt sie dort oben das Polster der
+ * ungünstigsten Befestigung; ein loser Zettel hat keine, das Polster fällt also
+ * nur ein paar Pixel zu groß aus.
+ */
+const LOOSE_GROUP = 3
 
 /**
  * Der Zettel, zu dem die Wand nach dem Schließen der Suche scrollt: der
  * zuletzt **in der Suche** erledigte. Erkannt am Fetzen — ihn bietet jeder
  * Abriss an, egal über welche Geste, und `WallView` muss dafür nichts von den
- * Gesten im Zettel wissen. Wer später aus der Suche heraus anpinnt, setzt ihn
- * ebenfalls.
+ * Gesten im Zettel wissen. Ebenso der zuletzt in der Suche angepinnte lose
+ * Zettel (→ `repinFromSearch`).
  */
 let searchTargetId: string | null = null
+
+/**
+ * **wieder dreckig** von der Nadelstelle eines losen Zettels: die Aufgabe ist
+ * wieder dran und steht, sobald der Store neu geladen hat, als angepinnter
+ * Treffer in der Suche. Nach dem Schließen scrollt die Wand zu ihr.
+ *
+ * Der Riegel gegen den Doppeltipp sitzt synchron vor dem ersten `await` —
+ * dieselbe Regel wie in `WallDoneList.markDirty`.
+ */
+const repinBusy = new Set<string>()
+
+const repinFromSearch = async (taskId: string) => {
+  if (repinBusy.has(taskId)) return
+  repinBusy.add(taskId)
+  try {
+    if (await taskStore.markAsDirty(taskId)) searchTargetId = taskId
+  } finally {
+    repinBusy.delete(taskId)
+  }
+}
 
 watch(tornScrapState.scrap, (scrap) => {
   if (scrap && showSearch.value) searchTargetId = scrap.taskId
@@ -281,6 +315,7 @@ const relayout = (animate: boolean, tappedId?: string): boolean => {
   board.pendingTasks.value.forEach((task) => taskGroups.set(task.task_id, 0))
   board.dailyTasks.value.forEach((task) => taskGroups.set(task.task_id, 1))
   board.projectTasks.value.forEach((task) => taskGroups.set(task.task_id, 2))
+  looseIds.value.forEach((id) => taskGroups.set(id, LOOSE_GROUP))
 
   /**
    * Zettel, die dieser Lauf mangels Element übersprungen hat. Breite setzen und
@@ -547,7 +582,14 @@ const scheduleRelayout = (animate: boolean) => {
  * die Treffer ändert, packt neu.
  */
 const layoutSignature = computed(() =>
-  shownTasks.value.map((task) => `${task.task_id}:${task.task_type}:${task.title}`).join('|'),
+  shownTasks.value
+    .map(
+      (task) =>
+        // Der lose Zustand gehört dazu: ein angepinnter loser Zettel behält
+        // Kennung, Typ und Titel, wechselt aber die Gruppe.
+        `${task.task_id}:${task.task_type}:${task.title}:${looseIds.value.has(task.task_id) ? 'l' : 'p'}`,
+    )
+    .join('|'),
 )
 
 watch(layoutSignature, () => {
@@ -555,8 +597,9 @@ watch(layoutSignature, () => {
   // seinen Aufklapp-Zustand mit. Ohne das stünde er beim Wiederauftauchen —
   // etwa nach „wieder dreckig" — unvermittelt offen da. Gemessen an der
   // **ganzen** Wand, nicht an den Treffern: wer nur weggefiltert ist, bleibt
-  // aufgeklappt, wenn die Suche ihn wieder zeigt.
-  const onWall = new Set(wallTasks.value.map((task) => task.task_id))
+  // aufgeklappt, wenn die Suche ihn wieder zeigt. Lose Zettel zählen mit,
+  // solange sie gezeigt werden — sonst klappte jeder Packlauf sie wieder zu.
+  const onWall = new Set([...wallTasks.value.map((task) => task.task_id), ...looseIds.value])
   if ([...expandedIds.value].some((id) => !onWall.has(id))) {
     expandedIds.value = new Set([...expandedIds.value].filter((id) => onWall.has(id)))
   }
@@ -641,8 +684,8 @@ let jumpPulse: Animation | null = null
 const JUMP_PULSE_Z = '799'
 
 /**
- * Zeigt nach dem Schließen der Suche auf den zuletzt dort erledigten Zettel:
- * scrollt hin und lässt einen Ring pulsieren.
+ * Zeigt nach dem Schließen der Suche auf den zuletzt dort erledigten oder
+ * angepinnten Zettel: scrollt hin und lässt einen Ring pulsieren.
  *
  * Erst nach dem Schließen: das läuft über einen Verlaufssprung, und ein
  * Scrollen davor könnte die Scroll-Wiederherstellung des Browsers
@@ -802,7 +845,9 @@ const handleCreateQuickTask = async (data: { title: string; effort: number; note
           :ref="(instance) => setNoteEl(task.task_id, instance)"
           :task="task"
           :expanded="expandedIds.has(task.task_id)"
+          :loose="looseIds.has(task.task_id)"
           @toggle="toggleNote"
+          @repin="repinFromSearch"
           @gesture-start="gestureNoteId = $event"
           @gesture-end="gestureNoteId = gestureNoteId === $event ? null : gestureNoteId"
         />

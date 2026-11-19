@@ -29,6 +29,7 @@ type StampCarrier = Pick<
  *                                 ganzen Spruchstapel aus `projectPhraseStackOf`)
  *   noch nie erledigt           → NEU
  *   sonst                       → FÄLLIG
+ *   loser Zettel (Suche)        → ERLEDIGT (nicht hier: `stampStackOf` mit `loose`)
  *
  * **Der Typ schlägt NEU, und die Reihenfolge dieser Prüfungen ist die ganze
  * Regel.** Tägliche Aufgaben und Projekte werden nie abgeschlossen und stünden
@@ -103,16 +104,22 @@ export interface StampLayer {
  * verrutscht aber nicht mehr. Und erst der Versatz von Lage 0 macht den Stapel
  * unter einem deckenden Nachdruck sichtbar.
  */
-export function stampStackOf(task: StampCarrier): StampLayer[] {
+export function stampStackOf(task: StampCarrier, options: { loose?: boolean } = {}): StampLayer[] {
   // An einem Projekt trägt jede Stufe einen Spruch (→ CONTEXT.md „Projektspruch");
   // die Dringlichkeit steht allein in der Farbe der obersten Lage — die Rampe
   // darf deshalb nie ans Wort gebunden werden. Alle drei kommen aus dem EINEN
   // gespeicherten Listenplatz (`projectPhraseStackOf`); hier wird nichts gezogen.
-  const texts =
-    task.task_type === 'project'
+  //
+  // Ein **loser Zettel** (erledigter Treffer der Suche) trägt nur ERLEDIGT, vor
+  // jedem Typ: so sieht man, woher er kommt. Überstempeln gibt es an ihm nicht
+  // (→ CONTEXT.md „Stempel"), also auch keinen Nachdruck — selbst wenn noch
+  // einer gespeichert ist. Versatz und Neigung sind die des Grundabdrucks.
+  const texts = options.loose
+    ? ['ERLEDIGT']
+    : task.task_type === 'project'
       ? projectPhraseStackOf(task)
       : [baseLabelOf(task), 'WICHTIG', 'DRINGEND']
-  const level = task.emphasis_level
+  const level = options.loose ? 0 : task.emphasis_level
   const id = task.task_id
 
   return texts.slice(0, level + 1).map((text, index) => ({
