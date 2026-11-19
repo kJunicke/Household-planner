@@ -32,8 +32,8 @@
  * der Wand hängen (→ CONTEXT.md „Suche"). Dieselbe Komponente mit denselben
  * Gesten, bis auf drei Stellen: keine Befestigung, sondern an ihrer Stelle die
  * **Nadelstelle**, deren Tipp **wieder dreckig** meldet (`repin`); der Stempel
- * trägt nur ERLEDIGT und lässt sich nicht überstempeln; „verschieben" im Kranz
- * tut nichts, weil eine erledigte Aufgabe nicht verschoben wird. Abreißen
+ * trägt nur ERLEDIGT und lässt sich nicht überstempeln; der Kranz bietet kein
+ * „verschieben", weil eine erledigte Aufgabe nicht verschoben wird. Abreißen
  * erledigt die Aufgabe noch einmal, mit Punkten und Fetzen wie an der Wand.
  */
 import { computed, ref, watch } from 'vue'
@@ -569,6 +569,13 @@ const isPressControl = (target: EventTarget | null): boolean =>
  * das Arbeitsfenster, die anderen drei tun **nichts** — eine Aktion ohne
  * Beschriftung wäre eine unsichtbare.
  */
+/**
+ * Was am losen Zettel nichts tut: „verschieben" — eine erledigte Aufgabe wird
+ * nicht verschoben (→ `onPressDirection`). Der Kranz lässt die Richtung
+ * unbeschriftet, statt einen toten Eintrag anzubieten.
+ */
+const LOOSE_DEAD_DIRECTIONS: readonly PressDirection[] = ['up']
+
 const onPressDirection = (direction: PressDirection) => {
   if (isProject.value) {
     if (direction === 'down') openProjectWork()
@@ -1072,6 +1079,7 @@ const handlePostponeConfirm = async (targetDate: string) => {
       :origin="pressOrigin"
       :tip="pressTip"
       :active="pressDirection"
+      :omit="props.loose ? LOOSE_DEAD_DIRECTIONS : undefined"
     />
 
     <!-- Zug nach rechts: erledigen mit angepasstem Aufwand. -->
