@@ -154,7 +154,7 @@ const effectivePoints = computed(() =>
 
 /**
  * **unbewertet** (CONTEXT.md § unbewertet): keine Standardpunkte. Am Sticker
- * steht dann keine Zahl, sondern ein Fragezeichen, und jeder Weg zum Erledigen
+ * steht dann keine Zahl, sondern das Wort selbst, und jeder Weg zum Erledigen
  * öffnet zuerst die Punktwahl (→ `ratingTarget`). Ein Projekt zeigt seine
  * verschlungenen Punkte und ist davon nicht betroffen.
  */
@@ -179,7 +179,9 @@ const displayPoints = computed(() =>
  * mit `displayPoints` (siehe `badgeStage`), sonst fiele 1500 auf die Stufe von 999.
  */
 const pointsLabel = computed(() => {
-  if (unrated.value) return '?'
+  // Das Wort, nicht „?“ mit Tooltip: am Telefon gibt es kein Hover. Das weiche
+  // Trennzeichen bricht es in den 34 px zu „unbe-“ / „wertet“ (→ `.points--unrated`).
+  if (unrated.value) return 'unbe\u00ADwertet'
   return isProject.value && displayPoints.value > 999 ? '999+' : String(displayPoints.value)
 })
 
@@ -1616,15 +1618,22 @@ const handlePostponeConfirm = async (targetDate: string) => {
   filter: drop-shadow(1.5px 2px 0 rgba(36, 31, 26, 0.35));
 }
 
-/* Unbewertet: ein leerer, gestrichelter Sticker mit Fragezeichen — keine Zahl,
-   keine Form, die einen Wert behauptete. Außenmaß wie `.points--s1` (34 px,
-   der Rand liegt innen), damit die Breitenmessung der Wand nichts Neues lernt. */
+/* Unbewertet: ein leerer, gestrichelter Sticker mit dem Wort „unbewertet“ —
+   keine Zahl, keine Form, die einen Wert behauptete. Außenmaß wie
+   `.points--s1` (34 px, der Rand liegt innen), damit die Breitenmessung der
+   Wand nichts Neues lernt. Das Wort steht zweizeilig, getrennt am weichen
+   Trennzeichen in `pointsLabel`; ohne Hover am Telefon trägt es allein. */
 .points--unrated {
   box-sizing: border-box;
   border-radius: 50%;
   border: 1.5px dashed rgba(36, 31, 26, 0.5);
   color: var(--pw-ink-soft);
   filter: none;
+  font-size: 8.5px;
+  font-weight: 800;
+  line-height: 1.05;
+  text-align: center;
+  hyphens: manual;
 }
 
 .points--s0,
