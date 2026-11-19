@@ -13,7 +13,7 @@
 --      unbewertete Aufgaben: Bewerten-Dialog vor dem Erledigen, `effort: null`);
 --   3. die Edge Function `complete-task` mit `standardPoints` deployt ist.
 -- Ein alter Client oder eine alte Function kann eine unbewertete Aufgabe nicht
--- erledigen. Angewendet wird sie in P007 (Umstellung im Haushalt).
+-- erledigen. Angewendet wird sie bei der Umstellung im Haushalt.
 --
 -- Betroffen: alle Zeilen in `tasks` — Hauptaufgaben jedes Typs (recurring,
 -- daily, one-time, project), Unteraufgaben (auch „Am Projekt arbeiten“) und
