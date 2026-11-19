@@ -31,6 +31,7 @@ import {
   readCachedHousehold,
   writeCachedHousehold,
 } from '@/lib/householdCache'
+import { normalizeHouseholdName } from '@/lib/householdName'
 
 /** `localStorage`, oder `null`, wo schon der Zugriff wirft (gesperrter Speicher). */
 const browserStorage = (): Storage | null => {
@@ -631,6 +632,36 @@ export const useHouseholdStore = defineStore('household', () => {
     return true
   }
 
+  /**
+   * Haushalt umbenennen. Jedes Mitglied darf das (Spaltenrecht `name` seit
+   * `20261102120100`). Das andere Mitglied bekommt den neuen Namen über das
+   * Realtime-Abo auf `households`, sonst über `refreshHousehold()`.
+   */
+  const renameHousehold = async (newName: string) => {
+    const toastStore = useToastStore()
+    if (!currentHousehold.value) return false
+
+    const name = normalizeHouseholdName(newName)
+    if (name === null) return false
+
+    const { data, error } = await supabase
+      .from('households')
+      .update({ name })
+      .eq('household_id', currentHousehold.value.household_id)
+      .select()
+      .single()
+
+    if (error) {
+      console.error('Error renaming household:', error)
+      toastStore.showToast('Fehler beim Umbenennen des Haushalts', 'error')
+      return false
+    }
+
+    currentHousehold.value = data
+    toastStore.showToast('Haushalt umbenannt', 'success', 2000)
+    return true
+  }
+
   /** Haushaltszeile neu laden — Rückfallweg, wenn ein Realtime-Ereignis fehlte. */
   const refreshHousehold = async () => {
     if (!currentHousehold.value) return
@@ -833,6 +864,7 @@ export const useHouseholdStore = defineStore('household', () => {
     householdMembers,
     loadUserHousehold,
     updateMemberProfile,
+    renameHousehold,
     getCurrentMemberDisplayName,
     createHousehold,
     joinHousehold,

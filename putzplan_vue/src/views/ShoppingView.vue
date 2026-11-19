@@ -954,7 +954,6 @@ onUnmounted(() => {
   <ListEditModal
     v-if="showListEditModal && editingList"
     :list="editingList"
-    :can-delete="shoppingStore.lists.length > 1"
     @rename="handleRenameList"
     @delete="handleDeleteList"
     @close="closeListEditModal"

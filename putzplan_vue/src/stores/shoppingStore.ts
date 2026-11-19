@@ -693,11 +693,6 @@ export const useShoppingStore = defineStore('shopping', () => {
   const deleteList = async (listId: string) => {
     const toastStore = useToastStore()
 
-    if (lists.value.length <= 1) {
-      toastStore.showToast('Die letzte Liste kann nicht gelöscht werden', 'error')
-      return false
-    }
-
     try {
       const { error } = await supabase.from('shopping_lists').delete().eq('list_id', listId)
 
