@@ -61,8 +61,8 @@ describe('wallGrid — Spalten', () => {
 })
 
 /** Die Legereihenfolge der Gruppen laut Spec: fällig → täglich → Projekt → lose. */
-const GROUP_RANK: Record<WallGroup, number> = { due: 0, daily: 1, project: 2, loose: 3 }
-const GROUPS = Object.keys(GROUP_RANK) as WallGroup[]
+const GROUPS: WallGroup[] = ['due', 'daily', 'project', 'loose']
+const GROUP_RANK = (group: WallGroup) => GROUPS.indexOf(group)
 
 function randomNotes(seed: number, count: number): WallNoteInput[] {
   const rand = mulberry32(seed)
@@ -187,7 +187,7 @@ describe('layoutWall — Reihenfolge', () => {
     'Wand $wall px, Stichprobe $seed: fällig → täglich → Projekt → lose, auch innerhalb jeder Spalte',
     ({ wall, seed }) => {
       const notes = randomNotes(seed, 40)
-      const groupOf = new Map(notes.map((n) => [n.id, GROUP_RANK[n.group]]))
+      const groupOf = new Map(notes.map((n) => [n.id, GROUP_RANK(n.group)]))
       const layout = layoutWall(notes, wall)
       const laid = layout.notes.map((p) => groupOf.get(p.id)!)
       expect(laid).toEqual([...laid].sort((a, b) => a - b))
