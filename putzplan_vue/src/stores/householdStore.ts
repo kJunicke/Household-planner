@@ -6,6 +6,7 @@ import { useAuthStore } from './authStore'
 import { useToastStore } from './toastStore'
 import { DEFAULT_MEMBER_COLOR } from '@/lib/memberColors'
 import { DISPLAY_NAME_MAX_LENGTH, HOUSEHOLD_NAME_MAX_LENGTH } from '@/lib/limits'
+import { DEFAULT_EUROS_PER_POINT, MAX_EUROS_PER_POINT } from '@/lib/settlementAmount'
 import {
   DEFAULT_WEEKLY_GOAL_POINTS,
   effectiveWeekStartDay,
@@ -324,6 +325,16 @@ export const useHouseholdStore = defineStore('household', () => {
     return Math.trunc(raw)
   })
 
+  /**
+   * Kurs des Haushalts in Euro je Punkt. PostgREST liefert NUMERIC als Zahl,
+   * Realtime womöglich als Text — daher `Number()`. Fehlt die Spalte (Migration
+   * noch nicht angewendet), gilt der Startwert.
+   */
+  const eurosPerPoint = computed(() => {
+    const raw = Number(currentHousehold.value?.euros_per_point)
+    return Number.isFinite(raw) && raw > 0 ? raw : DEFAULT_EUROS_PER_POINT
+  })
+
   // Lade die Erledigungen der **laufenden Woche** (feste Woche ab dem
   // eingestellten Wochenstart, nicht die letzten sieben Tage) und
   // ausschließlich die des eigenen Haushalts.
@@ -584,6 +595,37 @@ export const useHouseholdStore = defineStore('household', () => {
     return { success: true }
   }
 
+  /**
+   * Kurs setzen. Jedes Mitglied darf das, wie beim Wochenziel. Frühere
+   * Ausgleiche tragen ihren gezahlten Betrag selbst und bleiben unverändert.
+   */
+  const updateEurosPerPoint = async (rate: number) => {
+    const toastStore = useToastStore()
+    if (!currentHousehold.value) return false
+
+    const cents = Math.round(rate * 100)
+    if (!Number.isFinite(cents) || cents <= 0 || cents > MAX_EUROS_PER_POINT * 100) {
+      return false
+    }
+
+    const { data, error } = await supabase
+      .from('households')
+      .update({ euros_per_point: cents / 100 })
+      .eq('household_id', currentHousehold.value.household_id)
+      .select()
+      .single()
+
+    if (error) {
+      console.error('Error updating euros per point:', error)
+      toastStore.showToast('Fehler beim Speichern des Kurses', 'error')
+      return false
+    }
+
+    currentHousehold.value = data
+    toastStore.showToast('Kurs gespeichert', 'success', 2000)
+    return true
+  }
+
   /** Haushaltszeile neu laden — Rückfallweg, wenn ein Realtime-Ereignis fehlte. */
   const refreshHousehold = async () => {
     if (!currentHousehold.value) return
@@ -799,6 +841,8 @@ export const useHouseholdStore = defineStore('household', () => {
     weeklyContributions,
     weeklyTotalPoints,
     weeklyGoalPoints,
+    eurosPerPoint,
+    updateEurosPerPoint,
     weekStartDay,
     activeWeekStartDay,
     selectedWeekStartDay,

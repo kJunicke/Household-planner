@@ -5,6 +5,7 @@ import { useHouseholdStore } from '@/stores/householdStore'
 import { useAuthStore } from '@/stores/authStore'
 import SettlementCreateModal from '@/components/SettlementCreateModal.vue'
 import type { SettlementMethod } from '@/types/Settlement'
+import { formatEuroInput, MAX_EUROS_PER_POINT, parseEuroInput } from '@/lib/settlementAmount'
 
 const settlementStore = useSettlementStore()
 const householdStore = useHouseholdStore()
@@ -35,6 +36,28 @@ const methodIcon: Record<SettlementMethod, string> = {
   surprise: 'bi-gift',
   other: 'bi-three-dots',
 }
+
+// Kurs: steht hier, wo er verwendet wird, und ist hier änderbar. Eine
+// Änderung wirkt nur auf künftige Vorschläge; frühere Geld-Ausgleiche tragen
+// ihren gezahlten Betrag selbst.
+const editingRate = ref(false)
+const rateText = ref('')
+const rateInput = computed(() => {
+  const value = parseEuroInput(rateText.value)
+  return value !== null && value > 0 && value <= MAX_EUROS_PER_POINT ? value : null
+})
+
+const startEditRate = () => {
+  rateText.value = formatEuroInput(householdStore.eurosPerPoint)
+  editingRate.value = true
+}
+
+const saveRate = async () => {
+  if (rateInput.value === null) return
+  if (await householdStore.updateEurosPerPoint(rateInput.value)) editingRate.value = false
+}
+
+const formatEuros = (value: number | string) => `${formatEuroInput(Number(value))} €`
 
 const formatDate = (iso: string) =>
   new Date(iso).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' })
@@ -78,6 +101,28 @@ onUnmounted(() => {
     <div class="container-fluid">
       <!-- Titel kommt vom Tab darüber (Statistiken/Ausgleich) -->
       <div class="page-header-row">
+        <form v-if="editingRate" class="rate-edit" @submit.prevent="saveRate">
+          <span>1 Pkt. =</span>
+          <input
+            v-model="rateText"
+            type="text"
+            inputmode="decimal"
+            class="form-control form-control-sm rate-input"
+            :class="{ 'is-invalid': rateInput === null }"
+            autocomplete="off"
+          />
+          <span>€</span>
+          <button type="submit" class="btn btn-sm btn-primary" :disabled="rateInput === null">
+            <i class="bi bi-check-lg"></i>
+          </button>
+          <button type="button" class="btn btn-sm btn-secondary" @click="editingRate = false">
+            <i class="bi bi-x-lg"></i>
+          </button>
+        </form>
+        <button v-else class="rate-display" type="button" @click="startEditRate">
+          Kurs: 1 Pkt. = {{ formatEuros(householdStore.eurosPerPoint) }}
+          <i class="bi bi-pencil ms-1"></i>
+        </button>
         <button class="btn btn-primary btn-sm" @click="openCreateModal()">
           <i class="bi bi-plus-lg me-1"></i> Neu
         </button>
@@ -190,6 +235,9 @@ onUnmounted(() => {
                       →
                       <strong>{{ getMemberName(s.to_user_id) }}</strong>
                       <span class="badge bg-secondary ms-1">{{ s.points_settled }} Pkt.</span>
+                      <span v-if="s.method === 'money' && s.paid_euros != null" class="paid-euros">
+                        {{ formatEuros(s.paid_euros) }}
+                      </span>
                     </div>
                     <div class="settlement-meta">
                       {{ methodLabel[s.method as SettlementMethod] }}
@@ -227,8 +275,35 @@ onUnmounted(() => {
 .page-header-row {
   display: flex;
   align-items: center;
-  justify-content: flex-end;
+  justify-content: space-between;
+  gap: var(--spacing-sm);
   margin-bottom: var(--spacing-md);
+}
+
+.rate-display {
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: 0.875rem;
+  color: var(--color-text-secondary);
+  -webkit-tap-highlight-color: transparent;
+}
+
+.rate-edit {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.875rem;
+}
+
+.rate-input {
+  width: 5.5rem;
+}
+
+.paid-euros {
+  margin-left: 6px;
+  font-weight: 600;
+  white-space: nowrap;
 }
 
 .page-header-row .page-title {
