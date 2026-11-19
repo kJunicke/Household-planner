@@ -1,46 +1,59 @@
 # Pinnwand-Layout — Herleitungen
 
 Begründungen für Zahlen und Entscheidungen der Wand, die im Code nur als Ergebnis stehen.
-Messfallen beim Nachmessen: [testing.md](testing.md). Warum der Abdruckstapel keinen Platz
-mehr freihält, sondern in Stift und Papierrand ragt: [ADR-0007](adr/0007-raster-statt-freiem-packen.md).
+Messfallen beim Nachmessen: [testing.md](testing.md). Warum die Wand ein Raster ist und der
+Abdruckstapel keinen Platz mehr freihält, sondern in Stift und Papierrand ragt:
+[ADR-0007](adr/0007-raster-statt-freiem-packen.md).
+
+### Raster (wallLayout.ts, `wallGrid`, `layoutWall`)
+
+- **Spaltenzahl** = nutzbare Wandbreite / 160, abgerundet, mindestens zwei. Nutzbar ist
+  `wall.clientWidth − 2 × EDGE`; auf dem Handy (Fenster 320…412 px) sind das 276…368 px,
+  also immer zwei Spalten von 134…180 px. Ab rund 524 px Fenster drei, auf dem Tablet
+  (768 px) vier.
+- **Spaltenabstand 8 px.** Der waagerechte Versatz je Zettel ist ±3 px; zwei Nachbarn laufen
+  höchstens 6 px aufeinander zu, 2 px Luft bleiben (am ungedrehten Kasten; die Neigung darf
+  überlappen, der linke Zettel liegt dann oben).
+- **Reihenfolge:** Gruppe (fällig → täglich → Projekt), innerhalb der Gruppe der Hash der
+  Kennung. Jeder Zettel kommt in die gerade kürzeste Spalte, bei Gleichstand die linke. Die
+  Gruppen fließen in denselben Spalten weiter: ein täglicher Zettel kann neben einem fälligen
+  höher hängen, innerhalb einer Spalte aber nie darüber.
+- **Wildheit:** Versatz (±3 px waagerecht, 4…15 px Luft darüber) und Neigung (±3°) hängen
+  allein an der Kennung. Kommt ein Zettel dazu oder geht, rücken andere in andere Spalten,
+  behalten aber Versatz und Neigung.
+- **Breite = Spaltenbreite.** Nichts am Inhalt verbreitert einen Zettel: ein langer Titel bricht
+  an Wortgrenzen um, ein einzelnes überlanges Wort endet mit Ellipse, der Abdruck ragt. Darum
+  verrutscht beim Stempeln nichts. Die Wand setzt erst allen Zetteln die Breite und misst dann
+  alle Höhen — ein erzwungenes Layout je Lauf.
+- **Punkte-Sticker oben** genau bei Zetteln mit Unteraufgaben: die Fußzeile hat neben Stift und
+  Eselsohr (88 px) nur rund 50 px, genug für Sticker und Stempelbereich oder für das
+  Unteraufgaben-Zeichen.
+
+### Aufklappen teilt die Spalten (`layoutWall`, `expanded`)
+
+Der aufgeklappte Zettel liegt wandbreit, ohne Versatz, 8 px unter der tiefsten Spalte; danach
+beginnen alle Spalten 8 px unter ihm neu. Weil das Raster der Reihe nach legt, bleibt alles vor
+ihm, wo es war, und Zuklappen stellt den vorigen Zustand her — es gibt keinen Zustand, den die
+Wand sich merken müsste. Mehrere aufgeklappte Zettel teilen je an ihrer Stelle.
+
+Das obere Polster für die Befestigungen wird bei Spaltenbreite gerechnet, nicht wandbreit: die
+Klammern eines aufgeklappten Projekts hätten den längeren Hebel und schöben sonst die ganze
+Wand, auch die Zettel vor ihm. Liegt ein aufgeklappter Zettel ganz oben, bekommt er sein eigenes
+Polster.
 
 ### Wandrand `EDGE` (WallView.vue)
 
 - Fest 12 px, nicht anteilig. Der Rand ist für den Daumen da, und der wächst nicht mit dem
   Bildschirm. 5 % gäben dem 412-px-Gerät 19,6 px und dem 360-px-Gerät 17,0 px — für den Daumen
-  gleich —, kosteten das 360-px-Gerät aber +22,9 % Wandhöhe, das 390-px-Gerät +3,6 %. Ein
-  Prozentsatz gibt dem schmalsten Gerät den kleinsten Rand und die größten Kosten.
-- Kosten des Rands allein (Browser, 86 Zettel): 390 px +0,66 %, 375 px +5,77 %, 360 px +17,47 %
-  Wandhöhe. Absolute Wandhöhen im Browser messen; eine Node-Simulation mit Baseline-Breiten liegt
-  rund 2 % daneben und taugt nur für Vorher-Nachher-Vergleiche.
-- 12 ist ein Kompromiss und bewusst nicht auf eine Höhenklippe optimiert: bei
-  `usableWidth ≈ 324` kostet 1 px +8,3 % Höhe. Ein knapp darunter geparkter Rand wäre scheinbar
-  gratis und bräche still, sobald sich ein Titel ändert — die Klippe gehört dem Bestand, nicht
-  dem Code.
+  gleich —, nähmen aber dem schmalsten Gerät am meisten Spaltenbreite.
 - Bezugsgröße ist `wall.clientWidth`, nie `window.innerWidth`.
-
-### Messmarge `MEASURE_SAFETY` (WallView.vue)
-
-- 4 px Zuschlag auf jede gemessene Breite. Deckt nur den Rundungsrest, mit dem der Browser
-  Rahmen, Innenabstand und Textlauf unabhängig voneinander auflöst. Rahmen und Innenabstand von
-  `.zettel` zählt `chromeWidth` exakt dazu; die Marge ersetzt das nicht. Fehlt `chromeWidth`,
-  stehen Fußzeilen-gebundene Zettel konstant um ~14,7 px über.
-- Ergebnis bei 4 px (Wandbreite 370, 60 Zettel): die Fußzeilen-Untergrenze hält überall
-  ≥ 4,00 px Luft; Zettel mit voller `natural`-Breite haben 4,00…4,86 px (Marge plus
-  `Math.ceil`-Rest). Eine ältere Messung mit 1 px Marge (25 Zettel, noch **ohne** `chromeWidth`,
-  also ein anderes Maß und nicht mit dem obigen vergleichbar) fand 0,50 px knappste Restluft —
-  zu wenig, als dass Schrift- oder Polsteränderungen folgenlos blieben.
-- Ein Zettel kann breiter sein, als sein Titel verlangt: `minimum` sticht den 45-%-Deckel, und in
-  der Fassung mit Punkten oben bindet oft `titleMinimum + cornerExtra`.
-- Die Marge geht immer nach oben: ein paar Pixel Breite sieht niemand, ein fehlendes halbes Pixel
-  bricht den Titel um.
 
 ### Stempelstapel: Stempelbereich und ragende Abdrücke (WallNote.vue)
 
 Der Abdruck ist nur das Wort, ohne Kasten und Polster (ADR-0007). `.due-stamp` ist der
 **Stempelbereich**: ein Flex-Kind der Fußzeile, 44 px breit und so hoch wie die Griffzeile,
-das sich den Rest bis zum Stift nimmt. Die Lagen liegen absolut darin, am linken Rand
-verankert, und ragen nach rechts.
+das sich den Rest bis zum Stift nimmt und in einer schmalen Spalte schrumpft. Die Lagen liegen
+absolut darin, am linken Rand verankert, und ragen nach rechts.
 
 - **Links verankert, nicht zentriert:** links steht der Punkte-Sticker, und dorthin darf
   kein Abdruck ragen; nach rechts liegen Stift und Eselsohr, in die er ragen darf.
@@ -50,13 +63,3 @@ verankert, und ragen nach rechts.
   (ADR-0003) entfallen.
 - **Halo bleibt:** die oberste Lage ist deckend auf Papierfarbe, sonst scheinen die unteren
   Wörter durch ihre Buchstaben. Ohne Polster sitzt er knapp am Wort.
-
-### Freies Packen vor einer Sperrlinie (wallLayout.ts, `packFree`)
-
-Packt die Wand oberhalb einer Vorgabe (ein aufgeklappter Zettel bleibt liegen), wählt sie für
-jeden Zettel die Spalte, deren erreichbare Oberkante seiner alten (`previousTop`) am nächsten
-liegt. *Welcher* Zettel zuerst gesetzt wird, bleibt dagegen gierig nach niedrigster Oberkante.
-Verworfen wurde, die Zettel in der Reihenfolge ihrer alten Oberkanten zu setzen: das bewegte im
-Prüfstand mehr Zettel über der Vorgabe (2,4 statt 0,9 je Aufklappen), weil der Packer keine
-x-Vorgeschichte kennt und die Zettel seitlich driften — die alte Anordnung entsteht so trotzdem
-nicht.

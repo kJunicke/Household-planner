@@ -2,11 +2,12 @@
 /**
  * Die Pinnwand — der Putzen-Screen der Route `/`.
  *
- * Keine Kategorie-Chips, keine Überschriften. Die Gruppen fällig → täglich →
- * Projekt bestimmen die grobe Leserichtung (`packWall`: ein Projekt landet nie
- * oberhalb einer fälligen Aufgabe); **innerhalb** einer Gruppe packt die Skyline
- * frei, nicht nach Dringlichkeit (→ CONTEXT.md „Stempel"; ADR
- * docs/adr/0002-stempel-ordnet-nicht.md). Den Typ trägt das Papier.
+ * Keine Kategorie-Chips, keine Überschriften. Die Wand ist ein Raster aus gleich
+ * breiten Spalten (`layoutWall`, ADR-0007): die Gruppen fällig → täglich →
+ * Projekt fließen nacheinander in dieselben Spalten, **innerhalb** einer Gruppe
+ * gilt eine feste Zufallsordnung, nicht die Dringlichkeit (→ CONTEXT.md
+ * „Stempel"; ADR docs/adr/0002-stempel-ordnet-nicht.md). Den Typ trägt das
+ * Papier.
  *
  * Welche Zettel aufgeklappt sind, weiß die Wand und nicht der Zettel — sie muss
  * es beim Packen wissen. Die Gesten (Abreißen am Eselsohr, Kranz) stecken im
@@ -29,13 +30,11 @@ import { useOverlayHistoryEntry } from '@/composables/useOverlayHistoryEntry'
 import { searchTasks } from '@/lib/taskSearch'
 import { offerScrap } from '@/composables/useTornScrap'
 import {
-  defaultNoteWidth,
-  packWall,
-  planNoteWidths,
+  layoutWall,
   rememberWallHeight,
   rememberedWallHeight,
   rotationOf,
-  type WallNoteShape,
+  wallGrid,
 } from '@/lib/wallLayout'
 import type { Task } from '@/types/Task'
 
@@ -63,39 +62,12 @@ const doneTasks = computed((): readonly Task[] => board.completedTasks.value)
 /**
  * Luft zum Wandrand links und rechts — **fest, nicht anteilig**. Der Rand ist
  * für den Daumen da, und der wächst nicht mit dem Bildschirm; ein Prozentsatz
- * gäbe dem schmalsten Gerät am wenigsten Rand und kostete es die meiste
- * Wandhöhe. 12 ist ein Kompromiss, bewusst nicht auf eine Höhenklippe des
- * aktuellen Bestands hin optimiert → docs/pinnwand-layout.md („Wandrand `EDGE`").
+ * gäbe dem schmalsten Gerät am wenigsten Rand. → docs/pinnwand-layout.md
+ * („Wandrand `EDGE`").
  *
  * Bezugsgröße bleibt die Wand (`wall.clientWidth`), nie `window.innerWidth`.
  */
 const EDGE = 12
-
-/**
- * Zuschlag auf jede gemessene Breite. Deckt den nicht herleitbaren Rundungsrest,
- * mit dem der Browser Rahmen, Innenabstand und Textlauf unabhängig voneinander
- * auflöst. Rahmen und Innenabstand von `.zettel` selbst zählt `chromeWidth`
- * (→ `relayout`) — diese Marge ist kein Ersatz dafür.
- *
- * **Bemessen, nicht bewiesen:** mit 4 px hält die Fußzeilen-Untergrenze über alle
- * gemessenen Zettel mindestens 4,00 px Luft → docs/pinnwand-layout.md
- * („Messmarge `MEASURE_SAFETY`").
- *
- * Ein paar Pixel zusätzliche Zettelbreite sieht niemand; ein fehlendes halbes
- * Pixel bricht den Titel um. Die Marge geht deshalb immer nach oben.
- */
-const MEASURE_SAFETY = 4
-
-/**
- * Wie viele Titelzeilen der zweite Packlauf einem Zettel zusätzlich zumuten
- * darf. Ein Zettel, der in einen schmalen Streifen gequetscht wird und dadurch
- * vierzeilig wird, kostet mehr Fläche, als er spart.
- *
- * Eins, nicht zwei: bei einem einzeiligen Zettel ist das die Verdopplung der
- * Texthöhe. Wer mehr zulässt, tauscht eine waagerechte Lücke gegen eine
- * senkrechte.
- */
-const MAX_EXTRA_LINES = 1
 
 const wallEl = ref<HTMLElement | null>(null)
 const wallHeight = ref(0)
@@ -161,46 +133,13 @@ const revealNotes = () => {
 /**
  * Aufgeklappte Zettel. Mehrere dürfen gleichzeitig offen sein — ein Zettel, der
  * sich beim Antippen eines anderen still schließt, nimmt dem Aufklappen die
- * Verlässlichkeit.
+ * Verlässlichkeit. Jeder teilt die Spalten an seiner Stelle (→ `layoutWall`).
  *
  * Geändert wird durch **Ersetzen** des Sets. Ein `ref` macht ein `Set` zwar
  * tief reaktiv, aber die Zuweisung ist der Weg, der auch dann noch stimmt, wenn
  * jemand hier später auf `shallowRef` umstellt.
  */
 const expandedIds = ref(new Set<string>())
-
-/**
- * Gemerkte Oberkanten der aufgeklappten Zettel: der aufgeklappte Zettel bleibt
- * liegen, wo er lag, die anderen weichen ihm aus. `packWall` ist zustandslos; das
- * Gedächtnis steht hier. Eingetragen wird die y-Koordinate unmittelbar vor dem
- * Antippen (`lastPositions`), verworfen beim Zuklappen und beim Verschwinden von
- * der Wand, zusammen mit `expandedIds`.
- *
- * **Die Reihenfolge ist Teil des Zustands.** Der letzte Eintrag der `Map` ist der
- * zuletzt angetippte Zettel und gewinnt, wenn sich zwei Vorgaben nicht vertragen
- * (→ `resolvePins` in `wallLayout.ts`). Beim erneuten Antippen deshalb erst
- * löschen, dann setzen — sonst bliebe er auf seinem alten Platz in der Reihenfolge.
- *
- * Bewusst **nicht** reaktiv: gelesen nur in `relayout`, und jede Änderung zieht
- * ohnehin selbst ein `relayout` nach sich.
- */
-const pinnedTops = new Map<string, number>()
-
-/**
- * Zettel, deren Punktwert oben rechts statt in der Fußzeile steht. Entschieden
- * wird beim Messen in `relayout` (nur dort sind Titel- und Fußzeilenbreite
- * bekannt), festgehalten aber HIER und über das `meta-top`-Prop an `WallNote`
- * gereicht.
- *
- * **`relayout` fasst diese Klasse an KEINER Stelle per `classList` an — weder
- * setzend noch entfernend.** Schon das Entfernen allein genügt, um sie dauerhaft
- * zu verlieren: Vue vergleicht beim Patch nur seinen eigenen zuletzt berechneten
- * Klassen-String mit dem neuen; bleibt die Entscheidung gleich, schreibt es
- * `className` gar nicht neu, und die extern entfernte Klasse kommt NIE zurück —
- * außer eine UNABHÄNGIGE Bindungsänderung am selben Element patcht zufällig die
- * ganze Klassenliste. Einzige Quelle ist deshalb dieses Set.
- */
-const metaTopIds = ref(new Set<string>())
 
 /**
  * Der Zettel, der gerade **unter einer Geste des Fingers steht** — Abreißen am
@@ -238,20 +177,18 @@ const setNoteEl = (taskId: string, instance: unknown) => {
 }
 
 /**
- * Packt die Wand neu: Breiten messen, Breiten planen, Höhen messen, Skyline
- * rechnen, Positionen schreiben. Muss nach jedem Datenwechsel, nach dem Laden der
- * Schrift und nach jeder Breitenänderung laufen.
+ * Packt die Wand neu: Spaltenbreite setzen, Höhen messen, Raster rechnen
+ * (`layoutWall`), Positionen schreiben. Muss nach jedem Datenwechsel, nach dem
+ * Laden der Schrift und nach jeder Breitenänderung laufen.
  *
- * Erst wird **jeder** Zettel gemessen, dann werden **alle** Breiten geplant, dann
- * gesetzt — die Breite eines Zettels hängt davon ab, was neben ihn passt.
+ * Die Breite eines Zettels kommt allein aus dem Raster (Spaltenbreite,
+ * aufgeklappt die Wandbreite), nie aus seinem Inhalt: ein langer Titel bricht
+ * um, ein Abdruck ragt (ADR-0007). Deshalb verrutscht beim Stempeln nichts.
  *
- * **Kosten** liegen fast ganz in der DOM-Messung von Schritt 1 (mehrere erzwungene
- * Layouts je Zettel, linear in der Zettelzahl, in der Größenordnung eines Frames);
- * `planNoteWidths` plus `packWall` sind mit rund 0,05 ms belanglos.
+ * Erst bekommen **alle** Zettel ihre Breite, dann werden **alle** Höhen gelesen
+ * — so erzwingt der Lauf ein einziges Layout statt eines je Zettel.
  *
- * **`tappedId`** ist der angetippte Zettel beim Auf- und Zuklappen. Er steht
- * still — beim Aufklappen über seine Vorgabe (→ `pinnedTops`), beim Zuklappen,
- * weil er ohne Vorgabe dort landet, wo er als schmaler Zettel lag. Hier wird er
+ * **`tappedId`** ist der angetippte Zettel beim Auf- und Zuklappen; er wird
  * nur von der Flug-Animation ausgenommen.
  *
  * Liefert `false`, wenn der Lauf nicht vollständig war (→ `runRelayout`).
@@ -261,48 +198,24 @@ const relayout = (animate: boolean, tappedId?: string): boolean => {
   if (!wall) return false
 
   // `EDGE` steht hier und beim Setzen von `left` (`note.x + EDGE`) — es muss an
-  // beiden Stellen derselbe Wert sein: `packWall` klemmt jeden Zettel intern auf
+  // beiden Stellen derselbe Wert sein: `layoutWall` klemmt jeden Zettel auf
   // `[0, usableWidth − Breite]`, die rechte Wandkante steht also bei
-  // `EDGE + usableWidth`. Wer den Rand hier aus der Wandbreite rechnet und dort
-  // auch nur um 1 px anders rundet, lässt genau den Zettel, der an der Klemmung
-  // hängt, über die Kante ragen — ohne dass irgendetwas darauf aufmerksam macht.
+  // `EDGE + usableWidth`.
   const usableWidth = wall.clientWidth - 2 * EDGE
   if (usableWidth <= 0) return false
 
   const before = new Map(lastPositions)
+  const { columnWidth } = wallGrid(usableWidth)
 
-  // Für den Stempel-Wächter unten: EIN Hinweis je Packlauf, nicht einer je
-  // Zettel — sonst ginge die Meldung im Rauschen unter.
-  let stampWarned = false
-
-  // Gruppe je Zettel (0 = fällig, 1 = täglich, 2 = Projekt) für Packreihenfolge
-  // und Gruppengrenze in `packWall`, das keine Task-Objekte kennt.
+  // Gruppe je Zettel (0 = fällig, 1 = täglich, 2 = Projekt) für die
+  // Legereihenfolge in `layoutWall`, das keine Task-Objekte kennt.
   const taskGroups = new Map<string, number>()
   board.pendingTasks.value.forEach((task) => taskGroups.set(task.task_id, 0))
   board.dailyTasks.value.forEach((task) => taskGroups.set(task.task_id, 1))
   board.projectTasks.value.forEach((task) => taskGroups.set(task.task_id, 2))
 
-  // Schritt 1 — messen, was jeder Zettel an Breite braucht.
-  //
-  // Gemessen wird mit `getBoundingClientRect()`, NICHT mit `offsetWidth`.
-  // `offsetWidth` ist eine ganze Zahl und rundet ab: bei 123,4 px Textbreite
-  // setzten wir 123 — und der Titel bricht um, im Mittel bei jedem zweiten und
-  // scheinbar zufällig. Danach wird aufgerundet und `MEASURE_SAFETY` addiert.
-  //
-  // Zwei Werte je Zettel:
-  // - `max-content` (Titel per Klasse einzeilig gestellt) = natürliche Breite,
-  // - `min-content` = die Breite, unter der ein Wort abgeschnitten würde.
-  //
-  // Die Untergrenze wird gemessen und nicht am Text abgelesen: nur der Browser
-  // kennt seine tatsächlichen Umbruchstellen. Sind beide Werte gleich, hat der
-  // Titel keine Umbruchstelle — genau die bleiben vom zweiten Lauf ausgenommen.
-  const shapes: WallNoteShape[] = []
-  const nextMetaTopIds = new Set<string>()
-  const elements = new Map<string, HTMLElement>()
-  const lineHeights = new Map<string, number>()
-
   /**
-   * Zettel, die dieser Lauf mangels Element übersprungen hat. Messen und
+   * Zettel, die dieser Lauf mangels Element übersprungen hat. Breite setzen und
    * Positionieren zählen hier hoch; ein Lauf mit auch nur einem übersprungenen
    * Zettel gilt als **nicht** geglückt. Der Rückgabewert ist das Freigabesignal
    * für den Platzhalter — meldete ein Teillauf `true`, stünden gestapelte Zettel
@@ -315,392 +228,39 @@ const relayout = (animate: boolean, tappedId?: string): boolean => {
    */
   let skipped = 0
 
+  // Schritt 1 — Breiten setzen: Spaltenbreite, aufgeklappt die ganze Wand.
+  const elements = new Map<string, HTMLElement>()
   for (const task of wallTasks.value) {
     const el = noteEls.get(task.task_id)
     if (!el) {
       skipped++
       continue
     }
-
-    // Aufgeklappt heißt: volle Wandbreite, ohne Messung. Bei `width: max-content`
-    // mäße sie die Reihe der Zettelchen, ein Vielfaches der Wandbreite.
-    // `natural = minimum = usableWidth` sagt dem Planer: so breit wie die Wand,
-    // nicht verschmälerbar — der Zettel belegt von selbst eine Reihe allein.
-    if (expandedIds.value.has(task.task_id)) {
-      el.style.width = `${usableWidth}px`
-      shapes.push({ id: task.task_id, natural: usableWidth, minimum: usableWidth })
-      elements.set(task.task_id, el)
-      lineHeights.set(task.task_id, 0)
-      // Die bisherige Punktwert-Entscheidung wird MITGENOMMEN, obwohl dieser
-      // Zettel nicht gemessen wird. Sonst verlöre er `zettel--meta-top`, solange
-      // er offen ist. Die Klasse verengt den Titel um `cornerExtra`; beim
-      // Zuklappen erreichte die neu entschiedene Klasse das DOM erst im nächsten
-      // Tick, Schritt 4 mäße die Höhe der ALTEN Fassung, und die Wand pendelte je
-      // nach zuletzt aufgeklapptem Zettel zwischen zwei Packungen — dieselbe
-      // Eingabe, zwei Ergebnisse. „Zuklappen stellt die Wandhöhe exakt wieder
-      // her" hängt an dieser Zeile.
-      if (metaTopIds.value.has(task.task_id)) nextMetaTopIds.add(task.task_id)
-      continue
-    }
-
-    el.classList.add('zettel--measuring', 'zettel--single-line')
-    el.style.maxWidth = 'none'
-
-    const titleEl = el.querySelector<HTMLElement>('.title')
-    const footEl = el.querySelector<HTMLElement>('.foot')
-
-    // Waagerechte Zettel-Chrome: `titleWidth` und die Fußzeilenbreiten (unten)
-    // sind Content-Box-Breiten der KINDER `.title`/`.foot`. Gesetzt wird aber die
-    // Border-Box-Breite von `.zettel` SELBST (`box-sizing: border-box`, `base.css`
-    // Universalregel) — Rahmen und Innenabstand von `.zettel` (`WallNote.vue`,
-    // gilt für alle Zetteltypen) müssen dazu, sonst schneidet die gesetzte Breite
-    // die Fußzeile ab.
-    //
-    // Gemessen statt fest verdrahtet: eine Konstante liefe bei der nächsten
-    // Änderung an Rahmen oder Polster still auseinander.
-    const zettelStyle = getComputedStyle(el)
-    const chromeWidth =
-      parseFloat(zettelStyle.borderLeftWidth) +
-      parseFloat(zettelStyle.borderRightWidth) +
-      parseFloat(zettelStyle.paddingLeft) +
-      parseFloat(zettelStyle.paddingRight)
-
-    // Punktwert oben rechts? Der Sticker wandert nach oben, wenn der Zettel
-    // DADURCH schmaler wird — oben kostet er `cornerExtra` (er verengt den
-    // Titelkasten), unten `pointsWidth` plus `gap`. Verglichen werden die
-    // geplanten Breiten, nicht die gewünschten (→ `defaultNoteWidth` unten).
-    // Titel UND Fußzeile stehen für die Messung auf `max-content` (`WallNote.vue`,
-    // `.zettel--measuring .title`/`.foot`).
-    //
-    // **`zettel--meta-top` gehört AUSSCHLIESSLICH Vue** (Prop `metaTop`, siehe
-    // `metaTopIds` oben und `WallNote.vue`). Weder `add`/`toggle` NOCH `remove`
-    // dürfen diese Klasse hier anfassen — Begründung bei `metaTopIds`.
-    //
-    // Die Fußzeilenbreite MIT Punkte-Sticker wird deshalb aus dem GERADE
-    // gerenderten Zustand REKONSTRUIERT statt am DOM erzwungen: `wasMetaTop` sagt,
-    // ob der Sticker in der Ecke sitzt (dann fehlt er der Fußzeile und wird
-    // rechnerisch dazugezählt) oder schon in der Fußzeile steht. Gemessen wird er
-    // dort, wo er GERADE TATSÄCHLICH im DOM steht — `.points--sN` gibt an beiden
-    // Orten dieselbe Größe vor.
-    const wasMetaTop = metaTopIds.value.has(task.task_id)
-    el.style.width = 'max-content'
-    const footWidthCurrent = footEl?.getBoundingClientRect().width ?? 0
-    const titleWidth = titleEl?.getBoundingClientRect().width ?? 0
-    const visiblePointsEl = wasMetaTop
-      ? el.querySelector<HTMLElement>('.corner .points')
-      : el.querySelector<HTMLElement>('.foot > .points')
-
-    // Der Sticker klebt SCHIEF (`.points { transform: rotate(-6deg) }`, der Stern
-    // `-10deg`). `getBoundingClientRect()` liefert den gedrehten Umriss, für das
-    // Layout zählt die ungedrehte Breite — sonst würde jeder Zettel mit Sticker
-    // oben rund 3 px zu breit (über `cornerExtra` UND `footWidthFull`).
-    //
-    // Die Neigung wird für die Messung per Inline-Style abgeschaltet und danach
-    // zurückgenommen (`''`, im Ruhezustand steht dort nichts). `offsetWidth` wäre
-    // der falsche Ausweg (rundet ab, siehe Kopf dieses Messblocks), und
-    // `zettel--measuring` hilft nicht: dessen `transform: none` gilt für den
-    // ZETTEL, nicht für den Sticker.
-    if (visiblePointsEl) visiblePointsEl.style.transform = 'none'
-    const pointsWidth = visiblePointsEl?.getBoundingClientRect().width ?? 0
-    if (visiblePointsEl) visiblePointsEl.style.transform = ''
-
-    // Beim Herausrechnen des Punktwerts zählt ein Flex-`gap` mit — ein `gap`
-    // entsteht nur ZWISCHEN Geschwistern. Der Punktwert ist in der Fußzeile
-    // **nie** das einzige Kind: JEDER Zettel trägt einen Stempel (→ `stampStackOf`).
-    // Er zählt hier nur mit seinem Stempelbereich (44 px), nicht mit dem Wort —
-    // das ragt in Stift und Papierrand (ADR-0007).
-    //
-    // Die Rechnung steht auf ZWEI Annahmen über `WallNote.vue`: der
-    // Stempel heißt `.due-stamp`, und er ist ein DIREKTES Flex-Kind von
-    // `.foot`. Fällt eine davon, ist `footGap` falsch, und die Zettel werden
-    // still falsch breit gepackt — kein Fehler, keine Warnung, nur ein Zettel,
-    // der nicht passt. Deshalb wird sie geprüft und laut gemeldet, statt
-    // stumm auf 0 zurückzufallen.
-    //
-    // Die 6 selbst bleibt verdrahtet (`.foot { gap: 6px }`) statt aus dem
-    // `getComputedStyle` der Fußzeile gelesen — bekannte Lücke, bewusst hier
-    // nicht mitgeändert.
-    if (!stampWarned && !footEl?.querySelector(':scope > .due-stamp')) {
-      stampWarned = true
-      console.warn(
-        '[WallView] Kein `.due-stamp` als direktes Kind von `.foot` — die ' +
-          'Breitenmessung rechnet mit einem Flex-`gap`, den es dann nicht ' +
-          'gibt. Wurde der Stempel in `WallNote.vue` umbenannt oder verschoben? ' +
-          '(Dieser Hinweis erscheint einmal je Packlauf, nicht einmal je Zettel.)',
-      )
-    }
-    const footGap = 6
-    const footWidthFull = wasMetaTop ? footWidthCurrent + pointsWidth + footGap : footWidthCurrent
-    const footWidthWithoutPoints = wasMetaTop
-      ? footWidthCurrent
-      : Math.max(0, footWidthCurrent - pointsWidth - footGap)
-
-    // Die Breite, unter der ein Wort abgeschnitten würde — `.title` SELBST auf
-    // `min-content` gestellt (nicht der ganze Zettel, dessen Breite die
-    // Vue-exklusive `zettel--meta-top`-Klasse mitbestimmt). Steht vor der
-    // Entscheidung, weil `defaultNoteWidth` nach unten gegen `minimum` klemmt.
-    el.classList.remove('zettel--single-line')
-    if (titleEl) titleEl.style.width = 'min-content'
-    const titleMinimum = titleEl?.getBoundingClientRect().width ?? titleWidth
-    if (titleEl) titleEl.style.width = ''
-
-    // Was der Sticker OBEN kostet. Ohne diesen Zuschlag setzt ein Teil der Zettel
-    // seinen Titel mehrzeilig, obwohl er die volle natürliche Breite hat.
-    //
-    // `.corner` ist in `WallNote.vue` ein `float: right` in `.head`
-    // (`display: flow-root`) — der Titel steht aber NICHT „um ihn herum": weil
-    // `.title` mit `overflow: hidden` einen eigenen Block-Formatierungskontext
-    // öffnet, darf sein Kasten den Float-Margin-Kasten nicht überlappen. Der
-    // Titel wird deshalb über seine GANZE Höhe schmaler, nicht nur in der ersten
-    // Zeile.
-    //
-    // Verengt wird um die Sticker-Breite plus dessen waagerechte Ränder
-    // (`.corner { margin: -1px 0 2px 7px }`: links 7 px, rechts 0). Gemessen,
-    // nicht verdrahtet: die Ecke ist nicht über alle Zettel gleich breit — der
-    // Fünf-Punkte-Stern `.points--s5` ist breiter; eine feste 41 rechnete für
-    // jeden Stern falsch.
-    //
-    // `getComputedStyle` für die Ränder und NICHT `getBoundingClientRect`: ohne
-    // `zettel--meta-top` ist `.corner` `display: none` und misst 0. Ein Rand in px
-    // ist auch dann richtig auflösbar. Kurz einschalten geht nicht — die Klasse
-    // gehört ausschließlich Vue (siehe oben).
-    const cornerEl = el.querySelector<HTMLElement>('.corner')
-    const cornerStyle = cornerEl ? getComputedStyle(cornerEl) : null
-    const cornerMargins = cornerStyle
-      ? parseFloat(cornerStyle.marginLeft) + parseFloat(cornerStyle.marginRight)
-      : NaN
-    // Zwei Ausfälle, beide nur erreichbar, wenn `WallNote` sein Markup ändert:
-    // - Ohne `.corner` (oder mit Rändern, die keine Zahl ergeben) ist
-    //   `cornerExtra` 0 — der Sticker oben kostet rechnerisch nichts, es
-    //   entscheidet allein die Fußzeile. Zu großzügig, kein sicherer Wert.
-    // - Ohne sichtbaren Sticker ist `pointsWidth` 0 und `cornerExtra` nur der
-    //   Rand; `metaTop` bleibt dann immer `false`.
-    const cornerExtra = Number.isFinite(cornerMargins) ? pointsWidth + cornerMargins : 0
-
-    // Die beiden Fassungen des Zettels, zwischen denen die Entscheidung wählt,
-    // jede mit IHRER Fußzeile (ohne bzw. mit Punktwert). Unten wird eine davon
-    // GANZ übernommen — so passen `natural`/`minimum` strukturell zur gerade
-    // getroffenen Entscheidung, nicht zur vorigen (`wasMetaTop`).
-    //
-    // - `natural`: Titel einzeilig, mindestens so breit wie die Fußzeile;
-    // - `minimum`: derselbe Boden, aber der Titel darf an Wortgrenzen umbrechen;
-    // - plus `chromeWidth` (Rahmen und Innenabstand, siehe oben) und
-    //   `MEASURE_SAFETY` (Rundungsmarge, Begründung dort).
-    //
-    // `cornerExtra` zählt in der oberen Fassung zu BEIDEN Titelmaßen, auch zu
-    // `minimum`: der Titelkasten ist über seine ganze Höhe verengt, das längste
-    // Wort muss in die VERENGTE Spalte passen — sonst schneidet `text-overflow:
-    // ellipsis` es still ab. Der Preis: einzelne Zettel mit Sticker oben sind ein
-    // paar Pixel breiter, als ihr Titel verlangt.
-    const shapeWithMetaTop: WallNoteShape = {
-      id: task.task_id,
-      natural:
-        Math.ceil(Math.max(titleWidth + cornerExtra, footWidthWithoutPoints) + chromeWidth) +
-        MEASURE_SAFETY,
-      minimum:
-        Math.ceil(Math.max(titleMinimum + cornerExtra, footWidthWithoutPoints) + chromeWidth) +
-        MEASURE_SAFETY,
-    }
-    const shapeWithMetaFoot: WallNoteShape = {
-      id: task.task_id,
-      natural: Math.ceil(Math.max(titleWidth, footWidthFull) + chromeWidth) + MEASURE_SAFETY,
-      minimum: Math.ceil(Math.max(titleMinimum, footWidthFull) + chromeWidth) + MEASURE_SAFETY,
-    }
-
-    // Entschieden wird gegen die Breite, die TATSÄCHLICH herauskommt, nicht gegen
-    // die gewünschte. Übersteigen beide Fassungen den 45-%-Deckel, sind sie gleich
-    // breit, und der Sticker oben nähme dem Titel `cornerExtra` je Zeile, ohne
-    // dass der Zettel schmaler würde.
-    //
-    // Die Regel minimiert die Breite des EINZELNEN Zettels und schaut nie auf
-    // Höhen — ein schmaler Zettel ist ein hoher Zettel. So entschieden, weil die
-    // Wand unterm Strich kürzer wird; wer Höhe optimieren will, baut eine andere
-    // Regel, nicht diese um.
-    //
-    // Benutzt wird die ECHTE Regel aus `wallLayout.ts` statt einer Kopie des
-    // Deckels — eine zweite Fassung derselben Entscheidung liefe auseinander.
-    //
-    // Bei Gleichstand bleibt der Sticker UNTEN: `<`, nicht `<=`; der Umzug muss
-    // mindestens 1 px echt einsparen. Dass die Fußzeile nie abgeschnitten wird,
-    // garantiert `minimum` — `defaultNoteWidth` klemmt nach unten nie darunter.
-    const widthWithMetaTop = defaultNoteWidth(shapeWithMetaTop, usableWidth)
-    const widthWithMetaFoot = defaultNoteWidth(shapeWithMetaFoot, usableWidth)
-
-    const metaTop = widthWithMetaTop < widthWithMetaFoot
-    if (metaTop) nextMetaTopIds.add(task.task_id)
-
-    // Eine der beiden Fassungen wird GANZ übernommen — kein Nachrechnen.
-    const shape = metaTop ? shapeWithMetaTop : shapeWithMetaFoot
-
-    el.classList.remove('zettel--measuring')
-    el.style.maxWidth = ''
-    el.style.width = ''
-
-    const lineHeight = titleEl ? parseFloat(getComputedStyle(titleEl).lineHeight) : NaN
-
-    shapes.push(shape)
-    elements.set(task.task_id, el)
-    // Ohne brauchbare Zeilenhöhe gibt es keine Zeilenobergrenze — dann bleibt
-    // es bei der natürlichen Breite (siehe Schritt 3).
-    lineHeights.set(task.task_id, Number.isFinite(lineHeight) && lineHeight > 0 ? lineHeight : 0)
-  }
-
-  // Die frisch getroffene `metaTop`-Entscheidung wird VORWÄRTS ans DOM gegeben,
-  // bevor eine Höhe gemessen wird. Das Set erreicht das DOM als Klasse
-  // `zettel--meta-top` erst im NÄCHSTEN Tick, Schritt 3 (Zeilen) und Schritt 4
-  // (Höhen) laufen aber in DIESEM. Für jeden gekippten Zettel mäßen sie die ALTE
-  // Fassung, und `packed.height` (Inline-Höhe der Wand) stünde nach einer
-  // Breitenänderung deutlich zu niedrig. Der Resize-Wächter (`width ===
-  // lastWidth`) lässt bewusst nur EINEN Lauf zu — nichts heilte das später.
-  //
-  // Die Klasse selbst darf hier NICHT gesetzt werden — sie gehört ausschließlich
-  // Vue. Sie schaltet aber nur `display` an zwei vorhandenen Knoten um
-  // (`WallNote.vue`: `.zettel--meta-top .corner { display: flex }`,
-  // `.zettel--meta-top .foot > .points { display: none }`). Genau diese Wirkung
-  // wird als Inline-`display` vorweggenommen; schreibt Vue im nächsten Tick die
-  // Klasse, ändert sich an der Darstellung nichts mehr.
-  //
-  // Aufgeräumt wird per `nextTick`, NACH Vues DOM-Update — sonst überstimmte der
-  // Inline-Stil jede SPÄTERE Klassenänderung. Sofort nach der Messung
-  // zurücknehmen wäre falsch: bis zum Klassen-Update stünde wieder die alte
-  // Fassung im DOM. Im expanded-Zweig kippt nie etwas, weil die Entscheidung dort
-  // mitgenommen wird.
-  const flippedEls: HTMLElement[] = []
-  for (const shape of shapes) {
-    const el = elements.get(shape.id)
-    if (!el) continue
-    const isMetaTop = nextMetaTopIds.has(shape.id)
-    if (isMetaTop === metaTopIds.value.has(shape.id)) continue
-    const cornerEl = el.querySelector<HTMLElement>('.corner')
-    const footPointsEl = el.querySelector<HTMLElement>('.foot > .points')
-    // `flex` und `grid` sind die Werte der jeweiligen Stylesheet-Regeln in
-    // `WallNote.vue` (`.zettel--meta-top .corner` bzw. `.points`).
-    if (cornerEl) cornerEl.style.display = isMetaTop ? 'flex' : 'none'
-    if (footPointsEl) footPointsEl.style.display = isMetaTop ? 'none' : 'grid'
-    flippedEls.push(el)
-  }
-  metaTopIds.value = nextMetaTopIds
-
-  // Das Aufräumen wird NACH der Zuweisung oben angemeldet: erst dann steht
-  // Vues Flush an, und `nextTick` hängt sich an genau diesen Flush — der
-  // Rückruf läuft also verlässlich NACH dem Klassen-Update. Vorher angemeldet
-  // liefe er an einer bereits aufgelösten Promise womöglich DAVOR, und die
-  // alte Fassung stünde für einen Moment wieder im DOM.
-  if (flippedEls.length > 0) {
-    nextTick(() => {
-      for (const el of flippedEls) {
-        const cornerEl = el.querySelector<HTMLElement>('.corner')
-        const footPointsEl = el.querySelector<HTMLElement>('.foot > .points')
-        if (cornerEl) cornerEl.style.display = ''
-        if (footPointsEl) footPointsEl.style.display = ''
-      }
-    })
-  }
-
-  // Schritt 2 — Breiten planen (zweiter Packlauf, siehe `planNoteWidths`).
-  const planned = planNoteWidths(shapes, usableWidth)
-
-  // Schritt 3 — geplante Breiten setzen, Zeilen prüfen, zu Hohes zurücknehmen.
-  // Wie viele Zeilen ein Titel bei einer Breite braucht, weiß nur der
-  // Umbruch-Algorithmus des Browsers, keine Formel.
-  //
-  // **Bezugsgröße der Grenze ist `fallback`** — die Breite ohne zweiten Packlauf,
-  // also die bereits bei `MAX_WIDTH_RATIO` gedeckelte, NICHT die einzeilige. Ein
-  // gedeckelt zweizeiliger Zettel darf also dreizeilig werden. Absicht: der Deckel
-  // ist der Bestand, gegen den der zweite Lauf antritt.
-  const fallbacks = new Map<string, number>()
-  const widths = new Map<string, number>()
-  for (const shape of shapes) {
-    const el = elements.get(shape.id)
-    if (!el) continue
-    const fallback = defaultNoteWidth(shape, usableWidth)
-    const width = planned.get(shape.id) ?? fallback
-    fallbacks.set(shape.id, fallback)
-    widths.set(shape.id, width)
+    const width = expandedIds.value.has(task.task_id) ? usableWidth : columnWidth
     el.style.width = `${width}px`
+    elements.set(task.task_id, el)
   }
 
-  // Zeilen zählen — nur bei den wenigen Zetteln, die der zweite Lauf
-  // überhaupt verschmälert hat.
-  const rejected = new Set<string>()
-  for (const shape of shapes) {
-    const el = elements.get(shape.id)
-    const width = widths.get(shape.id) ?? 0
-    const fallback = fallbacks.get(shape.id) ?? width
-    const lineHeight = lineHeights.get(shape.id) ?? 0
-    // Ohne brauchbare Zeilenhöhe gibt es keine Grenze; dann bleibt die Planung.
-    if (!el || width >= fallback || lineHeight <= 0) continue
+  // Schritt 2 — Höhen messen, bei der eben gesetzten Breite.
+  const notes = [...elements].map(([id, el]) => ({
+    id,
+    // **`-1`, nicht `0` — das ist Absicht, bitte nicht „aufräumen".** Die drei
+    // Listen teilen `wallTasks` heute vollständig auf. Träte der Fall je ein,
+    // wäre `0` die schlechteste Antwort: Gruppe 0 ist eine ECHTE Gruppe
+    // (Reißzwecke), und `fastenersOfGroup` in `wallLayout.ts` gäbe dem Zettel
+    // still die Befestigung mit dem KLEINSTEN Überstand. `-1` polstert für die
+    // ungünstigste.
+    group: taskGroups.get(id) ?? -1,
+    height: el.offsetHeight,
+  }))
 
-    const titleEl = el.querySelector<HTMLElement>('.title')
-    if (!titleEl) continue
-    const lines = Math.round(titleEl.clientHeight / lineHeight)
-    // Bei `fallback` ist der Titel einzeilig, solange der Deckel nicht griff.
-    // Nur der bereits gedeckelte Langtitel muss dafür erneut gemessen werden.
-    let baseLines = 1
-    if (fallback < shape.natural) {
-      el.style.width = `${fallback}px`
-      baseLines = Math.round(titleEl.clientHeight / lineHeight)
-      el.style.width = `${width}px`
-    }
-    if (lines > baseLines + MAX_EXTRA_LINES) rejected.add(shape.id)
-  }
-
-  // Zurücknehmen — auf `fallback`, den Stand ohne zweiten Packlauf. Der
-  // Streifen-Füller verschmälert Zettel einzeln, eine Partner-Rücknahme braucht
-  // es deshalb nicht.
-  for (const id of rejected) {
-    const el = elements.get(id)
-    const fallback = fallbacks.get(id)
-    if (!el || fallback === undefined) continue
-    widths.set(id, fallback)
-    el.style.width = `${fallback}px`
-  }
-
-  // Schritt 4 — Höhen messen. Erst hier, wenn keine Breite sich mehr ändert:
-  // eine Höhe zu einer überholten Breite wäre wertlos.
-  const metrics = []
-  for (const shape of shapes) {
-    const el = elements.get(shape.id)
-    if (!el) continue
-    metrics.push({
-      id: shape.id,
-      width: widths.get(shape.id) ?? 0,
-      height: el.offsetHeight,
-      expanded: expandedIds.value.has(shape.id),
-      // **`-1`, nicht `0` — das ist Absicht, bitte nicht „aufräumen".**
-      //
-      // Die drei Listen (`pendingTasks` / `dailyTasks` / `projectTasks`) teilen
-      // `wallTasks` heute vollständig auf. Träte der Fall je ein, wäre `0` die
-      // schlechteste Antwort: Gruppe 0 ist eine ECHTE Gruppe (fällig, Reißzwecke),
-      // und `fastenersOfGroup` in `wallLayout.ts` gäbe dem Zettel still die
-      // Befestigung mit dem KLEINSTEN Überstand — die Wand polsterte oben zu knapp,
-      // die Befestigung ragte über den Kork.
-      //
-      // `-1` ist keine Gruppe: `fastenersOfGroup` fällt auf ALLE Befestigungen
-      // zurück und polstert für die ungünstigste. Für das Packen unschädlich — ein
-      // unbekannter Zettel landet ganz oben in einer eigenen Gruppe.
-      group: taskGroups.get(shape.id) ?? -1,
-      // Wo dieser Zettel im vorigen Lauf stand. `packWall` braucht das nur,
-      // solange eine Vorgabe im Spiel ist: wer vorher unter oder neben dem
-      // vorgegebenen Zettel lag, darf danach nicht darüber stehen. Beim ersten
-      // Lauf ist die Karte leer — dann gibt es auch keine Vorgabe.
-      previousTop: before.get(shape.id)?.y,
-    })
-  }
-
-  // Vorgaben der aufgeklappten Zettel in Antipp-Reihenfolge, gefiltert auf das,
-  // was gerade an der Wand hängt — eine Vorgabe für einen Zettel, den `packWall`
-  // nicht bekommt, wäre ein stiller Konfliktpartner für die übrigen.
-  const onWall = new Set(metrics.map((note) => note.id))
-  const pins = [...pinnedTops].filter(([id]) => onWall.has(id)).map(([id, top]) => ({ id, top }))
-
-  const packed = packWall(metrics, usableWidth, pins)
-  wallHeight.value = packed.height
+  const layout = layoutWall(notes, usableWidth, expandedIds.value)
+  wallHeight.value = layout.height
 
   lastPositions.clear()
   const moved: Array<{ el: HTMLElement; id: string; dx: number; dy: number; z: number }> = []
 
-  for (const note of packed.notes) {
+  for (const note of layout.notes) {
     const el = noteEls.get(note.id)
     if (!el) {
       skipped++
@@ -716,10 +276,8 @@ const relayout = (animate: boolean, tappedId?: string): boolean => {
 
     // Der angetippte Zettel wird NICHT animiert: rutschte er selbst sichtbar,
     // läse sich das als „ich habe danebengetippt". Die Bewegung gilt den ANDEREN
-    // Zetteln. Meist steht er ohnehin still (Vorgabe, → `pinnedTops`); die
-    // Ausnahme — zwei unverträgliche Vorgaben — ist gerade die, in der eine
-    // Flugbahn am meisten verwirrte.
-    // Ebenso der Zettel, der gerade unter einer Geste steht (→ `gestureNoteId`).
+    // Zetteln. Ebenso der Zettel, der gerade unter einer Geste steht
+    // (→ `gestureNoteId`).
     if (note.id === tappedId || note.id === gestureNoteId.value) continue
 
     const previous = before.get(note.id)
@@ -732,8 +290,8 @@ const relayout = (animate: boolean, tappedId?: string): boolean => {
     }
   }
 
-  // Bewusst keine Scroll-Nachführung: der angetippte Zettel wandert nicht, und
-  // der Bildlauf gehört dem Nutzer, nicht der Wand.
+  // Bewusst keine Scroll-Nachführung: der Bildlauf gehört dem Nutzer, nicht der
+  // Wand.
   //
   // Geglückt ist der Lauf nur, wenn JEDER gerenderte Zettel eine Position
   // bekommen hat (→ `skipped`). Sonst meldet er `false`, wird vertagt und
@@ -746,7 +304,7 @@ const relayout = (animate: boolean, tappedId?: string): boolean => {
     // Höhengedächtnis für `placeholderMinHeight` — NUR bei vollständigem Lauf:
     // ein Teillauf liefert eine zu kleine Höhe und damit beim nächsten Montieren
     // genau den Sprung, den die Mindesthöhe verhindern soll.
-    rememberWallHeight(packed.height)
+    rememberWallHeight(layout.height)
   }
 
   if (!animate || prefersReducedMotion?.matches) return complete
@@ -757,34 +315,14 @@ const relayout = (animate: boolean, tappedId?: string): boolean => {
 /**
  * Auf- und Zuklappen eines Zettels mit Unteraufgaben.
  *
- * Die Skyline packt frei innerhalb ihrer Gruppe (→ `packWall`): ändert sich die
- * Höhe des aufklappenden Zettels, können sich auch **andere** Zettel derselben
- * Gruppe verschieben, nicht nur die nachfolgenden. Bewusst keine Garantie
- * „oberhalb bewegt sich nichts" — `animateMoves` animiert jeden Zettel, dessen
- * Position sich tatsächlich ändert.
- *
- * **Der angetippte Zettel selbst bleibt liegen:** seine Oberkante geht `packWall`
- * als Vorgabe mit, die anderen weichen aus. Gemerkt wird die zuletzt GESETZTE
- * Position (`lastPositions`), nicht eine frisch gemessene — eine DOM-Messung
- * träfe ihn mitten in einer laufenden Fluganimation. Steht dort noch nichts
- * (erster Lauf), packt er ohne Vorgabe frei mit.
+ * Der aufgeklappte Zettel teilt die Spalten (→ `layoutWall`): was vor ihm
+ * hängt, bleibt liegen; er selbst geht wandbreit unter die tiefste Spalte, was
+ * nach ihm kommt, setzt sich darunter fort. Zuklappen stellt den vorigen
+ * Zustand her — das Raster ist zustandslos, es gibt nichts zu merken.
  */
 const toggleNote = (taskId: string) => {
   const next = new Set(expandedIds.value)
-  if (next.delete(taskId)) {
-    // Zuklappen: Vorgabe verwerfen. Der Zettel ist danach wieder schmal und
-    // packt normal mit — er landet dabei wieder dort, wo er vor dem Aufklappen
-    // lag, weil die Wand rechnerisch in denselben Zustand zurückfällt.
-    pinnedTops.delete(taskId)
-  } else {
-    next.add(taskId)
-    const top = lastPositions.get(taskId)?.y
-    // Erst löschen, dann setzen: die Einfügereihenfolge der `Map` IST die
-    // Antipp-Reihenfolge, und der zuletzt Angetippte muss hinten stehen — er
-    // gewinnt, wenn sich zwei Vorgaben nicht vertragen.
-    pinnedTops.delete(taskId)
-    if (top !== undefined) pinnedTops.set(taskId, top)
-  }
+  if (!next.delete(taskId)) next.add(taskId)
   expandedIds.value = next
   // Erst nach dem Rendern der Zettelchen packen — vorher ist die Höhe des
   // Zettels noch die alte.
@@ -803,10 +341,10 @@ const animateMoves = (
     const rot = rotationOf(id)
     const lift = `translate(${dx * 0.6}px, ${dy * 0.6 - 8}px) rotate(${rot * 0.25}deg) scale(1.07)`
     // Während des Flugs über die ruhenden Zettel gehoben (600), aber NICHT nach
-    // Laufnummer sortiert: `z` ist der Stapelwert aus `packWall`, damit „der linke
+    // Laufnummer sortiert: `z` ist der Stapelwert aus `layoutWall`, damit „der linke
     // Zettel liegt oben" auch WÄHREND der Bewegung gilt. `600 + z` bleibt sicher
     // unter den 800/810, die `WallNote.vue` per `!important` für den gezogenen
-    // bzw. lang gedrückten Zettel reserviert (siehe Obergrenze in `packWall`).
+    // bzw. lang gedrückten Zettel reserviert (siehe Obergrenze in `layoutWall`).
     // Die Verzögerung (`delay`) hängt an `index` — sie sagt, WANN ein Zettel
     // losfliegt, nicht wer oben liegt.
     el.style.zIndex = String(600 + z)
@@ -931,7 +469,7 @@ const scheduleRelayout = (animate: boolean) => {
 
 /**
  * Nur Änderungen, die das Packen betreffen, lösen ein Neupacken aus: Menge,
- * Reihenfolge, Titel (steuert die Breite) und Typ (steuert das Papier). Eine
+ * Reihenfolge, Titel (steuert die Höhe) und Typ (steuert das Papier). Eine
  * geänderte Zuweisung färbt nur um und darf die Wand nicht durchschütteln.
  */
 const layoutSignature = computed(() =>
@@ -946,11 +484,6 @@ watch(layoutSignature, () => {
   if ([...expandedIds.value].some((id) => !onWall.has(id))) {
     expandedIds.value = new Set([...expandedIds.value].filter((id) => onWall.has(id)))
   }
-  // Mit dem Aufklapp-Zustand geht auch die gemerkte Oberkante — sonst käme der
-  // Zettel mit einer Vorgabe aus einer Wand zurück, die es nicht mehr gibt.
-  for (const id of [...pinnedTops.keys()]) {
-    if (!onWall.has(id)) pinnedTops.delete(id)
-  }
   // Dasselbe für den Zettel unter der Geste: verschwindet er von der Wand
   // (erledigt, gelöscht), kommt das `gesture-end` seiner Komponente nicht an — sie ist
   // ausgehängt. Ohne diese Zeile bliebe seine ID hängen und genau dieser Zettel
@@ -958,20 +491,6 @@ watch(layoutSignature, () => {
   if (gestureNoteId.value !== null && !onWall.has(gestureNoteId.value)) gestureNoteId.value = null
   scheduleRelayout(true)
 })
-
-/**
- * Wächst ein Projekt-Abzeichen von einer auf zwei oder drei Stellen, ändert sich
- * die gemessene Breite seines Zettels. `layoutSignature` sieht das nicht — dort
- * stehen nur Menge, Reihenfolge, Titel und Typ.
- */
-watch(
-  () =>
-    wallTasks.value
-      .filter((task) => task.task_type === 'project')
-      .map((task) => `${task.task_id}:${taskStore.getProjectEffortTotal(task.task_id)}`)
-      .join('|'),
-  () => scheduleRelayout(true),
-)
 
 let resizeObserver: ResizeObserver | null = null
 let lastWidth = 0
@@ -981,8 +500,8 @@ onMounted(async () => {
   // Beitritt geschieht, käme sonst nie an. Der Beitritt lädt selbst nach.
   taskStore.subscribeToTasks()
   // Parallel: die Projekt-Punktesummen kommen aus einer EIGENEN Abfrage (die
-  // Wand lädt keine Erledigungen), und sie müssen vor dem ersten `relayout`
-  // stehen — die Stellenzahl am Abzeichen geht in die gemessene Zettelbreite ein.
+  // Wand lädt keine Erledigungen); geladen vor dem ersten `relayout`, damit das
+  // Abzeichen nicht nach dem Erscheinen der Wand umspringt.
   await Promise.all([taskStore.loadTasks(), taskStore.loadProjectEffortTotals()])
   householdStore.loadWeeklyCompletions()
 
@@ -1005,8 +524,8 @@ onMounted(async () => {
     resizeObserver.observe(wallEl.value)
   }
 
-  // Die Schrift bestimmt JEDE Zettelbreite; mit der Ersatzschrift gemessen,
-  // fallen alle Zettel zu schmal aus und die Titel brechen um. Deshalb ein
+  // Die Schrift bestimmt den Umbruch und damit JEDE Zettelhöhe; mit der
+  // Ersatzschrift gemessen, stünden die Zettel zu eng oder zu weit. Deshalb ein
   // weiterer Lauf, sobald die Schriften stehen (sind sie schon geladen, kostet
   // er nichts).
   //
@@ -1237,11 +756,7 @@ const handleCreateTask = async (taskData: {
   }
 }
 
-const handleCreateQuickTask = async (data: {
-  title: string
-  effort: number
-  note?: string
-}) => {
+const handleCreateQuickTask = async (data: { title: string; effort: number; note?: string }) => {
   const result = await taskStore.createQuickTask(data)
   if (result) {
     showQuickModal.value = false
@@ -1285,7 +800,6 @@ const handleCreateQuickTask = async (data: {
           :ref="(instance) => setNoteEl(task.task_id, instance)"
           :task="task"
           :expanded="expandedIds.has(task.task_id)"
-          :meta-top="metaTopIds.has(task.task_id)"
           @toggle="toggleNote"
           @gesture-start="gestureNoteId = $event"
           @gesture-end="gestureNoteId = gestureNoteId === $event ? null : gestureNoteId"
@@ -1310,7 +824,9 @@ const handleCreateQuickTask = async (data: {
       :taskTitle="searchRatingTask.title"
       :isLoading="searchBusyId !== null"
       @close="searchRatingTask = null"
-      @confirm="(points: number) => searchRatingTask && completeFromSearch(searchRatingTask, points)"
+      @confirm="
+        (points: number) => searchRatingTask && completeFromSearch(searchRatingTask, points)
+      "
     />
 
     <!-- FAB: schwebende Papierkarte, nicht angepinnt — Suche und Neuanlegen
@@ -1476,21 +992,20 @@ const handleCreateQuickTask = async (data: {
    Packen, nicht aus dem Inhalt. `.pw-wall` (pinnwand.css) liefert den Kork.
 
    KEIN `padding-top` für die überstehenden Befestigungen. Das Polster steckt im
-   Packen selbst (`topPaddingFor` in `wallLayout.ts`): die oberste Reihe beginnt
-   nicht bei `y = 0`, sondern darunter, und `packed.height` bringt den Betrag
+   Raster selbst (`topPaddingFor` in `wallLayout.ts`): die oberste Reihe beginnt
+   nicht bei `y = 0`, sondern darunter, und `layout.height` bringt den Betrag
    mit. Hier ginge es auch gar nicht — der Betrag ist keine Konstante, sondern
-   hängt an Breite und Neigung der gepackten Zettel (Begründung dort). Ein
+   hängt an Breite und Neigung der Zettel (Begründung dort). Ein
    Polster an dieser Stelle wäre eine zweite, stille Quelle derselben Zahl, und
    die absolut positionierten Zettel rechnen ohnehin gegen die Padding-Box:
    ein `padding-top` verschöbe sie nicht einmal. */
 .wall {
   position: relative;
   width: 100%;
-  /* Während der Breitenmessung ist ein Zettel kurzzeitig `max-content` breit
-     und kann die Wand überragen. `clip` verhindert, dass dabei ein waagerechter
-     Bildlauf aufblitzt; `visible` in der Senkrechten hält Reißzwecke und
-     Klebeband sichtbar, die über die Oberkante hinausragen. Bleibt, obwohl oben
-     Platz für sie reserviert ist: es trägt den kurzzeitig überstehenden Zettel. */
+  /* Ein Abdruck darf über den Papierrand ragen (ADR-0007), am rechten Zettel
+     auch über die Wand. `clip` verhindert, dass dabei ein waagerechter Bildlauf
+     entsteht; `visible` in der Senkrechten hält Reißzwecke und Klebeband
+     sichtbar, die über die Oberkante hinausragen. */
   overflow-x: clip;
   overflow-y: visible;
   border: 2px solid rgba(0, 0, 0, 0.12);
@@ -1514,7 +1029,7 @@ const handleCreateQuickTask = async (data: {
 }
 
 /* `opacity`, nicht `display: none` oder `visibility`: `relayout` misst die
-   Zettel am DOM (`getBoundingClientRect`), und ausgeblendete Elemente messen
+   Höhen am DOM (`offsetHeight`), und ausgeblendete Elemente messen
    sich als 0 — die Wand käme nie über den ersten Lauf hinaus. */
 .wall--unpacked .wall-notes {
   opacity: 0;
