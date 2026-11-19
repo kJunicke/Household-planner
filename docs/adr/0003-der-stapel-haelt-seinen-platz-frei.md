@@ -1,6 +1,6 @@
 # ADR-0003: Der Abdruckstapel hält seinen Platz frei — und die Wand wird dafür länger
 
-**Status:** Angenommen · 02.09.2026
+**Status:** Angenommen · 02.09.2026 · Platzreservierung abgelöst durch [ADR-0007](0007-raster-statt-freiem-packen.md) (19.11.2026)
 
 ## Kontext
 

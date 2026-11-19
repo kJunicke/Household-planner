@@ -32,6 +32,7 @@ Architekturentscheidungen: [docs/adr/](docs/adr/).
 - Unterster Abdruck ist **berechnet** aus Kadenz und letzter Erledigung:
   - **NEU**, solange nie erledigt, sonst **FÄLLIG**.
   - Tägliche Aufgaben: **BEDARF** — sie werden nicht fällig, sie fallen an. Projekte: ein **Projektspruch**. Beide sagen nichts über Dringlichkeit — sie geraten nie in Verzug.
+  - **ERLEDIGT** auf **losen Zetteln** in der **Suche** — so sieht man, woher der Zettel kommt. Lose Zettel lassen sich nicht überstempeln, erst wieder angepinnt.
   - **Der Typ schlägt NEU:** eine nagelneue tägliche Aufgabe zeigt BEDARF, ein nagelneues Projekt seinen Spruch. Sonst stünde auf beiden dauerhaft NEU, weil beide nie abgeschlossen werden.
   - Darüber legt der Haushalt von Hand nach → **Überstempeln**.
 - **Der Stempel ordnet nicht.** Auf der Wand sind alle fälligen Aufgaben gleich dringend; innerhalb einer Gruppe entscheidet der Platz. Eine DRINGEND-Aufgabe darf unter einer ungestempelten hängen → [ADR-0002](docs/adr/0002-stempel-ordnet-nicht.md).
@@ -51,13 +52,14 @@ Architekturentscheidungen: [docs/adr/](docs/adr/).
 - **Am Projekt sind es drei Projektsprüche statt WICHTIG und DRINGEND** (→ *Projektspruch*). Die Stufe ist dieselbe, nur das Wort ist ein anderes — und die Farbe ist dort der einzige Hinweis auf sie.
 - **Träger sind Zettel und Projekte — Zettelchen nicht.** Was zuerst zählt, handelt der Haushalt über ganze Aufgaben aus, nicht über einzelne Häkchen einer Checkliste.
 - Vorherige Abdrücke bleiben sichtbar liegen — der **Abdruckstapel**. Der oberste gilt und ist am besten lesbar; die Stapelhöhe ist selbst eine Aussage. Man sieht einem Zettel an, ob einmal oder mehrfach nachgedrückt wurde, ohne ein Wort zu lesen. Ein einmal gesetzter Abdruck **verrutscht nicht mehr**, wenn ein weiterer daraufkommt.
-- Jeder Zettel hält den Platz für den ganzen Stapel frei, auch der ungestempelte — sonst schöbe sich die Wand beim Stempeln unter dem Finger weg. Das macht die Wand spürbar länger und ist bewusst so → [ADR-0003](docs/adr/0003-der-stapel-haelt-seinen-platz-frei.md).
+- Beim Stempeln bewegt sich nichts: der Zettel ist so breit wie seine Spalte, der Stapel ändert daran nichts; er darf dafür in Stift und Papierrand ragen → [ADR-0007](docs/adr/0007-raster-statt-freiem-packen.md) (löst die Platzreservierung aus [ADR-0003](docs/adr/0003-der-stapel-haelt-seinen-platz-frei.md) ab).
 - Gilt für **einen Durchlauf**: mit dem Erledigen fällt es weg (sonst wäre nach Wochen alles dringend).
 - **Zurückgesetzt wird beim Erledigen, sonst nie** — auch bei **täglichen** Aufgaben. Ein nächtliches Zurücksetzen gibt es nicht. Der bewusst gezahlte Preis: wer eine tägliche Aufgabe morgens auf DRINGEND stempelt und sie mittags abhakt, verliert den Stapel sofort, obwohl der Tag noch läuft.
 - **Projekte verlieren ihn gar nicht** — sie werden nie fertig, ihr Stapel bleibt stehen. Räumt jemand den Stapel von Hand ab, wechselt ihr **Projektspruch**.
 - **Der Verfall folgt dem eigenen `task_type`, nicht dem Elternknoten.**
 - Getragen von `tasks.emphasis_level`: **0** nur Grundabdruck, **1** WICHTIG, **2** DRINGEND (am Projekt: **1** und **2** tragen ebenfalls Sprüche, die Zahl bedeutet dasselbe). Die Verfallsregel steht im Code an **zwei** Stellen — Edge Function `complete-task` und optimistischer Pfad im Store. Beide verweisen hierher; wer eine ändert, ändert beide.
 - Der **Grundabdruck** verfällt nicht — er wird berechnet und kommt von selbst wieder.
+- Der Abdruck ist nur das Wort, ohne Kasten. Er darf in den Stift und über den Papierrand ragen; Tipps nimmt aber nur der eigene Stempelbereich an — Stift und Eselsohr behalten ihre Fläche.
 - **Der Stempel ist zugleich Bedienelement und Anzeige.** Ein Tipp stempelt, Gedrückthalten öffnet weiterhin den **Kranz** — der Zettel bleibt auf ganzer Fläche Griff, gerade unten, wo der Daumen liegt.
 
 ### Kranz
@@ -75,7 +77,7 @@ Architekturentscheidungen: [docs/adr/](docs/adr/).
 
 ### Aufklappen
 - Tipp auf einen Zettel mit Unteraufgaben: zeigt seine Zettelchen, nimmt die volle Wandbreite ein.
-- Ein aufgeklappter Zettel **bleibt liegen, wo er hängt**; Zettel im Weg rutschen unter ihn.
+- Ein aufgeklappter Zettel **teilt die Spalten** an seiner Stelle: was vor ihm hängt, bleibt, wo es ist; was nach ihm kommt, setzt sich unter ihm fort.
 - Zuklappen stellt den vorigen Zustand wieder her.
 
 ### Befestigung
@@ -97,8 +99,9 @@ Architekturentscheidungen: [docs/adr/](docs/adr/).
 - Unteraufgaben dürfen sich wiederholen („Am Projekt arbeiten" steht an jedem Projekt); gelöschte Aufgaben und damit alle **Quick-Aufgaben** zählen nicht.
 
 ### Suche
-- Overlay hinter dem FAB der Pinnwand: findet Hauptaufgaben über ihren Titel und die ihrer Unteraufgaben.
-- Ein **Treffer** springt zum Zettel bzw. zur Zeile der Erledigt-Liste. Daneben direkt: **erledigen** (auch eine schon erledigte Aufgabe — dann eben noch einmal, mit Punkten; nicht bei Projekten) und **wieder dreckig** (nur bei erledigten). Beide schließen die Suche und springen ebenfalls, damit der **Fetzen** sichtbar wird.
+- Filtert die Pinnwand selbst: findet Hauptaufgaben über ihren Titel und die ihrer Unteraufgaben; wer nicht passt, verschwindet, die Spalten rücken auf.
+- Ein **Treffer** ist ein voller Zettel mit allen Gesten der Wand — Abreißen, Kranz, Punktwahl, Zuweisen, Stempeln.
+- Erledigte Treffer folgen nach den angepinnten als **lose Zettel**: ohne **Befestigung**, leicht verblasst. Ein Tipp an die Stelle der fehlenden Nadel ist **wieder dreckig** und pinnt sie an; Abreißen erledigt sie noch einmal.
 - Passt der Suchbegriff genau auf eine bestehende Aufgabe (→ *Duplikat*), wird „Aufgabe erstellen" nicht angeboten.
 
 ### verschieben
@@ -159,6 +162,50 @@ Architekturentscheidungen: [docs/adr/](docs/adr/).
 - Vorausgefüllt ist die ganze offene **Bilanz**; Teilausgleiche sind erlaubt.
 - In Geld: die App schlägt den Betrag nach der **Umrechnung** vor; der Haushalt darf sich auf mehr oder weniger einigen. Punkte und gezahlter Betrag sind dann **unabhängig** — die Punkte gleichen die Bilanz aus, der Betrag hält fest, was tatsächlich floss, auch wenn sich der Kurs später ändert. Ein Kommentar ist möglich.
 - In der Bilanz-Übersicht steht kein Geld — Euro erscheint erst, wenn ausgeglichen wird.
+- **Verrechnen mit dem Haushaltstopf** ist eine Art des Ausgleichs: wer in der Bilanz hinten liegt, aber im **Haushaltstopf** Geld gut hat, gleicht Punkte gegen dieses Guthaben aus. Es entstehen zugleich ein Ausgleich (Punkte) und eine **Rückzahlung** im Haushaltstopf (Euro nach der **Umrechnung**, vor dem Speichern änderbar). Beide Salden bleiben getrennt und in ihrer eigenen Einheit.
+- Töpfe für einen Anlass haben mit der Bilanz nichts zu tun.
+
+### Topf
+- Ein Kreis von Teilnehmern, die untereinander Ausgaben festhalten; jede Ausgabe gehört zu genau einem Topf, jeder Topf hat seinen eigenen Saldo.
+- Der **Haushaltstopf** ist immer da und hat genau die Haushaltsmitglieder als Teilnehmer — nie Gäste.
+- Daneben beliebig viele Töpfe für einen Anlass (Urlaub, Feier), in die auch Gäste kommen dürfen.
+- Anteile gelten je Teilnehmer, nicht als „mein Teil, dein Teil“.
+- Ein Topf für einen Anlass lässt sich **abschließen**: danach schreibgeschützt, unter „Abgeschlossen“ einsortiert; sein **Gastlink** zeigt nur noch den Endstand. Löschen geht zusätzlich. Der Haushaltstopf wird nie abgeschlossen.
+- Gerechnet wird nur in Euro; wer in fremder Währung zahlt, rechnet vor dem Eintragen selbst um.
+- Gäste tragen sich beim ersten Öffnen selbst als Teilnehmer ein oder wählen ihren Namen. Ein Name, den es im Topf schon gibt (Groß-/Kleinschreibung egal), wird abgewiesen.
+- **Das Sagen haben die Haushaltsmitglieder**, nie Gäste — das einzige Recht, das ohne Anmeldung wirklich etwas sichert.
+- Sonst darf jeder Teilnehmer jede Ausgabe und Rückzahlung bearbeiten und löschen; jeder Eintrag zeigt, wer ihn zuletzt geändert hat.
+
+### Kasse
+- Der Bereich der App für Statistik, **Ausgleich** und **Töpfe** — vormals „Übersicht“.
+
+### Ausgabe
+- Ein Betrag, den ein Teilnehmer eines **Topfs** bezahlt hat, mit Datum, Beschreibung und **Aufteilung**.
+
+### Aufteilung
+- Wer an einer **Ausgabe** wie viel trägt.
+- Schnell: gleich auf eine ausgewählte Teilmenge oder gleich auf die **ganze Gruppe**.
+- Erweitert: Verhältnisse, Prozente oder genaue Beträge je Person.
+
+### ganze Gruppe
+- Aufteilung, die nicht an die heutigen Teilnehmer gebunden ist, sondern an den Topf: tritt jemand bei, trägt er an solchen Ausgaben mit.
+- Das geschieht nicht still — ein Haushaltsmitglied bestätigt es erst (Gäste können das nicht, → *Topf*).
+
+### Rückzahlung
+- Geld, das ein Teilnehmer einem anderen im selben **Topf** überwiesen hat; senkt den Saldo zwischen beiden. Keine **Ausgabe**, steht aber in derselben Liste.
+- Der Topf schlägt vor, wer wem wie viel überweist, mit möglichst wenigen Überweisungen; ein Tipp auf einen Vorschlag trägt die Rückzahlung vorausgefüllt ein.
+
+### Gastlink
+- Link, der **genau eine** Liste oder **genau einen** Topf für Menschen außerhalb des Haushalts öffnet. Wer zwei Dinge teilen will, verschickt zwei Links.
+- Wer den Link hat, darf mitarbeiten — keine Anmeldung, kein Konto. Der Link selbst ist der Schlüssel.
+- Ein Haushaltsmitglied kann ihn **erneuern** (der alte ist sofort tot) oder die Freigabe **beenden**. Ein Ablaufdatum gibt es nicht.
+
+### Gast
+- Mensch ohne Haushaltsmitgliedschaft, der über einen **Gastlink** mitarbeitet.
+- Sagt selbst, wer er ist: der Browser merkt es sich; hat er es vergessen, wählt man sich beim Öffnen des Links neu aus. **Vertrauensbasis** — niemand prüft, ob die Wahl stimmt.
+- Sieht nur, was sein Link öffnet, nie etwas anderes vom Haushalt.
+- Gefragt, wer er ist, wird er nur in einem **Topf** — dort hängt Geld an einer Person. Auf einer Liste hakt er ab und trägt ein, ohne Namen.
+- Arbeitet nur mit Netz; eine Offline-Warteschlange gibt es für Gäste nicht (sie hat keinen **Besitzer**).
 
 ### Wochenziel
 - Punktzahl, die der Haushalt sich gemeinsam für eine Woche vornimmt; gehört dem Haushalt, jedes Mitglied darf sie ändern.
