@@ -1,7 +1,7 @@
 import { onBeforeUnmount, ref } from 'vue'
 import Sortable from 'sortablejs'
 
-import { dropTargetAt } from '@/lib/dropTargetAt'
+import { dropTargetAt, releasedOver } from '@/lib/dropTargetAt'
 
 import { useDragAutoScroll } from './useDragAutoScroll'
 
@@ -23,6 +23,9 @@ import { useDragAutoScroll } from './useDragAutoScroll'
  * Sortable-Gruppe; welche Blase unter dem Finger liegt, verfolgt diese
  * Komponente selbst (`dropKey`). Loslassen über einer Blase schreibt deren
  * Kategorie über denselben `onMove` wie das Ablegen auf einer Sektion.
+ *
+ * Loslassen außerhalb jedes Ziels verändert nichts: eine Sektion zählt nur,
+ * wenn der Finger über ihr losgelassen wird (→ `releasedOver`).
  */
 export function useCategoryDrag(options: {
   /** Sortable-Gruppenname — nur Container derselben Gruppe nehmen einander an. */
@@ -159,6 +162,7 @@ export function useCategoryDrag(options: {
           const bubble = dropKey.value
             ? bubbles().find((b) => b.key === dropKey.value)?.el
             : undefined
+          const release = pointer
           endTracking()
 
           // Zurückrollen, bevor Vue neu rendert: sonst steht die Zeile doppelt
@@ -181,7 +185,18 @@ export function useCategoryDrag(options: {
             return
           }
           if (from === to) return
-          options.onMove(itemId, options.categoryOf(to))
+          // Die Bibliothek meldet als Ziel die Sektion, in der ihr Platzhalter
+          // zuletzt stand — auch wenn der Finger danach in den leeren Raum
+          // gezogen und dort losgelassen wurde. Abgelegt wird nur, wenn er über
+          // der Sektion losgelassen wurde (Kopf oder Körper, beide sind
+          // Container derselben Kategorie).
+          const target = options.categoryOf(to)
+          const sectionRects = [...instances.values()]
+            .map((s) => s.el)
+            .filter((el) => el.isConnected && options.categoryOf(el) === target)
+            .map((el) => el.getBoundingClientRect())
+          if (!releasedOver(release, sectionRects)) return
+          options.onMove(itemId, target)
         },
       }),
     )
