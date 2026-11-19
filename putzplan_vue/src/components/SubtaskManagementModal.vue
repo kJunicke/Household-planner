@@ -177,8 +177,8 @@ const handleDeleteSubtask = (subtaskId: string) => {
                 @keyup.enter="handleAddSubtask"
               />
               <!-- Points Mode Selector (nur wenn mehr als 1 Option) -->
-              <div v-if="availableModes.length > 1" class="form-row">
-                <label class="form-label-inline">Punktemodus:</label>
+              <div v-if="availableModes.length > 1" class="form-column">
+                <label class="form-label-block">Punktemodus:</label>
                 <div class="points-mode-selector">
                   <label
                     v-for="mode in availableModes"
@@ -460,21 +460,6 @@ const handleDeleteSubtask = (subtaskId: string) => {
   font-size: 0.875rem;
 }
 
-/* Form Row Layout */
-.form-row {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-md);
-}
-
-.form-label-inline {
-  font-size: 0.875rem;
-  font-weight: 600;
-  color: var(--color-text-primary);
-  min-width: 100px;
-  margin: 0;
-}
-
 /* Form Column Layout (für Effort Selector) */
 .form-column {
   display: flex;
@@ -490,10 +475,11 @@ const handleDeleteSubtask = (subtaskId: string) => {
 }
 
 /* Points Mode Selector (for Add Form) */
+/* Über der Auswahl beschriftet, nicht daneben: auf 320 px bekommt jede der drei
+   Optionen so ein Drittel der vollen Breite, und „Checkliste“ passt ganz hinein. */
 .points-mode-selector {
   display: flex;
   gap: 0.5rem;
-  flex: 1;
 }
 
 .mode-option-compact {
@@ -501,7 +487,7 @@ const handleDeleteSubtask = (subtaskId: string) => {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: var(--spacing-xs);
+  padding: var(--spacing-xs) 0.25rem;
   min-height: var(--touch-target-min);
   border: 2px solid var(--color-border);
   border-radius: var(--radius-md);
@@ -536,8 +522,6 @@ const handleDeleteSubtask = (subtaskId: string) => {
 .mode-option-compact .mode-text {
   font-size: var(--font-sm);
   font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.3px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
