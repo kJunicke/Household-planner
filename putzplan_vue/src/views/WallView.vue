@@ -406,8 +406,9 @@ const relayout = (animate: boolean, tappedId?: string): boolean => {
 
     // Beim Herausrechnen des Punktwerts zählt ein Flex-`gap` mit — ein `gap`
     // entsteht nur ZWISCHEN Geschwistern. Der Punktwert ist in der Fußzeile
-    // **nie** das einzige Kind: JEDER Zettel trägt einen Stempel (→ `WallNote.vue`,
-    // `stampLabel`).
+    // **nie** das einzige Kind: JEDER Zettel trägt einen Stempel (→ `stampStackOf`).
+    // Er zählt hier nur mit seinem Stempelbereich (44 px), nicht mit dem Wort —
+    // das ragt in Stift und Papierrand (ADR-0007).
     //
     // Die Rechnung steht auf ZWEI Annahmen über `WallNote.vue`: der
     // Stempel heißt `.due-stamp`, und er ist ein DIREKTES Flex-Kind von

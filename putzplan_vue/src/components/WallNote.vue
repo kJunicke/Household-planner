@@ -32,8 +32,8 @@ import { computed, ref, watch } from 'vue'
 import type { Task } from '@/types/Task'
 import { useTaskStore } from '@/stores/taskStore'
 import { useHouseholdStore } from '@/stores/householdStore'
-import { projectPhraseOf, projectPhraseStackOf } from '@/lib/projectPhrases'
-import { jitterOf, kindOfTaskType, rotationOf, subtaskColumns } from '@/lib/wallLayout'
+import { stampStackOf } from '@/lib/stampStack'
+import { kindOfTaskType, rotationOf, subtaskColumns } from '@/lib/wallLayout'
 import { useTearGesture } from '@/composables/useTearGesture'
 import { useDirectionPress, type PressDirection } from '@/composables/useDirectionPress'
 import { flyPoints } from '@/lib/pointsFlight'
@@ -669,41 +669,6 @@ const noteStyle = computed((): Record<string, string> => {
 })
 
 /**
- * Der **Grundabdruck** — der berechnete unterste Abdruck des Gummistempels
- * (→ CONTEXT.md „Stempel"). **Jeder Zettel trägt einen.**
- *
- *   tägliche Aufgabe            → BEDARF   (sie wird nicht fällig, sie fällt an)
- *   Projekt                     → Projektspruch (es kann nicht in Verzug geraten)
- *   noch nie erledigt           → NEU
- *   sonst                       → FÄLLIG
- *
- * **Der Typ schlägt NEU, und die Reihenfolge dieser Prüfungen ist die ganze
- * Regel.** Tägliche Aufgaben und Projekte werden nie abgeschlossen und stünden
- * bei umgekehrter Reihenfolge DAUERHAFT auf NEU — ein stiller Fehler: der
- * Stempel sähe plausibel aus, er stünde nur nie wieder um.
- *
- * Keine Dringlichkeitsstufe, keine Tageszahl, kein „HEUTE": auf der Wand sind
- * alle fälligen Aufgaben gleich dringend, der Stempel **ordnet nicht**
- * (→ ADR-0002). Wer hier wieder eine Tageszahl anzeigen will, widerspricht dem
- * Glossareintrag „Stempel" — das ist eine Domänenentscheidung, keine
- * UI-Petitesse. Was von Hand daraufgelegt wird, ist das Überstempeln
- * (`emphasis_level`); der Grundabdruck selbst verfällt nicht.
- */
-const stampLabel = computed((): string => {
-  // ERST der Typ, DANN der Erledigungs-Status. Nicht umstellen, siehe oben.
-  if (props.task.task_type === 'daily') return 'BEDARF'
-
-  // Dieser Zweig läuft derzeit nie: Projekte nehmen in `stampLayers` den Weg
-  // über `projectPhraseStackOf`. Er bleibt als Notausgang — der Grundabdruck
-  // eines Projekts IST sein Spruch; ohne die Zeile lieferte ein künftiger
-  // zweiter Leser still `NEU`/`FÄLLIG` an einem Projekt. Der
-  // `warnOnce`-Stolperdraht in `projectPhrases.ts` hängt nicht an ihm.
-  if (props.task.task_type === 'project') return projectPhraseOf(props.task)
-
-  return props.task.last_completed_at ? 'FÄLLIG' : 'NEU'
-})
-
-/**
  * Der **Nachdruck** — was von Hand auf den Grundabdruck gelegt wurde
  * (→ CONTEXT.md „Überstempeln"); `null` heißt: sauber.
  *
@@ -730,106 +695,20 @@ const stampTitle = computed((): string => {
 })
 
 /**
- * Betrag der Neigung eines Abdrucks in Grad und Streubreite je Lage: **9° ± 5°**
- * (am Bild abgenommen, nicht frei gewählt). **Ein Betrag, kein Winkel** — die
- * Richtung kommt aus `tiltSignOf`. Weil `jitterOf` symmetrisch um null streut,
- * ergäbe ein vorzeichenbehafteter Wert eine feste Schräge mit Rauschen: jeder
- * Stempel der Wand nach derselben Seite.
+ * Der **Abdruckstapel** (→ CONTEXT.md „Überstempeln", `stampStackOf`): nur die
+ * Lagen, die gestempelt sind. Seit ADR-0007 reserviert der Stapel keine Breite
+ * mehr, also stehen auch keine unsichtbaren Platzhalter im DOM.
+ *
+ * Die Lage liegt absolut über dem Stempelbereich und ragt nach rechts in Stift
+ * und Papierrand (→ `.stamp-layer`). Das `-50%` im senkrechten Versatz stellt
+ * sie auf die Mitte der Fußzeile — `top: 50%` allein setzte ihre Oberkante dorthin.
  */
-const STAMP_TILT = 9
-const STAMP_TILT_JITTER = 5
-
-/**
- * Versatz einer Lage, in Pixeln: ±5,5. **Ein Messergebnis, kein Geschmack:** bei
- * 3 px verschwinden die unteren Lagen unter der deckenden obersten, und die
- * Stapelhöhe soll die Aussage tragen. Nicht „aufräumen".
- *
- * Der Versatz läuft über `transform` und geht deshalb **nicht** in die Breite
- * der Fußzeile ein — was die Breite bestimmt, steht am `.due-stamp`-CSS.
- */
-const STAMP_OFFSET = 5.5
-
-/**
- * Nach links oder rechts geneigt — deterministisch aus der Aufgaben-Kennung.
- * **Das Vorzeichen hängt an der LAGE, nicht am Zettel:** jeder Abdruck ist ein
- * eigener Handgriff; kippen alle drei gleich, sieht der Stapel gedruckt aus
- * statt gestempelt.
- *
- * Geometrisch folgenlos: die Hüllbreite eines gedrehten Kastens ist
- * `b·cos θ + h·sin θ`, für +θ und −θ gleich. Gekreuzte Lagen ragen nicht in die
- * 88-px-Reserve und nicht weiter über die Papierkante als gleichsinnige.
- */
-const tiltSignOf = (id: string, index: number) =>
-  jitterOf(id, `stamp-dir${index}`, 1) < 0 ? -1 : 1
-
-/** Eine Lage des Abdruckstapels, von unten (Grundabdruck) nach oben. */
-interface StampLayer {
-  /**
-   * Stufe: 0 Grundabdruck, 1 und 2 die überstempelten Lagen. Am Projekt stehen
-   * auf 1 und 2 Projektsprüche statt `WICHTIG`/`DRINGEND` — deshalb heißt das
-   * Feld nach der Stufe, nicht nach dem Wort.
-   */
-  level: 0 | 1 | 2
-  text: string
-  /** Die zurzeit oberste, gültige Lage — voll deckend. */
-  top: boolean
-  /** Noch nicht gestempelt: unsichtbar, aber **weiterhin gemessen** (siehe unten). */
-  reserved: boolean
-  transform: string
-}
-
-/**
- * Der **Abdruckstapel** (→ CONTEXT.md „Überstempeln", ADR-0003).
- *
- * **Alle drei Lagen stehen IMMER im DOM — auch die noch nicht gestempelten.**
- * Nach einem Tipp wird bewusst NICHT neu gepackt (`layoutSignature` in
- * `WallView.vue` kennt `emphasis_level` nicht, → ADR-0002). Wüchse die Fußzeile
- * beim Stempeln, schöbe sich das Layout unter dem Finger weg — oder bliebe,
- * schlimmer, falsch gepackt stehen. Die noch nicht gesetzten Lagen sind deshalb
- * nur `visibility: hidden`: unsichtbar, aber im Grid weiterhin vermessen. Die
- * naheliegende Alternative — Nachdrücke absolut über den Grundabdruck legen —
- * ist gemessen und verworfen (→ ADR-0003, Alternativen).
- *
- * **Versatz und Neigung kommen deterministisch aus der Aufgaben-Kennung**
- * (`jitterOf`, derselbe FNV-1a wie beim Zettelversatz) — nie `Math.random`, nie
- * die Listenposition. Ein Stempel, der beim Neuladen woanders sitzt, sieht aus
- * wie ein Fehler; auf einem zweiten Gerät säße er anders als hier.
- *
- * **Der Versatz hängt an der LAGE, nicht an ihrer Rolle — und JEDE Lage hat
- * einen, auch der Grundabdruck.** Hinge er an `top`, spränge der Grundabdruck
- * beiseite, sobald der erste Nachdruck daraufkommt — ein Abdruck auf dem Papier
- * verrutscht aber nicht mehr. Und erst der Versatz von Lage 0 macht den Stapel
- * unter einem deckenden Nachdruck sichtbar.
- */
-const stampLayers = computed((): StampLayer[] => {
-  // An einem Projekt trägt jede Stufe einen Spruch (→ CONTEXT.md „Projektspruch");
-  // die Dringlichkeit steht allein in der Farbe der obersten Lage — die Rampe
-  // darf deshalb nie ans Wort gebunden werden. Alle drei kommen aus dem EINEN
-  // gespeicherten Listenplatz (`projectPhraseStackOf`); hier wird nichts gezogen.
-  const texts =
-    props.task.task_type === 'project'
-      ? projectPhraseStackOf(props.task)
-      : [stampLabel.value, 'WICHTIG', 'DRINGEND']
-  const level = props.task.emphasis_level
-  const id = props.task.task_id
-  const offsets = texts.map((_, index) => jitterOf(id, `stamp-dx${index}`, STAMP_OFFSET))
-
-  return texts.map((text, index) => {
-    const top = index === level
-    const tilt =
-      tiltSignOf(id, index) * (STAMP_TILT + jitterOf(id, `stamp-rot${index}`, STAMP_TILT_JITTER))
-    const dx = offsets[index]
-    const dy = jitterOf(id, `stamp-dy${index}`, STAMP_OFFSET)
-
-    return {
-      level: index as 0 | 1 | 2,
-      text,
-      top,
-      reserved: index > level,
-      transform: `translate(${dx}px, ${dy}px) rotate(${tilt}deg)`,
-    }
-  })
-})
+const stampLayers = computed(() =>
+  stampStackOf(props.task).map((layer) => ({
+    ...layer,
+    transform: `translate(${layer.dx}px, calc(-50% + ${layer.dy}px)) rotate(${layer.tilt}deg)`,
+  })),
+)
 
 /**
  * Ein Tipp dreht den Stempel weiter: sauber → WICHTIG → DRINGEND → sauber. Am
@@ -1050,40 +929,33 @@ const handlePostponeConfirm = async (targetDate: string) => {
           {{ tracksProgress ? `${doneSubtasks}/${subtasks.length}` : subtasks.length }}
         </span>
       </button>
-      <!-- Der Gummistempel (→ `stampLabel` im Skript) — **JEDER Zettel trägt
-           einen**, sonst gäbe es keine Fläche zum Überstempeln.
+      <!-- Der Gummistempel (→ `stampStackOf`) — **JEDER Zettel trägt einen**,
+           sonst gäbe es keine Fläche zum Überstempeln.
 
-           Er steht IM FLUSS der Fußzeile, nicht darüber: so kann er sich mit
-           keinem Knopf überschneiden, egal wie schmal der Zettel wird — die
-           Zeile schiebt ihn zur Seite, statt ihn zu überlagern.
+           Das Element ist der **Stempelbereich**: ein Flex-Kind der Fußzeile,
+           das sich den Platz bis zum Stift nimmt. Nur hier stempelt ein Tipp.
+           Die Abdrücke selbst liegen absolut darüber, ragen nach rechts in
+           Stift und Papierrand und tragen keine Breite (→ ADR-0007). Stift und
+           Eselsohr stehen im DOM später und liegen deshalb über ihnen — auch
+           für den Finger.
 
-           **`v-if` gibt es hier bewusst nicht.** Das Element ist unbedingt da,
-           und die Breitenmessung in `WallView.vue` verlässt sich darauf: sie
-           sucht `.due-stamp` per `querySelector` und zählt danach die
-           Flex-`gap`s der Fußzeile ab. **Klassenname und Platz als
-           DIREKTES Flex-Kind von `.foot` sind Vertrag mit dieser Messung** —
-           wer eines von beidem ändert, ohne `WallView.vue` mitzuziehen,
-           bekommt eine still falsche Zettelbreite: kein Fehler, keine Warnung,
-           nur ein Zettel, der nicht passt. -->
+           **`v-if` gibt es hier bewusst nicht.** Die Breitenmessung in
+           `WallView.vue` sucht `.due-stamp` als DIREKTES Flex-Kind von `.foot`
+           und zählt danach die Flex-`gap`s ab. Klassenname und Platz sind
+           Vertrag mit dieser Messung, solange es sie gibt. -->
       <!-- Ein Tipp dreht den Nachdruck weiter (→ `onStampTap` im Skript).
            `@click.stop` hält den Zettel davon ab, dabei auch noch auf- oder
            zuzuklappen (`onSurfaceTap` an der Wurzel) — es ist die EINZIGE
            Abgrenzung zwischen den beiden Tipp-Zielen auf diesem Zettel. Nicht in
-           `isPressControl` — Begründung dort.
-
-           Kein `<button>`: das Element ist Vertrag mit der Breitenmessung in
-           `WallView.vue` (Klassenname UND Platz als direktes Flex-Kind von
-           `.foot`), und ein Knopf brächte eigene Polster, Schrift und Kästen
-           mit, die diese Messung still verschieben. -->
+           `isPressControl` — Begründung dort. -->
       <span
         class="due-stamp"
         :data-emphasis="props.task.emphasis_level"
         :title="stampTitle"
         @click.stop="onStampTap"
       >
-        <!-- Der Abdruckstapel (→ `stampLayers` im Skript). **Immer alle drei
-             Lagen**, die noch nicht gestempelten als `.stamp-layer--reserved`
-             unsichtbar, aber im Grid weiterhin gemessen (→ ADR-0003).
+        <!-- Der Abdruckstapel (→ `stampLayers` im Skript): nur die gestempelten
+             Lagen, von unten nach oben.
 
              `v-for` über `level` statt über den Text: der Schlüssel ist die
              LAGE, nicht das Wort. Dass am Projekt nie zweimal derselbe Spruch
@@ -1096,7 +968,6 @@ const handlePostponeConfirm = async (targetDate: string) => {
           :class="[
             `stamp-layer--l${layer.level}`,
             layer.top ? 'stamp-layer--top' : 'stamp-layer--under',
-            { 'stamp-layer--reserved': layer.reserved },
           ]"
           :style="{ transform: layer.transform }"
           :aria-hidden="layer.top ? undefined : 'true'"
@@ -1431,85 +1302,54 @@ const handlePostponeConfirm = async (targetDate: string) => {
 
 /* --- Der Gummistempel: der Abdruckstapel -----------------------------------
    Die vorherigen Abdrücke bleiben unter dem nächsten liegen; die
-   **Stapelhöhe ist selbst eine Aussage** (→ CONTEXT.md „Überstempeln"). Optik
-   „Papier-Halo"; die gemessenen, nicht geschmacklichen Werte stehen an ihrer
-   Stelle einzeln benannt (Herleitung → docs/pinnwand-layout.md, „Stempelstapel").
+   **Stapelhöhe ist selbst eine Aussage** (→ CONTEXT.md „Überstempeln").
 
-   Der Stapel steht IM FLUSS der Fußzeile (ein normales Flex-Kind, keine
-   Überlagerung) — dadurch schiebt die Zeile ihn zur Seite, statt dass er einen
-   Knopf überdeckt. **Klassenname `.due-stamp` und der Platz als DIREKTES
-   Flex-Kind von `.foot` sind Vertrag mit der Breitenmessung in
-   `WallView.vue`** (dort steht ein Laufzeit-Wächter); wer eines von beidem
-   ändert, bekommt eine still falsche Zettelbreite.
+   **Schlank (ADR-0007):** der Abdruck ist nur das Wort, ohne Kasten und
+   Polster, und er trägt keine Breite. `.due-stamp` ist der **Stempelbereich**
+   im Fluss der Fußzeile; die Lagen liegen absolut darin, am linken Rand
+   verankert, und ragen nach rechts in Stift, Eselsohr und notfalls über den
+   Papierrand. Nach links nie: dort steht der Punkte-Sticker.
 
-   **Die Breite ist das Maximum über ALLE Lagen, nicht die der obersten:** an
-   einem Projekt kann die breiteste Lage UNTEN liegen. Lägen die unteren Lagen
-   absolut, zählten sie nicht zur Breite, ragten aber heraus. Deshalb liegen
-   alle Lagen als Grid-Elemente in DERSELBEN Zelle (`grid-area: 1 / 1`).
+   **Der Stempelbereich** ist 44 px breit (eine Daumenbreite) und nimmt sich
+   den Rest der Zeile bis zum Stift (`flex-grow`). `width` statt `flex-basis`,
+   damit die Breitenmessung in `WallView.vue` (`width: max-content` an der
+   Fußzeile) genau diese 44 px zählt; schrumpfen darf er trotzdem, weil sein
+   Inhalt absolut liegt und keine Mindestbreite stellt. `align-self: stretch`
+   macht ihn so hoch wie die Griffzeile (44 px) — die ganze Box ist die
+   Trefffläche, ein Pseudoelement braucht es nicht.
 
-   **`place-items: center`:** die Lagen liegen mittig übereinander; auf
-   Zellbreite stehen sie über `min-width: 100%` an `.stamp-layer`. */
+   **Klassenname `.due-stamp` und der Platz als DIREKTES Flex-Kind von
+   `.foot` sind Vertrag mit der Breitenmessung in `WallView.vue`** (dort steht
+   ein Laufzeit-Wächter), solange die Wand frei packt. */
 .due-stamp {
   position: relative;
-  display: inline-grid;
-  place-items: center;
-  flex: 0 0 auto;
+  flex: 1 1 auto;
+  width: 44px;
+  align-self: stretch;
   /* Ein Bedienelement — die Fläche muss das mit der Maus auch sagen.
      `.zettel--tappable` färbt den Zeiger nur an Zetteln MIT Unteraufgaben; der
      Stempel ist an jedem Zettel antippbar. */
   cursor: pointer;
 }
 
-/* Die Trefferfläche: mindestens 44 px hoch, obwohl ein Abdruck rund 18 px
-   misst. Ein Daumen trifft sonst den Zettel statt den Stempel.
+/* Eine Lage des Stapels. Die Schriftgröße bleibt bei 10,8 px; kleiner erst als
+   letztes Mittel, falls der längste Projektspruch sonst nicht lesbar passt
+   (→ ADR-0007). Der Kasten ist weg, also braucht der Spruch keinen Platz mehr
+   in der Zeile — er ragt.
 
-   Die Fläche liegt ABSOLUT und damit AUSSER dem Fluss — sie darf die Fußzeile
-   weder höher noch breiter machen, sonst ginge sie in `footWidthFull` und über
-   `min-height: 44px` der Fußzeile auch in die Wandhöhe ein. `padding` oder
-   `min-height` am Stempel selbst wären genau dieser Fehler.
-
-   Sie liegt am STAPEL, nicht an einer Lage: ein Klick auf das Pseudoelement
-   zielt auf `.due-stamp` selbst, der Handler dort fängt ihn mit.
-
-   **Sie schluckt dem Zettel nichts:** der Long-Press startet auf ihr wie auf
-   blankem Papier (Hochblubbern zur Wurzel), und sie deckt keinen der beiden
-   Griffe rechts ab, die hinter `padding-right: 88px` freigehalten sind. */
-.due-stamp::after {
-  content: '';
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  width: 100%;
-  min-width: 44px;
-  height: 44px;
-  transform: translate(-50%, -50%);
-}
-
-/* Eine Lage des Stapels. Die Schriftgröße ist ausdrücklich KEIN Stellknopf:
-   11 px sind die dokumentierte Untergrenze, alles darunter
-   nähme die Anhebung der Schrift zurück (→ ADR-0003, „Den Stempel schmaler
-   setzen").
+   `pointer-events: none`: **Tipps nimmt nur der Stempelbereich an**, nicht das
+   Wort, wo es über ihn hinausragt. Im Stift und im Eselsohr lägen die Knöpfe
+   ohnehin darüber (später im DOM); ohne diese Zeile stempelte aber ein Tipp
+   auf den überstehenden Rest über dem Papierrand oder über der Fußzeile.
 
    `transform` steht NICHT hier, sondern als Inline-Stil am Element: Versatz
    und Neigung kommen je Lage deterministisch aus der Aufgaben-Kennung
-   (→ `stampLayers` im Skript). Weil beides über `transform` läuft, geht es
-   NICHT in die Breite der Fußzeile ein — der Stapel bleibt so breit wie sein
-   breitestes Wort. */
+   (→ `stampStackOf`), dazu das senkrechte Zentrieren auf `top: 50%`. */
 .stamp-layer {
-  grid-area: 1 / 1;
-  /* JEDE Lage steht auf Zellbreite, nicht nur die oberste — sonst fiele eine
-     Lage beim Überstempeln auf ihre Textbreite zurück und sähe geschrumpft aus. */
-  min-width: 100%;
-  /* ZENTRIERT WIRD IN JEDER LAGE, nicht nur in der obersten. Der Kasten steht
-     auf der Breite des BREITESTEN Worts im Stapel; ohne Zentrierung klebte das
-     Wort links und spränge beim Überstempeln, während der Kasten stehen bleibt.
-     Ein Abdruck, der einmal auf dem Papier ist, verrutscht nicht mehr — auch
-     nicht sein Wort. Am Projekt (drei verschieden breite Sprüche) fällt es am
-     meisten auf. */
-  text-align: center;
-  padding: 1px 5px;
-  border: 2px solid currentColor;
-  border-radius: 3px;
+  position: absolute;
+  left: 0;
+  top: 50%;
+  pointer-events: none;
   font-size: 10.8px;
   font-weight: 900;
   letter-spacing: 0.8px;
@@ -1541,22 +1381,10 @@ const handlePostponeConfirm = async (targetDate: string) => {
 /* Die OBERSTE Lage ist **voll deckend** und bekommt die Papierfarbe des
    Zettels als Hintergrund — den „Papier-Halo".
 
-   **Beides ist ein Messergebnis, kein Geschmack.** Mit durchsichtiger oberster
-   Lage schienen die unteren Wörter durch die BUCHSTABEN des obersten. Nicht
-   „aufräumen". Der Halo bemisst sich an der **Zelle** (`min-width: 100%` an
-   `.stamp-layer`), nicht an seinem Wort — er kann nur verdecken, was er
-   überdeckt.
-
-   **Bewusst KEIN seitlicher Zuschlag über die Zelle hinaus:** er beschnitte den
-   Rahmen der Lage darunter fast überall (→ docs/pinnwand-layout.md,
-   „Stempelstapel").
-
-   Die zyklische Prozentangabe (`100%` an einem Grid-Element, dessen Spur sich
-   nach dem Inhalt richtet) soll die Spur laut Spezifikation NICHT aufblähen.
-   Gemessen stimmt das: Wandhöhe und Stempelbreiten sind mit und ohne
-   `min-width` gleich. **Gemessen wurde allerdings nur Chrome** — WebKit ist
-   genau hier für Abweichungen bekannt. Wenn auf dem iPhone die Zettel breiter
-   aussehen als hier, ist das die erste Stelle zum Nachsehen.
+   **Ein Messergebnis, kein Geschmack.** Mit durchsichtiger oberster Lage
+   schienen die unteren Wörter durch die BUCHSTABEN des obersten. Nicht
+   „aufräumen". Ohne Polster sitzt der Halo knapp am Wort; die unteren Lagen
+   lugen über ihren Versatz und ihre eigene Neigung daneben hervor.
 
    `--note-paper` kommt vom `.zettel` und wird vererbt (weiß / gelb /
    Packpapier je nach Typ). */
@@ -1574,15 +1402,6 @@ const handlePostponeConfirm = async (targetDate: string) => {
 
 .stamp-layer--under.stamp-layer--l1 {
   opacity: 0.6;
-}
-
-/* Eine noch nicht gestempelte Lage: unsichtbar, aber **weiterhin gemessen**.
-
-   `visibility: hidden` und nicht `display: none` — das ist der ganze Punkt:
-   ein `display: none`-Kind fiele aus dem Grid und damit aus der Breite, und
-   die Fußzeile wüchse bei jedem Tipp (→ `stampLayers` im Skript, ADR-0003). */
-.stamp-layer--reserved {
-  visibility: hidden;
 }
 
 /* --- Punkte als aufgeklebter Sticker ----------------------------------------
