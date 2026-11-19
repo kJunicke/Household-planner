@@ -362,7 +362,7 @@ const arrow = computed(() => {
 </template>
 
 <style scoped>
-/* Über der Wand, über dem FAB (1000) und über dem Such-Overlay (1010), aber
+/* Über der Wand, über dem Suchfeld (940) und dem FAB (1000), aber
    unter der Modal-Ebene (1050, utilities.css) — die Modals, die diese Geste
    öffnet, müssen darüber liegen. Sie kann allerdings nicht gleichzeitig mit
    einem Modal sichtbar sein: das Loslassen schließt sie und öffnet erst dann. */

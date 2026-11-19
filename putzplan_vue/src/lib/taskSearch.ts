@@ -1,70 +1,63 @@
 import type { Task } from '@/types/Task'
-import { normalizeTaskTitle } from './taskDuplicates'
+import { findDuplicateTask } from './taskDuplicates'
 
 /**
- * Suche über alle Aufgaben — die Relevanzregel des Such-Overlays der Pinnwand,
- * als reine Funktion.
+ * Die **Suche** der Pinnwand als reine Funktion: welche Zettel bleiben an der
+ * Wand stehen, wenn ein Suchbegriff eingegeben ist (→ CONTEXT.md „Suche",
+ * „Treffer").
+ *
+ * Die Suche ist ein Filter der Wand, kein eigenes Verzeichnis: die Treffer
+ * zeigt die Wand im selben Raster mit derselben Zettel-Komponente. Eine
+ * Reihenfolge liefert dieses Modul deshalb nicht mit — die Legereihenfolge
+ * bestimmt allein `layoutWall`.
  */
-
-type SearchCategory = 'daily' | 'recurring' | 'project' | 'completed'
-
-export interface TaskSearchResult {
-  task: Task
-  category: SearchCategory
-  categoryLabel: string
-  relevance: number
+export interface WallSearch {
+  /**
+   * Angepinnte Treffer: offene Hauptaufgaben, deren Titel oder der Titel einer
+   * ihrer Unteraufgaben den Begriff enthält — genau die Zettel, die an der Wand
+   * stehen bleiben.
+   *
+   * Erledigte Treffer (die **losen Zettel**) kommen als eigenes Feld dazu; sie
+   * gehören nicht in diese Liste.
+   */
+  pinned: Task[]
+  /**
+   * „Aufgabe erstellen" anbieten? Nur, wenn es den Titel noch nicht gibt —
+   * „genau" heißt hier dasselbe wie **Duplikat** (`findDuplicateTask`), sonst
+   * führte der Knopf nur in eine Abweisung.
+   */
+  offerCreate: boolean
 }
 
-function categoryOf(task: Task): { category: SearchCategory; label: string } {
-  if (task.completed) return { category: 'completed', label: 'Erledigt' }
-  if (task.task_type === 'daily' || task.task_type === 'one-time')
-    return { category: 'daily', label: 'Alltag' }
-  if (task.task_type === 'recurring') return { category: 'recurring', label: 'Putzen' }
-  if (task.task_type === 'project') return { category: 'project', label: 'Projekte' }
-  return { category: 'daily', label: 'Alltag' }
-}
+const isLive = (task: Task) => task.deleted_at === null
 
 /**
- * Ergebnisse nach Relevanz, beste zuerst. `null` bei leerer Eingabe — das
- * unterscheidet „nichts gesucht" von „nichts gefunden".
+ * `null` bei leerer Eingabe — das unterscheidet „nichts gesucht" (volle Wand)
+ * von „nichts gefunden" (leere Wand).
  */
-export function searchTasks(tasks: readonly Task[], query: string): TaskSearchResult[] | null {
+export function searchWall(tasks: readonly Task[], query: string): WallSearch | null {
   const needle = query.trim().toLowerCase()
   if (!needle) return null
-  // „Exakt" heißt hier dasselbe wie „Duplikat" (→ `findDuplicateTask`): Relevanz
-  // 100 sagt dem Overlay, dass es den Titel schon gibt.
-  // Getrimmt wie der Titelvorschlag, den das Overlay ans Anlegen weitergibt.
-  const exact = normalizeTaskTitle(query.trim())
 
-  // Unteraufgaben einmal nach Elternteil bündeln — sonst wird die Suche O(n²).
-  const subtasksByParent = new Map<string, Task[]>()
+  // Eltern, die über eine Unteraufgabe passen — einmal gesammelt, sonst wird
+  // die Suche O(n²).
+  const parentsBySubtask = new Set<string>()
   for (const task of tasks) {
-    if (task.parent_task_id) {
-      const existing = subtasksByParent.get(task.parent_task_id) || []
-      existing.push(task)
-      subtasksByParent.set(task.parent_task_id, existing)
+    if (task.parent_task_id && isLive(task) && task.title.toLowerCase().includes(needle)) {
+      parentsBySubtask.add(task.parent_task_id)
     }
   }
 
-  const relevanceOf = (task: Task): number => {
-    const title = task.title.toLowerCase()
-    if (normalizeTaskTitle(task.title) === exact) return 100
-    if (title.startsWith(needle)) return 80
-    if (title.includes(needle)) return 60
-    const subtasks = subtasksByParent.get(task.task_id) || []
-    if (subtasks.some((sub) => sub.title.toLowerCase().includes(needle))) return 40
-    return 0
-  }
+  const pinned = tasks.filter(
+    (task) =>
+      task.parent_task_id === null &&
+      isLive(task) &&
+      !task.completed &&
+      (task.title.toLowerCase().includes(needle) || parentsBySubtask.has(task.task_id)),
+  )
 
-  const results: TaskSearchResult[] = []
-  for (const task of tasks) {
-    if (task.parent_task_id !== null) continue
-    const relevance = relevanceOf(task)
-    if (relevance === 0) continue
-    const { category, label } = categoryOf(task)
-    results.push({ task, category, categoryLabel: label, relevance })
-  }
+  // Getrimmt wie der Titelvorschlag, den die Suche ans Anlegen weitergibt.
+  const offerCreate = findDuplicateTask(tasks, query.trim()) === undefined
 
-  results.sort((a, b) => b.relevance - a.relevance)
-  return results
+  return { pinned, offerCreate }
 }
