@@ -8,7 +8,13 @@ import { useToastStore } from './toastStore'
 import { useTaskStore } from './taskStore'
 import type { RealtimeChannel } from '@supabase/supabase-js'
 import { onSessionEnd } from '@/lib/sessionEnd'
-import type { PairBalance } from '@/lib/settlementAmount'
+import { euroAmountFromWire, type PairBalance } from '@/lib/settlementAmount'
+
+/** Zeile, wie sie ankommt: `paid_euros` ist NUMERIC und kommt womöglich als Text. */
+const settlementFromWire = (row: Settlement): Settlement => ({
+  ...row,
+  paid_euros: euroAmountFromWire(row.paid_euros),
+})
 
 interface CompletionForBalance {
   user_id: string
@@ -111,7 +117,7 @@ export const useSettlementStore = defineStore('settlement', () => {
         .order('settled_at', { ascending: false })
 
       if (error) throw error
-      settlements.value = data || []
+      settlements.value = (data || []).map(settlementFromWire)
     } catch (error) {
       console.error('Error loading settlements:', error)
       toastStore.showToast('Fehler beim Laden der Ausgleiche', 'error')
@@ -163,9 +169,10 @@ export const useSettlementStore = defineStore('settlement', () => {
 
       if (error) throw error
 
-      settlements.value.unshift(data)
+      const row = settlementFromWire(data)
+      settlements.value.unshift(row)
       toastStore.showToast('Ausgleich eingetragen', 'success', 2000)
-      return data
+      return row
     } catch (error) {
       console.error('Error creating settlement:', error)
       toastStore.showToast('Fehler beim Eintragen des Ausgleichs', 'error')
@@ -217,13 +224,13 @@ export const useSettlementStore = defineStore('settlement', () => {
         },
         (payload) => {
           if (payload.eventType === 'INSERT') {
-            const changed = payload.new as Settlement
+            const changed = settlementFromWire(payload.new as Settlement)
             if (!settlements.value.find((row) => row.settlement_id === changed.settlement_id)) {
               settlements.value.unshift(changed)
             }
           }
           if (payload.eventType === 'UPDATE') {
-            const changed = payload.new as Settlement
+            const changed = settlementFromWire(payload.new as Settlement)
             const idx = settlements.value.findIndex(
               (row) => row.settlement_id === changed.settlement_id,
             )

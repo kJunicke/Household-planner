@@ -6,7 +6,11 @@ import { useAuthStore } from './authStore'
 import { useToastStore } from './toastStore'
 import { DEFAULT_MEMBER_COLOR } from '@/lib/memberColors'
 import { DISPLAY_NAME_MAX_LENGTH, HOUSEHOLD_NAME_MAX_LENGTH } from '@/lib/limits'
-import { DEFAULT_EUROS_PER_POINT, MAX_EUROS_PER_POINT } from '@/lib/settlementAmount'
+import {
+  DEFAULT_EUROS_PER_POINT,
+  MAX_EUROS_PER_POINT,
+  euroAmountFromWire,
+} from '@/lib/settlementAmount'
 import {
   DEFAULT_WEEKLY_GOAL_POINTS,
   effectiveWeekStartDay,
@@ -326,13 +330,14 @@ export const useHouseholdStore = defineStore('household', () => {
   })
 
   /**
-   * Kurs des Haushalts in Euro je Punkt. PostgREST liefert NUMERIC als Zahl,
-   * Realtime womöglich als Text — daher `Number()`. Fehlt die Spalte (Migration
-   * noch nicht angewendet), gilt der Startwert.
+   * Kurs des Haushalts in Euro je Punkt — die einzige Stelle, die
+   * `euros_per_point` liest. PostgREST liefert NUMERIC als Zahl, Realtime
+   * womöglich als Text — daher `euroAmountFromWire`. Fehlt die Spalte
+   * (Migration noch nicht angewendet), gilt der Startwert.
    */
   const eurosPerPoint = computed(() => {
-    const raw = Number(currentHousehold.value?.euros_per_point)
-    return Number.isFinite(raw) && raw > 0 ? raw : DEFAULT_EUROS_PER_POINT
+    const raw = euroAmountFromWire(currentHousehold.value?.euros_per_point)
+    return raw !== null && raw > 0 ? raw : DEFAULT_EUROS_PER_POINT
   })
 
   // Lade die Erledigungen der **laufenden Woche** (feste Woche ab dem

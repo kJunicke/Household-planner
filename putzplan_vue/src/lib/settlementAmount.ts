@@ -49,6 +49,18 @@ export function openBalance(pairs: readonly PairBalance[], fromId: string, toId:
   return 0
 }
 
+/**
+ * Euro-Betrag aus einer NUMERIC-Spalte (`households.euros_per_point`,
+ * `settlements.paid_euros`) als Zahl: PostgREST liefert eine Zahl, Realtime
+ * womöglich Text. Gelesen wird damit, wo die Zeile ankommt, damit die Typen
+ * überall `number` sagen dürfen. Kein oder kein lesbarer Betrag → `null`.
+ */
+export function euroAmountFromWire(value: unknown): number | null {
+  if (value === null || value === undefined || value === '') return null
+  const n = Number(value)
+  return Number.isFinite(n) ? n : null
+}
+
 /** Startwert des Kurses, wie der Spalten-Default. */
 export const DEFAULT_EUROS_PER_POINT = 1
 /** Grenzen der Spalten aus 20261119130000: NUMERIC(6,2) und NUMERIC(10,2). */

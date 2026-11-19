@@ -57,7 +57,7 @@ const saveRate = async () => {
   if (await householdStore.updateEurosPerPoint(rateInput.value)) editingRate.value = false
 }
 
-const formatEuros = (value: number | string) => `${formatEuroInput(Number(value))} €`
+const formatEuros = (value: number) => `${formatEuroInput(value)} €`
 
 const formatDate = (iso: string) =>
   new Date(iso).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' })
