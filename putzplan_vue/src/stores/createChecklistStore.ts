@@ -589,11 +589,6 @@ export function createChecklistStore(config: ChecklistStoreConfig) {
     const deleteList = async (listId: string) => {
       const toastStore = useToastStore()
 
-      if (lists.value.length <= 1) {
-        toastStore.showToast('Die letzte Liste kann nicht gelöscht werden', 'error')
-        return
-      }
-
       try {
         const { error } = await supabase.from(listsTable).delete().eq('list_id', listId)
 
