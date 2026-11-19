@@ -1,23 +1,23 @@
 import { describe, expect, it } from 'vitest'
 
 import {
-  defaultNoteWidth,
   jitterOf,
   kindOfTaskType,
-  packWall,
-  planNoteWidths,
+  layoutWall,
   rememberedWallHeight,
   rememberWallHeight,
   rotationOf,
   subtaskColumns,
-  type PackedWall,
-  type WallNoteMetrics,
-  type WallNoteShape,
+  wallGrid,
+  type PlacedNote,
+  type WallLayout,
+  type WallNoteInput,
 } from './wallLayout'
 
-// Geprüft wird das dokumentierte Verhalten aus den Kommentaren in wallLayout.ts und
-// CONTEXT.md („Zettel", „Aufklappen"), nicht der Rechenweg. Eine Messung ist kein
-// Blick (CLAUDE.md): grün heißt hier „Geometrie hält ihre Zusagen", nicht „sieht gut aus".
+// Geprüft wird das Verhalten an der Schnittstelle (Zettel, Wandbreite,
+// aufgeklappte Zettel → Spalten und Positionen), nicht der Rechenweg. Eine
+// Messung ist kein Blick (CLAUDE.md): grün heißt „Geometrie hält ihre Zusagen",
+// nicht „sieht gut aus".
 
 /** Kleiner deterministischer Zufall, damit die Stichproben reproduzierbar bleiben. */
 function mulberry32(seed: number) {
@@ -34,31 +34,111 @@ function mulberry32(seed: number) {
 const uuid = (rand: () => number) =>
   Array.from({ length: 32 }, () => Math.floor(rand() * 16).toString(16)).join('')
 
-/** Zettelformen wie an der echten Wand: `minimum` ≥ 110 (Griffzeile), meist mehrwortig. */
-function randomShapes(rand: () => number, count: number, wallWidth: number): WallNoteShape[] {
-  return Array.from({ length: count }, () => {
-    const natural = 110 + Math.floor(rand() * (wallWidth * 1.3))
-    const singleWord = rand() < 0.1
-    const minimum = singleWord ? natural : 110 + Math.floor(rand() * Math.min(80, natural - 110))
-    return { id: uuid(rand), natural, minimum }
-  })
-}
+/**
+ * Nutzbare Wandbreiten der Prüfgeräte: Fensterbreite − 16 (Seitenpolster) − 4
+ * (Wandrahmen) − 24 (`EDGE` beidseitig), siehe `WallView.vue`.
+ */
+const PHONE_WALLS = { 320: 276, 360: 316, 390: 346, 412: 368 }
 
-function randomWall(seed: number, count: number, wallWidth: number): WallNoteMetrics[] {
+describe('wallGrid — Spalten', () => {
+  it.each(Object.entries(PHONE_WALLS))('Handy %s px: zwei Spalten', (_, wall) => {
+    expect(wallGrid(wall).columns).toBe(2)
+  })
+
+  it('Tablet und Desktop bekommen mehr Spalten, rund 160 px je Spalte', () => {
+    expect(wallGrid(724).columns).toBe(4) // 768 px
+    expect(wallGrid(980).columns).toBe(6) // 1024 px
+    expect(wallGrid(1236).columns).toBe(7) // 1280 px
+  })
+
+  it('Spalten und Zwischenräume füllen die Wand genau', () => {
+    for (const wall of [276, 316, 346, 368, 500, 724, 1236]) {
+      const { columns, columnWidth, columnGap } = wallGrid(wall)
+      expect(columns * columnWidth + (columns - 1) * columnGap).toBeCloseTo(wall, 6)
+    }
+  })
+})
+
+function randomNotes(seed: number, count: number): WallNoteInput[] {
   const rand = mulberry32(seed)
-  const shapes = randomShapes(rand, count, wallWidth)
-  const widths = planNoteWidths(shapes, wallWidth)
-  return shapes.map((s) => ({
-    id: s.id,
-    width: widths.get(s.id)!,
-    height: 60 + Math.floor(rand() * 90),
+  return Array.from({ length: count }, () => ({
+    id: uuid(rand),
     group: Math.floor(rand() * 3),
-    expanded: rand() < 0.05,
+    height: 60 + Math.floor(rand() * 120),
   }))
 }
 
-const WALLS = [320, 347, 390, 768]
-const SEEDS = Array.from({ length: 25 }, (_, i) => i + 1)
+const WALLS = [276, 316, 346, 368, 724]
+const SEEDS = Array.from({ length: 12 }, (_, i) => i + 1)
+const CASES = WALLS.flatMap((wall) => SEEDS.map((seed) => ({ wall, seed })))
+const EPS = 1e-6
+
+/** Paare, deren (ungedrehte) Rechtecke sich überdecken. */
+function overlaps(notes: readonly WallNoteInput[], layout: WallLayout): string[] {
+  const heightOf = new Map(notes.map((n) => [n.id, n.height]))
+  const boxes = layout.notes.map((p) => ({ ...p, height: heightOf.get(p.id)! }))
+  const found: string[] = []
+  for (let i = 0; i < boxes.length; i++) {
+    for (let j = i + 1; j < boxes.length; j++) {
+      const a = boxes[i]
+      const b = boxes[j]
+      const xOverlap = a.x < b.x + b.width - EPS && b.x < a.x + a.width - EPS
+      const yOverlap = a.y < b.y + b.height - EPS && b.y < a.y + a.height - EPS
+      if (xOverlap && yOverlap) found.push(`${a.id} × ${b.id}`)
+    }
+  }
+  return found
+}
+
+describe('layoutWall — Raster', () => {
+  it('leere Wand: keine Zettel, keine Höhe', () => {
+    expect(layoutWall([], 316)).toMatchObject({ notes: [], height: 0 })
+  })
+
+  it.each(CASES)(
+    'Wand $wall px, Stichprobe $seed: jeder Zettel in Spaltenbreite, nichts ragt über den Rand',
+    ({ wall, seed }) => {
+      const notes = randomNotes(seed, 40)
+      const layout = layoutWall(notes, wall)
+      const heightOf = new Map(notes.map((n) => [n.id, n.height]))
+      expect(layout.notes).toHaveLength(notes.length)
+      for (const p of layout.notes) {
+        expect(p.width).toBeCloseTo(wallGrid(wall).columnWidth, 6)
+        expect(p.x).toBeGreaterThanOrEqual(0)
+        expect(p.x + p.width).toBeLessThanOrEqual(wall + EPS)
+        expect(p.y).toBeGreaterThan(0) // Polster für die Befestigungen über der Oberkante
+        expect(p.y + heightOf.get(p.id)!).toBeLessThanOrEqual(layout.height + EPS)
+      }
+    },
+  )
+
+  it.each(CASES)(
+    'Wand $wall px, Stichprobe $seed: kein Zettel überdeckt einen anderen',
+    ({ wall, seed }) => {
+      const notes = randomNotes(seed, 40)
+      expect(overlaps(notes, layoutWall(notes, wall))).toEqual([])
+    },
+  )
+
+  it.each(CASES)(
+    'Wand $wall px, Stichprobe $seed: jeder Zettel kommt in die gerade kürzeste Spalte',
+    ({ wall, seed }) => {
+      const notes = randomNotes(seed, 40)
+      const layout = layoutWall(notes, wall)
+      const heightOf = new Map(notes.map((n) => [n.id, n.height]))
+      const { columns } = wallGrid(wall)
+      // Nachspielen in Legereihenfolge (= Reihenfolge der Ausgabe): beim Legen
+      // war die Spalte des Zettels die mit der niedrigsten Unterkante.
+      const bottoms = new Array<number>(columns).fill(0)
+      for (const p of layout.notes) {
+        expect(p.column).not.toBeNull()
+        const column = p.column!
+        expect(bottoms[column]).toBe(Math.min(...bottoms))
+        bottoms[column] = p.y + heightOf.get(p.id)!
+      }
+    },
+  )
+})
 
 function shuffled<T>(items: readonly T[], seed: number): T[] {
   const rand = mulberry32(seed)
@@ -70,40 +150,151 @@ function shuffled<T>(items: readonly T[], seed: number): T[] {
   return out
 }
 
-const EPS = 1e-6
+/** Platz eines Zettels ohne Stapelwert `z` — der hängt an allen Zetteln. */
+const places = (notes: readonly PlacedNote[]) =>
+  notes.map(({ id, column, x, y, width, dx, dy, rotation }) => ({
+    id,
+    column,
+    x,
+    y,
+    width,
+    dx,
+    dy,
+    rotation,
+  }))
 
-/** Paare, deren gezeichnete Rechtecke sich überdecken. */
-function overlaps(notes: readonly WallNoteMetrics[], packed: PackedWall, W: number): string[] {
-  const byId = new Map(notes.map((n) => [n.id, n]))
-  const boxes = packed.notes.map((p) => {
-    const n = byId.get(p.id)!
-    return { id: p.id, x: p.x, y: p.y, w: Math.min(n.width, W), h: n.height }
+const positions = (layout: WallLayout) =>
+  Object.fromEntries(layout.notes.map((n) => [n.id, [n.x, n.y, n.z]]))
+
+describe('layoutWall — Reihenfolge', () => {
+  it.each(CASES)(
+    'Wand $wall px, Stichprobe $seed: Ergebnis hängt an der Menge, nie an der Eingabereihenfolge',
+    ({ wall, seed }) => {
+      const notes = randomNotes(seed, 40)
+      const a = layoutWall(notes, wall)
+      const b = layoutWall(shuffled(notes, seed * 31), wall)
+      expect(positions(b)).toEqual(positions(a))
+      expect(b.height).toBe(a.height)
+    },
+  )
+
+  it.each(CASES)(
+    'Wand $wall px, Stichprobe $seed: fällig → täglich → Projekt, auch innerhalb jeder Spalte',
+    ({ wall, seed }) => {
+      const notes = randomNotes(seed, 40)
+      const groupOf = new Map(notes.map((n) => [n.id, n.group]))
+      const layout = layoutWall(notes, wall)
+      const laid = layout.notes.map((p) => groupOf.get(p.id)!)
+      expect(laid).toEqual([...laid].sort((a, b) => a - b))
+      for (let column = 0; column < layout.columns; column++) {
+        const down = layout.notes
+          .filter((p) => p.column === column)
+          .sort((a, b) => a.y - b.y)
+          .map((p) => groupOf.get(p.id)!)
+        expect(down).toEqual([...down].sort((a, b) => a - b))
+      }
+    },
+  )
+
+  it('Stapel: links liegt über rechts, in derselben Spalte oben über unten', () => {
+    const layout = layoutWall(randomNotes(3, 40), 346)
+    const zs = layout.notes.map((n) => n.z)
+    expect(new Set(zs).size).toBe(zs.length)
+    for (const a of layout.notes) {
+      for (const b of layout.notes) {
+        if (a.column !== null && b.column !== null && a.column < b.column)
+          expect(a.z).toBeGreaterThan(b.z)
+        if (a.column === b.column && a.y < b.y) expect(a.z).toBeGreaterThan(b.z)
+      }
+    }
   })
-  const found: string[] = []
-  for (let i = 0; i < boxes.length; i++) {
-    for (let j = i + 1; j < boxes.length; j++) {
-      const a = boxes[i]
-      const b = boxes[j]
-      const xOverlap = a.x < b.x + b.w - EPS && b.x < a.x + a.w - EPS
-      const yOverlap = a.y < b.y + b.h - EPS && b.y < a.y + a.h - EPS
-      if (xOverlap && yOverlap) found.push(`${a.id} × ${b.id}`)
-    }
-  }
-  return found
-}
+})
 
-/** Zettel einer späteren Gruppe, deren Oberkante über der eines Zettels einer früheren liegt. */
-function groupViolations(notes: readonly WallNoteMetrics[], packed: PackedWall): string[] {
-  const groupOf = new Map(notes.map((n) => [n.id, n.group]))
-  const found: string[] = []
-  for (const a of packed.notes) {
-    for (const b of packed.notes) {
-      if (groupOf.get(a.id)! > groupOf.get(b.id)! && a.y < b.y - EPS)
-        found.push(`${a.id} über ${b.id}`)
-    }
-  }
-  return found
-}
+describe('layoutWall — Versatz und Neigung hängen an der Aufgabe', () => {
+  it.each(SEEDS)(
+    'Stichprobe %i: ein Zettel kommt dazu oder geht — die anderen behalten Versatz und Neigung',
+    (seed) => {
+      const notes = randomNotes(seed, 30)
+      const offsets = (layout: WallLayout) =>
+        new Map(layout.notes.map((n) => [n.id, [n.dx, n.dy, n.rotation]]))
+      const before = offsets(layoutWall(notes, 316))
+      const added = offsets(layoutWall([...notes, ...randomNotes(seed + 1000, 1)], 316))
+      const removed = offsets(layoutWall(notes.slice(1), 316))
+      for (const note of notes.slice(1)) {
+        expect(added.get(note.id)).toEqual(before.get(note.id))
+        expect(removed.get(note.id)).toEqual(before.get(note.id))
+      }
+    },
+  )
+
+  it('Versatz und Neigung sind nicht für alle Zettel gleich', () => {
+    const layout = layoutWall(randomNotes(4, 30), 316)
+    expect(new Set(layout.notes.map((n) => n.dx)).size).toBeGreaterThan(10)
+    expect(new Set(layout.notes.map((n) => n.dy)).size).toBeGreaterThan(5)
+    expect(new Set(layout.notes.map((n) => n.rotation)).size).toBeGreaterThan(10)
+  })
+})
+
+describe('layoutWall — Aufklappen teilt die Spalten', () => {
+  const wall = 316
+
+  /** Der aufgeklappte Zettel ist höher als vorher: seine Zettelchen stehen im DOM. */
+  const expand = (notes: WallNoteInput[], id: string) =>
+    notes.map((n) => (n.id === id ? { ...n, height: n.height + 160 } : n))
+
+  it.each(SEEDS)(
+    'Stichprobe %i: was davor liegt, bleibt; der Zettel liegt wandbreit darunter; der Rest darunter',
+    (seed) => {
+      const notes = randomNotes(seed, 30)
+      const closed = layoutWall(notes, wall)
+      const target = closed.notes[10 + (seed % 15)].id
+      const open = layoutWall(expand(notes, target), wall, new Set([target]))
+      const heightOf = new Map(expand(notes, target).map((n) => [n.id, n.height]))
+
+      const index = open.notes.findIndex((n) => n.id === target)
+      expect(closed.notes.findIndex((n) => n.id === target)).toBe(index)
+      expect(places(open.notes.slice(0, index))).toEqual(places(closed.notes.slice(0, index)))
+
+      const pinned = open.notes[index]
+      expect(pinned).toMatchObject({ x: 0, width: wall, column: null })
+      for (const before of open.notes.slice(0, index))
+        expect(before.y + heightOf.get(before.id)!).toBeLessThanOrEqual(pinned.y)
+      for (const after of open.notes.slice(index + 1))
+        expect(after.y).toBeGreaterThanOrEqual(pinned.y + heightOf.get(target)!)
+      expect(overlaps(expand(notes, target), open)).toEqual([])
+    },
+  )
+
+  it.each(SEEDS)('Stichprobe %i: Zuklappen stellt den vorigen Zustand her', (seed) => {
+    const notes = randomNotes(seed, 30)
+    const target = notes[seed].id
+    layoutWall(expand(notes, target), wall, new Set([target]))
+    expect(layoutWall(notes, wall)).toEqual(layoutWall(notes, wall, new Set()))
+  })
+
+  it('zwei aufgeklappte Zettel teilen je an ihrer Stelle', () => {
+    const notes = randomNotes(21, 30)
+    const closed = layoutWall(notes, wall)
+    const [first, second] = [closed.notes[8].id, closed.notes[20].id]
+    const grown = expand(expand(notes, first), second)
+    const open = layoutWall(grown, wall, new Set([first, second]))
+    const heightOf = new Map(grown.map((n) => [n.id, n.height]))
+    const a = open.notes.find((n) => n.id === first)!
+    const b = open.notes.find((n) => n.id === second)!
+    expect(places(open.notes.slice(0, 8))).toEqual(places(closed.notes.slice(0, 8)))
+    expect(b.y).toBeGreaterThanOrEqual(a.y + heightOf.get(first)!)
+    expect(overlaps(grown, open)).toEqual([])
+  })
+
+  it('ein aufgeklappter Zettel ganz oben ragt mit seinen Befestigungen nicht über den Kork', () => {
+    // Projekt (Klammern an den Kanten): wandbreit ist der Hebel der Neigung am größten.
+    const project = { id: 'projekt-ganz-oben', group: 2, height: 300 }
+    const narrow = layoutWall([project], wall)
+    const wide = layoutWall([project], wall, new Set([project.id]))
+    expect(wide.notes[0].y).toBeGreaterThanOrEqual(narrow.notes[0].y - narrow.notes[0].dy)
+    expect(wide.notes[0].y).toBeGreaterThan(0)
+  })
+})
 
 describe('Unordnung ist deterministisch', () => {
   it('Neigung liegt in −3…+3 Grad und hängt nur an der Kennung', () => {
@@ -172,287 +363,6 @@ describe('subtaskColumns', () => {
     expect(subtaskColumns(['Regale', 'Boden', 'Lampen'])).toBe(3)
     expect(subtaskColumns(['Regale', '123456789012'])).toBe(3)
     expect(subtaskColumns(['Regale', '1234567890123'])).toBe(2)
-  })
-})
-
-describe('defaultNoteWidth — „Breite folgt dem Titel"', () => {
-  const W = 347
-  const cap = Math.round(W * 0.45)
-
-  it('ein kurzer Titel behält seine natürliche Breite', () => {
-    expect(defaultNoteWidth({ id: 'a', natural: 140, minimum: 110 }, W)).toBe(140)
-  })
-
-  it('ein langer mehrwortiger Titel wird bei 45 % der Wand gedeckelt', () => {
-    expect(defaultNoteWidth({ id: 'a', natural: 300, minimum: 120 }, W)).toBe(cap)
-  })
-
-  it('ein Titel ohne Wortgrenze wird nicht gedeckelt, höchstens auf die Wand', () => {
-    expect(defaultNoteWidth({ id: 'a', natural: 250, minimum: 250 }, W)).toBe(250)
-    expect(defaultNoteWidth({ id: 'a', natural: 500, minimum: 500 }, W)).toBe(W)
-  })
-
-  it('die Fußzeile (minimum) sticht den Deckel, aber nie die Wand', () => {
-    expect(defaultNoteWidth({ id: 'a', natural: 300, minimum: 200 }, W)).toBe(200)
-    expect(defaultNoteWidth({ id: 'a', natural: 600, minimum: 400 }, W)).toBe(W)
-  })
-})
-
-describe('planNoteWidths', () => {
-  it('jeder Zettel bekommt eine Breite, in Eingabereihenfolge, nie breiter als die Wand', () => {
-    for (const W of WALLS) {
-      for (const seed of SEEDS) {
-        const shapes = randomShapes(mulberry32(seed), 30, W)
-        const plan = planNoteWidths(shapes, W)
-        expect([...plan.keys()]).toEqual(shapes.map((s) => s.id))
-        for (const s of shapes) {
-          const w = plan.get(s.id)!
-          expect(w).toBeLessThanOrEqual(W)
-          expect(w).toBeGreaterThan(0)
-        }
-      }
-    }
-  })
-
-  it('schneidet kein Wort ab: nie schmaler als `minimum`, solange das auf die Wand passt', () => {
-    for (const W of WALLS) {
-      for (const seed of SEEDS) {
-        const shapes = randomShapes(mulberry32(seed), 30, W)
-        const plan = planNoteWidths(shapes, W)
-        for (const s of shapes) {
-          expect(plan.get(s.id)!).toBeGreaterThanOrEqual(Math.min(s.minimum, W))
-        }
-      }
-    }
-  })
-
-  it('bei 45 % passen zwei lange mehrwortige Zettel nebeneinander', () => {
-    for (const W of WALLS) {
-      const shapes = [
-        { id: 'lang-a', natural: W * 2, minimum: 110 },
-        { id: 'lang-b', natural: W * 2, minimum: 110 },
-      ]
-      const plan = planNoteWidths(shapes, W)
-      // Reihenabstand höchstens 16 px (12 ± 4)
-      expect(plan.get('lang-a')! + plan.get('lang-b')! + 16).toBeLessThanOrEqual(W)
-    }
-  })
-
-  it('füllt den Reststreifen einer Reihe, wenn der Titel dort an einer Wortgrenze umbricht', () => {
-    const W = 500
-    // A: unbrechbar, 300 px → Rest ≈ 500 − 300 − 12 ≈ 188. B will 225 (45 %), passt ab 150.
-    const plan = planNoteWidths(
-      [
-        { id: 'a', natural: 300, minimum: 300 },
-        { id: 'b', natural: 400, minimum: 150 },
-      ],
-      W,
-    )
-    const b = plan.get('b')!
-    expect(b).toBeLessThan(Math.round(W * 0.45))
-    expect(b).toBeGreaterThanOrEqual(150)
-    expect(300 + b + 8).toBeLessThanOrEqual(W)
-  })
-
-  it('verschmälert nicht, wenn dabei ein Wort abgeschnitten würde', () => {
-    const W = 500
-    const tooWide = planNoteWidths(
-      [
-        { id: 'a', natural: 300, minimum: 300 },
-        { id: 'b', natural: 400, minimum: 200 },
-      ],
-      W,
-    )
-    expect(tooWide.get('b')).toBe(defaultNoteWidth({ id: 'b', natural: 400, minimum: 200 }, W))
-
-    const unbreakable = planNoteWidths(
-      [
-        { id: 'a', natural: 300, minimum: 300 },
-        { id: 'b', natural: 220, minimum: 220 },
-      ],
-      W,
-    )
-    expect(unbreakable.get('b')).toBe(220)
-  })
-})
-
-describe('packWall — Invarianten auf Stichproben', () => {
-  const cases = WALLS.flatMap((W) => SEEDS.map((seed) => ({ W, seed })))
-
-  it.each(cases)('Wand $W px, Stichprobe $seed: nichts ragt über den Rand', ({ W, seed }) => {
-    const notes = randomWall(seed, 40, W)
-    const packed = packWall(notes, W)
-    const byId = new Map(notes.map((n) => [n.id, n]))
-    expect(packed.notes).toHaveLength(notes.length)
-    for (const p of packed.notes) {
-      const n = byId.get(p.id)!
-      expect(p.x).toBeGreaterThanOrEqual(0)
-      expect(p.x + Math.min(n.width, W)).toBeLessThanOrEqual(W + EPS)
-      expect(p.y).toBeGreaterThan(0) // Polster für die Befestigungen über der Oberkante
-      expect(p.y + n.height).toBeLessThanOrEqual(packed.height + EPS)
-    }
-  })
-
-  it.each(cases)(
-    'Wand $W px, Stichprobe $seed: kein Zettel überdeckt einen anderen',
-    ({ W, seed }) => {
-      const notes = randomWall(seed, 40, W)
-      expect(overlaps(notes, packWall(notes, W), W)).toEqual([])
-    },
-  )
-
-  it.each(cases)(
-    'Wand $W px, Stichprobe $seed: kein Zettel steht oberhalb des tiefsten der Vorgruppe',
-    ({ W, seed }) => {
-      const notes = randomWall(seed, 40, W)
-      expect(groupViolations(notes, packWall(notes, W))).toEqual([])
-    },
-  )
-
-  it.each(cases)(
-    'Wand $W px, Stichprobe $seed: ein aufgeklappter Zettel mit Vorgabe hält alle Zusagen',
-    ({ W, seed }) => {
-      // So wie WallView es macht: Zettel antippen, er klappt wandbreit auf und
-      // bekommt seine bisherige Oberkante als Vorgabe; alle anderen tragen ihr
-      // `previousTop` aus dem Lauf davor.
-      const notes = randomWall(seed, 40, W).map((n) => ({ ...n, expanded: false }))
-      const before = new Map(packWall(notes, W).notes.map((p) => [p.id, p.y]))
-      const target = notes[seed % notes.length]
-      const top = before.get(target.id)!
-      const after = notes.map((n) =>
-        n.id === target.id
-          ? { ...n, width: W, height: n.height + 150, expanded: true, previousTop: top }
-          : { ...n, previousTop: before.get(n.id) },
-      )
-      const packed = packWall(after, W, [{ id: target.id, top }])
-
-      expect(overlaps(after, packed, W)).toEqual([])
-      expect(groupViolations(after, packed)).toEqual([])
-      const pinnedY = packed.notes.find((p) => p.id === target.id)!.y
-      for (const p of packed.notes) {
-        const n = after.find((m) => m.id === p.id)!
-        if (n.id === target.id || n.group !== target.group) continue
-        if (n.previousTop! >= top)
-          expect(p.y, `${n.id} ist nach oben gerutscht`).toBeGreaterThanOrEqual(pinnedY)
-      }
-    },
-  )
-
-  it.each(cases)(
-    'Wand $W px, Stichprobe $seed: Ergebnis hängt nur an der Menge, nie an der Reihenfolge',
-    ({ W, seed }) => {
-      const notes = randomWall(seed, 40, W)
-      const a = packWall(notes, W)
-      const b = packWall(shuffled(notes, seed * 31), W)
-      const pos = (wall: ReturnType<typeof packWall>) =>
-        Object.fromEntries(wall.notes.map((n) => [n.id, [n.x, n.y, n.z]]))
-      expect(pos(b)).toEqual(pos(a))
-      expect(b.height).toBe(a.height)
-    },
-  )
-})
-
-describe('packWall — Einzelzusagen', () => {
-  it('leere Wand: keine Zettel, keine Höhe', () => {
-    expect(packWall([], 347)).toEqual({ notes: [], height: 0 })
-  })
-
-  it('ein aufgeklappter Zettel über die volle Breite steht ohne Versatz an der linken Kante', () => {
-    const packed = packWall([{ id: 'auf', width: 347, height: 300, group: 0, expanded: true }], 347)
-    expect(packed.notes[0].x).toBe(0)
-  })
-
-  it('ein Zettel breiter als die Wand wird auf x = 0 geklemmt', () => {
-    const packed = packWall([{ id: 'riesig', width: 900, height: 80, group: 1 }], 347)
-    expect(packed.notes[0].x).toBe(0)
-  })
-
-  it('Stapelreihenfolge: links liegt über rechts, bei gleichem x oben über unten', () => {
-    const notes = randomWall(3, 40, 390)
-    const packed = packWall(notes, 390)
-    const zs = packed.notes.map((n) => n.z)
-    expect(new Set(zs).size).toBe(zs.length)
-    for (const a of packed.notes) {
-      for (const b of packed.notes) {
-        if (a.x < b.x || (a.x === b.x && a.y < b.y)) expect(a.z).toBeGreaterThan(b.z)
-      }
-    }
-  })
-})
-
-describe('packWall — Vorgaben (aufgeklappter Zettel bleibt liegen)', () => {
-  const W = 347
-
-  const scene = () => {
-    const rand = mulberry32(42)
-    const above = Array.from({ length: 4 }, (_, i) => ({
-      id: `oben-${i}-${uuid(rand)}`,
-      width: 150,
-      height: 50,
-      group: 0,
-      previousTop: 10,
-    }))
-    const below = Array.from({ length: 6 }, (_, i) => ({
-      id: `unten-${i}-${uuid(rand)}`,
-      width: 150,
-      height: 70,
-      group: 0,
-      previousTop: 400,
-    }))
-    const pinned = { id: 'auf', width: W, height: 220, group: 0, expanded: true }
-    return { above, below, pinned }
-  }
-
-  it('steht genau auf der Vorgabe, wenn nichts im Weg ist', () => {
-    const { above, below, pinned } = scene()
-    const packed = packWall([...below, pinned, ...above], W, [{ id: 'auf', top: 300 }])
-    expect(packed.notes.find((n) => n.id === 'auf')!.y).toBe(300)
-  })
-
-  it('wer vorher darunter lag, bleibt darunter', () => {
-    const { above, below, pinned } = scene()
-    const packed = packWall([...below, pinned, ...above], W, [{ id: 'auf', top: 300 }])
-    const pin = packed.notes.find((n) => n.id === 'auf')!
-    for (const note of below) {
-      const y = packed.notes.find((n) => n.id === note.id)!.y
-      expect(y).toBeGreaterThanOrEqual(pin.y + pinned.height)
-    }
-  })
-
-  it('wer vorher darüber lag und ganz darüber passt, bleibt darüber', () => {
-    const { above, below, pinned } = scene()
-    const packed = packWall([...below, pinned, ...above], W, [{ id: 'auf', top: 300 }])
-    for (const note of above) {
-      const y = packed.notes.find((n) => n.id === note.id)!.y
-      expect(y + note.height).toBeLessThanOrEqual(300)
-    }
-  })
-
-  it('„überlappt nicht" gewinnt gegen „bleibt liegen": die Vorgabe rutscht unter die Vorgruppe', () => {
-    const tall = { id: 'hoch', width: 150, height: 400, group: 0 }
-    const pinned = { id: 'auf', width: W, height: 200, group: 1, expanded: true }
-    const packed = packWall([tall, pinned], W, [{ id: 'auf', top: 50 }])
-    const t = packed.notes.find((n) => n.id === 'hoch')!
-    const p = packed.notes.find((n) => n.id === 'auf')!
-    expect(p.y).toBeGreaterThanOrEqual(t.y + tall.height - EPS)
-  })
-
-  it('zwei unvereinbare Vorgaben: die zuletzt angetippte gewinnt, die frühere rutscht darunter', () => {
-    const first = { id: 'erst', width: W, height: 150, group: 0, expanded: true }
-    const last = { id: 'zuletzt', width: W, height: 150, group: 0, expanded: true }
-    const packed = packWall([first, last], W, [
-      { id: 'erst', top: 100 },
-      { id: 'zuletzt', top: 120 },
-    ])
-    const f = packed.notes.find((n) => n.id === 'erst')!
-    const l = packed.notes.find((n) => n.id === 'zuletzt')!
-    expect(l.y).toBe(120)
-    expect(f.y).toBeGreaterThanOrEqual(l.y + last.height)
-  })
-
-  it('eine Vorgabe für einen Zettel, der nicht an der Wand hängt, ist folgenlos', () => {
-    const notes = randomWall(5, 20, W)
-    expect(packWall(notes, W, [{ id: 'gibt-es-nicht', top: 100 }])).toEqual(packWall(notes, W))
   })
 })
 

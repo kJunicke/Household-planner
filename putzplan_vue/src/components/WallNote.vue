@@ -51,16 +51,6 @@ import { estimateParentPoints, isProjectWork, isUnrated } from '@/lib/taskPoints
 const props = defineProps<{
   task: Task
   expanded?: boolean
-  /**
-   * Punktwert oben rechts statt in der Fußzeile. Das entscheidet die Wand, weil
-   * nur sie beim Packen misst, ob die Fußzeile sonst breiter als der Titel wäre
-   * (→ `WallView`, `relayout`).
-   *
-   * **Bewusst ein Prop, keine per `classList` gesetzte Klasse:** Vue ersetzt
-   * `className` bei jedem Patch komplett aus dem berechneten Klassen-Array —
-   * eine von außen ans DOM geschriebene Klasse überlebt kein Update.
-   */
-  metaTop?: boolean
 }>()
 /**
  * `gesture-start` / `gesture-end`: solange der Finger auf diesem Zettel eine
@@ -95,6 +85,14 @@ const subtasks = computed(() => {
 
 /** Nur ein Zettel MIT Unteraufgaben klappt auf. */
 const hasSubtasks = computed(() => subtasks.value.length > 0)
+
+/**
+ * Punktwert oben rechts statt in der Fußzeile — genau dann, wenn der Zettel
+ * Unteraufgaben hat. Die Fußzeile einer Spalte (rund 160 px, ADR-0007) hat
+ * neben Stift und Eselsohr (88 px) nur noch rund 50 px: genug für Sticker und
+ * Stempelbereich ODER für das Unteraufgaben-Zeichen, nicht für beides.
+ */
+const metaTop = computed(() => hasSubtasks.value)
 
 /**
  * **Ein täglicher Zettel hat keinen Fortschritt — das ist Absicht, kein Bug.**
@@ -840,7 +838,7 @@ const handlePostponeConfirm = async (targetDate: string) => {
       `zettel--${kind}`,
       {
         'zettel--tappable': hasSubtasks,
-        'zettel--meta-top': props.metaTop,
+        'zettel--meta-top': metaTop,
         'zettel--tearing': isNoteTearing,
         'zettel--tear-ready': isTearReady,
         'zettel--pressed': pressOpen,
@@ -868,8 +866,7 @@ const handlePostponeConfirm = async (targetDate: string) => {
 
     <!-- Kopf: der Titel bekommt die ganze obere Kante. Der Punktwert steht HIER
          ein zweites Mal im DOM — sichtbar ist immer nur eine der beiden Stellen,
-         gesteuert über `zettel--meta-top` (Prop `metaTop`, siehe Skript und
-         `WallView`). -->
+         gesteuert über `zettel--meta-top` (→ `metaTop` im Skript). -->
     <div class="head">
       <!-- Schwimmt nach rechts — der Titel fließt aber NICHT darum herum:
            `.title` öffnet mit `overflow: hidden` einen eigenen Block-
@@ -878,12 +875,6 @@ const handlePostponeConfirm = async (targetDate: string) => {
            einer um die Ecke verengten Spalte; auch die zweite und dritte
            Zeile bleiben kurz. Die Ecken sind NICHT alle gleich breit:
            `.points--s5` macht den Fünf-Punkte-Stern breiter.
-
-           Das ist eine echte Kopplung, kein Nebeneffekt: wer das
-           `overflow: hidden` an `.title` wegräumt, nimmt nicht nur die
-           Ellipse-Klemme mit (Begründung dort), sondern verändert auch die
-           Form dieses Kopfes — und die Breitenmessung in `WallView`
-           (`cornerExtra`) rechnet dann für ein Layout, das es nicht mehr gibt.
 
            Nur sichtbar mit `zettel--meta-top`. -->
       <div class="corner">
@@ -937,12 +928,7 @@ const handlePostponeConfirm = async (targetDate: string) => {
            Die Abdrücke selbst liegen absolut darüber, ragen nach rechts in
            Stift und Papierrand und tragen keine Breite (→ ADR-0007). Stift und
            Eselsohr stehen im DOM später und liegen deshalb über ihnen — auch
-           für den Finger.
-
-           **`v-if` gibt es hier bewusst nicht.** Die Breitenmessung in
-           `WallView.vue` sucht `.due-stamp` als DIREKTES Flex-Kind von `.foot`
-           und zählt danach die Flex-`gap`s ab. Klassenname und Platz sind
-           Vertrag mit dieser Messung, solange es sie gibt. -->
+           für den Finger. -->
       <!-- Ein Tipp dreht den Nachdruck weiter (→ `onStampTap` im Skript).
            `@click.stop` hält den Zettel davon ab, dabei auch noch auf- oder
            zuzuklappen (`onSurfaceTap` an der Wurzel) — es ist die EINZIGE
@@ -978,7 +964,7 @@ const handlePostponeConfirm = async (targetDate: string) => {
 
     <!-- Unteraufgaben als angeheftete Zettelchen. Erst im aufgeklappten
          Zustand im DOM: eingeklappt dürfen sie weder Höhe noch Breite des
-         Zettels beeinflussen, und `min-content` misst sie sonst mit. -->
+         Zettels beeinflussen. -->
     <div v-if="props.expanded && hasSubtasks" class="subs" :class="`subs--c${columns}`">
       <div
         v-for="subtask in subtasks"
@@ -1277,9 +1263,8 @@ const handlePostponeConfirm = async (targetDate: string) => {
 }
 
 /* Der Punktwert steht an ZWEI Stellen im DOM zugleich (Ecke UND Fußzeile);
-   sichtbar ist immer nur eine, gesteuert über `zettel--meta-top`. Ein `v-if`
-   wäre hier falsch: die Wand entscheidet das während der Messung, nicht im
-   Render. */
+   sichtbar ist immer nur eine, gesteuert über `zettel--meta-top` (→ `metaTop`
+   im Skript: oben, sobald der Zettel Unteraufgaben hat). */
 .corner {
   display: none;
 }
@@ -1311,16 +1296,11 @@ const handlePostponeConfirm = async (targetDate: string) => {
    Papierrand. Nach links nie: dort steht der Punkte-Sticker.
 
    **Der Stempelbereich** ist 44 px breit (eine Daumenbreite) und nimmt sich
-   den Rest der Zeile bis zum Stift (`flex-grow`). `width` statt `flex-basis`,
-   damit die Breitenmessung in `WallView.vue` (`width: max-content` an der
-   Fußzeile) genau diese 44 px zählt; schrumpfen darf er trotzdem, weil sein
-   Inhalt absolut liegt und keine Mindestbreite stellt. `align-self: stretch`
-   macht ihn so hoch wie die Griffzeile (44 px) — die ganze Box ist die
-   Trefffläche, ein Pseudoelement braucht es nicht.
-
-   **Klassenname `.due-stamp` und der Platz als DIREKTES Flex-Kind von
-   `.foot` sind Vertrag mit der Breitenmessung in `WallView.vue`** (dort steht
-   ein Laufzeit-Wächter), solange die Wand frei packt. */
+   den Rest der Zeile bis zum Stift (`flex-grow`). In einer schmalen Spalte
+   schrumpft er (ADR-0007: die Zettelbreite ist die Spaltenbreite); das geht,
+   weil sein Inhalt absolut liegt und keine Mindestbreite stellt.
+   `align-self: stretch` macht ihn so hoch wie die Griffzeile (44 px) — die
+   ganze Box ist die Trefffläche, ein Pseudoelement braucht es nicht. */
 .due-stamp {
   position: relative;
   flex: 1 1 auto;
@@ -1439,8 +1419,8 @@ const handlePostponeConfirm = async (targetDate: string) => {
 
 /* Unbewertet: ein leerer, gestrichelter Sticker mit dem Wort „unbewertet“ —
    keine Zahl, keine Form, die einen Wert behauptete. Außenmaß wie
-   `.points--s1` (34 px, der Rand liegt innen), damit die Breitenmessung der
-   Wand nichts Neues lernt. Das Wort steht zweizeilig, getrennt am weichen
+   `.points--s1` (34 px, der Rand liegt innen), damit die Fußzeile in der
+   Spalte nicht breiter wird. Das Wort steht zweizeilig, getrennt am weichen
    Trennzeichen in `pointsLabel`; ohne Hover am Telefon trägt es allein. */
 .points--unrated {
   box-sizing: border-box;
@@ -1671,14 +1651,18 @@ const handlePostponeConfirm = async (targetDate: string) => {
    Zettelchen gehört, die er ankündigt — und nicht zu den beiden Griffen
    rechts, die etwas mit dem GANZEN Zettel tun. Immer sichtbar, auch bei
    `daily` (→ `tracksProgress` im Skript). Aufgeklappt kippt die Farbe um,
-   damit man den Weg zurück findet. */
+   damit man den Weg zurück findet.
+
+   Schmal gepolstert: in einer Spalte von rund 160 px bleiben neben Stift und
+   Eselsohr rund 50 px Fußzeile. Ein Zettel mit diesem Zeichen trägt deshalb
+   seinen Punkte-Sticker oben (→ `metaTop`). */
 .subs-badge {
   display: flex;
   align-items: center;
-  gap: 3px;
+  gap: 2px;
   flex: 0 0 auto;
   height: 34px;
-  padding: 0 7px;
+  padding: 0 4px;
   border: 1.5px dashed var(--pw-line);
   border-radius: 3px;
   background: var(--pw-paper);
@@ -1875,36 +1859,6 @@ const handlePostponeConfirm = async (targetDate: string) => {
 .mini-ear:active::before {
   width: 20px;
   height: 20px;
-}
-
-/* Nur für die Breitenmessung durch WallView: Titel einzeilig, damit
-   `width: max-content` die natürliche Zettelbreite ergibt.
-   Eigene Klasse neben `--measuring`, weil die zweite Messung (`min-content`,
-   die Breite, unter der ein Wort abgeschnitten würde) dieselbe entdrehte Lage
-   braucht, aber gerade den Umbruch NICHT abschalten darf — mit `nowrap` wäre
-   `min-content` identisch mit `max-content` und die Untergrenze wertlos. */
-.zettel--single-line .title {
-  white-space: nowrap;
-}
-
-/* Während der Messung steht der Zettel gerade.
-   `getBoundingClientRect()` liefert das Rechteck NACH der Transformation: ein
-   um 3° geneigter Zettel misst sich um `Höhe × sin(3°)` breiter, als er ist,
-   und zwar je nach Zettel unterschiedlich viel. Die Neigung wird deshalb für
-   den Moment der Messung abgeschaltet — `!important`, weil die Neigung als
-   Inline-Style am Element hängt. */
-.zettel--measuring {
-  transform: none !important;
-}
-
-/* Während der Messung nehmen Titel und Fußzeile ihre EIGENE natürliche
-   Breite an. Ohne das sind beide so breit wie der Zettel, und die Wand könnte
-   nicht entscheiden, welcher von beiden ihn breit macht (→ `WallView`,
-   `zettel--meta-top`). Die gemessene Zettelbreite ändert das nicht: sie ist
-   ohnehin das Maximum der beiden. */
-.zettel--measuring .title,
-.zettel--measuring .foot {
-  width: max-content;
 }
 
 /* Der Bearbeiten-Knopf sitzt UNTEN rechts, unmittelbar links neben dem
