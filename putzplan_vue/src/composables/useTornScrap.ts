@@ -79,13 +79,15 @@ export const offerScrap = (torn: TornScrap) => {
 }
 
 /**
- * Fenster von außen schließen. Zwei Fälle, und nur diese beiden:
+ * Fenster von außen schließen. Drei Fälle, und nur diese:
  *
  * - die Pinnwand wird verlassen (bzw. die Seite neu geladen) — was man nicht
  *   sieht, darf man nicht auslösen können;
  * - die Aufgabe unter dem Fetzen ist weg, weil ein anderes Mitglied sie gelöscht
  *   hat — ein Fetzen, dessen Zettel es nicht mehr gibt, führt beim Tippen ins
- *   Leere.
+ *   Leere;
+ * - die Aufgabe ist **wieder dreckig** — sie hängt schon wieder an der Wand,
+ *   und „Zurückkleben −N P" böte eine zweite Rücknahme derselben Erledigung an.
  */
 export const dropScrap = (taskId: string) => {
   if (scrap.value?.taskId === taskId) close()

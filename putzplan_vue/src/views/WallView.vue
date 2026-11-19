@@ -26,7 +26,7 @@ import { useHouseholdStore } from '../stores/householdStore'
 import { useTaskBoard } from '@/composables/useTaskBoard'
 import { useOverlayHistoryEntry } from '@/composables/useOverlayHistoryEntry'
 import { searchWall } from '@/lib/taskSearch'
-import { tornScrapState } from '@/composables/useTornScrap'
+import { dropScrap, tornScrapState } from '@/composables/useTornScrap'
 import {
   layoutWall,
   rememberWallHeight,
@@ -112,8 +112,10 @@ let searchTargetId: string | null = null
 
 /**
  * **wieder dreckig** von der Nadelstelle eines losen Zettels: die Aufgabe ist
- * wieder dran und steht, sobald der Store neu geladen hat, als angepinnter
- * Treffer in der Suche. Nach dem Schließen scrollt die Wand zu ihr.
+ * wieder dran und steht sofort als angepinnter Treffer in der Suche
+ * (`markAsDirty` ist optimistisch). Nach dem Schließen scrollt die Wand zu ihr.
+ * Ein Fetzen derselben Aufgabe verschwindet: sein Zurückkleben nähme eine
+ * Erledigung zurück, die „wieder dreckig" schon widerrufen hat.
  *
  * Der Riegel gegen den Doppeltipp sitzt synchron vor dem ersten `await` —
  * dieselbe Regel wie in `WallDoneList.markDirty`.
@@ -124,7 +126,10 @@ const repinFromSearch = async (taskId: string) => {
   if (repinBusy.has(taskId)) return
   repinBusy.add(taskId)
   try {
-    if (await taskStore.markAsDirty(taskId)) searchTargetId = taskId
+    if (await taskStore.markAsDirty(taskId)) {
+      searchTargetId = taskId
+      dropScrap(taskId)
+    }
   } finally {
     repinBusy.delete(taskId)
   }

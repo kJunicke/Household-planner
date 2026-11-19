@@ -85,6 +85,9 @@ type RowSnapshot = Pick<
  */
 type StampSnapshot = Pick<Task, 'task_id' | 'emphasis_level' | 'project_saying_index'>
 
+/** Was „wieder dreckig" anfasst und bei einem Fehlschlag zurückgesetzt wird. */
+type DirtySnapshot = Pick<Task, 'task_id' | 'completed' | 'postponed_until'>
+
 /**
  * Was nötig ist, um eine Erledigung zurückzunehmen (→ `undoCompletion`).
  *
@@ -620,30 +623,57 @@ export const useTaskStore = defineStore('tasks', () => {
   // Ändert nur tasks.completed, löscht KEINE completions aus der Historie
   // Hebt eine Verschiebung auf: die manuelle Entscheidung "jetzt dran" schlägt
   // den gesetzten Weckruf, sonst würde der Cron die Aufgabe später erneut wecken.
-  const markAsDirty = async (taskId: string) => {
+  //
+  // Optimistisch: die Aufgabe hängt sofort wieder an der Wand, in der Suche wird
+  // der lose Zettel sofort zum angepinnten Treffer (Story 33), ohne auf Server
+  // und `loadTasks` zu warten. Bestätigt wird in derselben Kette wie eine ggf.
+  // noch laufende Mutation dieser Zeile (`runOptimistic` reiht je `task_id`
+  // auf) — sonst könnte ein gerade unterwegs befindliches complete-task die
+  // Zurücksetzung wieder überschreiben. Schlägt es fehl, springen beide Felder
+  // zurück. Rückgabe ist der Serverausgang, wie bisher.
+  const markAsDirty = async (taskId: string): Promise<boolean> => {
     const toastStore = useToastStore()
-    // UPDATE tasks.completed = FALSE — in derselben Kette wie eine ggf. noch
-    // laufende Mutation dieser Zeile, sonst könnte ein gerade unterwegs
-    // befindliches complete-task die Zurücksetzung wieder überschreiben.
-    const { error } = await serializeMutation(
-      taskId,
-      async () =>
-        await supabase
+
+    const { settled } = runOptimistic<DirtySnapshot>({
+      entityId: taskId,
+      apply: () => {
+        const task = tasks.value.find((t) => t.task_id === taskId)
+        if (!task) {
+          console.error('Cannot mark as dirty: task not in local state', taskId)
+          return null
+        }
+        const snapshot: DirtySnapshot = {
+          task_id: task.task_id,
+          completed: task.completed,
+          postponed_until: task.postponed_until,
+        }
+        task.completed = false
+        task.postponed_until = null
+        return snapshot
+      },
+
+      commit: async () => {
+        const { error } = await supabase
           .from('tasks')
           .update({ completed: false, postponed_until: null })
-          .eq('task_id', taskId),
-    )
+          .eq('task_id', taskId)
+        if (error) throw error
+      },
 
-    if (error) {
-      console.error('Error marking task as dirty:', error)
-      toastStore.showToast('Fehler beim Zurücksetzen der Aufgabe', 'error')
-      return false
-    }
+      // Die eigene Zeile darf den Echo-Schutz umgehen (wie bei `completeTask`).
+      onSuccess: () => loadTasks([taskId]),
 
-    // Kein lokales Mitziehen mehr nötig: der loadTasks-Guard verschluckt
-    // parallele Anforderungen nicht mehr, sondern lädt danach genau einmal nach.
-    await loadTasks()
-    return true
+      revert: async (snapshot, error) => {
+        await restoreRows([snapshot], isNetworkError(error))
+      },
+
+      onError: (error) => {
+        console.error('Error marking task as dirty:', error)
+        toastStore.showToast('Fehler beim Zurücksetzen der Aufgabe', 'error')
+      },
+    })
+
+    return settled
   }
 
   // NACHDRUCK — Stempel-Automat 0 (kein Nachdruck) → 1 WICHTIG → 2 DRINGEND → 0

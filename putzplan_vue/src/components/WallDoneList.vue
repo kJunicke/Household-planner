@@ -26,6 +26,7 @@ import type { Task } from '@/types/Task'
 import { useTaskStore } from '@/stores/taskStore'
 import { useHouseholdStore } from '@/stores/householdStore'
 import { scheduleOf } from '@/lib/taskSchedule'
+import { dropScrap } from '@/composables/useTornScrap'
 import TaskEditModal from './TaskEditModal.vue'
 import TaskAssignmentModal from './TaskAssignmentModal.vue'
 import SubtaskManagementModal from './SubtaskManagementModal.vue'
@@ -187,9 +188,9 @@ const rows = computed((): DoneRow[] =>
 )
 
 /**
- * Schutz gegen den Doppeltipp. `markAsDirty` ist asynchron und lädt danach
- * neu; ohne Sperre setzen zwei schnelle Tipps zwei Anfragen ab, und die Zeile
- * steht bis zum Nachladen weiter da.
+ * Schutz gegen den Doppeltipp. `markAsDirty` wendet sofort an, bestätigt aber
+ * asynchron und lädt danach neu; ohne Sperre setzen zwei schnelle Tipps zwei
+ * Anfragen ab.
  *
  * **ACHTUNG — der Schutz hängt allein an der `if`-Zeile unten, nicht am
  * `:disabled` im Template.** Vue schreibt das Attribut erst im nächsten Tick;
@@ -209,7 +210,8 @@ const markDirty = async (taskId: string) => {
   if (busy.value.has(taskId)) return
   busy.value = new Set(busy.value).add(taskId)
   try {
-    await taskStore.markAsDirty(taskId)
+    // Ein Fetzen derselben Aufgabe wäre jetzt eine zweite Rücknahme (→ `dropScrap`).
+    if (await taskStore.markAsDirty(taskId)) dropScrap(taskId)
   } finally {
     const next = new Set(busy.value)
     next.delete(taskId)
