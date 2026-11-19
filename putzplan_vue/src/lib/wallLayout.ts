@@ -150,7 +150,7 @@ const FASTENERS: ReadonlyArray<{
   /** Die CSS-Regel in `WallNote.vue`, aus der diese Zeile abgeschrieben ist. */
   css: string
   /** Zettelgruppe, die diese Befestigung trägt — siehe `fastenersOfGroup`. */
-  group: 0 | 1 | 2
+  group: Exclude<WallGroup, 'unknown'>
   anchor: FastenerAnchor
   /** Nur bei `left`/`right`: Padding-Box-Kante bis Mitte der Befestigung. */
   inset: number
@@ -164,7 +164,7 @@ const FASTENERS: ReadonlyArray<{
   /** Reißzwecke — fällige (wiederkehrende, einmalige) Aufgaben. */
   {
     css: '.pin',
-    group: 0,
+    group: 'due',
     anchor: 'center',
     inset: 0,
     top: -7,
@@ -175,7 +175,7 @@ const FASTENERS: ReadonlyArray<{
   /** Klebestreifen — tägliche Aufgaben. Der breiteste, deshalb der drehempfindlichste. */
   {
     css: '.tape',
-    group: 1,
+    group: 'daily',
     anchor: 'center',
     inset: 0,
     top: -9,
@@ -188,7 +188,7 @@ const FASTENERS: ReadonlyArray<{
   /** Linke Hälfte der doppelten Büroklammer (`.clip` + `.clip--l`). */
   {
     css: '.clip--l',
-    group: 2,
+    group: 'project',
     anchor: 'left',
     inset: 19.5,
     top: -8,
@@ -199,7 +199,7 @@ const FASTENERS: ReadonlyArray<{
   /** Rechte Hälfte der doppelten Büroklammer (`.clip` + `.clip--r`). */
   {
     css: '.clip--r',
-    group: 2,
+    group: 'project',
     anchor: 'right',
     inset: 19.5,
     top: -8,
@@ -207,27 +207,39 @@ const FASTENERS: ReadonlyArray<{
     height: 20,
     rotation: 6,
   },
+  /**
+   * Nadelstelle — lose Zettel (Suche). Keine Befestigung, aber ein Knopf, der
+   * über die Kante ragt: gerechnet wird seine ganze Trefffläche, nicht nur das
+   * gezeichnete Loch, damit auch sie in der obersten Reihe auf dem Kork liegt
+   * und nicht unter dem Suchfeld.
+   */
+  {
+    css: '.pin-spot',
+    group: 'loose',
+    anchor: 'center',
+    inset: 0,
+    top: -8,
+    width: 44,
+    height: 36,
+    rotation: 0,
+  },
 ]
 
 /**
  * Die Befestigungen, die ein Zettel dieser Gruppe tragen KANN.
  *
- * Gruppe und gezeichnete Sorte decken sich bei Gruppe 1 nicht: `dailyTasks`
+ * Gruppe und gezeichnete Sorte decken sich bei `daily` nicht: `dailyTasks`
  * enthält auch `one-time` (`useTaskBoard.ts`), und der trägt eine Reißzwecke
  * (`kindOfTaskType`), bekommt hier aber `.tape`. Das fällt auf die sichere
  * Seite — `.tape` steht weiter über, das Polster wird überschätzt, nie
  * unterschätzt.
  *
- * Eine **unbekannte** Gruppe bekommt aus demselben Grund **alle**
- * Befestigungen, nicht keine — sichtbarer Kork ist ein Schönheitsfehler, eine
- * überstehende Befestigung ist der gemeldete Bug. Damit dieser Zweig überhaupt
- * erreichbar ist, meldet `WallView` einen Zettel ohne Gruppenzuordnung als
- * `-1` und nicht als `0`.
+ * `unknown` bekommt aus demselben Grund **alle** Befestigungen, nicht keine —
+ * sichtbarer Kork ist ein Schönheitsfehler, eine überstehende Befestigung ist
+ * der gemeldete Bug.
  */
-const fastenersOfGroup = (group: number): typeof FASTENERS => {
-  const own = FASTENERS.filter((f) => f.group === group)
-  return own.length > 0 ? own : FASTENERS
-}
+const fastenersOfGroup = (group: WallGroup): typeof FASTENERS =>
+  group === 'unknown' ? FASTENERS : FASTENERS.filter((f) => f.group === group)
 
 const RAD = Math.PI / 180
 
@@ -285,7 +297,9 @@ const overhangOf = (
  * aufgeklappter Zettel selbst ganz oben, bekommt er sein eigenes Polster
  * (→ `layoutWall`).
  */
-function topPaddingFor(notes: ReadonlyArray<{ id: string; group: number; width: number }>): number {
+function topPaddingFor(
+  notes: ReadonlyArray<{ id: string; group: WallGroup; width: number }>,
+): number {
   let worst = 0
   for (const note of notes) {
     const tilt = rotationOf(note.id)
@@ -297,15 +311,32 @@ function topPaddingFor(notes: ReadonlyArray<{ id: string; group: number; width: 
   return Math.ceil(worst)
 }
 
+/**
+ * Die Gruppe eines Zettels: Legereihenfolge und Befestigung.
+ *
+ * - `due` fällig (Reißzwecke), `daily` täglich (Klebestreifen), `project`
+ *   Projekt (Büroklammern) — die drei Listen von `useTaskBoard`
+ * - `loose` loser Zettel der Suche (Nadelstelle), nach allen angepinnten
+ * - `unknown` ein Zettel, den keine Liste kennt. Kommt zuerst und bekommt das
+ *   Polster aller Befestigungen (→ `fastenersOfGroup`); **bewusst nicht
+ *   `due`**: das gäbe ihm still die Befestigung mit dem kleinsten Überstand.
+ */
+export type WallGroup = 'unknown' | 'due' | 'daily' | 'project' | 'loose'
+
+/** Legereihenfolge der Gruppen (→ `layoutWall`). */
+const GROUP_ORDER: Record<WallGroup, number> = {
+  unknown: 0,
+  due: 1,
+  daily: 2,
+  project: 3,
+  loose: 4,
+}
+
 /** Was die Wand je Zettel hereinreicht. */
 export interface WallNoteInput {
   id: string
-  /**
-   * 0 = fällig, 1 = täglich, 2 = Projekt. Bestimmt die Legereihenfolge; eine
-   * unbekannte Gruppe (`-1`) kommt zuerst und bekommt das Polster aller
-   * Befestigungen (→ `fastenersOfGroup`).
-   */
-  group: number
+  /** Bestimmt Legereihenfolge und oberes Polster (→ `WallGroup`). */
+  group: WallGroup
   /** Bei der Breite gemessen, die das Raster vorgibt (Spalte oder Wand). */
   height: number
 }
@@ -362,7 +393,7 @@ const BOTTOM_GAP = 8
 /**
  * Legt die Zettel ins Raster.
  *
- * **Reihenfolge:** nach Gruppe (fällig → täglich → Projekt), innerhalb der
+ * **Reihenfolge:** nach Gruppe (fällig → täglich → Projekt → lose), innerhalb der
  * Gruppe die feste Zufallsordnung aus dem Hash der Kennung — nie die
  * Eingabereihenfolge, sonst bewegte eine verschobene Aufgabe im Store die
  * Wand. Jeder Zettel kommt in die gerade kürzeste Spalte (bei Gleichstand die
@@ -386,7 +417,10 @@ export function layoutWall(
   const top = topPaddingFor(notes.map((note) => ({ ...note, width: columnWidth })))
 
   const ordered = [...notes].sort(
-    (a, b) => a.group - b.group || fnv1a(a.id) - fnv1a(b.id) || (a.id < b.id ? -1 : 1),
+    (a, b) =>
+      GROUP_ORDER[a.group] - GROUP_ORDER[b.group] ||
+      fnv1a(a.id) - fnv1a(b.id) ||
+      (a.id < b.id ? -1 : 1),
   )
 
   const bottoms = new Array<number>(columns).fill(top)

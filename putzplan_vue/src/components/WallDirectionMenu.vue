@@ -45,6 +45,11 @@ const props = defineProps<{
   /** Wo der Finger gerade liegt — der Pfeil zeigt DORTHIN, nicht auf die Option. */
   tip: { x: number; y: number } | null
   active: PressDirection | null
+  /**
+   * Richtungen, die an diesem Zettel nichts tun und deshalb ohne Beschriftung
+   * und ohne Randnebel bleiben — heute nur „verschieben" am losen Zettel.
+   */
+  omit?: readonly PressDirection[]
 }>()
 
 /** Schleier über der App. Vom Nutzer abgenommen; nicht heller drehen. */
@@ -57,7 +62,9 @@ const INK = '#f4fbf5'
  * Die Belegung. Sie steht bewusst als **feste Liste** hier und hängt an keiner
  * Eigenschaft der Aufgabe: dieselbe Bewegung muss bei jedem Aufgabentyp
  * dasselbe tun (Spec). Wer hier eine Bedingung einbaut, macht die Geste
- * unzuverlässig.
+ * unzuverlässig. Die einzige Ausnahme ist das Weglassen (`omit`): eine
+ * Richtung, die an einem Zettel nichts tut, bekommt keine Beschriftung —
+ * eine tote Beschriftung wäre eine falsche Aussage.
  *
  * Zweizeilig statt einzeilig: „Aufwand anpassen" passt am rechten Rand nicht in
  * eine Zeile. Umbrechen löst das, ohne dass der Text gedreht oder gekürzt
@@ -71,6 +78,8 @@ const LINES: Record<PressDirection, string[]> = {
   right: ['Aufwand', 'anpassen'],
 }
 const DIRS: PressDirection[] = ['down', 'up', 'left', 'right']
+/** Die beschrifteten Richtungen dieses Zettels (→ `omit`). */
+const shownDirs = computed(() => DIRS.filter((d) => !props.omit?.includes(d)))
 const LINE_H = 17
 
 /** Einrückung des Randpunkts vom jeweiligen Bildschirmrand. */
@@ -293,7 +302,7 @@ const arrow = computed(() => {
 
       <rect x="0" y="0" :width="vw" :height="vh" :fill="VEIL" />
 
-      <template v-for="d in DIRS" :key="d">
+      <template v-for="d in shownDirs" :key="d">
         <!-- Randnebel als Ellipse für **alle vier** Richtungen. Rechteck-Bahnen
              über die volle Höhe wirkten wie Streifen und sind verworfen.
 

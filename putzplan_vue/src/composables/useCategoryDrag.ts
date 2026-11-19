@@ -1,7 +1,8 @@
 import { onBeforeUnmount, ref } from 'vue'
 import Sortable from 'sortablejs'
 
-import { dropTargetAt } from '@/lib/dropTargetAt'
+import { followDragPointer } from '@/lib/dragPointer'
+import { dropTargetAt, releasedOver } from '@/lib/dropTargetAt'
 
 import { useDragAutoScroll } from './useDragAutoScroll'
 
@@ -23,6 +24,9 @@ import { useDragAutoScroll } from './useDragAutoScroll'
  * Sortable-Gruppe; welche Blase unter dem Finger liegt, verfolgt diese
  * Komponente selbst (`dropKey`). Loslassen über einer Blase schreibt deren
  * Kategorie über denselben `onMove` wie das Ablegen auf einer Sektion.
+ *
+ * Loslassen außerhalb jedes Ziels verändert nichts: eine Sektion zählt nur,
+ * wenn der Finger über ihr losgelassen wird (→ `releasedOver`).
  */
 export function useCategoryDrag(options: {
   /** Sortable-Gruppenname — nur Container derselben Gruppe nehmen einander an. */
@@ -38,6 +42,8 @@ export function useCategoryDrag(options: {
   /** `data-drop-key` der Blase unter dem Finger, sonst null. */
   const dropKey = ref<string | null>(null)
   let pointer: { x: number; y: number } | null = null
+  /** Meldet die Fingerverfolgung ab; `null`, solange nichts gezogen wird. */
+  let unfollow: (() => void) | null = null
   /**
    * Erst wenn der Finger einmal neben jeder Blase war, zählen Blasen als Ziel.
    * Die Leiste wird beim Greifen breiter und kann dann schon unter dem Finger
@@ -67,19 +73,9 @@ export function useCategoryDrag(options: {
     dropKey.value = next
   }
 
-  const trackPointer = (evt: Event) => {
-    const point = 'touches' in evt ? (evt as TouchEvent).touches[0] : (evt as MouseEvent)
-    if (!point) return
-    pointer = { x: point.clientX, y: point.clientY }
-    refreshDropKey()
-  }
-
-  const MOVE_EVENTS = ['touchmove', 'pointermove', 'mousemove'] as const
-  const END_EVENTS = ['touchend', 'touchcancel', 'pointerup', 'mouseup'] as const
-
   const endTracking = () => {
-    MOVE_EVENTS.forEach((type) => document.removeEventListener(type, trackPointer))
-    END_EVENTS.forEach((type) => document.removeEventListener(type, endLater))
+    unfollow?.()
+    unfollow = null
     dragging.value = false
     dropKey.value = null
     pointer = null
@@ -92,8 +88,13 @@ export function useCategoryDrag(options: {
 
   const startTracking = () => {
     endTracking()
-    MOVE_EVENTS.forEach((type) => document.addEventListener(type, trackPointer, { passive: true }))
-    END_EVENTS.forEach((type) => document.addEventListener(type, endLater, { passive: true }))
+    unfollow = followDragPointer({
+      onMove: (point) => {
+        pointer = point
+        refreshDropKey()
+      },
+      onEnd: endLater,
+    })
     dragging.value = true
   }
 
@@ -159,6 +160,7 @@ export function useCategoryDrag(options: {
           const bubble = dropKey.value
             ? bubbles().find((b) => b.key === dropKey.value)?.el
             : undefined
+          const release = pointer
           endTracking()
 
           // Zurückrollen, bevor Vue neu rendert: sonst steht die Zeile doppelt
@@ -181,7 +183,18 @@ export function useCategoryDrag(options: {
             return
           }
           if (from === to) return
-          options.onMove(itemId, options.categoryOf(to))
+          // Die Bibliothek meldet als Ziel die Sektion, in der ihr Platzhalter
+          // zuletzt stand — auch wenn der Finger danach in den leeren Raum
+          // gezogen und dort losgelassen wurde. Abgelegt wird nur, wenn er über
+          // der Sektion losgelassen wurde (Kopf oder Körper, beide sind
+          // Container derselben Kategorie).
+          const target = options.categoryOf(to)
+          const sectionRects = [...instances.values()]
+            .map((s) => s.el)
+            .filter((el) => el.isConnected && options.categoryOf(el) === target)
+            .map((el) => el.getBoundingClientRect())
+          if (!releasedOver(release, sectionRects)) return
+          options.onMove(itemId, target)
         },
       }),
     )

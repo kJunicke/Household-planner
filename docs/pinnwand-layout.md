@@ -14,10 +14,14 @@ Abdruckstapel keinen Platz mehr freihält, sondern in Stift und Papierrand ragt:
 - **Spaltenabstand 8 px.** Der waagerechte Versatz je Zettel ist ±3 px; zwei Nachbarn laufen
   höchstens 6 px aufeinander zu, 2 px Luft bleiben (am ungedrehten Kasten; die Neigung darf
   überlappen, der linke Zettel liegt dann oben).
-- **Reihenfolge:** Gruppe (fällig → täglich → Projekt), innerhalb der Gruppe der Hash der
-  Kennung. Jeder Zettel kommt in die gerade kürzeste Spalte, bei Gleichstand die linke. Die
-  Gruppen fließen in denselben Spalten weiter: ein täglicher Zettel kann neben einem fälligen
-  höher hängen, innerhalb einer Spalte aber nie darüber.
+- **Reihenfolge:** Gruppe (fällig → täglich → Projekt, in der Suche danach die losen
+  Zettel), innerhalb der Gruppe der Hash der Kennung. Jeder Zettel kommt in die gerade
+  kürzeste Spalte, bei Gleichstand die linke. Die Gruppen fließen in denselben Spalten
+  weiter: ein täglicher Zettel kann neben einem fälligen höher hängen, innerhalb einer
+  Spalte aber nie darüber.
+- **Gruppe bestimmt das obere Polster** (`WallGroup`): jede bringt ihre Befestigung mit,
+  die losen Zettel ihre Nadelstelle. Ein Zettel, den keine Liste kennt (`unknown`),
+  bekommt das Polster aller Befestigungen.
 - **Wildheit:** Versatz (±3 px waagerecht, 4…15 px Luft darüber) und Neigung (±3°) hängen
   allein an der Kennung. Kommt ein Zettel dazu oder geht, rücken andere in andere Spalten,
   behalten aber Versatz und Neigung.
@@ -25,9 +29,14 @@ Abdruckstapel keinen Platz mehr freihält, sondern in Stift und Papierrand ragt:
   an Wortgrenzen um, ein einzelnes überlanges Wort endet mit Ellipse, der Abdruck ragt. Darum
   verrutscht beim Stempeln nichts. Die Wand setzt erst allen Zetteln die Breite und misst dann
   alle Höhen — ein erzwungenes Layout je Lauf.
-- **Punkte-Sticker oben** genau bei Zetteln mit Unteraufgaben: die Fußzeile hat neben Stift und
-  Eselsohr (88 px) nur rund 50 px, genug für Sticker und Stempelbereich oder für das
-  Unteraufgaben-Zeichen.
+- **Punkte-Sticker und Unteraufgaben-Zeichen oben rechts**, an jedem Zettel. Die Fußzeile gehört
+  allein dem Stempelbereich: auf 360 px ist der Zettel innen 136,5 px breit, Stift und
+  Eselsohr nehmen 88 px, es bleiben 48,5 px. Mit dem Sticker (34 px) davor waren es 3–9 px —
+  kein Fingerziel (Browser-QC vom 19.11.2026).
+- **Der Titel umfließt die Ecke:** neben ihr stehen nur seine ersten Zeilen verkürzt, darunter
+  läuft er über die volle Breite. Ein Wort, das nicht neben die Ecke passt, rutscht unter sie,
+  statt mit Ellipse zu enden. Dafür trägt `.title` `overflow: clip` statt `hidden` (das öffnete
+  einen eigenen Formatierungskontext, und der Titel stünde in einer schmalen Spalte daneben).
 
 ### Aufklappen teilt die Spalten (`layoutWall`, `expanded`)
 
@@ -51,15 +60,22 @@ Polster.
 ### Stempelstapel: Stempelbereich und ragende Abdrücke (WallNote.vue)
 
 Der Abdruck ist nur das Wort, ohne Kasten und Polster (ADR-0007). `.due-stamp` ist der
-**Stempelbereich**: ein Flex-Kind der Fußzeile, 44 px breit und so hoch wie die Griffzeile,
-das sich den Rest bis zum Stift nimmt und in einer schmalen Spalte schrumpft. Die Lagen liegen
-absolut darin, am linken Rand verankert, und ragen nach rechts.
+**Stempelbereich**: das einzige Kind der Fußzeile, so hoch wie die Griffzeile und so breit wie
+alles links vom Stift — 48,5 px auf 360 px, 63,5 px auf 390 px, 74,5 px auf 412 px, 28 px auf
+dem 320-px-Gerät. Die Lagen liegen absolut darin, am linken Rand verankert, und ragen nach rechts.
 
-- **Links verankert, nicht zentriert:** links steht der Punkte-Sticker, und dorthin darf
-  kein Abdruck ragen; nach rechts liegen Stift und Eselsohr, in die er ragen darf.
+- **Links verankert, nicht zentriert:** links ist die Papierkante; nach rechts liegen Stift und
+  Eselsohr, in die ein langer Abdruck ragen darf. NEU, FÄLLIG und BEDARF liegen auf 360 px
+  ganz im Stempelbereich, WICHTIG und DRINGEND ragen ein Stück, der längste Projektspruch
+  (IRGENDWANN, 87 px) über den Stift bis kurz vor das Eselsohr.
 - **Trefffläche = Stempelbereich:** die Lagen tragen `pointer-events: none`. Stift und
   Eselsohr stehen im DOM später und liegen über den Lagen, auch für den Finger.
 - **Nur gestempelte Lagen im DOM:** die unsichtbaren Platzhalter für die Breite
   (ADR-0003) entfallen.
 - **Halo bleibt:** die oberste Lage ist deckend auf Papierfarbe, sonst scheinen die unteren
-  Wörter durch ihre Buchstaben. Ohne Polster sitzt er knapp am Wort.
+  Wörter durch ihre Buchstaben. Ohne Polster und mit `line-height: 1` sitzt er knapp am Wort.
+- **Senkrecht gefächert** (`stampStackOf`): Lage 0 liegt 7 ± 1 px zur einen Seite der Mitte,
+  Lage 1 zur anderen, Lage 2 ± 1,5 px um die Mitte. Je zwei Lagen liegen so mindestens 4,5 px
+  auseinander, und von jeder unteren lugt ein Streifen unter dem Halo hervor. Mit ±5,5 px
+  freiem Zufall je Lage lagen zwei oft deckungsgleich, lesbar war nur das oberste Wort
+  (Browser-QC vom 19.11.2026). Die unteren Lagen stehen mit 55 % und 75 % Deckkraft.

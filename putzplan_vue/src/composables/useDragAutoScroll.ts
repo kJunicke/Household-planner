@@ -1,5 +1,6 @@
 import { onBeforeUnmount } from 'vue'
 
+import { followDragPointer } from '@/lib/dragPointer'
 import { edgeScrollSpeed } from '@/lib/edgeScrollSpeed'
 
 /**
@@ -21,6 +22,8 @@ export function useDragAutoScroll() {
   let lastTime = 0
   /** Bruchteile eines Pixels, die `scrollBy` sonst wegrunden würde. */
   let carry = 0
+  /** Meldet die Fingerverfolgung ab; `null`, solange nichts gezogen wird. */
+  let unfollow: (() => void) | null = null
 
   const visibleEdges = () => {
     const header = document.querySelector('.app-header')?.getBoundingClientRect()
@@ -48,35 +51,27 @@ export function useDragAutoScroll() {
     frame = requestAnimationFrame(tick)
   }
 
-  const track = (evt: Event) => {
-    const point = 'touches' in evt ? (evt as TouchEvent).touches[0] : (evt as MouseEvent)
-    if (point) pointerY = point.clientY
-  }
-
-  // Touch, Pointer und Maus: welches Ereignis der Browser während des
-  // Fallback-Ziehens liefert, hängt vom Gerät ab.
-  const MOVE_EVENTS = ['touchmove', 'pointermove', 'mousemove'] as const
-
-  // Loslassen beendet das Scrollen auch dann, wenn `onEnd` ausbleibt — etwa
-  // weil die Sektion des gezogenen Eintrags mitten im Zug neu gerendert wurde.
-  // Kein `pointercancel`: das feuert Chrome auf Android, sobald es den Finger
-  // als Wischen deutet, auch wenn das Ziehen über Touch-Ereignisse weiterläuft.
-  const END_EVENTS = ['touchend', 'touchcancel', 'pointerup', 'mouseup'] as const
-
   const stop = () => {
     if (frame !== null) cancelAnimationFrame(frame)
     frame = null
     pointerY = null
     carry = 0
-    MOVE_EVENTS.forEach((type) => document.removeEventListener(type, track))
-    END_EVENTS.forEach((type) => document.removeEventListener(type, stop))
+    unfollow?.()
+    unfollow = null
   }
 
-  /** Bis zur ersten Fingerbewegung steht die Liste: gegriffen wird nie am Rand. */
+  /**
+   * Bis zur ersten Fingerbewegung steht die Liste: gegriffen wird nie am Rand.
+   * Loslassen hält sie an, auch wenn `onEnd` ausbleibt (→ `followDragPointer`).
+   */
   const start = () => {
     stop()
-    MOVE_EVENTS.forEach((type) => document.addEventListener(type, track, { passive: true }))
-    END_EVENTS.forEach((type) => document.addEventListener(type, stop, { passive: true }))
+    unfollow = followDragPointer({
+      onMove: (point) => {
+        pointerY = point.y
+      },
+      onEnd: stop,
+    })
     lastTime = performance.now()
     frame = requestAnimationFrame(tick)
   }

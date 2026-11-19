@@ -32,8 +32,8 @@
  * der Wand hängen (→ CONTEXT.md „Suche"). Dieselbe Komponente mit denselben
  * Gesten, bis auf drei Stellen: keine Befestigung, sondern an ihrer Stelle die
  * **Nadelstelle**, deren Tipp **wieder dreckig** meldet (`repin`); der Stempel
- * trägt nur ERLEDIGT und lässt sich nicht überstempeln; „verschieben" im Kranz
- * tut nichts, weil eine erledigte Aufgabe nicht verschoben wird. Abreißen
+ * trägt nur ERLEDIGT und lässt sich nicht überstempeln; der Kranz bietet kein
+ * „verschieben", weil eine erledigte Aufgabe nicht verschoben wird. Abreißen
  * erledigt die Aufgabe noch einmal, mit Punkten und Fetzen wie an der Wand.
  */
 import { computed, ref, watch } from 'vue'
@@ -103,14 +103,6 @@ const subtasks = computed(() => {
 const hasSubtasks = computed(() => subtasks.value.length > 0)
 
 /**
- * Punktwert oben rechts statt in der Fußzeile — genau dann, wenn der Zettel
- * Unteraufgaben hat. Die Fußzeile einer Spalte (rund 160 px, ADR-0007) hat
- * neben Stift und Eselsohr (88 px) nur noch rund 50 px: genug für Sticker und
- * Stempelbereich ODER für das Unteraufgaben-Zeichen, nicht für beides.
- */
-const metaTop = computed(() => hasSubtasks.value)
-
-/**
  * **Ein täglicher Zettel hat keinen Fortschritt — das ist Absicht, kein Bug.**
  *
  * An einem `daily`-Elternteil sind Unteraufgaben nur `bonus`: wiederholbare
@@ -155,8 +147,8 @@ const NOTE_HANDLE = '#note'
  * Was dieser Zettel beim Abreißen **wirklich** noch einbringt.
  *
  * Bewusst dieselbe Rechnung wie `estimateCompletionEffort` im Store: der Balken
- * wächst um genau diesen Wert, also müssen die fliegende Zahl UND die Zahl in
- * der Fußzeile dieselbe sein. Der ungekürzte `tasks.effort` verspräche bei
+ * wächst um genau diesen Wert, also müssen die fliegende Zahl UND die Zahl am
+ * Sticker dieselbe sein. Der ungekürzte `tasks.effort` verspräche bei
  * erledigten `deduct`-Unteraufgaben Punkte, die nie fliegen — eine Zahl am
  * Zettel ist ein Versprechen.
  *
@@ -179,9 +171,6 @@ const unrated = computed(() => !isProject.value && isUnrated(props.task))
  * (→ `effectivePoints`). **Ein Projekt hat keine feste Punktzahl** — dort steht,
  * wie viele Punkte es bis jetzt verschlungen hat (`taskStore.projectEffortTotals`).
  * Bewusst NICHT aus `taskStore.completions`: die sind an der Wand leer.
- *
- * Klassenname `.points` und Platz im `.corner` bleiben, weil
- * `WallView.relayout` genau danach misst.
  */
 const displayPoints = computed(() =>
   isProject.value ? taskStore.getProjectEffortTotal(props.task.task_id) : effectivePoints.value,
@@ -580,6 +569,13 @@ const isPressControl = (target: EventTarget | null): boolean =>
  * das Arbeitsfenster, die anderen drei tun **nichts** — eine Aktion ohne
  * Beschriftung wäre eine unsichtbare.
  */
+/**
+ * Was am losen Zettel nichts tut: „verschieben" — eine erledigte Aufgabe wird
+ * nicht verschoben (→ `onPressDirection`). Der Kranz lässt die Richtung
+ * unbeschriftet, statt einen toten Eintrag anzubieten.
+ */
+const LOOSE_DEAD_DIRECTIONS: readonly PressDirection[] = ['up']
+
 const onPressDirection = (direction: PressDirection) => {
   if (isProject.value) {
     if (direction === 'down') openProjectWork()
@@ -862,7 +858,6 @@ const handlePostponeConfirm = async (targetDate: string) => {
       `zettel--${kind}`,
       {
         'zettel--tappable': hasSubtasks,
-        'zettel--meta-top': metaTop,
         'zettel--tearing': isNoteTearing,
         'zettel--tear-ready': isTearReady,
         'zettel--pressed': pressOpen,
@@ -899,20 +894,44 @@ const handlePostponeConfirm = async (targetDate: string) => {
       <span class="clip clip--r" aria-hidden="true"></span>
     </template>
 
-    <!-- Kopf: der Titel bekommt die ganze obere Kante. Der Punktwert steht HIER
-         ein zweites Mal im DOM — sichtbar ist immer nur eine der beiden Stellen,
-         gesteuert über `zettel--meta-top` (→ `metaTop` im Skript). -->
+    <!-- Kopf: der Titel und die Ecke oben rechts mit Punkte-Sticker und, wenn
+         es welche gibt, dem Unteraufgaben-Zeichen. Beide stehen hier und nicht
+         in der Fußzeile: die gehört dem Stempelbereich (→ `.foot`). -->
     <div class="head">
-      <!-- Schwimmt nach rechts — der Titel fließt aber NICHT darum herum:
-           `.title` öffnet mit `overflow: hidden` einen eigenen Block-
-           Formatierungskontext, und ein solcher Kasten darf den Float-Kasten
-           nicht überlappen. Der Titel steht deshalb über seine GANZE Höhe in
-           einer um die Ecke verengten Spalte; auch die zweite und dritte
-           Zeile bleiben kurz. Die Ecken sind NICHT alle gleich breit:
-           `.points--s5` macht den Fünf-Punkte-Stern breiter.
-
-           Nur sichtbar mit `zettel--meta-top`. -->
+      <!-- Schwimmt nach rechts, und der Titel UMFLIESST sie: neben ihr stehen
+           seine ersten Zeilen verkürzt, darunter läuft er über die volle
+           Breite. Passt ein Wort nicht neben die Ecke, rutscht es unter sie
+           und wird nicht abgeschnitten (Story 7). Dafür darf `.title` keinen
+           eigenen Block-Formatierungskontext öffnen (→ `overflow: clip` dort). -->
       <div class="corner">
+        <!-- Unteraufgaben haben IMMER ein eigenes Zeichen: sonst verriete nur
+             die Fortschrittszahl ihre Existenz, und die fehlt bei `daily`
+             (→ `tracksProgress`). Ein echter Knopf, weil die aufklappende
+             Zettelfläche es niemandem sagt. Der Zähler steht nur, wo
+             Fortschritt etwas bedeutet; sonst die blanke Anzahl. -->
+        <button
+          v-if="hasSubtasks"
+          class="subs-badge"
+          :class="{ 'subs-badge--open': props.expanded }"
+          :title="props.expanded ? 'Unteraufgaben zuklappen' : 'Unteraufgaben aufklappen'"
+          @click.stop="emit('toggle', props.task.task_id)"
+        >
+          <i class="bi bi-list-task" aria-hidden="true"></i>
+          <span class="subs-count">
+            {{ tracksProgress ? `${doneSubtasks}/${subtasks.length}` : subtasks.length }}
+          </span>
+        </button>
+        <!-- NICHT `task.effort`: hier steht, was das Abreißen wirklich noch
+             einbringt (→ `effectivePoints`) — dieselbe Zahl, die gleich fliegt.
+
+             Punkte als aufgeklebter Sticker: die FORM trägt den Wert (Kreis 1,
+             Quadrat 2, Sechseck 3, Wappen 4, Stern 5), die Zahl bestätigt ihn
+             nur — die Silhouette trägt auch bei Farbenblindheit.
+
+             Bei einem PROJEKT steht hier die Bilanz der verschlungenen Punkte
+             (→ `displayPoints`), als Abzeichen mit eigenem Bild
+             (`points--badge`): die Sticker-Formen bedeuten eine Punktzahl, das
+             Abzeichen eine Stufe. -->
         <span class="points" :class="pointsShapeClass" :title="pointsTitle">
           {{ pointsLabel }}
         </span>
@@ -922,39 +941,8 @@ const handlePostponeConfirm = async (targetDate: string) => {
     </div>
 
     <!-- Fußzeile im normalen Fluss, zugleich die GRIFFZEILE: links der
-         Punktwert, rechts Stift und Eselsohr — beide 44×44 px nebeneinander. -->
+         Stempelbereich, rechts Stift und Eselsohr — beide 44×44 px nebeneinander. -->
     <div class="foot">
-      <!-- NICHT `task.effort`: hier steht, was das Abreißen wirklich noch
-           einbringt (→ `effectivePoints`) — dieselbe Zahl, die gleich fliegt.
-
-           Punkte als aufgeklebter Sticker: die FORM trägt den Wert (Kreis 1,
-           Quadrat 2, Sechseck 3, Wappen 4, Stern 5), die Zahl bestätigt ihn
-           nur — die Silhouette trägt auch bei Farbenblindheit. Werte über 5
-           (Bonus-Unteraufgaben) fallen alle auf den Stern; bekannt offen.
-
-           Bei einem PROJEKT steht hier die Bilanz der verschlungenen Punkte
-           (→ `displayPoints`), als Abzeichen mit eigenem Bild (`points--badge`):
-           die Sticker-Formen bedeuten eine Punktzahl, das Abzeichen eine Stufe. -->
-      <span class="points" :class="pointsShapeClass" :title="pointsTitle">
-        {{ pointsLabel }}
-      </span>
-      <!-- Unteraufgaben haben IMMER ein eigenes Zeichen: sonst verriete nur die
-           Fortschrittszahl ihre Existenz, und die fehlt bei `daily`
-           (→ `tracksProgress`). Ein echter Knopf, weil die aufklappende
-           Zettelfläche es niemandem sagt. Der Zähler steht nur, wo Fortschritt
-           etwas bedeutet; sonst die blanke Anzahl. -->
-      <button
-        v-if="hasSubtasks"
-        class="subs-badge"
-        :class="{ 'subs-badge--open': props.expanded }"
-        :title="props.expanded ? 'Unteraufgaben zuklappen' : 'Unteraufgaben aufklappen'"
-        @click.stop="emit('toggle', props.task.task_id)"
-      >
-        <i class="bi bi-list-task" aria-hidden="true"></i>
-        <span class="subs-count">
-          {{ tracksProgress ? `${doneSubtasks}/${subtasks.length}` : subtasks.length }}
-        </span>
-      </button>
       <!-- Der Gummistempel (→ `stampStackOf`) — **JEDER Zettel trägt einen**,
            sonst gäbe es keine Fläche zum Überstempeln.
 
@@ -1091,6 +1079,7 @@ const handlePostponeConfirm = async (targetDate: string) => {
       :origin="pressOrigin"
       :tip="pressTip"
       :active="pressDirection"
+      :omit="props.loose ? LOOSE_DEAD_DIRECTIONS : undefined"
     />
 
     <!-- Zug nach rechts: erledigen mit angepasstem Aufwand. -->
@@ -1248,26 +1237,36 @@ const handlePostponeConfirm = async (targetDate: string) => {
   overflow-wrap: normal;
   word-break: normal;
   hyphens: none;
-  /* Letzter Ausweg für ein EINZELNES Wort, das breiter ist als die ganze
-     Wand: es wird abgeschnitten, nicht umgebrochen. `overflow` sitzt am
+  /* Letzter Ausweg für ein EINZELNES Wort, das breiter ist als der ganze
+     Zettel: es wird abgeschnitten, nicht umgebrochen. `overflow` sitzt am
      Titel und nicht am Zettel, damit Reißzwecke und Klebeband — die über
      den oberen Rand hinausragen — sichtbar bleiben.
 
      Die Ellipse ist nicht Kosmetik, sondern die Ehrlichkeit dazu: ohne sie
      endet der Titel stumm mitten im Wort und sieht aus wie der vollständige
      Text. Sie greift ausschließlich in diesem Fall — solange der Titel passt
-     oder an Wortgrenzen umbricht, überläuft nichts und es erscheint keine. */
+     oder an Wortgrenzen umbricht, überläuft nichts und es erscheint keine.
+
+     **`clip`, nicht `hidden`:** `hidden` öffnet einen eigenen
+     Block-Formatierungskontext, und ein solcher Kasten fließt nicht um die
+     Ecke (`.corner`), sondern steht ganz neben ihr — auf 360 px blieben dem
+     Titel dann rund 95 px, und schon „Unteraufgaben" endete mit Ellipse.
+     `clip` schneidet ab, ohne einen Kontext zu öffnen. `hidden` davor ist der
+     Rückfall für Browser ohne `clip` (Safari vor 16): dort steht der Titel
+     wieder neben der Ecke statt um sie herum. */
   overflow: hidden;
+  overflow: clip;
   text-overflow: ellipsis;
 }
 
-/* Fußzeile, zugleich die GRIFFZEILE: links der Punktwert (plus Stempel und
-   Unteraufgaben-Zeichen), rechts Stift und Eselsohr — beide 44 px, deshalb
-   `min-height` UND das rechte Polster, das die beiden Griffe freihält. */
+/* Fußzeile, zugleich die GRIFFZEILE: links allein der Stempelbereich, rechts
+   Stift und Eselsohr — beide 44 px, deshalb `min-height` UND das rechte
+   Polster, das die beiden Griffe freihält. Punkte-Sticker und
+   Unteraufgaben-Zeichen stehen oben in der Ecke: mit ihnen blieben dem Stempel
+   auf 360 px nur 3–9 px (→ docs/pinnwand-layout.md). */
 .foot {
   display: flex;
   align-items: center;
-  gap: 6px;
   margin-top: 0;
   min-height: 44px;
   padding-right: 88px;
@@ -1287,8 +1286,7 @@ const handlePostponeConfirm = async (targetDate: string) => {
 
 /* Der Zettel selbst ist ein Flex-Container; ein `float` wäre darin
    wirkungslos. Der Kopf ist deshalb ein eigener Block — nur dort wirkt der
-   Float der Ecke überhaupt. UMFLOSSEN wird sie dabei nicht: der Titel steht
-   in einer verengten Spalte daneben (Begründung am `.corner` im Template).
+   Float der Ecke überhaupt, und der Titel umfließt ihn (→ `.title`).
 
    `flow-root`, nicht `block`: die Ecke (34 px) kann höher sein als eine
    einzeilige Titelzeile (~18 px). Ein bloßer `block` umschließt einen Float
@@ -1298,23 +1296,10 @@ const handlePostponeConfirm = async (targetDate: string) => {
   position: relative;
 }
 
-/* Der Punktwert steht an ZWEI Stellen im DOM zugleich (Ecke UND Fußzeile);
-   sichtbar ist immer nur eine, gesteuert über `zettel--meta-top` (→ `metaTop`
-   im Skript: oben, sobald der Zettel Unteraufgaben hat). */
+/* Punkte-Sticker, davor ggf. das Unteraufgaben-Zeichen. Der Sticker sitzt
+   immer ganz rechts, an jedem Zettel an derselben Stelle. */
 .corner {
-  display: none;
-}
-
-.zettel--meta-top .corner {
   display: flex;
-}
-
-.zettel--meta-top .foot > .points {
-  display: none;
-}
-
-/* Bewusst KEIN `display` in dieser Regel, das steht bereits oben. */
-.corner {
   float: right;
   align-items: center;
   gap: 5px;
@@ -1329,11 +1314,12 @@ const handlePostponeConfirm = async (targetDate: string) => {
    Polster, und er trägt keine Breite. `.due-stamp` ist der **Stempelbereich**
    im Fluss der Fußzeile; die Lagen liegen absolut darin, am linken Rand
    verankert, und ragen nach rechts in Stift, Eselsohr und notfalls über den
-   Papierrand. Nach links nie: dort steht der Punkte-Sticker.
+   Papierrand. Nach links nie: dort ist die Papierkante.
 
-   **Der Stempelbereich** ist 44 px breit (eine Daumenbreite) und nimmt sich
-   den Rest der Zeile bis zum Stift (`flex-grow`). In einer schmalen Spalte
-   schrumpft er (ADR-0007: die Zettelbreite ist die Spaltenbreite); das geht,
+   **Der Stempelbereich** ist das einzige Kind der Fußzeile und nimmt sich die
+   ganze Zeile bis zum Stift (`flex-grow`): auf 360 px rund 48 px, auf 412 px
+   rund 74 px. Kürzere Abdrücke (NEU, FÄLLIG, BEDARF) liegen ganz darin, längere
+   ragen in den Stift. In einer noch schmaleren Spalte schrumpft er; das geht,
    weil sein Inhalt absolut liegt und keine Mindestbreite stellt.
    `align-self: stretch` macht ihn so hoch wie die Griffzeile (44 px) — die
    ganze Box ist die Trefffläche, ein Pseudoelement braucht es nicht. */
@@ -1402,22 +1388,30 @@ const handlePostponeConfirm = async (targetDate: string) => {
    „aufräumen". Ohne Polster sitzt der Halo knapp am Wort; die unteren Lagen
    lugen über ihren Versatz und ihre eigene Neigung daneben hervor.
 
+   `line-height: 1` zieht den Halo senkrecht auf die Schriftgröße zusammen
+   (geerbt wären 1,1): er deckt so wenig wie möglich von den unteren Lagen, die
+   `stampStackOf` 7 px über und unter die Mitte fächert. Umlautpunkte dürfen über
+   den Halo hinausstehen; sie werden trotzdem gezeichnet.
+
    `--note-paper` kommt vom `.zettel` und wird vererbt (weiß / gelb /
    Packpapier je nach Typ). */
 .stamp-layer--top {
   background: var(--note-paper);
+  line-height: 1;
 }
 
 /* Die unteren Lagen bleiben durchsichtig und lugen an den Rändern hervor —
-   dort, und nur dort, steckt die sichtbare Stapelhöhe. 40 % für Lage 0,
-   60 % für Lage 1; nach oben immer prominenter. Die Regel hängt an der STUFE,
-   nicht am Wort (am Projekt ist Lage 1 ein Projektspruch). */
+   dort, und nur dort, steckt die sichtbare Stapelhöhe. 55 % für Lage 0,
+   75 % für Lage 1; nach oben immer prominenter, aber auch die unterste noch
+   als Wort lesbar (bei 40 % las sich nur das oberste, Browser-QC vom
+   19.11.2026). Die Regel hängt an der STUFE, nicht am Wort (am Projekt ist
+   Lage 1 ein Projektspruch). */
 .stamp-layer--under.stamp-layer--l0 {
-  opacity: 0.4;
+  opacity: 0.55;
 }
 
 .stamp-layer--under.stamp-layer--l1 {
-  opacity: 0.6;
+  opacity: 0.75;
 }
 
 /* --- Punkte als aufgeklebter Sticker ----------------------------------------
@@ -1455,8 +1449,8 @@ const handlePostponeConfirm = async (targetDate: string) => {
 
 /* Unbewertet: ein leerer, gestrichelter Sticker mit dem Wort „unbewertet“ —
    keine Zahl, keine Form, die einen Wert behauptete. Außenmaß wie
-   `.points--s1` (34 px, der Rand liegt innen), damit die Fußzeile in der
-   Spalte nicht breiter wird. Das Wort steht zweizeilig, getrennt am weichen
+   `.points--s1` (34 px, der Rand liegt innen), damit die Ecke dem Titel nicht
+   mehr Platz nimmt. Das Wort steht zweizeilig, getrennt am weichen
    Trennzeichen in `pointsLabel`; ohne Hover am Telefon trägt es allein. */
 .points--unrated {
   box-sizing: border-box;
@@ -1689,9 +1683,9 @@ const handlePostponeConfirm = async (targetDate: string) => {
    `daily` (→ `tracksProgress` im Skript). Aufgeklappt kippt die Farbe um,
    damit man den Weg zurück findet.
 
-   Schmal gepolstert: in einer Spalte von rund 160 px bleiben neben Stift und
-   Eselsohr rund 50 px Fußzeile. Ein Zettel mit diesem Zeichen trägt deshalb
-   seinen Punkte-Sticker oben (→ `metaTop`). */
+   Sitzt oben in der Ecke vor dem Punkte-Sticker, nicht in der Fußzeile: die
+   gehört dem Stempelbereich. Schmal gepolstert, damit dem Titel neben der Ecke
+   noch ein kurzes Wort bleibt. */
 .subs-badge {
   display: flex;
   align-items: center;
@@ -2100,11 +2094,18 @@ const handlePostponeConfirm = async (targetDate: string) => {
 
 /* Die **Nadelstelle**: wo die Reißzwecke säße, ein leeres Nadelloch. Ein Knopf
    (wieder dreckig), deshalb anders als `.pin` MIT Trefffläche: 44 × 36 px, mittig
-   über der Oberkante. Sie ragt 8 px über den Zettel — weniger als jede
-   Befestigung, für die die Wand oben Platz hält (Gruppe 3 bekommt in
-   `wallLayout.ts` das Polster der ungünstigsten). */
+   über der Oberkante. Sie ragt 8 px über die Padding-Box, 6 px über das Papier;
+   die Wand hält oben Platz dafür frei. Wer Lage oder Maße ändert, ändert die
+   Zeile `.pin-spot` in `FASTENERS` (`src/lib/wallLayout.ts`) mit.
+
+   `z-index: 1` legt die ganze Fläche über den Kopf: `.head` ist positioniert
+   und steht im DOM später, ohne diese Zeile nahm der Titel ab 12 px unter der
+   Oberkante jeden Tipp, und vom Ziel blieben 44 × 12 px, halb über dem Kork
+   (Browser-QC M7). Am Titel selbst hängt keine eigene Aktion; aufklappen
+   lässt sich der Zettel über die übrige Fläche und das Unteraufgaben-Zeichen. */
 .pin-spot {
   position: absolute;
+  z-index: 1;
   top: -8px;
   left: 50%;
   margin-left: -22px;

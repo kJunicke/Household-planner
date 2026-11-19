@@ -10,6 +10,7 @@ import {
   subtaskColumns,
   wallGrid,
   type PlacedNote,
+  type WallGroup,
   type WallLayout,
   type WallNoteInput,
 } from './wallLayout'
@@ -59,11 +60,15 @@ describe('wallGrid — Spalten', () => {
   })
 })
 
+/** Die Legereihenfolge der Gruppen laut Spec: fällig → täglich → Projekt → lose. */
+const GROUPS: WallGroup[] = ['due', 'daily', 'project', 'loose']
+const GROUP_RANK = (group: WallGroup) => GROUPS.indexOf(group)
+
 function randomNotes(seed: number, count: number): WallNoteInput[] {
   const rand = mulberry32(seed)
   return Array.from({ length: count }, () => ({
     id: uuid(rand),
-    group: Math.floor(rand() * 3),
+    group: GROUPS[Math.floor(rand() * GROUPS.length)]!,
     height: 60 + Math.floor(rand() * 120),
   }))
 }
@@ -179,10 +184,10 @@ describe('layoutWall — Reihenfolge', () => {
   )
 
   it.each(CASES)(
-    'Wand $wall px, Stichprobe $seed: fällig → täglich → Projekt, auch innerhalb jeder Spalte',
+    'Wand $wall px, Stichprobe $seed: fällig → täglich → Projekt → lose, auch innerhalb jeder Spalte',
     ({ wall, seed }) => {
       const notes = randomNotes(seed, 40)
-      const groupOf = new Map(notes.map((n) => [n.id, n.group]))
+      const groupOf = new Map(notes.map((n) => [n.id, GROUP_RANK(n.group)]))
       const layout = layoutWall(notes, wall)
       const laid = layout.notes.map((p) => groupOf.get(p.id)!)
       expect(laid).toEqual([...laid].sort((a, b) => a - b))
@@ -288,11 +293,35 @@ describe('layoutWall — Aufklappen teilt die Spalten', () => {
 
   it('ein aufgeklappter Zettel ganz oben ragt mit seinen Befestigungen nicht über den Kork', () => {
     // Projekt (Klammern an den Kanten): wandbreit ist der Hebel der Neigung am größten.
-    const project = { id: 'projekt-ganz-oben', group: 2, height: 300 }
+    const project = { id: 'projekt-ganz-oben', group: 'project' as const, height: 300 }
     const narrow = layoutWall([project], wall)
     const wide = layoutWall([project], wall, new Set([project.id]))
     expect(wide.notes[0].y).toBeGreaterThanOrEqual(narrow.notes[0].y - narrow.notes[0].dy)
     expect(wide.notes[0].y).toBeGreaterThan(0)
+  })
+})
+
+describe('layoutWall — oberes Polster der losen Zettel', () => {
+  /** Polster über der obersten Reihe: Oberkante des ersten Zettels ohne seine Luft. */
+  const topPadding = (group: WallGroup, id: string) => {
+    const [first] = layoutWall([{ id, group, height: 80 }], 316).notes
+    return first!.y - first!.dy
+  }
+
+  it('hält die Nadelstelle auf dem Kork: sie ragt 6 px über die Papierkante', () => {
+    const rand = mulberry32(21)
+    for (let i = 0; i < 200; i++) expect(topPadding('loose', uuid(rand))).toBeGreaterThanOrEqual(6)
+  })
+
+  it('polstert nach der eigenen Nadelstelle, nicht nach der höchsten Befestigung', () => {
+    // Früher bekam ein loser Zettel als unbekannte Gruppe das Polster aller
+    // Befestigungen; Klammern und Klebestreifen stehen weiter über als die
+    // Nadelstelle.
+    const rand = mulberry32(22)
+    for (let i = 0; i < 200; i++) {
+      const id = uuid(rand)
+      expect(topPadding('loose', id)).toBeLessThan(topPadding('unknown', id))
+    }
   })
 })
 

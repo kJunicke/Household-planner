@@ -5,11 +5,12 @@
  * Viewport-Koordinaten — unten also die Oberkante der Navigationsleiste, nicht
  * der Bildschirmrand: dahinter erreicht der Daumen nichts mehr.
  *
- * Innerhalb der Randzone wächst die Geschwindigkeit quadratisch von `MIN` am
- * inneren Zonenrand bis `MAX` am Rand. Quadratisch, damit der äußere Teil der
- * Zone zum Feinsteuern langsam bleibt und erst der letzte Zentimeter rast.
+ * Innerhalb der Randzone wächst die Geschwindigkeit quadratisch von
+ * `MIN_PX_PER_S` am inneren Zonenrand bis `MAX_PX_PER_S` am Rand. Quadratisch,
+ * damit der äußere Teil der Zone zum Feinsteuern langsam bleibt und erst der
+ * letzte Zentimeter rast.
  * Hinter dem Rand (Finger auf der Navigations- oder Kopfleiste) bleibt es bei
- * `MAX`. SortableJS lief vorher fest mit 10 px je 24 ms ≈ 420 px/s.
+ * `MAX_PX_PER_S`. SortableJS lief vorher fest mit 10 px je 24 ms ≈ 420 px/s.
  */
 const ZONE_PX = 96
 const MIN_PX_PER_S = 150

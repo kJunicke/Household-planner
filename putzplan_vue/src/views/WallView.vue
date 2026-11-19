@@ -26,13 +26,14 @@ import { useHouseholdStore } from '../stores/householdStore'
 import { useTaskBoard } from '@/composables/useTaskBoard'
 import { useOverlayHistoryEntry } from '@/composables/useOverlayHistoryEntry'
 import { searchWall } from '@/lib/taskSearch'
-import { tornScrapState } from '@/composables/useTornScrap'
+import { dropScrap, tornScrapState } from '@/composables/useTornScrap'
 import {
   layoutWall,
   rememberWallHeight,
   rememberedWallHeight,
   rotationOf,
   wallGrid,
+  type WallGroup,
 } from '@/lib/wallLayout'
 import type { Task } from '@/types/Task'
 
@@ -88,7 +89,7 @@ const wallSearch = computed(() =>
  * Die Zettel, die gerade an der Wand stehen: alle, oder nur die Treffer — die
  * angepinnten und dahinter die **losen Zettel** (erledigte Treffer, die nicht an
  * der Wand hängen). Die Reihenfolge ist egal — `layoutWall` sortiert selbst;
- * dass die losen nach den angepinnten kommen, sagt ihre Gruppe (`LOOSE_GROUP`).
+ * dass die losen nach den angepinnten kommen, sagt ihre Gruppe (`loose`).
  */
 const shownTasks = computed((): Task[] => {
   const search = wallSearch.value
@@ -101,14 +102,6 @@ const shownTasks = computed((): Task[] => {
 const looseIds = computed(() => new Set(wallSearch.value?.loose.map((task) => task.task_id) ?? []))
 
 /**
- * Gruppe der losen Zettel für `layoutWall`: nach fällig (0), täglich (1) und
- * Projekt (2). Als unbekannte Gruppe bekommt sie dort oben das Polster der
- * ungünstigsten Befestigung; ein loser Zettel hat keine, das Polster fällt also
- * nur ein paar Pixel zu groß aus.
- */
-const LOOSE_GROUP = 3
-
-/**
  * Der Zettel, zu dem die Wand nach dem Schließen der Suche scrollt: der
  * zuletzt **in der Suche** erledigte. Erkannt am Fetzen — ihn bietet jeder
  * Abriss an, egal über welche Geste, und `WallView` muss dafür nichts von den
@@ -119,8 +112,10 @@ let searchTargetId: string | null = null
 
 /**
  * **wieder dreckig** von der Nadelstelle eines losen Zettels: die Aufgabe ist
- * wieder dran und steht, sobald der Store neu geladen hat, als angepinnter
- * Treffer in der Suche. Nach dem Schließen scrollt die Wand zu ihr.
+ * wieder dran und steht sofort als angepinnter Treffer in der Suche
+ * (`markAsDirty` ist optimistisch). Nach dem Schließen scrollt die Wand zu ihr.
+ * Ein Fetzen derselben Aufgabe verschwindet: sein Zurückkleben nähme eine
+ * Erledigung zurück, die „wieder dreckig" schon widerrufen hat.
  *
  * Der Riegel gegen den Doppeltipp sitzt synchron vor dem ersten `await` —
  * dieselbe Regel wie in `WallDoneList.markDirty`.
@@ -131,7 +126,10 @@ const repinFromSearch = async (taskId: string) => {
   if (repinBusy.has(taskId)) return
   repinBusy.add(taskId)
   try {
-    if (await taskStore.markAsDirty(taskId)) searchTargetId = taskId
+    if (await taskStore.markAsDirty(taskId)) {
+      searchTargetId = taskId
+      dropScrap(taskId)
+    }
   } finally {
     repinBusy.delete(taskId)
   }
@@ -309,13 +307,13 @@ const relayout = (animate: boolean, tappedId?: string): boolean => {
   const before = new Map(lastPositions)
   const { columnWidth } = wallGrid(usableWidth)
 
-  // Gruppe je Zettel (0 = fällig, 1 = täglich, 2 = Projekt) für die
-  // Legereihenfolge in `layoutWall`, das keine Task-Objekte kennt.
-  const taskGroups = new Map<string, number>()
-  board.pendingTasks.value.forEach((task) => taskGroups.set(task.task_id, 0))
-  board.dailyTasks.value.forEach((task) => taskGroups.set(task.task_id, 1))
-  board.projectTasks.value.forEach((task) => taskGroups.set(task.task_id, 2))
-  looseIds.value.forEach((id) => taskGroups.set(id, LOOSE_GROUP))
+  // Gruppe je Zettel für Legereihenfolge und oberes Polster in `layoutWall`,
+  // das keine Task-Objekte kennt.
+  const taskGroups = new Map<string, WallGroup>()
+  board.pendingTasks.value.forEach((task) => taskGroups.set(task.task_id, 'due'))
+  board.dailyTasks.value.forEach((task) => taskGroups.set(task.task_id, 'daily'))
+  board.projectTasks.value.forEach((task) => taskGroups.set(task.task_id, 'project'))
+  looseIds.value.forEach((id) => taskGroups.set(id, 'loose'))
 
   /**
    * Zettel, die dieser Lauf mangels Element übersprungen hat. Breite setzen und
@@ -349,13 +347,9 @@ const relayout = (animate: boolean, tappedId?: string): boolean => {
   // Schritt 2 — Höhen messen, bei der eben gesetzten Breite.
   const notes = [...elements].map(([id, el]) => ({
     id,
-    // **`-1`, nicht `0` — das ist Absicht, bitte nicht „aufräumen".** Die drei
-    // Listen teilen `wallTasks` heute vollständig auf. Träte der Fall je ein,
-    // wäre `0` die schlechteste Antwort: Gruppe 0 ist eine ECHTE Gruppe
-    // (Reißzwecke), und `fastenersOfGroup` in `wallLayout.ts` gäbe dem Zettel
-    // still die Befestigung mit dem KLEINSTEN Überstand. `-1` polstert für die
-    // ungünstigste.
-    group: taskGroups.get(id) ?? -1,
+    // Die drei Listen und die losen Zettel teilen `shownTasks` heute
+    // vollständig auf; `unknown` ist das Netz dafür (→ `WallGroup`).
+    group: taskGroups.get(id) ?? 'unknown',
     height: el.offsetHeight,
   }))
 

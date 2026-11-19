@@ -297,7 +297,7 @@ const buildDate = __BUILD_DATE__
               <span v-if="!isEditingHouseholdName" class="info-value-row">
                 <span class="info-value">{{ householdStore.currentHousehold?.name }}</span>
                 <button
-                  class="copy-btn"
+                  class="rename-btn"
                   @click="startEditingHouseholdName"
                   title="Haushalt umbenennen"
                   aria-label="Haushalt umbenennen"
@@ -315,7 +315,9 @@ const buildDate = __BUILD_DATE__
                   @keyup.enter="saveHouseholdName"
                   @keyup.escape="cancelEditingHouseholdName"
                 />
-                <p v-if="!householdNameValid" class="goal-error">Der Name darf nicht leer sein</p>
+                <p v-if="!householdNameValid" class="household-name-error">
+                  Der Name darf nicht leer sein
+                </p>
                 <div class="d-flex gap-2">
                   <button
                     @click="saveHouseholdName"
@@ -680,7 +682,9 @@ const buildDate = __BUILD_DATE__
   gap: 0.5rem;
 }
 
-.copy-btn {
+/* Kleiner Symbolknopf neben einem Wert: Code kopieren, Haushalt umbenennen. */
+.copy-btn,
+.rename-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -695,7 +699,8 @@ const buildDate = __BUILD_DATE__
   transition: all var(--transition-base);
 }
 
-.copy-btn:hover {
+.copy-btn:hover,
+.rename-btn:hover {
   border-color: var(--color-primary);
   color: var(--color-primary);
   background: var(--color-background);
@@ -846,13 +851,15 @@ const buildDate = __BUILD_DATE__
 }
 
 .goal-hint,
-.goal-error {
+.goal-error,
+.household-name-error {
   margin: 0;
   font-size: 0.75rem;
   color: var(--color-text-secondary);
 }
 
-.goal-error {
+.goal-error,
+.household-name-error {
   color: var(--color-danger);
 }
 
