@@ -5,6 +5,13 @@ import PointPicker from './PointPicker.vue'
 
 interface Props {
   projectTitle: string
+  /**
+   * Standardpunkte der Projekt-Arbeit (der Unteraufgabe „Am Projekt arbeiten“).
+   * Gesetzt: vorausgewählt und als Knopf markiert. `null` = unbewertet — dann
+   * wird die Wahl dieser ersten Arbeit zu den Standardpunkten (der Aufrufer
+   * schickt sie als `standardPoints` mit).
+   */
+  standardPoints: number | null
   isLoading: boolean
 }
 
@@ -16,7 +23,7 @@ interface Emits {
 const props = defineProps<Props>()
 const emit = defineEmits<Emits>()
 
-const selectedEffort = ref<number | null>(null)
+const selectedEffort = ref<number | null>(props.standardPoints)
 const note = ref('')
 
 const canConfirm = computed(() => {
@@ -49,7 +56,15 @@ const handleClose = () => {
           <div class="effort-selection">
             <label class="selection-label">Wie viele Punkte war es? *</label>
             <!-- `standard`: Projekt-Arbeit zählt mindestens 1 Punkt, wie vorher. -->
-            <PointPicker v-model="selectedEffort" kind="standard" :disabled="isLoading" />
+            <PointPicker
+              v-model="selectedEffort"
+              kind="standard"
+              :default-points="standardPoints"
+              :disabled="isLoading"
+            />
+            <p v-if="standardPoints === null" class="rating-hint">
+              Noch unbewertet. Der Wert gilt ab jetzt als Vorauswahl für dieses Projekt.
+            </p>
           </div>
 
           <div class="note-input">
@@ -108,5 +123,11 @@ const handleClose = () => {
 
 .note-input {
   margin-bottom: 1rem;
+}
+
+.rating-hint {
+  margin: 0.25rem 0 0;
+  font-size: 0.8125rem;
+  color: var(--color-text-secondary);
 }
 </style>

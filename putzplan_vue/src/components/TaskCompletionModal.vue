@@ -6,7 +6,8 @@ import PointPicker from './PointPicker.vue'
 
 interface Props {
   taskTitle: string
-  defaultEffort: number
+  /** Standardpunkte; `null` = unbewertet (dann ist nichts eine Abweichung). */
+  defaultEffort: number | null
   isLoading: boolean
 }
 

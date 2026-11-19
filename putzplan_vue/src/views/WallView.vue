@@ -20,6 +20,8 @@ import WallDoneList from '../components/WallDoneList.vue'
 import WallScrap from '../components/WallScrap.vue'
 import TaskCreateModal from '../components/TaskCreateModal.vue'
 import QuickTaskModal from '../components/QuickTaskModal.vue'
+import TaskRatingModal from '../components/TaskRatingModal.vue'
+import { estimateParentPoints, isUnrated } from '@/lib/taskPoints'
 import { useTaskStore } from '../stores/taskStore'
 import { useHouseholdStore } from '../stores/householdStore'
 import { useTaskBoard } from '@/composables/useTaskBoard'
@@ -1080,15 +1082,25 @@ const searchMatchesExisting = computed(
  * zurücknehmen kann — bliebe die Suche offen, ersetzte das nächste Erledigen ihn
  * ungesehen.
  */
-const completeFromSearch = async (task: Task) => {
+const completeFromSearch = async (task: Task, standardPoints?: number) => {
   if (searchBusyId.value) return
+  // Unbewertet (CONTEXT.md § unbewertet): erst die Punktwahl. Abbrechen lässt
+  // die Suche offen und erledigt nichts.
+  if (isUnrated(task) && standardPoints === undefined) {
+    searchRatingTask.value = task
+    return
+  }
   searchBusyId.value = task.task_id
   try {
-    const points = taskStore.estimateCompletionEffort(task)
-    if (!(await taskStore.completeTask(task.task_id))) {
+    const points =
+      standardPoints === undefined
+        ? taskStore.estimateCompletionEffort(task)
+        : estimateParentPoints(standardPoints, taskStore.getSubtasks(task.task_id))
+    if (!(await taskStore.completeTask(task.task_id, undefined, undefined, standardPoints))) {
       searchBusyId.value = null
       return
     }
+    searchRatingTask.value = null
     offerScrap({ taskId: task.task_id, title: task.title, points })
     jumpToResult(task.task_id)
   } catch (error) {
@@ -1096,6 +1108,9 @@ const completeFromSearch = async (task: Task) => {
     throw error
   }
 }
+
+/** Die unbewertete Aufgabe, deren Erledigen aus der Suche auf die Punktwahl wartet. */
+const searchRatingTask = ref<Task | null>(null)
 
 /** **Wieder dreckig** aus der Suche (Stecknadel-Knopf, → CONTEXT.md): zurück an die Wand, Punkte bleiben. */
 const markDirtyFromSearch = async (task: Task) => {
@@ -1291,6 +1306,15 @@ const handleCreateQuickTask = async (data: {
     <!-- Erledigt: kompakter Streifen UNTER der Wand, nicht auf ihr. -->
     <WallDoneList :tasks="doneTasks" />
 
+    <!-- Erledigen aus der Suche an einer unbewerteten Aufgabe: erst bewerten. -->
+    <TaskRatingModal
+      v-if="searchRatingTask"
+      :taskTitle="searchRatingTask.title"
+      :isLoading="searchBusyId !== null"
+      @close="searchRatingTask = null"
+      @confirm="(points: number) => searchRatingTask && completeFromSearch(searchRatingTask, points)"
+    />
+
     <!-- FAB: schwebende Papierkarte, nicht angepinnt — Suche und Neuanlegen
          bleiben hier und wandern nicht in den Header. Dass er nichts verdeckt,
          regelt das Bodenpolster von `.wall-page`, nicht seine eigene Höhe. -->
@@ -1365,7 +1389,10 @@ const handleCreateQuickTask = async (data: {
                 @click="jumpToResult(result.task.task_id)"
               >
                 <span class="search-result-text">
-                  <span class="search-result-category">{{ result.categoryLabel }}</span>
+                  <span class="search-result-category"
+                    >{{ result.categoryLabel
+                    }}<template v-if="isUnrated(result.task)"> · unbewertet</template></span
+                  >
                   <span class="search-result-title">{{ result.task.title }}</span>
                 </span>
                 <i class="bi bi-arrow-right-short" aria-hidden="true"></i>

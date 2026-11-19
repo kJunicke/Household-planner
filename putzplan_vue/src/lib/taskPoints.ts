@@ -2,8 +2,20 @@ import type { Task } from '@/types/Task'
 import type { PointBenchmark } from '@/types/PointBenchmark'
 
 /**
+ * **unbewertet** (CONTEXT.md § unbewertet): die Aufgabe hat keine Standardpunkte.
+ * Sie lässt sich nicht erledigen, ohne erst bewertet zu werden — jeder Weg zum
+ * Erledigen öffnet zuerst die Punktwahl. Dieselbe Regel prüft die Edge Function
+ * `complete-task` (Parameter `standardPoints`); wer eine ändert, ändert beide.
+ */
+export function isUnrated(task: Pick<Task, 'effort'>): boolean {
+  return task.effort === null
+}
+
+/**
  * Punkte, die das Erledigen einer Hauptaufgabe voraussichtlich bringt: ihr Aufwand
  * abzüglich der schon erledigten `deduct`-Unteraufgaben, nie unter null.
+ * Eine unbewertete `deduct`-Unteraufgabe zieht nichts ab: erledigt sein kann sie
+ * nur bewertet, die Absicherung gilt dem Zwischenstand beim Laden.
  *
  * Verbindlich rechnet die Edge Function `complete-task`; das hier ist die Schätzung
  * für fliegende Zahl, Zettel-Fußzeile, Fetzen und Wochenbalken. Alle lesen sie von
@@ -12,7 +24,7 @@ import type { PointBenchmark } from '@/types/PointBenchmark'
 export function estimateParentPoints(effort: number, subtasks: readonly Task[]): number {
   const deductSum = subtasks
     .filter((s) => s.completed && s.subtask_points_mode === 'deduct')
-    .reduce((sum, s) => sum + s.effort, 0)
+    .reduce((sum, s) => sum + (s.effort ?? 0), 0)
   return Math.max(0, effort - deductSum)
 }
 

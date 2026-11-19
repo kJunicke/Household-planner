@@ -21,7 +21,7 @@ import { mergeLoadedRows, type ChangeDuringLoad } from '@/lib/rowMerge'
 import { collectKeysetPages } from '@/lib/keysetPages'
 import { onSessionEnd } from '@/lib/sessionEnd'
 import { findDuplicateTask, normalizeTaskTitle } from '@/lib/taskDuplicates'
-import { estimateParentPoints } from '@/lib/taskPoints'
+import { estimateParentPoints, isUnrated } from '@/lib/taskPoints'
 
 /**
  * Optimistische Completion: trägt eine Client-Kennung, weil die `completion_id`
@@ -48,7 +48,16 @@ const isDuplicateTitleError = (error: { code?: string }): boolean => error.code 
 const isOptimistic = (c: TaskCompletion | EnrichedCompletion): c is OptimisticCompletion =>
   'clientMutationId' in c
 
-/** Die Task-Felder, die eine Erledigung anfasst — und die ein Rückgängig zurückschreibt. */
+/**
+ * Die Task-Felder, die eine Erledigung anfasst — und die ein Rückgängig zurückschreibt.
+ *
+ * `effort` steht hier nur für den gescheiterten Commit (`revert`): beim ersten
+ * Bewerten setzt der optimistische Pfad die Standardpunkte mit, und ohne den
+ * Schnappschuss bliebe die Aufgabe nach einem Netzfehler lokal bewertet,
+ * serverseitig aber unbewertet. **Zurückkleben schreibt `effort` bewusst nicht
+ * zurück** (→ `undoCompletion`): zurückgenommen wird die Erledigung, nicht die
+ * Bewertung — gefragt wird einmal je Aufgabe.
+ */
 type RowSnapshot = Pick<
   Task,
   | 'task_id'
@@ -57,6 +66,7 @@ type RowSnapshot = Pick<
   | 'postponed_until'
   | 'assigned_to'
   | 'emphasis_level'
+  | 'effort'
 >
 
 /**
@@ -240,7 +250,18 @@ export const useTaskStore = defineStore('tasks', () => {
   // ihn aus den Subtask-Zuständen. Die optimistische Completion trägt nur eine
   // Schätzung fürs Wochen-Ranking, die beim Eintreffen der echten Zeile still
   // korrigiert wird.
-  const completeTask = async (taskId: string, effortOverride?: number, completionNote?: string) => {
+  //
+  // `standardPoints`: erstes Bewerten einer **unbewerteten** Aufgabe
+  // (CONTEXT.md § unbewertet). Der Aufrufer hat vorher die Punktwahl gezeigt;
+  // der Wert wird lokal sofort zu den Standardpunkten und geht mit an die Edge
+  // Function, die ihn im selben Schritt speichert. Ohne ihn wird eine
+  // unbewertete Aufgabe hier nicht erledigt.
+  const completeTask = async (
+    taskId: string,
+    effortOverride?: number,
+    completionNote?: string,
+    standardPoints?: number,
+  ) => {
     const authStore = useAuthStore()
     const toastStore = useToastStore()
     const householdStore = useHouseholdStore()
@@ -278,6 +299,9 @@ export const useTaskStore = defineStore('tasks', () => {
     // Für den Rückgängig-Fahrschein, im Apply gefüllt (der Schnappschuss geht
     // sonst in `runOptimistic` hinein und kommt hier nicht wieder heraus).
     let undoSnapshot: RowSnapshot[] = []
+    // Im Apply entschieden: nur eine (lokal) unbewertete Aufgabe schickt
+    // `standardPoints` — an einer bewerteten lehnte der Server ihn ab.
+    let rateNow = false
 
     const { applied, settled } = runOptimistic<RowSnapshot[]>({
       entityId: taskId,
@@ -287,11 +311,25 @@ export const useTaskStore = defineStore('tasks', () => {
           console.error('Cannot complete task: not in local state', taskId)
           return null
         }
+        if (isUnrated(task) && standardPoints === undefined) {
+          // Der Aufrufer hätte die Punktwahl öffnen müssen. Nichts anwenden:
+          // der Server lehnte ohnehin ab, und die Karte spränge zurück.
+          console.error('Cannot complete unrated task without standardPoints', taskId)
+          toastStore.showToast(`Erst Punkte wählen: ${task.title}`, 'error')
+          return null
+        }
 
         const snapshot: RowSnapshot[] = [snapshotOf(task)]
         taskTitle = task.title
         touchedIds.push(task.task_id)
         const now = new Date().toISOString()
+
+        // Erstes Bewerten: die Standardpunkte gelten ab jetzt — lokal sofort,
+        // wie in der Edge Function im selben Schritt.
+        if (isUnrated(task) && standardPoints !== undefined) {
+          task.effort = standardPoints
+          rateNow = true
+        }
 
         // Spiegelt die Edge Function:
         // - Checklist-Subtask ohne expliziten Override wird abgehakt
@@ -362,10 +400,12 @@ export const useTaskStore = defineStore('tasks', () => {
           taskId: string
           effortOverride?: number
           completionNote?: string
+          standardPoints?: number
         } = { taskId }
 
         if (effortOverride !== undefined) payload.effortOverride = effortOverride
         if (completionNote?.trim()) payload.completionNote = completionNote
+        if (rateNow) payload.standardPoints = standardPoints
 
         const { data, error } = await supabase.functions.invoke('complete-task', {
           body: payload,
@@ -473,6 +513,7 @@ export const useTaskStore = defineStore('tasks', () => {
     postponed_until: task.postponed_until,
     assigned_to: task.assigned_to,
     emphasis_level: task.emphasis_level,
+    effort: task.effort,
   })
 
   /**
@@ -484,10 +525,10 @@ export const useTaskStore = defineStore('tasks', () => {
     if (effortOverride !== undefined) return effortOverride
     if (task.parent_task_id !== null) {
       if (task.subtask_points_mode === 'checklist') return 0
-      return task.effort
+      return task.effort ?? 0
     }
     return estimateParentPoints(
-      task.effort,
+      task.effort ?? 0,
       tasks.value.filter((t) => t.parent_task_id === task.task_id),
     )
   }

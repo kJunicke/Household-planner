@@ -7,6 +7,7 @@ import {
   estimateParentPoints,
   examplesFor,
   isDeviation,
+  isUnrated,
   isValidPoints,
   quickOptions,
 } from './taskPoints'
@@ -49,6 +50,22 @@ describe('estimateParentPoints', () => {
 
   it('fällt nie unter null', () => {
     expect(estimateParentPoints(2, [sub({ effort: 3, completed: true })])).toBe(0)
+  })
+
+  it('eine unbewertete deduct-Unteraufgabe zieht nichts ab', () => {
+    const subtasks = [sub({ effort: null, completed: true }), sub({ effort: 2, completed: true })]
+    expect(estimateParentPoints(5, subtasks)).toBe(3)
+  })
+})
+
+describe('isUnrated', () => {
+  it('ohne Standardpunkte: unbewertet', () => {
+    expect(isUnrated(sub({ effort: null }))).toBe(true)
+  })
+
+  it('mit Standardpunkten: bewertet, auch bei 1', () => {
+    expect(isUnrated(sub({ effort: 1 }))).toBe(false)
+    expect(isUnrated(sub({ effort: 12 }))).toBe(false)
   })
 })
 

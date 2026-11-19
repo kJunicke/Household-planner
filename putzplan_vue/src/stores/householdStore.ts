@@ -51,7 +51,7 @@ interface CompletionWithEffort {
   completed_at: string
   effort_override: number | null
   tasks: {
-    effort: number
+    effort: number | null
     household_id?: string
   } | null
 }

@@ -7,6 +7,12 @@ interface CompleteTaskRequest {
   taskId: string
   effortOverride?: number
   completionNote?: string
+  /**
+   * Erstes Bewerten (CONTEXT.md § unbewertet): setzt die Standardpunkte einer
+   * unbewerteten Aufgabe und erledigt sie im selben Aufruf. Pflicht, solange
+   * die Aufgabe unbewertet ist; bei einer bewerteten abgelehnt.
+   */
+  standardPoints?: number
 }
 
 // CORS headers for all responses
@@ -26,7 +32,8 @@ Deno.serve(async (req) => {
 
   try {
     // 1. Parse request body
-    const { taskId, effortOverride, completionNote }: CompleteTaskRequest = await req.json()
+    const { taskId, effortOverride, completionNote, standardPoints }: CompleteTaskRequest =
+      await req.json()
 
     // 2. Validate input
     if (!taskId) {
@@ -47,6 +54,18 @@ Deno.serve(async (req) => {
     ) {
       return new Response(
         JSON.stringify({ error: 'effortOverride must be an integer from 0 to 999' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+      )
+    }
+
+    // Standardpunkte: ganzzahlig 1–999, wie der CHECK auf tasks.effort und
+    // `isValidPoints(…, 'standard')` in src/lib/taskPoints.ts.
+    if (
+      standardPoints !== undefined &&
+      !(Number.isInteger(standardPoints) && standardPoints >= 1 && standardPoints <= 999)
+    ) {
+      return new Response(
+        JSON.stringify({ error: 'standardPoints must be an integer from 1 to 999' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
       )
     }
@@ -95,6 +114,30 @@ Deno.serve(async (req) => {
         { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
       )
     }
+
+    // Unbewertet (CONTEXT.md § unbewertet): ohne Standardpunkte wird nichts
+    // erledigt — der Client öffnet vorher die Punktwahl und schickt den Wert als
+    // `standardPoints` mit. Eine alte App-Version ohne diesen Parameter wird hier
+    // abgewiesen. Umgekehrt ist `standardPoints` nur beim ersten Bewerten erlaubt;
+    // eine bewertete Aufgabe ändert ihre Standardpunkte im Bearbeiten-Dialog.
+    // Dieselbe Regel steht in `isUnrated` in src/lib/taskPoints.ts — wer eine
+    // ändert, ändert beide.
+    const isUnrated = taskDetails.effort === null
+    if (isUnrated && standardPoints === undefined) {
+      return new Response(
+        JSON.stringify({ error: 'standardPoints is required: the task is unrated' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+      )
+    }
+    if (!isUnrated && standardPoints !== undefined) {
+      return new Response(
+        JSON.stringify({ error: 'standardPoints is only allowed while the task is unrated' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+      )
+    }
+    // Die Standardpunkte, mit denen ab hier gerechnet wird: die gespeicherten
+    // oder die eben gewählten. Geschrieben werden sie mit dem Task-Update unten.
+    const taskEffort = taskDetails.effort ?? (standardPoints as number)
 
     // 6. Fetch Parent Task Type wenn Subtask (für Daily-Validation)
     let parentTaskType: string | null = null
@@ -173,7 +216,11 @@ Deno.serve(async (req) => {
         // Mark subtask as completed (but award 0 points)
         const { error: updateError } = await supabase
           .from('tasks')
-          .update({ completed: true, last_completed_at: new Date().toISOString() })
+          .update({
+            completed: true,
+            last_completed_at: new Date().toISOString(),
+            ...(isUnrated ? { effort: taskEffort } : {}),
+          })
           .eq('task_id', taskId)
 
         if (updateError) {
@@ -192,7 +239,7 @@ Deno.serve(async (req) => {
     }
 
     // 7. Calculate final effort based on SUBTASK-level subtask_points_mode (only for PARENT tasks with NO effortOverride)
-    let finalEffort = taskDetails.effort // Default: use task's base effort
+    let finalEffort = taskEffort // Default: use task's base effort
 
     // Only apply subtask points logic if:
     // - This is a PARENT task (parent_task_id === null)
@@ -216,13 +263,15 @@ Deno.serve(async (req) => {
         // Formula: parentEffort - deductSum (minimum 0)
         // Bonus subtasks award points when completed individually, NOT at parent completion
         // Checklist subtasks count 0 (tracking only)
-        const deductSum = deductSubtasks.reduce((sum, s) => sum + s.effort, 0)
-        finalEffort = Math.max(0, taskDetails.effort - deductSum)
+        // Eine unbewertete deduct-Unteraufgabe zieht nichts ab (wie
+        // `estimateParentPoints` in src/lib/taskPoints.ts).
+        const deductSum = deductSubtasks.reduce((sum, s) => sum + (s.effort ?? 0), 0)
+        finalEffort = Math.max(0, taskEffort - deductSum)
 
         // Log warning if deduct sum exceeds parent effort (configuration issue)
-        if (taskDetails.effort - deductSum < 0) {
+        if (taskEffort - deductSum < 0) {
           console.warn(
-            `[Deduct Overflow] Parent effort (${taskDetails.effort}) exceeded by deduct subtasks (${deductSum}).`,
+            `[Deduct Overflow] Parent effort (${taskEffort}) exceeded by deduct subtasks (${deductSum}).`,
             `Task: ${taskId}, awarding 0 points for parent.`,
           )
         }
@@ -271,8 +320,14 @@ Deno.serve(async (req) => {
       last_completed_at: string
       assigned_to?: null
       emphasis_level?: number
+      effort?: number
     } = {
       last_completed_at: now, // ← Always update timestamp
+    }
+
+    // Erstes Bewerten: die gewählten Standardpunkte gelten ab jetzt.
+    if (isUnrated) {
+      updateData.effort = taskEffort
     }
 
     // Daily tasks stay uncompleted (always visible in Alltagsaufgaben tab)
@@ -398,5 +453,18 @@ Deno.serve(async (req) => {
     --header 'Authorization: Bearer YOUR_USER_JWT_TOKEN' \
     --header 'Content-Type: application/json' \
     --data '{"taskId":"project-work-subtask-uuid","effortOverride":8}'
+
+  8. Unbewertete Aufgabe (tasks.effort NULL) ohne standardPoints → 400:
+
+  curl -i --location --request POST 'http://127.0.0.1:54321/functions/v1/complete-task'     --header 'Authorization: Bearer YOUR_USER_JWT_TOKEN'     --header 'Content-Type: application/json'     --data '{"taskId":"unrated-task-uuid"}'
+
+  9. Unbewertete Aufgabe mit standardPoints → 200, erledigt, tasks.effort = 5,
+     effort_override = 5 (erstes Bewerten ist keine Abweichung):
+
+  curl -i --location --request POST 'http://127.0.0.1:54321/functions/v1/complete-task'     --header 'Authorization: Bearer YOUR_USER_JWT_TOKEN'     --header 'Content-Type: application/json'     --data '{"taskId":"unrated-task-uuid","standardPoints":5}'
+
+  10. standardPoints an einer bewerteten Aufgabe → 400:
+
+  curl -i --location --request POST 'http://127.0.0.1:54321/functions/v1/complete-task'     --header 'Authorization: Bearer YOUR_USER_JWT_TOKEN'     --header 'Content-Type: application/json'     --data '{"taskId":"task-with-effort-3","standardPoints":5}'
 
 */

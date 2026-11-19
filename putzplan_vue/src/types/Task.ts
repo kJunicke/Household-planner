@@ -3,7 +3,8 @@ export interface Task {
   household_id: string
   title: string
   // Standardpunkte (→ CONTEXT.md): ganze Zahl 1–999, gilt bei jeder Erledigung.
-  effort: number
+  // NULL = unbewertet (→ `isUnrated`): wird beim ersten Erledigen bewertet.
+  effort: number | null
 
   // Task Type - categorizes task behavior
   // 'recurring': Traditional time-based tasks (recurrence_days > 0)

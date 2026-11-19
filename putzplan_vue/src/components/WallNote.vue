@@ -45,7 +45,8 @@ import TaskEditModal from './TaskEditModal.vue'
 import TaskAssignmentModal from './TaskAssignmentModal.vue'
 import SubtaskManagementModal from './SubtaskManagementModal.vue'
 import TaskPostponeModal from './TaskPostponeModal.vue'
-import { estimateParentPoints } from '@/lib/taskPoints'
+import TaskRatingModal from './TaskRatingModal.vue'
+import { estimateParentPoints, isUnrated } from '@/lib/taskPoints'
 
 const props = defineProps<{
   task: Task
@@ -148,8 +149,16 @@ const NOTE_HANDLE = '#note'
  * Verbindlich rechnet die Edge Function; das hier ist die Schätzung fürs Auge.
  */
 const effectivePoints = computed(() =>
-  estimateParentPoints(props.task.effort, taskStore.getSubtasks(props.task.task_id)),
+  estimateParentPoints(props.task.effort ?? 0, taskStore.getSubtasks(props.task.task_id)),
 )
+
+/**
+ * **unbewertet** (CONTEXT.md § unbewertet): keine Standardpunkte. Am Sticker
+ * steht dann keine Zahl, sondern ein Fragezeichen, und jeder Weg zum Erledigen
+ * öffnet zuerst die Punktwahl (→ `ratingTarget`). Ein Projekt zeigt seine
+ * verschlungenen Punkte und ist davon nicht betroffen.
+ */
+const unrated = computed(() => !isProject.value && isUnrated(props.task))
 
 /**
  * Was am Sticker steht: sonst die Zahl, die beim Abreißen fliegt
@@ -169,9 +178,10 @@ const displayPoints = computed(() =>
  * Stellen sprengen die 34 px. Die Klemme gilt nur der ANZEIGE — die Stufe rechnet
  * mit `displayPoints` (siehe `badgeStage`), sonst fiele 1500 auf die Stufe von 999.
  */
-const pointsLabel = computed(() =>
-  isProject.value && displayPoints.value > 999 ? '999+' : String(displayPoints.value),
-)
+const pointsLabel = computed(() => {
+  if (unrated.value) return '?'
+  return isProject.value && displayPoints.value > 999 ? '999+' : String(displayPoints.value)
+})
 
 /**
  * Stufe des Projekt-Abzeichens: 1–5 über den Bändern 0–9, 10–24, 25–49,
@@ -198,6 +208,7 @@ const badgeStage = computed(() => {
  * Stufen 34 × 34 px — anders als der Sticker, der bei `points--s5` wächst.
  */
 const pointsShapeClass = computed(() => {
+  if (unrated.value) return 'points--unrated'
   if (!isProject.value) return `points--s${Math.min(5, Math.max(0, displayPoints.value))}`
   return [
     'points--badge',
@@ -210,11 +221,12 @@ const pointsShapeClass = computed(() => {
  * Nur dort gesetzt, wo die Klemme etwas verschweigt — sonst wiederholte der
  * Titel nur die sichtbare Zahl.
  */
-const pointsTitle = computed(() =>
-  isProject.value && displayPoints.value > 999
+const pointsTitle = computed(() => {
+  if (unrated.value) return 'unbewertet — beim Erledigen bewerten'
+  return isProject.value && displayPoints.value > 999
     ? `Bisher verschlungene Punkte: ${displayPoints.value}`
-    : undefined,
-)
+    : undefined
+})
 
 /**
  * Startpunkt des Punkteflugs: die Mitte des Griffs in Fensterkoordinaten. Das
@@ -243,12 +255,16 @@ const isLoggingWork = ref(false)
  * `subtasks` (dort herausgefiltert, „Buchhaltung, kein Zettel") — gesucht wird
  * deshalb in der ungefilterten Liste des Stores.
  */
+const projectWorkSubtask = computed(() => {
+  if (!isProject.value) return null
+  return (
+    taskStore.getSubtasks(props.task.task_id).find((s) => s.title === 'Am Projekt arbeiten') ?? null
+  )
+})
+
 const projectWorkSubtaskId = computed(() => {
   if (!isProject.value) return null
-  const work = taskStore
-    .getSubtasks(props.task.task_id)
-    .find((s) => s.title === 'Am Projekt arbeiten')
-  return work?.task_id ?? null
+  return projectWorkSubtask.value?.task_id ?? null
 })
 
 /**
@@ -279,7 +295,16 @@ const handleProjectWork = async (effort: number, note: string) => {
   const el = root.value
   const origin = el ? centerOf(el) : null
   isLoggingWork.value = true
-  const applied = await taskStore.completeTask(subtaskId, effort, note)
+  // Erste Arbeit an einem unbewerteten Projekt: die Wahl wird zu den
+  // Standardpunkten der Arbeits-Unteraufgabe und ist beim nächsten Mal
+  // vorausgewählt (→ `ProjectWorkModal`, `standardPoints`).
+  const rateNow = projectWorkSubtask.value ? isUnrated(projectWorkSubtask.value) : false
+  const applied = await taskStore.completeTask(
+    subtaskId,
+    effort,
+    note,
+    rateNow ? effort : undefined,
+  )
   isLoggingWork.value = false
   if (!applied) return
   showProjectWorkModal.value = false
@@ -304,11 +329,33 @@ const handleProjectWork = async (effort: number, note: string) => {
 const tearSubtask = async (subtaskId: string, handle: HTMLElement) => {
   const subtask = subtasks.value.find((s) => s.task_id === subtaskId)
   const origin = centerOf(handle)
+  // Unbewertet: erst die Punktwahl, abgehakt wird erst nach dem Bestätigen.
+  if (subtask && isUnrated(subtask)) {
+    openRating({
+      taskId: subtaskId,
+      title: subtask.title,
+      checklist: subtask.subtask_points_mode === 'checklist',
+      subtask: true,
+      origin,
+    })
+    return
+  }
+  await finishSubtaskTear(subtaskId, origin)
+}
+
+/** Erledigen und Rückmeldung eines Zettelchens — mit `standardPoints` beim ersten Bewerten. */
+const finishSubtaskTear = async (
+  subtaskId: string,
+  origin: { x: number; y: number },
+  standardPoints?: number,
+): Promise<boolean> => {
+  const subtask = subtasks.value.find((s) => s.task_id === subtaskId)
   markTorn(subtaskId)
-  const applied = await taskStore.completeTask(subtaskId)
-  if (!applied || !subtask) return
-  if (subtask.subtask_points_mode === 'checklist') return
-  flyPoints(`+${subtask.effort} P`, origin)
+  const applied = await taskStore.completeTask(subtaskId, undefined, undefined, standardPoints)
+  if (!applied || !subtask) return applied
+  if (subtask.subtask_points_mode === 'checklist') return applied
+  flyPoints(`+${subtask.effort ?? standardPoints ?? 0} P`, origin)
+  return applied
 }
 
 /**
@@ -321,9 +368,40 @@ const tearSubtask = async (subtaskId: string, handle: HTMLElement) => {
  */
 const tearNote = async (handle: HTMLElement) => {
   const origin = centerOf(handle)
-  const points = effectivePoints.value
-  const applied = await taskStore.completeTask(props.task.task_id)
-  if (!applied) return
+  // Unbewertet: der Zettel bleibt hängen, bis die Punktwahl bestätigt ist.
+  // Abbrechen erledigt nichts.
+  if (unrated.value) {
+    openRating({
+      taskId: props.task.task_id,
+      title: props.task.title,
+      checklist: false,
+      subtask: false,
+      origin,
+    })
+    return
+  }
+  await finishNoteTear(origin)
+}
+
+/**
+ * Erledigen, Punkteflug und Fetzen des ganzen Zettels. Beim ersten Bewerten
+ * mit `standardPoints`; die fliegende Zahl rechnet dann mit dem gewählten Wert.
+ */
+const finishNoteTear = async (
+  origin: { x: number; y: number },
+  standardPoints?: number,
+): Promise<boolean> => {
+  const points =
+    standardPoints === undefined
+      ? effectivePoints.value
+      : estimateParentPoints(standardPoints, taskStore.getSubtasks(props.task.task_id))
+  const applied = await taskStore.completeTask(
+    props.task.task_id,
+    undefined,
+    undefined,
+    standardPoints,
+  )
+  if (!applied) return false
   if (points > 0) flyPoints(`+${points} P`, origin)
   else flyPoints('erledigt', origin, { muted: true })
   // Der Fetzen erst NACH `applied`: ein abgewiesener Doppelgriff hat nichts
@@ -331,6 +409,41 @@ const tearNote = async (handle: HTMLElement) => {
   // bekommt einen — ein Zettelchen bleibt sichtbar stehen, und die Dialogwege
   // sind bewusste Entscheidungen mit Bestätigung.
   offerScrap({ taskId: props.task.task_id, title: props.task.title, points })
+  return true
+}
+
+// --- Bewerten vor dem Erledigen ----------------------------------------------
+
+/**
+ * Was gerade bewertet wird: der Zettel selbst oder eines seiner Zettelchen.
+ * `origin` ist der Startpunkt des Punkteflugs, gemerkt beim Griff — nach dem
+ * Dialog gibt es keinen Griff mehr. `null` = kein Dialog offen.
+ */
+interface RatingTarget {
+  taskId: string
+  title: string
+  checklist: boolean
+  subtask: boolean
+  origin: { x: number; y: number }
+}
+const ratingTarget = ref<RatingTarget | null>(null)
+
+const openRating = (target: RatingTarget) => {
+  ratingTarget.value = target
+}
+
+/**
+ * Bestätigt: bewerten und erledigen in einem Schritt (`completeTask` mit
+ * `standardPoints`). Erst danach entsteht der Fetzen. Wird nichts angewandt
+ * (Doppelgriff), bleibt der Dialog offen.
+ */
+const handleRatingConfirm = async (standardPoints: number) => {
+  const target = ratingTarget.value
+  if (!target) return
+  const applied = target.subtask
+    ? await finishSubtaskTear(target.taskId, target.origin, standardPoints)
+    : await finishNoteTear(target.origin, standardPoints)
+  if (applied) ratingTarget.value = null
 }
 
 /**
@@ -470,7 +583,12 @@ const onPressDirection = (direction: PressDirection) => {
   }
   if (direction === 'up') showPostponeModal.value = true
   else if (direction === 'left') showAssignmentModal.value = true
-  else showCompletionModal.value = true
+  // Unbewertet gibt es keine Standardpunkte, von denen man abwiche: auch
+  // „rechts“ ist dann das erste Bewerten (→ `tearNote`).
+  else if (unrated.value) {
+    const el = root.value
+    if (el) void tearNote(el)
+  } else showCompletionModal.value = true
 }
 
 const press = useDirectionPress({
@@ -1007,7 +1125,10 @@ const handlePostponeConfirm = async (targetDate: string) => {
       >
         <span class="mini-title">{{ subtask.title }}</span>
         <span v-if="subtask.subtask_points_mode !== 'checklist'" class="mini-points">
-          {{ subtask.subtask_points_mode === 'deduct' ? '−' : '+' }}{{ subtask.effort }} P
+          <template v-if="subtask.effort === null">unbewertet</template>
+          <template v-else>
+            {{ subtask.subtask_points_mode === 'deduct' ? '−' : '+' }}{{ subtask.effort }} P
+          </template>
         </span>
         <!-- Eigener Abreiß-Griff, 40 × 40 px. Er sitzt VOLLSTÄNDIG innerhalb
              seines Zettelchens (kein negativer Versatz), damit er nicht die
@@ -1092,14 +1213,25 @@ const handlePostponeConfirm = async (targetDate: string) => {
     />
 
     <!-- Beide Gesten nach unten an einem Projekt: das Arbeitseintrag-Fenster.
-         Auswahl UND Notiz sind Pflicht, nichts ist vorausgewählt — Schließen
-         ohne Eintrag bucht nichts. -->
+         Auswahl UND Notiz sind Pflicht; vorausgewählt sind die Standardpunkte
+         der Arbeits-Unteraufgabe, unbewertet nichts (die erste Wahl bewertet
+         sie). Schließen ohne Eintrag bucht nichts. -->
     <ProjectWorkModal
       v-if="showProjectWorkModal"
       :projectTitle="props.task.title"
+      :standardPoints="projectWorkSubtask?.effort ?? null"
       :isLoading="isLoggingWork"
       @close="showProjectWorkModal = false"
       @confirm="handleProjectWork"
+    />
+
+    <!-- Bewerten vor dem Erledigen: Abreißen, Kranz unten/rechts, Zettelchen. -->
+    <TaskRatingModal
+      v-if="ratingTarget"
+      :taskTitle="ratingTarget.title"
+      :checklist="ratingTarget.checklist"
+      @close="ratingTarget = null"
+      @confirm="handleRatingConfirm"
     />
 
     <TaskEditModal
@@ -1486,6 +1618,17 @@ const handlePostponeConfirm = async (targetDate: string) => {
   font-weight: 900;
   line-height: 1;
   filter: drop-shadow(1.5px 2px 0 rgba(36, 31, 26, 0.35));
+}
+
+/* Unbewertet: ein leerer, gestrichelter Sticker mit Fragezeichen — keine Zahl,
+   keine Form, die einen Wert behauptete. Außenmaß wie `.points--s1` (34 px,
+   der Rand liegt innen), damit die Breitenmessung der Wand nichts Neues lernt. */
+.points--unrated {
+  box-sizing: border-box;
+  border-radius: 50%;
+  border: 1.5px dashed rgba(36, 31, 26, 0.5);
+  color: var(--pw-ink-soft);
+  filter: none;
 }
 
 .points--s0,

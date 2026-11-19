@@ -320,6 +320,7 @@ const handlePostponeConfirm = async (targetDate: string) => {
       >
         <span class="dot" aria-hidden="true"></span>
         <span class="done-title">{{ row.task.title }}</span>
+        <span v-if="row.task.effort === null" class="unrated">unbewertet</span>
         <span class="stamp">{{ row.stamp }}</span>
         <button class="ctrl edit" title="Aufgabe bearbeiten" @click="openEdit(row.task.task_id)">
           <i class="bi bi-pencil" aria-hidden="true"></i>
@@ -459,6 +460,18 @@ const handlePostponeConfirm = async (targetDate: string) => {
   letter-spacing: 0.02em;
   color: var(--pw-ink-soft);
   opacity: 0.85;
+  white-space: nowrap;
+}
+
+/* Unbewertet (CONTEXT.md § unbewertet): ein Hinweis statt einer Zahl. */
+.unrated {
+  flex: none;
+  padding: 1px 5px;
+  border: 1px dashed rgba(36, 31, 26, 0.45);
+  border-radius: 3px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--pw-ink-soft);
   white-space: nowrap;
 }
 

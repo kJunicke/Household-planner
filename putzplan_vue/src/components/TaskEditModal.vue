@@ -2,6 +2,7 @@
 import type { Task } from '@/types/Task'
 import { ref, computed } from 'vue'
 import { canPostpone } from '@/lib/taskSchedule'
+import { isUnrated } from '@/lib/taskPoints'
 import { TASK_TITLE_MAX_LENGTH } from '@/lib/limits'
 import { findDuplicateTask, normalizeTaskTitle } from '@/lib/taskDuplicates'
 import { useTaskStore } from '@/stores/taskStore'
@@ -106,18 +107,28 @@ const duplicate = computed(() => {
   return findDuplicateTask(taskStore.tasks, title, props.task.task_id)
 })
 
+// **unbewertet** (CONTEXT.md § unbewertet): hier lässt sich die Aufgabe ohne
+// Erledigen bewerten — etwa wenn der Haushalt viele auf einmal bewertet. Pflicht
+// ist es nicht: Titel oder Typ einer unbewerteten Aufgabe lassen sich ändern, ohne
+// Punkte zu wählen. Eine bewertete Aufgabe wird nie wieder unbewertet.
+const wasUnrated = isUnrated(props.task)
+
 const canConfirm = computed(() => {
   return (
-    editForm.value.title.trim().length > 0 && editForm.value.effort !== null && !duplicate.value
+    editForm.value.title.trim().length > 0 &&
+    (wasUnrated || editForm.value.effort !== null) &&
+    !duplicate.value
   )
 })
 
 const handleConfirm = () => {
-  const effort = editForm.value.effort
-  if (!canConfirm.value || effort === null) return
+  if (!canConfirm.value) return
+  const { effort, ...rest } = editForm.value
 
   // Validierung: Wenn task_type !== 'recurring', setze recurrence_days = 0
-  const updates = { ...editForm.value, effort, title: editForm.value.title.trim() }
+  const updates: Partial<Task> = { ...rest, title: editForm.value.title.trim() }
+  // Unbewertet und nichts gewählt: `effort` gar nicht mitschicken.
+  if (effort !== null) updates.effort = effort
   if (updates.task_type !== 'recurring') {
     updates.recurrence_days = 0
   }
@@ -169,6 +180,9 @@ const handleClose = () => {
 
             <div class="mb-3">
               <label class="form-label">Punkte</label>
+              <p v-if="wasUnrated" class="rating-hint">
+                Noch unbewertet. Der Wert gilt ab jetzt für diese Aufgabe.
+              </p>
               <PointPicker v-model="editForm.effort" kind="standard" />
             </div>
 
@@ -264,6 +278,12 @@ const handleClose = () => {
   outline: none;
   border-color: var(--color-primary);
   box-shadow: 0 0 0 3px rgba(13, 110, 253, 0.15);
+}
+
+.rating-hint {
+  margin: -0.25rem 0 0.5rem;
+  font-size: 0.8125rem;
+  color: var(--color-text-secondary);
 }
 
 /* Footer Layout */

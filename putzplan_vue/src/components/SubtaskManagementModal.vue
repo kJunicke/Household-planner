@@ -67,26 +67,30 @@ const modeDescriptions = {
 
 // DEDUCT OVERFLOW VALIDATION
 // Calculate current total deduct effort from existing subtasks
+// (unbewertete zählen 0, wie in `estimateParentPoints`)
 const currentDeductSum = computed(() => {
   return props.existingSubtasks
     .filter((s) => s.subtask_points_mode === 'deduct')
-    .reduce((sum, s) => sum + s.effort, 0)
+    .reduce((sum, s) => sum + (s.effort ?? 0), 0)
 })
+
+// Ist die Hauptaufgabe unbewertet, gibt es noch kein Budget — und keine Warnung.
+const parentEffort = computed(() => props.parentTask.effort)
 
 // Calculate remaining deduct budget
 const remainingDeductBudget = computed(() => {
-  return props.parentTask.effort - currentDeductSum.value
+  return (parentEffort.value ?? 0) - currentDeductSum.value
 })
 
 // Check if current deduct sum already exceeds parent effort (config error)
 const isDeductOverflow = computed(() => {
-  return currentDeductSum.value > props.parentTask.effort
+  return parentEffort.value !== null && currentDeductSum.value > parentEffort.value
 })
 
 // Check if adding this new subtask as deduct would cause overflow
 const wouldCauseDeductOverflow = computed(() => {
-  if (newSubtaskPointsMode.value !== 'deduct') return false
-  return currentDeductSum.value + (newSubtaskEffort.value ?? 0) > props.parentTask.effort
+  if (newSubtaskPointsMode.value !== 'deduct' || parentEffort.value === null) return false
+  return currentDeductSum.value + (newSubtaskEffort.value ?? 0) > parentEffort.value
 })
 
 const canAddSubtask = computed(() => {
@@ -223,7 +227,7 @@ const handleDeleteSubtask = (subtaskId: string) => {
                 :class="{ completed: subtask.completed }"
               >
                 <span class="subtask-title">{{ subtask.title }}</span>
-                <span class="subtask-effort">{{ subtask.effort }}</span>
+                <span class="subtask-effort">{{ subtask.effort ?? 'unbewertet' }}</span>
 
                 <!-- Points Mode Selector für existierende Subtasks (nur wenn nicht Daily).
                      Dieselben Modi wie beim Anlegen: unter Projekten kein deduct —
