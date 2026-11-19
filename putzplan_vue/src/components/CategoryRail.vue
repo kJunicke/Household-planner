@@ -13,6 +13,10 @@ const props = defineProps<{
   groups: RailGroup[]
   activeKey: string | null
   collapsed: boolean
+  /** Ein Listeneintrag liegt in der Hand: Blasen werden zu Ablagezielen. */
+  dragging?: boolean
+  /** Blase unter dem Finger während des Ziehens. */
+  dropKey?: string | null
 }>()
 
 const emit = defineEmits<{
@@ -25,29 +29,41 @@ const shortLabel = (label: string) => label.trim().slice(0, 4)
 
 // Adaptive density: shrink bubbles once the rail gets long so everything fits.
 const dense = computed(() => props.groups.length > 8)
+
+// Beim Ziehen klappt eine zugeklappte Leiste auf, nur für die Dauer des Zugs:
+// der gespeicherte Zustand bleibt unberührt.
+const open = computed(() => !props.collapsed || props.dragging)
 </script>
 
 <template>
   <nav
     class="cat-rail"
-    :class="{ 'rail-collapsed': collapsed, dense }"
+    :class="{ 'rail-collapsed': !open, dense, dragging }"
     aria-label="Kategorie-Schnellzugriff"
   >
-    <template v-if="!collapsed">
+    <!-- `data-drop-key` und `data-cat-name` liest `useCategoryDrag` beim Ziehen. -->
+    <template v-if="open">
       <button
         v-for="group in groups"
         :key="group.key"
         class="rail-bubble"
-        :class="{ active: activeKey === group.key, uncat: group.isUncategorized }"
+        :class="{
+          active: !dragging && activeKey === group.key,
+          uncat: group.isUncategorized,
+          'drop-target': dragging && dropKey === group.key,
+        }"
         :style="{ '--bubble-color': categoryColor(group.category) }"
         :title="group.label"
         :aria-label="group.label"
+        :data-drop-key="group.key"
+        :data-cat-name="group.category ?? ''"
         @click="emit('select', group.key)"
       >
-        <span class="bubble-label">{{ shortLabel(group.label) }}</span>
+        <span class="bubble-label">{{ dragging ? group.label : shortLabel(group.label) }}</span>
       </button>
     </template>
     <button
+      v-if="!dragging"
       class="rail-toggle"
       :title="collapsed ? 'Kategorien einblenden' : 'Ausblenden'"
       @click="emit('update:collapsed', !collapsed)"
@@ -144,6 +160,38 @@ const dense = computed(() => props.groups.length > 8)
   font-variant-numeric: tabular-nums;
 }
 
+/* Ziehen: breitere Blasen mit vollem Namen. Statt zu scrollen schrumpfen sie
+   in der Höhe, bis alle in die Leiste passen — eine Blase, die erst ins Bild
+   gescrollt werden müsste, wäre als Ziel nicht erreichbar. */
+.cat-rail.dragging {
+  width: 44vw;
+  max-width: 200px;
+  overflow: hidden;
+}
+.cat-rail.dragging .rail-bubble {
+  height: 52px;
+  min-height: 0;
+  flex-shrink: 1;
+  justify-content: flex-start;
+  padding: 2px 10px;
+  box-shadow: var(--shadow-sm);
+}
+.cat-rail.dragging .bubble-label {
+  white-space: normal;
+  overflow-wrap: anywhere;
+  text-align: left;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+}
+.cat-rail.dragging .rail-bubble.drop-target {
+  background: color-mix(in srgb, var(--bubble-color) 45%, var(--color-background));
+  border-color: var(--bubble-color);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--bubble-color) 45%, transparent);
+  transform: translateX(-6px);
+}
+
 /* Dense mode: many categories → shorter bubbles so the rail still fits. */
 .cat-rail.dense {
   gap: 4px;
@@ -154,5 +202,8 @@ const dense = computed(() => props.groups.length > 8)
 }
 .cat-rail.dense .bubble-label {
   font-size: var(--font-xs);
+}
+.cat-rail.dense.dragging .rail-bubble {
+  min-height: 0;
 }
 </style>

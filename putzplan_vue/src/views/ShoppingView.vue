@@ -447,7 +447,11 @@ const handleCategoryDelete = async (name: string, withItems: boolean) => {
 const justMovedId = ref<string | null>(null)
 let moveHighlightTimer: number | null = null
 
-const { bind: bindDrag } = useCategoryDrag({
+const {
+  bind: bindDrag,
+  dragging: itemDragging,
+  dropKey: railDropKey,
+} = useCategoryDrag({
   group: 'shopping-items',
   categoryOf: (el) => el.dataset.catName || null,
   onMove: (itemId, category) => {
@@ -898,6 +902,8 @@ onUnmounted(() => {
                 :groups="displaySections"
                 :active-key="activeCatKey"
                 :collapsed="railCollapsed"
+                :dragging="itemDragging"
+                :drop-key="railDropKey"
                 @select="scrollToKey"
                 @update:collapsed="setRailCollapsed"
               />
