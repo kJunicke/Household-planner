@@ -2100,9 +2100,9 @@ const handlePostponeConfirm = async (targetDate: string) => {
 
 /* Die **Nadelstelle**: wo die Reißzwecke säße, ein leeres Nadelloch. Ein Knopf
    (wieder dreckig), deshalb anders als `.pin` MIT Trefffläche: 44 × 36 px, mittig
-   über der Oberkante. Sie ragt 8 px über den Zettel — weniger als jede
-   Befestigung, für die die Wand oben Platz hält (Gruppe 3 bekommt in
-   `wallLayout.ts` das Polster der ungünstigsten). */
+   über der Oberkante. Sie ragt 8 px über die Padding-Box, 6 px über das Papier;
+   die Wand hält oben Platz dafür frei. Wer Lage oder Maße ändert, ändert die
+   Zeile `.pin-spot` in `FASTENERS` (`src/lib/wallLayout.ts`) mit. */
 .pin-spot {
   position: absolute;
   top: -8px;

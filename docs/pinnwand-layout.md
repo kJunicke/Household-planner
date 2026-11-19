@@ -14,10 +14,14 @@ Abdruckstapel keinen Platz mehr freihält, sondern in Stift und Papierrand ragt:
 - **Spaltenabstand 8 px.** Der waagerechte Versatz je Zettel ist ±3 px; zwei Nachbarn laufen
   höchstens 6 px aufeinander zu, 2 px Luft bleiben (am ungedrehten Kasten; die Neigung darf
   überlappen, der linke Zettel liegt dann oben).
-- **Reihenfolge:** Gruppe (fällig → täglich → Projekt), innerhalb der Gruppe der Hash der
-  Kennung. Jeder Zettel kommt in die gerade kürzeste Spalte, bei Gleichstand die linke. Die
-  Gruppen fließen in denselben Spalten weiter: ein täglicher Zettel kann neben einem fälligen
-  höher hängen, innerhalb einer Spalte aber nie darüber.
+- **Reihenfolge:** Gruppe (fällig → täglich → Projekt, in der Suche danach die losen
+  Zettel), innerhalb der Gruppe der Hash der Kennung. Jeder Zettel kommt in die gerade
+  kürzeste Spalte, bei Gleichstand die linke. Die Gruppen fließen in denselben Spalten
+  weiter: ein täglicher Zettel kann neben einem fälligen höher hängen, innerhalb einer
+  Spalte aber nie darüber.
+- **Gruppe bestimmt das obere Polster** (`WallGroup`): jede bringt ihre Befestigung mit,
+  die losen Zettel ihre Nadelstelle. Ein Zettel, den keine Liste kennt (`unknown`),
+  bekommt das Polster aller Befestigungen.
 - **Wildheit:** Versatz (±3 px waagerecht, 4…15 px Luft darüber) und Neigung (±3°) hängen
   allein an der Kennung. Kommt ein Zettel dazu oder geht, rücken andere in andere Spalten,
   behalten aber Versatz und Neigung.
