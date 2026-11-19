@@ -21,14 +21,12 @@ import WallDoneList from '../components/WallDoneList.vue'
 import WallScrap from '../components/WallScrap.vue'
 import TaskCreateModal from '../components/TaskCreateModal.vue'
 import QuickTaskModal from '../components/QuickTaskModal.vue'
-import TaskRatingModal from '../components/TaskRatingModal.vue'
-import { isUnrated } from '@/lib/taskPoints'
 import { useTaskStore } from '../stores/taskStore'
 import { useHouseholdStore } from '../stores/householdStore'
 import { useTaskBoard } from '@/composables/useTaskBoard'
 import { useOverlayHistoryEntry } from '@/composables/useOverlayHistoryEntry'
-import { searchTasks } from '@/lib/taskSearch'
-import { offerScrap } from '@/composables/useTornScrap'
+import { searchWall } from '@/lib/taskSearch'
+import { tornScrapState } from '@/composables/useTornScrap'
 import {
   layoutWall,
   rememberWallHeight,
@@ -51,6 +49,76 @@ const wallTasks = computed((): Task[] => [
   ...board.dailyTasks.value,
   ...board.projectTasks.value,
 ])
+
+/**
+ * Die **Suche** filtert die Wand selbst (→ CONTEXT.md „Suche"): das Suchfeld
+ * liegt über der Wand, und wer nicht passt, verschwindet — die Spalten rücken
+ * auf, weil `layoutWall` nur die sichtbaren Zettel bekommt. Ein Treffer ist
+ * derselbe `WallNote` wie sonst, mit allen Gesten; einen eigenen Such-Pfad für
+ * Abreißen, Kranz oder Punktwahl gibt es nicht.
+ *
+ * Das offene Suchfeld ist ein eigener Verlaufseintrag, damit die Zurück-Geste
+ * es schließt, statt die Ansicht zu wechseln (→ `useOverlayHistoryEntry`).
+ * Der Grund des Schließens kommt als Argument zurück: beim Weitergehen ins
+ * Modal bleibt die Eingabe als Titelvorschlag stehen, sonst wird sie geleert
+ * und die Wand zeigt den zuletzt in der Suche erledigten Zettel.
+ */
+const searchQuery = ref('')
+const searchInputEl = ref<HTMLInputElement | null>(null)
+
+const {
+  isOpen: showSearch,
+  open: openSearch,
+  close: closeSearch,
+} = useOverlayHistoryEntry<'modal'>('suche', (reason) => {
+  const target = searchTargetId
+  searchTargetId = null
+  if (reason === 'modal') return
+  searchQuery.value = ''
+  if (target) revealNote(target)
+})
+
+/** `null`, solange nichts gesucht wird — dann zeigt die Wand alles. */
+const wallSearch = computed(() =>
+  showSearch.value ? searchWall(taskStore.tasks, searchQuery.value) : null,
+)
+
+/**
+ * Die Zettel, die gerade an der Wand stehen: alle, oder nur die Treffer.
+ * Die Reihenfolge ist egal — `layoutWall` sortiert selbst.
+ */
+const shownTasks = computed((): Task[] => {
+  const search = wallSearch.value
+  if (!search) return wallTasks.value
+  const hits = new Set(search.pinned.map((task) => task.task_id))
+  return wallTasks.value.filter((task) => hits.has(task.task_id))
+})
+
+/**
+ * Der Zettel, zu dem die Wand nach dem Schließen der Suche scrollt: der
+ * zuletzt **in der Suche** erledigte. Erkannt am Fetzen — ihn bietet jeder
+ * Abriss an, egal über welche Geste, und `WallView` muss dafür nichts von den
+ * Gesten im Zettel wissen. Wer später aus der Suche heraus anpinnt, setzt ihn
+ * ebenfalls.
+ */
+let searchTargetId: string | null = null
+
+watch(tornScrapState.scrap, (scrap) => {
+  if (scrap && showSearch.value) searchTargetId = scrap.taskId
+})
+
+// `immediate`, weil das Suchfeld beim Aufbau der View **schon offen sein kann**:
+// die Marke im Verlauf überlebt das Neuladen und die Rückkehr aus einer fremden
+// Seite.
+watch(
+  showSearch,
+  (open) => {
+    if (!open) return
+    searchTargetId = null
+    setTimeout(() => searchInputEl.value?.focus(), 100)
+  },
+  { immediate: true },
+)
 
 /**
  * Erledigte Aufgaben — unter die Wand, nicht auf sie. Eigene Konstante statt
@@ -229,8 +297,10 @@ const relayout = (animate: boolean, tappedId?: string): boolean => {
   let skipped = 0
 
   // Schritt 1 — Breiten setzen: Spaltenbreite, aufgeklappt die ganze Wand.
+  // Nur die gezeigten Zettel: die anderen sind während der Suche gar nicht
+  // gerendert und zählten sonst als übersprungen.
   const elements = new Map<string, HTMLElement>()
-  for (const task of wallTasks.value) {
+  for (const task of shownTasks.value) {
     const el = noteEls.get(task.task_id)
     if (!el) {
       skipped++
@@ -303,8 +373,9 @@ const relayout = (animate: boolean, tappedId?: string): boolean => {
     revealNotes()
     // Höhengedächtnis für `placeholderMinHeight` — NUR bei vollständigem Lauf:
     // ein Teillauf liefert eine zu kleine Höhe und damit beim nächsten Montieren
-    // genau den Sprung, den die Mindesthöhe verhindern soll.
-    rememberWallHeight(layout.height)
+    // genau den Sprung, den die Mindesthöhe verhindern soll. Ebenso wenig die
+    // Höhe einer gefilterten Wand: gemerkt wird die volle.
+    if (!wallSearch.value) rememberWallHeight(layout.height)
   }
 
   if (!animate || prefersReducedMotion?.matches) return complete
@@ -471,24 +542,30 @@ const scheduleRelayout = (animate: boolean) => {
  * Nur Änderungen, die das Packen betreffen, lösen ein Neupacken aus: Menge,
  * Reihenfolge, Titel (steuert die Höhe) und Typ (steuert das Papier). Eine
  * geänderte Zuweisung färbt nur um und darf die Wand nicht durchschütteln.
+ *
+ * Gebaut aus den **gezeigten** Zetteln: jeder Tastendruck in der Suche, der
+ * die Treffer ändert, packt neu.
  */
 const layoutSignature = computed(() =>
-  wallTasks.value.map((task) => `${task.task_id}:${task.task_type}:${task.title}`).join('|'),
+  shownTasks.value.map((task) => `${task.task_id}:${task.task_type}:${task.title}`).join('|'),
 )
 
 watch(layoutSignature, () => {
   // Ein Zettel, der von der Wand verschwindet (erledigt, gelöscht), nimmt
   // seinen Aufklapp-Zustand mit. Ohne das stünde er beim Wiederauftauchen —
-  // etwa nach „wieder dreckig" — unvermittelt offen da.
+  // etwa nach „wieder dreckig" — unvermittelt offen da. Gemessen an der
+  // **ganzen** Wand, nicht an den Treffern: wer nur weggefiltert ist, bleibt
+  // aufgeklappt, wenn die Suche ihn wieder zeigt.
   const onWall = new Set(wallTasks.value.map((task) => task.task_id))
   if ([...expandedIds.value].some((id) => !onWall.has(id))) {
     expandedIds.value = new Set([...expandedIds.value].filter((id) => onWall.has(id)))
   }
-  // Dasselbe für den Zettel unter der Geste: verschwindet er von der Wand
-  // (erledigt, gelöscht), kommt das `gesture-end` seiner Komponente nicht an — sie ist
-  // ausgehängt. Ohne diese Zeile bliebe seine ID hängen und genau dieser Zettel
-  // würde nach einem „wieder dreckig" nie wieder mitfliegen.
-  if (gestureNoteId.value !== null && !onWall.has(gestureNoteId.value)) gestureNoteId.value = null
+  // Dasselbe für den Zettel unter der Geste: verschwindet er (erledigt,
+  // gelöscht, weggefiltert), kommt das `gesture-end` seiner Komponente nicht an
+  // — sie ist ausgehängt. Ohne diese Zeile bliebe seine ID hängen und genau
+  // dieser Zettel würde nach einem „wieder dreckig" nie wieder mitfliegen.
+  const shown = new Set(shownTasks.value.map((task) => task.task_id))
+  if (gestureNoteId.value !== null && !shown.has(gestureNoteId.value)) gestureNoteId.value = null
   scheduleRelayout(true)
 })
 
@@ -551,149 +628,34 @@ onUnmounted(() => {
 
 const showCreateModal = ref(false)
 const showQuickModal = ref(false)
-const searchQuery = ref('')
-
-/**
- * Treffer, an dem gerade eine Aktion läuft. Sperrt alle Aktionsknöpfe: ein zweiter
- * Tipp während des Erledigens würde vom Store still verworfen, einer danach eine
- * zweite Erledigung mit Punkten buchen.
- *
- * Nach einer geglückten Aktion bleibt die Sperre stehen, bis die Suche geschlossen
- * ist (Freigabe im Schließen-Rückruf unten) — nicht nur bis der Store „lokal
- * angewendet" meldet. Nur ein Fehlschlag gibt sie sofort frei.
- */
-const searchBusyId = ref<string | null>(null)
-
-// Das Such-Overlay ist ein eigener Verlaufseintrag, damit die Rückgängig-Geste
-// es schließt, statt die Ansicht zu wechseln. Reguläres Schließen verbraucht
-// den Eintrag wieder → `useOverlayHistoryEntry`.
-//
-// Der Grund des Schließens kommt als Argument zurück: beim Weitergehen ins
-// Modal bleibt die Eingabe als Titelvorschlag stehen, sonst wird sie geleert.
-// Er reist durch das Composable mit, weil das Schließen per Verlaufssprung
-// erst verzögert zurückmeldet.
-const {
-  isOpen: showSearchOverlay,
-  open: openSearchOverlay,
-  close: closeSearchOverlay,
-} = useOverlayHistoryEntry<'modal' | 'jump'>('suche', (reason) => {
-  searchBusyId.value = null
-  if (reason === 'modal') return
-  searchQuery.value = ''
-  if (reason === 'jump') revealJumpTarget()
-})
-
-const searchResults = computed(() => searchTasks(taskStore.tasks, searchQuery.value))
-
-// Gibt es den gesuchten Titel schon (Relevanz 100 = Duplikat-Regel, →
-// `searchTasks`), führt „Aufgabe erstellen" nur in eine Abweisung — der Knopf
-// wird dann gar nicht erst angeboten.
-const searchMatchesExisting = computed(
-  () => searchResults.value?.some((result) => result.relevance === 100) ?? false,
-)
-
-/**
- * Erledigen direkt aus der Suche — auch eine schon erledigte Aufgabe: dann ist
- * sie eben noch einmal gemacht worden, mit Punkten und Verlaufseintrag.
- * Projekte sind ausgenommen; an ihnen arbeitet man über ihre Unteraufgabe.
- *
- * Danach schließt die Suche und springt zur Aufgabe, wie ein Tipp auf den Treffer.
- * So hängt der Fetzen sichtbar unter der Wand, solange er die Erledigung noch
- * zurücknehmen kann — bliebe die Suche offen, ersetzte das nächste Erledigen ihn
- * ungesehen.
- */
-const completeFromSearch = async (task: Task, standardPoints?: number) => {
-  if (searchBusyId.value) return
-  // Unbewertet (CONTEXT.md § unbewertet): erst die Punktwahl. Abbrechen lässt
-  // die Suche offen und erledigt nichts.
-  if (isUnrated(task) && standardPoints === undefined) {
-    searchRatingTask.value = task
-    return
-  }
-  searchBusyId.value = task.task_id
-  try {
-    const points = taskStore.estimateCompletionEffort(task, { standardPoints })
-    if (!(await taskStore.completeTask(task.task_id, { standardPoints }))) {
-      searchBusyId.value = null
-      return
-    }
-    searchRatingTask.value = null
-    offerScrap({ taskId: task.task_id, title: task.title, points })
-    jumpToResult(task.task_id)
-  } catch (error) {
-    searchBusyId.value = null
-    throw error
-  }
-}
-
-/** Die unbewertete Aufgabe, deren Erledigen aus der Suche auf die Punktwahl wartet. */
-const searchRatingTask = ref<Task | null>(null)
-
-/** **Wieder dreckig** aus der Suche (Stecknadel-Knopf, → CONTEXT.md): zurück an die Wand, Punkte bleiben. */
-const markDirtyFromSearch = async (task: Task) => {
-  if (searchBusyId.value) return
-  searchBusyId.value = task.task_id
-  try {
-    if (await taskStore.markAsDirty(task.task_id)) jumpToResult(task.task_id)
-    else searchBusyId.value = null
-  } catch (error) {
-    searchBusyId.value = null
-    throw error
-  }
-}
-
-// `immediate`, weil das Overlay beim Aufbau der View **schon offen sein kann**:
-// die Marke im Verlauf überlebt das Neuladen und die Rückkehr aus einer fremden
-// Seite. Ein Watcher nur auf den Übergang liesse den Fokus dort aus, und
-// dasselbe Overlay verhielte sich je nach Herkunft anders.
-watch(
-  showSearchOverlay,
-  (open) => {
-    if (!open) return
-    searchBusyId.value = null
-    setTimeout(() => {
-      const input = document.querySelector('.search-overlay-input') as HTMLInputElement | null
-      input?.focus()
-    }, 100)
-  },
-  { immediate: true },
-)
-
-// Ein Suchtreffer ist ein Sprung, keine zweite Karte: der Tipp schließt die
-// Suche und zeigt auf den Zettel bzw. auf die Zeile der Erledigt-Liste. Bedient
-// wird die Aufgabe dann dort, mit denselben Gesten und Knöpfen wie sonst auch.
-// `useTaskBoard` verteilt jede Hauptaufgabe auf genau eine der beiden Stellen.
-//
-// Gezeigt wird erst nach dem Schließen: das läuft über einen Verlaufssprung,
-// und ein Scrollen davor könnte die Scroll-Wiederherstellung des Browsers
-// zurücksetzen.
-let jumpTargetId: string | null = null
 let jumpPulse: Animation | null = null
 
 /**
  * Stapelhöhe des Zettels, solange sein Sprung-Ring pulsiert: über allen ruhenden
  * (1…n) und fliegenden (600 + z) Zetteln, damit kein Nachbar den Ring verdeckt;
  * unter dem gezogenen bzw. lang gedrückten Zettel (800/810, `WallNote.vue`) und
- * unter Navigation (900), Header samt Statusleiste (950), FAB (1000) und
- * Such-Overlay (1010). Die Wand bildet keinen eigenen Stapelkontext — die Zettel
+ * unter Navigation (900), Suchfeld (940), Header samt Statusleiste (950) und
+ * FAB (1000). Die Wand bildet keinen eigenen Stapelkontext — die Zettel
  * konkurrieren direkt mit diesen Ebenen.
  */
 const JUMP_PULSE_Z = '799'
 
-const jumpToResult = (taskId: string) => {
-  jumpTargetId = taskId
-  closeSearchOverlay('jump')
-}
-
-function revealJumpTarget() {
-  const id = jumpTargetId
-  jumpTargetId = null
-  if (!id) return
+/**
+ * Zeigt nach dem Schließen der Suche auf den zuletzt dort erledigten Zettel:
+ * scrollt hin und lässt einen Ring pulsieren.
+ *
+ * Erst nach dem Schließen: das läuft über einen Verlaufssprung, und ein
+ * Scrollen davor könnte die Scroll-Wiederherstellung des Browsers
+ * zurücksetzen. Und erst nach dem Neupacken der vollen Wand — der `nextTick`
+ * hier kommt nach dem des Packlaufs, das `requestAnimationFrame` danach.
+ */
+function revealNote(id: string) {
   void nextTick(() =>
     requestAnimationFrame(() => {
       const note = noteEls.get(id)
-      // Rückfall Fetzen: nach dem Erledigen aus der Suche ist er das, worauf es
-      // ankommt, falls die Zeile noch nicht gerendert ist.
+      // Ein erledigter Zettel hängt nicht mehr an der Wand: dann seine Zeile in
+      // der Erledigt-Liste, und falls die noch nicht gerendert ist, der Fetzen —
+      // er ist das, worauf es nach dem Abreißen ankommt.
       const el =
         note ??
         document.querySelector<HTMLElement>(`.done-row[data-task-id="${CSS.escape(id)}"]`) ??
@@ -730,12 +692,12 @@ function revealJumpTarget() {
 // dann das Modal öffnen. `searchQuery` bleibt als Titelvorschlag stehen und
 // wird deshalb erst nach dem Schließen des Modals geleert.
 const openCreateFromSearch = () => {
-  closeSearchOverlay('modal')
+  closeSearch('modal')
   showCreateModal.value = true
 }
 
 const openQuickFromSearch = () => {
-  closeSearchOverlay('modal')
+  closeSearch('modal')
   showQuickModal.value = true
 }
 
@@ -771,6 +733,44 @@ const handleCreateQuickTask = async (data: { title: string; effort: number; note
          (`Header.vue`) und läuft auf jeder Route mit — hier NICHT einbinden,
          sonst rendert sie doppelt. -->
 
+    <!-- Das Suchfeld liegt oben über der Wand und klebt unter dem App-Header.
+         Jeder Tastendruck filtert die Wand darunter (→ `shownTasks`). -->
+    <div v-if="showSearch" class="wall-search">
+      <div class="wall-search-row">
+        <div class="wall-search-field">
+          <i class="bi bi-search" aria-hidden="true"></i>
+          <input
+            ref="searchInputEl"
+            v-model="searchQuery"
+            type="text"
+            class="wall-search-input"
+            placeholder="Aufgabe suchen oder erstellen..."
+            @keyup.esc="closeSearch()"
+          />
+          <button
+            v-if="searchQuery"
+            class="wall-search-clear"
+            aria-label="Eingabe löschen"
+            @click="searchQuery = ''"
+          >
+            <i class="bi bi-x-lg"></i>
+          </button>
+        </div>
+        <button class="wall-search-close" aria-label="Suche schließen" @click="closeSearch()">
+          <i class="bi bi-x-lg"></i>
+        </button>
+      </div>
+
+      <div v-if="wallSearch" class="wall-search-actions">
+        <button v-if="wallSearch.offerCreate" class="btn btn-primary" @click="openCreateFromSearch">
+          <i class="bi bi-plus-lg"></i> Aufgabe erstellen
+        </button>
+        <button class="btn btn-success" @click="openQuickFromSearch">
+          <i class="bi bi-lightning-charge-fill"></i> Quick-Aufgabe abschließen
+        </button>
+      </div>
+    </div>
+
     <!-- Die Wand: Kork, absolut positionierte Zettel, keine Überschriften. -->
     <div
       ref="wallEl"
@@ -789,13 +789,15 @@ const handleCreateQuickTask = async (data: { title: string; effort: number; note
         <div class="skeleton-card"></div>
       </div>
 
-      <!-- Die Zettel werden IMMER gerendert, auch vor dem ersten Packlauf —
-           `relayout` misst sie am DOM, ein `v-if` hier nähme ihm die Vorlage.
-           Verborgen werden sie deshalb nur optisch, über die Hülle: `opacity`
-           lässt die Messung unberührt (anders als `display: none`). -->
+      <!-- Die gezeigten Zettel werden IMMER gerendert, auch vor dem ersten
+           Packlauf — `relayout` misst sie am DOM, ein `v-if` hier nähme ihm die
+           Vorlage. Verborgen werden sie deshalb nur optisch, über die Hülle:
+           `opacity` lässt die Messung unberührt (anders als `display: none`).
+           Was die Suche wegfiltert, fehlt dagegen ganz (`shownTasks`) und wird
+           deshalb auch nicht gemessen. -->
       <div class="wall-notes">
         <WallNote
-          v-for="task in wallTasks"
+          v-for="task in shownTasks"
           :key="task.task_id"
           :ref="(instance) => setNoteEl(task.task_id, instance)"
           :task="task"
@@ -807,149 +809,36 @@ const handleCreateQuickTask = async (data: { title: string; effort: number; note
       </div>
     </div>
 
-    <p v-if="hasPacked && !taskStore.isLoading && wallTasks.length === 0" class="wall-empty">
+    <p v-if="wallSearch && shownTasks.length === 0" class="wall-empty">
+      Kein Zettel passt zu „{{ searchQuery.trim() }}“.
+    </p>
+    <p v-else-if="hasPacked && !taskStore.isLoading && shownTasks.length === 0" class="wall-empty">
       Nichts angepinnt.
     </p>
 
     <!-- Der Fetzen: klebt den zuletzt abgerissenen Zettel auf einen Tipp zurück.
-         Rendert nichts, solange nichts abgerissen wurde. -->
+         Rendert nichts, solange nichts abgerissen wurde. Bleibt auch während der
+         Suche stehen — ein Treffer, der dort abgerissen wird, lässt sich gleich
+         zurückkleben. -->
     <WallScrap />
 
     <!-- Erledigt: kompakter Streifen UNTER der Wand, nicht auf ihr. -->
     <WallDoneList :tasks="doneTasks" />
 
-    <!-- Erledigen aus der Suche an einer unbewerteten Aufgabe: erst bewerten. -->
-    <TaskRatingModal
-      v-if="searchRatingTask"
-      :taskTitle="searchRatingTask.title"
-      :isLoading="searchBusyId !== null"
-      @close="searchRatingTask = null"
-      @confirm="
-        (points: number) => searchRatingTask && completeFromSearch(searchRatingTask, points)
-      "
-    />
-
     <!-- FAB: schwebende Papierkarte, nicht angepinnt — Suche und Neuanlegen
          bleiben hier und wandern nicht in den Header. Dass er nichts verdeckt,
-         regelt das Bodenpolster von `.wall-page`, nicht seine eigene Höhe. -->
-    <div class="fab-card">
+         regelt das Bodenpolster von `.wall-page`, nicht seine eigene Höhe.
+         Während der Suche weg: sie ist schon offen. -->
+    <div v-if="!showSearch" class="fab-card">
       <button
         class="fab-btn"
         :disabled="taskStore.isLoading"
         aria-label="Aufgabe suchen oder hinzufügen"
-        @click="openSearchOverlay"
+        @click="openSearch"
       >
         <i class="bi bi-search" aria-hidden="true"></i>
         <span class="fab-plus" aria-hidden="true"><i class="bi bi-plus"></i></span>
       </button>
-    </div>
-
-    <!-- Such-Overlay. Ein Treffer springt zum Zettel bzw. zur Erledigt-Zeile
-         (→ `jumpToResult`). -->
-    <div v-if="showSearchOverlay" class="search-overlay">
-      <div class="search-overlay-backdrop" @click="closeSearchOverlay()"></div>
-      <div class="search-overlay-content">
-        <div class="search-overlay-header">
-          <div class="search-overlay-input-wrapper">
-            <i class="bi bi-search"></i>
-            <input
-              v-model="searchQuery"
-              type="text"
-              class="search-overlay-input"
-              placeholder="Aufgabe suchen oder erstellen..."
-              @keyup.esc="closeSearchOverlay()"
-            />
-            <button
-              v-if="searchQuery"
-              class="search-clear-btn"
-              aria-label="Eingabe löschen"
-              @click="searchQuery = ''"
-            >
-              <i class="bi bi-x-lg"></i>
-            </button>
-          </div>
-          <button
-            class="search-overlay-close"
-            aria-label="Suche schließen"
-            @click="closeSearchOverlay()"
-          >
-            <i class="bi bi-x-lg"></i>
-          </button>
-        </div>
-
-        <div v-if="searchQuery.trim()" class="search-overlay-actions">
-          <button
-            v-if="!searchMatchesExisting"
-            class="btn btn-primary"
-            @click="openCreateFromSearch"
-          >
-            <i class="bi bi-plus-lg"></i> Aufgabe erstellen
-          </button>
-          <button class="btn btn-success" @click="openQuickFromSearch">
-            <i class="bi bi-lightning-charge-fill"></i> Quick-Aufgabe abschließen
-          </button>
-        </div>
-
-        <div class="search-overlay-body">
-          <template v-if="searchResults && searchResults.length > 0">
-            <div
-              v-for="result in searchResults"
-              :key="result.task.task_id"
-              class="search-result-item"
-            >
-              <button
-                type="button"
-                class="search-result-jump"
-                @click="jumpToResult(result.task.task_id)"
-              >
-                <span class="search-result-text">
-                  <span class="search-result-category"
-                    >{{ result.categoryLabel
-                    }}<template v-if="isUnrated(result.task)"> · unbewertet</template></span
-                  >
-                  <span class="search-result-title">{{ result.task.title }}</span>
-                </span>
-                <i class="bi bi-arrow-right-short" aria-hidden="true"></i>
-              </button>
-              <button
-                v-if="result.task.completed"
-                type="button"
-                class="search-result-action"
-                aria-label="Wieder dreckig"
-                title="Wieder dreckig"
-                :disabled="searchBusyId !== null"
-                @click="markDirtyFromSearch(result.task)"
-              >
-                <i class="bi bi-pin-angle" aria-hidden="true"></i>
-              </button>
-              <button
-                v-if="result.task.task_type !== 'project'"
-                type="button"
-                class="search-result-action search-result-action--done"
-                aria-label="Erledigen"
-                title="Erledigen"
-                :disabled="searchBusyId !== null"
-                @click="completeFromSearch(result.task)"
-              >
-                <i class="bi bi-check2" aria-hidden="true"></i>
-              </button>
-            </div>
-          </template>
-
-          <div
-            v-else-if="searchResults && searchResults.length === 0"
-            class="search-overlay-initial"
-          >
-            <i class="bi bi-search"></i>
-            <p>Keine Aufgaben gefunden für "{{ searchQuery }}"</p>
-          </div>
-
-          <div v-else class="search-overlay-initial">
-            <i class="bi bi-search"></i>
-            <p>Suche über alle Aufgaben...</p>
-          </div>
-        </div>
-      </div>
     </div>
 
     <TaskCreateModal
@@ -1119,56 +1008,43 @@ const handleCreateQuickTask = async (data: { title: string; effort: number; note
   border-radius: 50%;
 }
 
-.search-overlay {
-  position: fixed;
-  inset: 0;
-  /* Über dem FAB (1000), unter der Modal-Ebene (1050, utilities.css): die
-     Modals aus der Suche heraus teleportieren nach <body>. */
-  z-index: 1010;
-}
-
-.search-overlay-backdrop {
-  position: absolute;
-  inset: 0;
-  background: rgba(36, 31, 26, 0.5);
-  z-index: 1;
-}
-
-.search-overlay-content {
-  position: relative;
-  z-index: 2;
-  width: 100%;
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-  background: var(--color-background);
-}
-
-.search-overlay-header {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 16px;
+/* Das Suchfeld klebt unter dem App-Header (sticky, `top` = seine gemeldete
+   Höhe), damit es beim Scrollen durch die Treffer greifbar bleibt. Ebene 940:
+   über den Zetteln (bis 810 beim Ziehen) und der Navigation (900), unter dem
+   Header (950) — der Header überdeckt es nie, weil es unter ihm klebt.
+   Die negativen Seitenränder heben das Polster von `.wall-page` auf: die Leiste
+   geht über die volle Breite, die Wand darunter behält ihren Rand. */
+.wall-search {
+  position: sticky;
+  top: var(--app-header-height, 0px);
+  z-index: 940;
+  margin: -10px -8px 10px;
+  padding: 10px 12px;
   background: var(--color-background-elevated);
   border-bottom: 2px solid var(--pw-line);
-  flex-shrink: 0;
 }
 
-.search-overlay-input-wrapper {
+.wall-search-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.wall-search-field {
   flex: 1;
   /* Mit `auto` setzte die Eigenbreite des Felds die Untergrenze, und der
      Schließen-Knopf rutschte auf schmalen Geräten aus dem Bild. */
   min-width: 0;
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 10px 14px;
+  gap: 10px;
+  padding: 8px 12px;
   background: var(--pw-paper);
   border: 2px solid var(--pw-line);
   border-radius: var(--radius-md);
 }
 
-.search-overlay-input {
+.wall-search-input {
   flex: 1;
   /* Siehe Hülle: ein `<input>` hat eine Eigenbreite (`size`), die `auto` als
      Untergrenze nimmt. */
@@ -1176,12 +1052,13 @@ const handleCreateQuickTask = async (data: { title: string; effort: number; note
   border: none;
   outline: none;
   background: transparent;
+  /* 16px, nicht weniger: darunter zoomt iOS beim Fokussieren in die Seite. */
   font-size: 1rem;
   color: var(--color-text-primary);
 }
 
-.search-clear-btn,
-.search-overlay-close {
+.wall-search-clear,
+.wall-search-close {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1192,7 +1069,7 @@ const handleCreateQuickTask = async (data: { title: string; effort: number; note
   flex-shrink: 0;
 }
 
-.search-clear-btn {
+.wall-search-clear {
   position: relative;
   width: 24px;
   height: 24px;
@@ -1204,7 +1081,7 @@ const handleCreateQuickTask = async (data: { title: string; effort: number; note
    Pseudo-Element auf 48px. Sie ragt je 12px über den Knopf und bleibt damit
    innerhalb der Hülle (rechts im Innenabstand) — die Fläche des Schließen-Knopfs
    erreicht sie nicht. */
-.search-clear-btn::after {
+.wall-search-clear::after {
   content: '';
   position: absolute;
   top: 50%;
@@ -1214,17 +1091,17 @@ const handleCreateQuickTask = async (data: { title: string; effort: number; note
   transform: translate(-50%, -50%);
 }
 
-.search-overlay-close {
+.wall-search-close {
   position: relative;
   width: 44px;
   height: 44px;
   font-size: 1.4rem;
 }
 
-/* Trefffläche 48px, ohne die Kopfzeile höher zu machen. Sie ragt je 2px über
-   den Knopf — links bleibt sie damit im Abstand zur Hülle und erreicht die
-   Fläche des Lösch-× nicht. */
-.search-overlay-close::after {
+/* Trefffläche 48px, ohne die Leiste höher zu machen. Sie ragt je 2px über den
+   Knopf — links bleibt sie damit im Abstand zur Hülle und erreicht die Fläche
+   des Lösch-× nicht. */
+.wall-search-close::after {
   content: '';
   position: absolute;
   top: 50%;
@@ -1234,122 +1111,20 @@ const handleCreateQuickTask = async (data: { title: string; effort: number; note
   transform: translate(-50%, -50%);
 }
 
-.search-overlay-actions {
+.wall-search-actions {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-  padding: 12px 16px;
-  background: var(--color-background-elevated);
-  border-bottom: 2px solid var(--pw-line);
-  flex-shrink: 0;
+  margin-top: 10px;
 }
 
-.search-overlay-actions .btn {
+.wall-search-actions .btn {
   flex: 1 1 200px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 6px;
   white-space: nowrap;
-}
-
-.search-overlay-body {
-  flex: 1;
-  overflow-y: auto;
-  padding: 16px;
-}
-
-.search-overlay-initial {
-  text-align: center;
-  padding: 3rem 2rem;
-  color: var(--color-text-secondary);
-}
-
-.search-overlay-initial i {
-  display: block;
-  font-size: 3rem;
-  margin-bottom: 1rem;
-  opacity: 0.3;
-}
-
-.search-result-item {
-  display: flex;
-  align-items: stretch;
-  width: 100%;
-  min-height: var(--touch-target-min);
-  margin-bottom: 8px;
-  color: var(--pw-ink);
-  background: var(--pw-paper);
-  border: 1.5px solid var(--pw-line);
-  border-radius: var(--radius-sm);
-  overflow: hidden;
-}
-
-/* Der Sprung behält die ganze Restfläche; die Aktionsknöpfe rechts sind feste 48 px. */
-.search-result-jump {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 8px 8px 12px;
-  text-align: left;
-  color: inherit;
-  background: none;
-  border: none;
-  cursor: pointer;
-}
-
-.search-result-action {
-  flex: none;
-  width: var(--touch-target-min, 48px);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 1.35rem;
-  color: var(--pw-ink-soft);
-  background: none;
-  border: none;
-  border-left: 1.5px solid var(--pw-line);
-  cursor: pointer;
-}
-
-.search-result-action--done {
-  color: var(--color-success, #198754);
-}
-
-.search-result-action:disabled {
-  opacity: 0.4;
-}
-
-.search-result-jump > .bi {
-  flex: none;
-  font-size: 1.5rem;
-  color: var(--pw-ink-soft);
-}
-
-/* `min-width: 0`, sonst kürzt der lange Titel nicht und schiebt den Pfeil raus. */
-.search-result-text {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-}
-
-.search-result-category {
-  font-size: 0.75rem;
-  color: var(--color-text-secondary);
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  font-weight: 700;
-}
-
-.search-result-title {
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-  font-size: 15px;
-  font-weight: 700;
 }
 
 @media (prefers-reduced-motion: reduce) {

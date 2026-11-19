@@ -208,7 +208,7 @@
    durchgezogener statt *gestrichelter* Rahmen an den „+ zu Kategorie…"-Zeilen,
    womit die Unterscheidung zwischen Eingabezeile und echtem Artikel
    verschwindet. Alle bare Inputs im Repo (`combo-input`, `add-input`,
-   `top-name-input`, `history-search-input`, `search-overlay-input`, …) setzen
+   `top-name-input`, `history-search-input`, `wall-search-input`, …) setzen
    Rahmen und Hintergrund selbst; hier greift daher bewusst nichts.
    --------------------------------------------------------------------------*/
 :root[data-design='pinnwand'] .form-control,
@@ -238,7 +238,7 @@
   box-shadow: none;
 }
 
-/* Bewusst NICHT in dieser Liste: `.combo-input` und `.search-overlay-input`.
+/* Bewusst NICHT in dieser Liste: `.combo-input` und `.wall-search-input`.
    Beide sitzen in einem Wrapper, der die Kontur zeichnet; eine eigene Fuellung
    ergaebe dort einen Kasten im Kasten. */
 
@@ -265,7 +265,7 @@
 :root[data-design='pinnwand'] .add-input:focus,
 :root[data-design='pinnwand'] .add-qty-input:focus,
 :root[data-design='pinnwand'] .history-search-input:focus,
-:root[data-design='pinnwand'] .search-overlay-input:focus {
+:root[data-design='pinnwand'] .wall-search-input:focus {
   border-color: var(--color-primary);
   outline: none;
   box-shadow: 0 0 0 3px rgba(43, 74, 143, 0.15);
