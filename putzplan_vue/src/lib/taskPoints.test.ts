@@ -3,7 +3,13 @@ import { describe, expect, it } from 'vitest'
 import type { PointBenchmark } from '@/types/PointBenchmark'
 import type { Task } from '@/types/Task'
 
-import { estimateParentPoints, examplesFor, isValidPoints, quickOptions } from './taskPoints'
+import {
+  estimateParentPoints,
+  examplesFor,
+  isDeviation,
+  isValidPoints,
+  quickOptions,
+} from './taskPoints'
 
 const sub = (overrides: Partial<Task>): Task => ({
   task_id: 's',
@@ -109,5 +115,31 @@ describe('examplesFor', () => {
   it('ohne Richtwert zu dieser Zahl oder ohne Wahl: keine Beispiele', () => {
     expect(examplesFor(list, 4)).toEqual([])
     expect(examplesFor(list, null)).toEqual([])
+  })
+})
+
+describe('isDeviation (braucht Begründung?)', () => {
+  it('andere Punkte als die Standardpunkte einer Aufgabe: ja', () => {
+    expect(isDeviation({ standardPoints: 3, chosenPoints: 5, kind: 'task' })).toBe(true)
+    expect(isDeviation({ standardPoints: 3, chosenPoints: 0, kind: 'task' })).toBe(true)
+  })
+
+  it('gleiche Punkte wie die Standardpunkte: nein', () => {
+    expect(isDeviation({ standardPoints: 3, chosenPoints: 3, kind: 'task' })).toBe(false)
+  })
+
+  it('Arbeit am Projekt: nie, es gibt keinen Standard', () => {
+    expect(isDeviation({ standardPoints: 3, chosenPoints: 8, kind: 'project' })).toBe(false)
+  })
+
+  it('Quick-Aufgabe: nie, ihre Punkte sind die Standardpunkte', () => {
+    expect(isDeviation({ standardPoints: 2, chosenPoints: 5, kind: 'quick' })).toBe(false)
+  })
+  it('noch nichts gewählt: nein, der Dialog sperrt ohnehin', () => {
+    expect(isDeviation({ standardPoints: 3, chosenPoints: null, kind: 'task' })).toBe(false)
+  })
+
+  it('unbewertete Aufgabe (erstes Bewerten): nein, es gibt keinen Standard', () => {
+    expect(isDeviation({ standardPoints: null, chosenPoints: 5, kind: 'task' })).toBe(false)
   })
 })

@@ -118,6 +118,31 @@ Deno.serve(async (req) => {
       }
     }
 
+    // Abweichung braucht Begründung (CONTEXT.md § Abweichung): wer andere Punkte
+    // gibt als die Standardpunkte der Aufgabe, muss eine Notiz mitschicken.
+    // Ausgenommen ist Projekt-Arbeit — sie läuft über die Unteraufgabe „Am
+    // Projekt arbeiten“, deshalb zählt auch der Typ des Elternknotens. Quick-
+    // Aufgaben kommen nie hierher (der Client schreibt sie direkt), und ohne
+    // Standardpunkte (unbewertet) gibt es nichts, wovon man abwiche.
+    // Dieselbe Regel steht in `isDeviation` in src/lib/taskPoints.ts — wer eine
+    // ändert, ändert beide.
+    const isProjectWork = taskDetails.task_type === 'project' || parentTaskType === 'project'
+    const hasNote = typeof completionNote === 'string' && completionNote.trim().length > 0
+    if (
+      effortOverride !== undefined &&
+      !isProjectWork &&
+      taskDetails.effort !== null &&
+      effortOverride !== taskDetails.effort &&
+      !hasNote
+    ) {
+      return new Response(
+        JSON.stringify({
+          error: 'completionNote is required when effortOverride differs from the task effort',
+        }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+      )
+    }
+
     // 7. Handle CHECKLIST-MODE SUBTASKS: Award 0 points when completed individually
     // Checklist subtasks only matter for parent tracking, NOT for individual points
     if (taskDetails.parent_task_id !== null && taskDetails.subtask_points_mode === 'checklist') {
@@ -351,5 +376,27 @@ Deno.serve(async (req) => {
     --header 'Authorization: Bearer YOUR_USER_JWT_TOKEN' \
     --header 'Content-Type: application/json' \
     --data '{"taskId":"some-uuid-here","effortOverride":1000}'
+
+  5. Abweichung (task effort 3, override 5) without a note → 400:
+
+  curl -i --location --request POST 'http://127.0.0.1:54321/functions/v1/complete-task' \
+    --header 'Authorization: Bearer YOUR_USER_JWT_TOKEN' \
+    --header 'Content-Type: application/json' \
+    --data '{"taskId":"task-with-effort-3","effortOverride":5}'
+
+  6. Same points as the task effort, without a note → 200:
+
+  curl -i --location --request POST 'http://127.0.0.1:54321/functions/v1/complete-task' \
+    --header 'Authorization: Bearer YOUR_USER_JWT_TOKEN' \
+    --header 'Content-Type: application/json' \
+    --data '{"taskId":"task-with-effort-3","effortOverride":3}'
+
+  7. Project work (the project's "Am Projekt arbeiten" subtask) with other points and
+     no note → 200 (the app itself always sends a note there):
+
+  curl -i --location --request POST 'http://127.0.0.1:54321/functions/v1/complete-task' \
+    --header 'Authorization: Bearer YOUR_USER_JWT_TOKEN' \
+    --header 'Content-Type: application/json' \
+    --data '{"taskId":"project-work-subtask-uuid","effortOverride":8}'
 
 */

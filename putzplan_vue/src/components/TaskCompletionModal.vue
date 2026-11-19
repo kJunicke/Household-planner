@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import { COMPLETION_NOTE_MAX_LENGTH } from '@/lib/limits'
+import { isDeviation } from '@/lib/taskPoints'
 import PointPicker from './PointPicker.vue'
 
 interface Props {
@@ -20,10 +21,20 @@ const emit = defineEmits<Emits>()
 const selectedEffort = ref<number | null>(null)
 const note = ref('')
 
-const canConfirm = computed(() => {
-  // Effort selection is required, note is optional
-  return selectedEffort.value !== null
-})
+// Andere Punkte als die Standardpunkte: die Notiz wird zur Pflicht-Begründung
+// (CONTEXT.md § Abweichung). Beide Felder schreiben in dieselbe `note`, damit
+// schon Getipptes beim Wechsel der Punkte stehen bleibt.
+const needsReason = computed(() =>
+  isDeviation({
+    standardPoints: props.defaultEffort,
+    chosenPoints: selectedEffort.value,
+    kind: 'task',
+  }),
+)
+
+const canConfirm = computed(
+  () => selectedEffort.value !== null && (!needsReason.value || note.value.trim().length > 0),
+)
 
 const handleConfirm = () => {
   if (canConfirm.value && selectedEffort.value !== null && !props.isLoading) {
@@ -53,12 +64,19 @@ const handleClose = () => {
             <PointPicker
               v-model="selectedEffort"
               kind="completion"
+              v-model:reason="note"
               :default-points="defaultEffort"
               :disabled="isLoading"
+              :show-reason="needsReason"
+              :reason-label="`Warum diesmal nicht ${defaultEffort}? *`"
+              reason-placeholder="z.B. War sehr dreckig, Pfannen eingebrannt"
             />
+            <p v-if="needsReason" class="reason-hint">
+              Die Standardpunkte der Aufgabe bleiben {{ defaultEffort }}.
+            </p>
           </div>
 
-          <div class="note-input">
+          <div v-if="!needsReason" class="note-input">
             <label for="note" class="form-label"> Notiz (optional) </label>
             <textarea
               id="note"
@@ -113,5 +131,11 @@ const handleClose = () => {
 
 .note-input {
   margin-bottom: 1rem;
+}
+
+.reason-hint {
+  margin: 0.25rem 0 0;
+  font-size: 0.8125rem;
+  color: var(--color-text-secondary);
 }
 </style>

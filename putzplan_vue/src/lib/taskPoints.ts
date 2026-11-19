@@ -55,3 +55,32 @@ export function examplesFor(
   if (points === null) return []
   return benchmarks.find((b) => b.points === points)?.examples ?? []
 }
+
+/**
+ * Wie eine Erledigung entsteht: `task` = eine Aufgabe mit Standardpunkten
+ * (Abreißen, Erledigungs-Dialog, Suche), `project` = Arbeit an einem Projekt,
+ * `quick` = Quick-Aufgabe.
+ */
+export type CompletionKind = 'task' | 'project' | 'quick'
+
+/**
+ * **Abweichung** — und damit „braucht Begründung?“ (CONTEXT.md § Abweichung):
+ * eine Erledigung zählt andere Punkte als die Standardpunkte der Aufgabe.
+ *
+ * Nie eine Abweichung, weil es keinen Standard gibt, von dem man abwiche:
+ * Projekt-Arbeit, Quick-Aufgabe und das erste Bewerten einer **unbewerteten**
+ * Aufgabe (`standardPoints === null`). Solange nichts gewählt ist
+ * (`chosenPoints === null`), auch nicht — die Punktwahl sperrt dann ohnehin.
+ *
+ * Dieselbe Regel prüft die Edge Function `complete-task`; wer eine ändert,
+ * ändert beide.
+ */
+export function isDeviation(input: {
+  standardPoints: number | null
+  chosenPoints: number | null
+  kind: CompletionKind
+}): boolean {
+  const { standardPoints, chosenPoints, kind } = input
+  if (kind !== 'task' || standardPoints === null || chosenPoints === null) return false
+  return chosenPoints !== standardPoints
+}
