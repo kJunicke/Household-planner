@@ -1,29 +1,24 @@
 # Putzplan
 
-Vue 3 + Supabase, PWA für einen Zwei-Personen-Haushalt. App in `putzplan_vue/`.
-Push auf `main` deployt sofort (GitHub Pages). Umgebung: Linux Mint, VS Code.
+Vue 3 + Supabase, PWA für einen Zwei-Personen-Haushalt; die App liegt in `putzplan_vue/`. **Mobile first**,
+kleinster Viewport zuerst: jedes Feature muss auf Android **und** iOS funktionieren. Barrierefreiheit und
+Tastaturbedienung sind kein Ziel, Gesten dürfen der einzige Weg sein.
 
-## Regeln
+## Git
 
-- **Mobile first**, kleinster Viewport zuerst. Jedes Feature muss auf Android **und** iOS
-  funktionieren. Barrierefreiheit und Tastaturbedienung sind kein Ziel — Gesten dürfen der
-  einzige Weg sein.
-- **UI wird manuell geprüft**, im Browser über die Chrome-Erweiterung — kein UI-Test-Framework,
-  bewusst. Messfallen im ferngesteuerten Tab: [docs/testing.md](docs/testing.md).
-- **Reine Logik unter `src/lib` hat vitest-Tests** (`npm test` in `putzplan_vue/`, Datei
-  `*.test.ts` neben dem Modul, ohne DOM). Neue reine Logik bekommt Tests. Grüne Tests ersetzen
-  keinen Blick aufs Gerät.
-- **Jede Codeänderung prüft ein zweiter Agent (QC)** — auch die einzeilige, auch die der
-  Hauptinstanz, auch der Formatierungs-Commit. Wer baut, prüft nicht. Der QC macht ein
-  Code-Review mit `/code-review` **und** sieht sich bei sichtbaren Änderungen das Aussehen
-  an. (05.09.2026: „ist doch nur CSS“ ohne QC → abgeschnittene Stempelränder auf 261 von
-  282 Lagen, am Gerät in Minuten gesehen; die eigene Messung fragte „wie breit“, nicht
-  „sieht es ganz aus“.)
-- **Eine Messung ist kein Blick.** Geometrie messen und Aussehen ansehen sind zwei Aufträge;
-  beide vergeben.
-- Vor jedem Push auf `main`: `npm test` und `npm run build` in `putzplan_vue/`. Nur eigene Pfade stagen.
-- Nennt der User einen Skill, der zu fehlen scheint: erst danach suchen (`~/.claude/skills/`, aus mastermind `agents/skills/`),
-  dann entscheiden.
+- Remote `origin`: `github.com/kJunicke/Household-planner`, öffentlich. **Ein Push auf `main` deployt sofort**
+  auf GitHub Pages (`.github/workflows/deploy.yml`).
+- Prüfbefehle in `putzplan_vue/`, dieselben wie im Deploy: `npm run lint:check`, `npm run knip`, `npm test`,
+  `npm run build`.
+
+## Prüfen
+
+- **UI wird von Hand geprüft**, im Browser über die Chrome-Erweiterung; ein UI-Test-Framework gibt es bewusst
+  nicht. Messfallen im ferngesteuerten Tab und wie man einen Deploy prüft: [docs/testing.md](docs/testing.md).
+- **Jede Codeänderung prüft ein zweiter Agent** mit `/code-review`, bei sichtbaren Änderungen auch das
+  Aussehen. Messen und Ansehen sind zwei Aufträge. (05.09.2026: „ist doch nur CSS“ ohne zweiten Blick →
+  abgeschnittene Stempelränder auf 261 von 282 Lagen; die Messung fragte „wie breit“, nicht „sieht es ganz
+  aus“.)
 
 ## Supabase
 
@@ -36,32 +31,11 @@ Push auf `main` deployt sofort (GitHub Pages). Umgebung: Linux Mint, VS Code.
   `--dry-run`. Daten, die eine Migration umbaut, vorher mit `db query --linked` ansehen.
 - **`db push` legt keine Transaktion um die Datei.** Braucht eine Migration eine (`LOCK TABLE`,
   alles-oder-nichts), schreibt sie `BEGIN;` … `COMMIT;` selbst.
-
-## Kommentare
-
-- Ein Kommentar sagt **warum so** oder **was bricht, wenn man es ändert**. Was der Code tut, sagt der Code.
-- Nicht in den Code: Ticketnummern, Etappen, QC-Runden, Daten, „vorher/früher/seit/nicht mehr“,
-  Messprotokolle — das gehört in Commit oder Ticket. Messwerte nur als Ergebnis, ggf. mit Verweis.
-- Verweise auf ADR, `CONTEXT.md` und `docs/` sind erwünscht. Lange Herleitungen dorthin, nicht in den Code.
-- Fallen-Warnungen (Messvertrag von `relayout`, iOS/WebKit) bleiben wörtlich stehen.
+- **`db push` deployt keine Edge Functions**, und eine veraltete Function versagt still (hier lief eine
+  monatelang in alter Fassung): `npx supabase functions deploy <name>`, danach `npx supabase functions list`.
+- Angelegte Testdaten bleiben nach der Verifikation stehen.
 
 ## Wissen
 
-- Vor dem Erkunden lesen: [CONTEXT.md](CONTEXT.md) und die ADRs des Bereichs.
-- Vokabular: Begriffe aus [CONTEXT.md](CONTEXT.md), keine Synonyme; fehlt einer, ist das
-  ein Befund. Wo Skills `GLOSSARY.md` sagen, ist diese Datei gemeint.
-- Entscheidungen: [docs/adr/](docs/adr/). Ein ADR gilt, bis er ausdrücklich zurückgezogen ist;
-  wer ihm widerspricht, schreibt das in den ADR. Wer eine Festlegung ersetzt, liest vorher,
-  was in der ersetzten Quelle wirklich steht.
-- Getrackte Dateien verlinken nicht in den Tracker — Wesentliches wird übernommen.
-
-## Tracker
-
-Tickets und Specs liegen in mastermind unter `task-tracker/HouseholdPlanner/` (Boards) und im
-gemeinsamen `task-tracker/scratch/`, nie in diesem Repo. Regeln, Status-Werte und
-Ticket-Format: Skill `task-tracker`.
-
-- `6-done` erst nach Abnahme durch den Lead: QC grün, auf `main`, Abnahmenotiz im Ticket
-  (Commit-Hash, was belegt funktioniert, welche Restbefunde bewusst bleiben). Was nur am
-  Gerät prüfbar ist, wird vorher ein eigenes Ticket `3-ready` + `owner: human` mit Link auf
-  die Testanleitung.
+- Glossar ist [CONTEXT.md](CONTEXT.md); wo Skills `GLOSSARY.md` sagen, ist diese Datei gemeint.
+- Getrackte Dateien verlinken nicht in den Tracker; Wesentliches wird übernommen.
