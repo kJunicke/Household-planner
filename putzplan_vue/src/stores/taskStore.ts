@@ -21,7 +21,7 @@ import { mergeLoadedRows, type ChangeDuringLoad } from '@/lib/rowMerge'
 import { collectKeysetPages } from '@/lib/keysetPages'
 import { onSessionEnd } from '@/lib/sessionEnd'
 import { findDuplicateTask, normalizeTaskTitle } from '@/lib/taskDuplicates'
-import { PROJECT_WORK_TITLE, estimateCompletionPoints, isUnrated } from '@/lib/taskPoints'
+import { estimateCompletionPoints, isUnrated, newProjectWorkSubtask } from '@/lib/taskPoints'
 
 /**
  * Optimistische Completion: trägt eine Client-Kennung, weil die `completion_id`
@@ -1000,16 +1000,12 @@ export const useTaskStore = defineStore('tasks', () => {
     if (data.task_type === 'project' && !taskData.parent_task_id) {
       const { data: subtaskData, error: subtaskError } = await supabase
         .from('tasks')
-        .insert({
-          title: PROJECT_WORK_TITLE,
-          effort: 1, // Default effort, will be overridden on completion
-          recurrence_days: 0,
-          task_type: 'daily', // Always visible, never recurs
-          subtask_points_mode: 'bonus',
-          parent_task_id: data.task_id,
-          order_index: 0,
-          household_id: householdStore.currentHousehold.household_id,
-        })
+        .insert(
+          newProjectWorkSubtask({
+            projectTaskId: data.task_id,
+            householdId: householdStore.currentHousehold.household_id,
+          }),
+        )
         .select()
         .single()
 

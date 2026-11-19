@@ -77,6 +77,20 @@ export function quickOptions(benchmarks: readonly PointBenchmark[]): number[] {
 }
 
 /**
+ * Vorauswahl im Erledigungs-Dialog („Punkte anpassen“). Haben die
+ * Standardpunkte einen Knopf, ist er markiert und nichts gewählt — man tippt
+ * bewusst. Ohne Knopf (z. B. 7) wäre der Standard nirgends zu sehen; dann steht
+ * er von Anfang an gewählt im freien Feld. Unbewertet: nichts.
+ */
+export function initialCompletionPoints(
+  standardPoints: number | null,
+  quickOptionPoints: readonly number[],
+): number | null {
+  if (standardPoints === null || quickOptionPoints.includes(standardPoints)) return null
+  return standardPoints
+}
+
+/**
  * Beispiele zu einer Punktzahl: die des **Richtwerts** mit genau dieser Zahl —
  * auch wenn er keine Schnelloption ist und die Zahl ins freie Feld getippt
  * wurde. Ohne Richtwert zu dieser Zahl keine; es wird nicht zum nächsten gerundet.
@@ -90,7 +104,7 @@ export function examplesFor(
 }
 
 /** Titel der Unteraufgabe eines Projekts, über die Projekt-Arbeit gebucht wird. */
-export const PROJECT_WORK_TITLE = 'Am Projekt arbeiten'
+const PROJECT_WORK_TITLE = 'Am Projekt arbeiten'
 
 /**
  * **Projekt-Arbeit**: die Unteraufgabe „Am Projekt arbeiten“ eines Projekts —
@@ -100,6 +114,25 @@ export const PROJECT_WORK_TITLE = 'Am Projekt arbeiten'
  */
 export function isProjectWork(input: { title: string; parentTaskType: string | null }): boolean {
   return input.parentTaskType === 'project' && input.title === PROJECT_WORK_TITLE
+}
+
+/**
+ * Die Zeile für „Am Projekt arbeiten“, die jedes neue Projekt bekommt. Sie
+ * entsteht **unbewertet**: die erste Projekt-Arbeit fragt nach ihren Punkten,
+ * und diese Wahl wird ihr Standard (Story 29). Täglich, damit sie nie
+ * wiederkehrt und immer buchbar ist; `bonus`, weil Arbeit Punkte gibt.
+ */
+export function newProjectWorkSubtask(input: { projectTaskId: string; householdId: string }) {
+  return {
+    title: PROJECT_WORK_TITLE,
+    effort: null,
+    recurrence_days: 0,
+    task_type: 'daily' as const,
+    subtask_points_mode: 'bonus' as const,
+    parent_task_id: input.projectTaskId,
+    order_index: 0,
+    household_id: input.householdId,
+  }
 }
 
 /**

@@ -175,7 +175,7 @@ const remove = (benchmark: PointBenchmark) => {
           min="1"
           :max="POINTS_MAX"
           step="1"
-          placeholder="Punkte"
+          placeholder="Pkt."
           :value="newPointsText"
           @input="onNewPointsInput"
         />
@@ -317,20 +317,27 @@ const remove = (benchmark: PointBenchmark) => {
   margin: 0;
 }
 
+/* Feld, Schalter und Knopf in einer Zeile auch auf 320 px (dort 272 px breit,
+   gemessen 2026-11-19: vorher 309 px Inhalt). Das Feld gibt nach (bis 4rem, für
+   drei Ziffern und „Pkt.“), Lücken und Knopf-Innenrand sind schmal. */
 .create-row {
   display: flex;
   align-items: center;
-  gap: var(--spacing-sm);
+  gap: var(--spacing-xs);
 }
 
 .create-input {
-  width: 6rem;
+  flex: 1 1 4rem;
+  min-width: 0;
+  max-width: 6rem;
   min-height: var(--touch-target-min);
+  padding-inline: 0.5rem;
 }
 
 .create-btn {
   flex: 1;
   min-height: var(--touch-target-min);
+  padding-inline: 0.75rem;
   white-space: nowrap;
 }
 

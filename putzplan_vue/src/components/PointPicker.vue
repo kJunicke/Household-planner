@@ -136,10 +136,12 @@ const examples = computed(() => examplesFor(benchmarkStore.benchmarks, points.va
   gap: 0.5rem;
 }
 
-/* Sechs Knöpfe passen auf 320 px in eine Zeile; mehr Schnelloptionen brechen um. */
+/* Sechs Knöpfe passen auf 320 px in eine Zeile: der Dialog lässt der Punktwahl
+   dort 280 px, sechs Spalten à 2.5rem plus fünf Lücken brauchen 270 px (mit
+   2.75rem waren es 294, und „12“ brach um). Mehr Schnelloptionen brechen um. */
 .quick-options {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(2.75rem, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(2.5rem, 1fr));
   gap: 0.375rem;
 }
 
