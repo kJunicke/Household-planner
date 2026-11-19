@@ -252,7 +252,8 @@ const openFollowUp = (which: 'assign' | 'subtasks' | 'postpone') => {
 
 const handleEditConfirm = async (updates: Partial<Task>) => {
   if (!targetTaskId.value) return
-  await taskStore.updateTask(targetTaskId.value, updates)
+  // Abgewiesen (etwa Titel gibt es schon): Fenster bleibt mit den Eingaben offen.
+  if (!(await taskStore.updateTask(targetTaskId.value, updates))) return
   showEditModal.value = false
 }
 

@@ -45,6 +45,7 @@ import TaskEditModal from './TaskEditModal.vue'
 import TaskAssignmentModal from './TaskAssignmentModal.vue'
 import SubtaskManagementModal from './SubtaskManagementModal.vue'
 import TaskPostponeModal from './TaskPostponeModal.vue'
+import { estimateParentPoints } from '@/lib/taskPoints'
 
 const props = defineProps<{
   task: Task
@@ -146,13 +147,9 @@ const NOTE_HANDLE = '#note'
  *
  * Verbindlich rechnet die Edge Function; das hier ist die Schätzung fürs Auge.
  */
-const effectivePoints = computed(() => {
-  const deductSum = taskStore
-    .getSubtasks(props.task.task_id)
-    .filter((s) => s.completed && s.subtask_points_mode === 'deduct')
-    .reduce((sum, s) => sum + s.effort, 0)
-  return Math.max(0, props.task.effort - deductSum)
-})
+const effectivePoints = computed(() =>
+  estimateParentPoints(props.task.effort, taskStore.getSubtasks(props.task.task_id)),
+)
 
 /**
  * Was am Sticker steht: sonst die Zahl, die beim Abreißen fliegt
@@ -780,7 +777,8 @@ const openFollowUp = (which: 'assign' | 'subtasks' | 'postpone') => {
 }
 
 const handleEditConfirm = async (updates: Partial<Task>) => {
-  await taskStore.updateTask(props.task.task_id, updates)
+  // Abgewiesen (etwa Titel gibt es schon): Fenster bleibt mit den Eingaben offen.
+  if (!(await taskStore.updateTask(props.task.task_id, updates))) return
   showEditModal.value = false
 }
 

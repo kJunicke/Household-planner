@@ -36,6 +36,11 @@ describe('searchTasks', () => {
     expect(searchTasks(tasks, 'Keller')).toEqual([])
   })
 
+  it('exakt (100) heißt: derselbe Titel im Sinne der Duplikat-Regel', () => {
+    const results = searchTasks([task('Bad  putzen')], 'bad putzen ')
+    expect(results?.[0]?.relevance).toBe(100)
+  })
+
   it('ignoriert Groß-/Kleinschreibung und Leerraum um die Eingabe', () => {
     expect(titles(searchTasks([task('Bad putzen')], '  BAD '))).toEqual(['Bad putzen'])
   })

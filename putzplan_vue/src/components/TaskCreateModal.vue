@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
 import { TASK_TITLE_MAX_LENGTH } from '@/lib/limits'
+import { findDuplicateTask } from '@/lib/taskDuplicates'
+import { useTaskStore } from '@/stores/taskStore'
 
 interface Props {
   initialTitle?: string
@@ -46,8 +48,12 @@ watch(
   { immediate: true },
 )
 
+const taskStore = useTaskStore()
+// Geprüft wird der getrimmte Titel — genau der wird gesendet (→ `normalizeTaskTitle`).
+const duplicate = computed(() => findDuplicateTask(taskStore.tasks, formData.value.title.trim()))
+
 const canConfirm = computed(() => {
-  return formData.value.title.trim().length > 0
+  return formData.value.title.trim().length > 0 && !duplicate.value
 })
 
 const handleConfirm = () => {
@@ -85,8 +91,13 @@ const handleClose = () => {
                 :maxlength="TASK_TITLE_MAX_LENGTH"
                 placeholder="z.B. Küche putzen"
                 class="form-control"
+                :class="{ 'is-invalid': duplicate }"
                 :disabled="isLoading"
               />
+              <div v-if="duplicate" class="invalid-feedback">
+                „{{ duplicate.title }}" gibt es schon — über die Suche erledigen oder wieder dreckig
+                machen.
+              </div>
             </div>
 
             <div class="mb-3">

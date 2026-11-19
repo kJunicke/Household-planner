@@ -25,6 +25,7 @@ import { useHouseholdStore } from '../stores/householdStore'
 import { useTaskBoard } from '@/composables/useTaskBoard'
 import { useOverlayHistoryEntry } from '@/composables/useOverlayHistoryEntry'
 import { searchTasks } from '@/lib/taskSearch'
+import { offerScrap } from '@/composables/useTornScrap'
 import {
   defaultNoteWidth,
   packWall,
@@ -1030,6 +1031,17 @@ const showCreateModal = ref(false)
 const showQuickModal = ref(false)
 const searchQuery = ref('')
 
+/**
+ * Treffer, an dem gerade eine Aktion läuft. Sperrt alle Aktionsknöpfe: ein zweiter
+ * Tipp während des Erledigens würde vom Store still verworfen, einer danach eine
+ * zweite Erledigung mit Punkten buchen.
+ *
+ * Nach einer geglückten Aktion bleibt die Sperre stehen, bis die Suche geschlossen
+ * ist (Freigabe im Schließen-Rückruf unten) — nicht nur bis der Store „lokal
+ * angewendet" meldet. Nur ein Fehlschlag gibt sie sofort frei.
+ */
+const searchBusyId = ref<string | null>(null)
+
 // Das Such-Overlay ist ein eigener Verlaufseintrag, damit die Rückgängig-Geste
 // es schließt, statt die Ansicht zu wechseln. Reguläres Schließen verbraucht
 // den Eintrag wieder → `useOverlayHistoryEntry`.
@@ -1043,12 +1055,60 @@ const {
   open: openSearchOverlay,
   close: closeSearchOverlay,
 } = useOverlayHistoryEntry<'modal' | 'jump'>('suche', (reason) => {
+  searchBusyId.value = null
   if (reason === 'modal') return
   searchQuery.value = ''
   if (reason === 'jump') revealJumpTarget()
 })
 
 const searchResults = computed(() => searchTasks(taskStore.tasks, searchQuery.value))
+
+// Gibt es den gesuchten Titel schon (Relevanz 100 = Duplikat-Regel, →
+// `searchTasks`), führt „Aufgabe erstellen" nur in eine Abweisung — der Knopf
+// wird dann gar nicht erst angeboten.
+const searchMatchesExisting = computed(
+  () => searchResults.value?.some((result) => result.relevance === 100) ?? false,
+)
+
+/**
+ * Erledigen direkt aus der Suche — auch eine schon erledigte Aufgabe: dann ist
+ * sie eben noch einmal gemacht worden, mit Punkten und Verlaufseintrag.
+ * Projekte sind ausgenommen; an ihnen arbeitet man über ihre Unteraufgabe.
+ *
+ * Danach schließt die Suche und springt zur Aufgabe, wie ein Tipp auf den Treffer.
+ * So hängt der Fetzen sichtbar unter der Wand, solange er die Erledigung noch
+ * zurücknehmen kann — bliebe die Suche offen, ersetzte das nächste Erledigen ihn
+ * ungesehen.
+ */
+const completeFromSearch = async (task: Task) => {
+  if (searchBusyId.value) return
+  searchBusyId.value = task.task_id
+  try {
+    const points = taskStore.estimateCompletionEffort(task)
+    if (!(await taskStore.completeTask(task.task_id))) {
+      searchBusyId.value = null
+      return
+    }
+    offerScrap({ taskId: task.task_id, title: task.title, points })
+    jumpToResult(task.task_id)
+  } catch (error) {
+    searchBusyId.value = null
+    throw error
+  }
+}
+
+/** **Wieder dreckig** aus der Suche (Stecknadel-Knopf, → CONTEXT.md): zurück an die Wand, Punkte bleiben. */
+const markDirtyFromSearch = async (task: Task) => {
+  if (searchBusyId.value) return
+  searchBusyId.value = task.task_id
+  try {
+    if (await taskStore.markAsDirty(task.task_id)) jumpToResult(task.task_id)
+    else searchBusyId.value = null
+  } catch (error) {
+    searchBusyId.value = null
+    throw error
+  }
+}
 
 // `immediate`, weil das Overlay beim Aufbau der View **schon offen sein kann**:
 // die Marke im Verlauf überlebt das Neuladen und die Rückkehr aus einer fremden
@@ -1058,6 +1118,7 @@ watch(
   showSearchOverlay,
   (open) => {
     if (!open) return
+    searchBusyId.value = null
     setTimeout(() => {
       const input = document.querySelector('.search-overlay-input') as HTMLInputElement | null
       input?.focus()
@@ -1099,8 +1160,12 @@ function revealJumpTarget() {
   void nextTick(() =>
     requestAnimationFrame(() => {
       const note = noteEls.get(id)
+      // Rückfall Fetzen: nach dem Erledigen aus der Suche ist er das, worauf es
+      // ankommt, falls die Zeile noch nicht gerendert ist.
       const el =
-        note ?? document.querySelector<HTMLElement>(`.done-row[data-task-id="${CSS.escape(id)}"]`)
+        note ??
+        document.querySelector<HTMLElement>(`.done-row[data-task-id="${CSS.escape(id)}"]`) ??
+        document.querySelector<HTMLElement>('.scrap')
       if (!el) return
       const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
       el.scrollIntoView({ block: 'center', behavior: reduceMotion ? 'auto' : 'smooth' })
@@ -1149,7 +1214,9 @@ const handleCreateTask = async (taskData: {
   task_type: 'recurring' | 'daily' | 'one-time' | 'project'
 }) => {
   try {
-    await taskStore.createTask(taskData)
+    // Abgewiesen (etwa weil es den Titel schon gibt): das Formular bleibt mit
+    // allen Eingaben offen, der Toast sagt warum.
+    if (!(await taskStore.createTask(taskData))) return
     showCreateModal.value = false
     searchQuery.value = ''
   } catch (error) {
@@ -1273,7 +1340,11 @@ const handleCreateQuickTask = async (data: {
         </div>
 
         <div v-if="searchQuery.trim()" class="search-overlay-actions">
-          <button class="btn btn-primary" @click="openCreateFromSearch">
+          <button
+            v-if="!searchMatchesExisting"
+            class="btn btn-primary"
+            @click="openCreateFromSearch"
+          >
             <i class="bi bi-plus-lg"></i> Aufgabe erstellen
           </button>
           <button class="btn btn-success" @click="openQuickFromSearch">
@@ -1283,19 +1354,45 @@ const handleCreateQuickTask = async (data: {
 
         <div class="search-overlay-body">
           <template v-if="searchResults && searchResults.length > 0">
-            <button
+            <div
               v-for="result in searchResults"
               :key="result.task.task_id"
-              type="button"
               class="search-result-item"
-              @click="jumpToResult(result.task.task_id)"
             >
-              <span class="search-result-text">
-                <span class="search-result-category">{{ result.categoryLabel }}</span>
-                <span class="search-result-title">{{ result.task.title }}</span>
-              </span>
-              <i class="bi bi-arrow-right-short" aria-hidden="true"></i>
-            </button>
+              <button
+                type="button"
+                class="search-result-jump"
+                @click="jumpToResult(result.task.task_id)"
+              >
+                <span class="search-result-text">
+                  <span class="search-result-category">{{ result.categoryLabel }}</span>
+                  <span class="search-result-title">{{ result.task.title }}</span>
+                </span>
+                <i class="bi bi-arrow-right-short" aria-hidden="true"></i>
+              </button>
+              <button
+                v-if="result.task.completed"
+                type="button"
+                class="search-result-action"
+                aria-label="Wieder dreckig"
+                title="Wieder dreckig"
+                :disabled="searchBusyId !== null"
+                @click="markDirtyFromSearch(result.task)"
+              >
+                <i class="bi bi-pin-angle" aria-hidden="true"></i>
+              </button>
+              <button
+                v-if="result.task.task_type !== 'project'"
+                type="button"
+                class="search-result-action search-result-action--done"
+                aria-label="Erledigen"
+                title="Erledigen"
+                :disabled="searchBusyId !== null"
+                @click="completeFromSearch(result.task)"
+              >
+                <i class="bi bi-check2" aria-hidden="true"></i>
+              </button>
+            </div>
           </template>
 
           <div
@@ -1637,21 +1734,55 @@ const handleCreateQuickTask = async (data: {
 
 .search-result-item {
   display: flex;
-  align-items: center;
-  gap: 8px;
+  align-items: stretch;
   width: 100%;
   min-height: var(--touch-target-min);
   margin-bottom: 8px;
-  padding: 8px 8px 8px 12px;
-  text-align: left;
   color: var(--pw-ink);
   background: var(--pw-paper);
   border: 1.5px solid var(--pw-line);
   border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+
+/* Der Sprung behält die ganze Restfläche; die Aktionsknöpfe rechts sind feste 48 px. */
+.search-result-jump {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 8px 8px 12px;
+  text-align: left;
+  color: inherit;
+  background: none;
+  border: none;
   cursor: pointer;
 }
 
-.search-result-item > .bi {
+.search-result-action {
+  flex: none;
+  width: var(--touch-target-min, 48px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.35rem;
+  color: var(--pw-ink-soft);
+  background: none;
+  border: none;
+  border-left: 1.5px solid var(--pw-line);
+  cursor: pointer;
+}
+
+.search-result-action--done {
+  color: var(--color-success, #198754);
+}
+
+.search-result-action:disabled {
+  opacity: 0.4;
+}
+
+.search-result-jump > .bi {
   flex: none;
   font-size: 1.5rem;
   color: var(--pw-ink-soft);

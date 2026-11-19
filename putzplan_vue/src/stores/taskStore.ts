@@ -20,6 +20,8 @@ import { createJoinReloadGate } from '@/lib/joinReload'
 import { mergeLoadedRows, type ChangeDuringLoad } from '@/lib/rowMerge'
 import { collectKeysetPages } from '@/lib/keysetPages'
 import { onSessionEnd } from '@/lib/sessionEnd'
+import { findDuplicateTask, normalizeTaskTitle } from '@/lib/taskDuplicates'
+import { estimateParentPoints } from '@/lib/taskPoints'
 
 /**
  * Optimistische Completion: trägt eine Client-Kennung, weil die `completion_id`
@@ -34,6 +36,14 @@ type OptimisticCompletion = TaskCompletion & { clientMutationId: string }
  * Anfragen.
  */
 const COMPLETIONS_PAGE = 1000
+
+/**
+ * Verstoß gegen den eindeutigen Titel-Index `tasks_unique_active_title`
+ * (→ `findDuplicateTask`). Der einzige andere eindeutige Schlüssel von `tasks` ist
+ * der vom Server vergebene Primärschlüssel — 23505 heißt hier also „Titel gibt es
+ * schon". Kommt ein weiterer eindeutiger Schlüssel dazu, stimmt das nicht mehr.
+ */
+const isDuplicateTitleError = (error: { code?: string }): boolean => error.code === '23505'
 
 const isOptimistic = (c: TaskCompletion | EnrichedCompletion): c is OptimisticCompletion =>
   'clientMutationId' in c
@@ -476,13 +486,10 @@ export const useTaskStore = defineStore('tasks', () => {
       if (task.subtask_points_mode === 'checklist') return 0
       return task.effort
     }
-    const deductSum = tasks.value
-      .filter(
-        (t) =>
-          t.parent_task_id === task.task_id && t.completed && t.subtask_points_mode === 'deduct',
-      )
-      .reduce((sum, t) => sum + t.effort, 0)
-    return Math.max(0, task.effort - deductSum)
+    return estimateParentPoints(
+      task.effort,
+      tasks.value.filter((t) => t.parent_task_id === task.task_id),
+    )
   }
 
   /**
@@ -891,6 +898,17 @@ export const useTaskStore = defineStore('tasks', () => {
       return null
     }
 
+    // Vorab, damit der Fehler sagt, welche Aufgabe es schon gibt. Die Gewähr
+    // gibt erst der eindeutige Index (→ `isDuplicateTitleError`): die lokale
+    // Liste kennt eine gerade auf dem anderen Gerät angelegte Aufgabe nicht.
+    if (!taskData.parent_task_id) {
+      const existing = findDuplicateTask(tasks.value, taskData.title)
+      if (existing) {
+        toastStore.showToast(`„${existing.title}" gibt es schon`, 'error')
+        return null
+      }
+    }
+
     isLoading.value = true
 
     const { data, error } = await supabase
@@ -906,7 +924,12 @@ export const useTaskStore = defineStore('tasks', () => {
 
     if (error) {
       console.error('Error creating task:', error)
-      toastStore.showToast('Fehler beim Erstellen der Aufgabe', 'error')
+      toastStore.showToast(
+        isDuplicateTitleError(error)
+          ? `„${taskData.title}" gibt es schon`
+          : 'Fehler beim Erstellen der Aufgabe',
+        'error',
+      )
       return null
     }
 
@@ -1013,6 +1036,23 @@ export const useTaskStore = defineStore('tasks', () => {
   // UPDATE - Task vollständig aktualisieren
   const updateTask = async (taskId: string, updates: Partial<Omit<Task, 'task_id'>>) => {
     const toastStore = useToastStore()
+
+    const current = tasks.value.find((t) => t.task_id === taskId)
+    // Nur bei echter Umbenennung: das Bearbeiten-Fenster schickt den Titel immer mit,
+    // und ein schon bestehendes Duplikat darf das Ändern des Aufwands nicht sperren.
+    if (
+      updates.title !== undefined &&
+      current &&
+      current.parent_task_id === null &&
+      normalizeTaskTitle(updates.title) !== normalizeTaskTitle(current.title)
+    ) {
+      const existing = findDuplicateTask(tasks.value, updates.title, taskId)
+      if (existing) {
+        toastStore.showToast(`„${existing.title}" gibt es schon`, 'error')
+        return false
+      }
+    }
+
     isLoading.value = true
 
     const { error } = await supabase.from('tasks').update(updates).eq('task_id', taskId)
@@ -1021,7 +1061,12 @@ export const useTaskStore = defineStore('tasks', () => {
 
     if (error) {
       console.error('Error updating task:', error)
-      toastStore.showToast('Fehler beim Aktualisieren der Aufgabe', 'error')
+      toastStore.showToast(
+        isDuplicateTitleError(error)
+          ? `„${updates.title?.trim()}" gibt es schon`
+          : 'Fehler beim Aktualisieren der Aufgabe',
+        'error',
+      )
       return false
     }
 
@@ -1742,6 +1787,7 @@ export const useTaskStore = defineStore('tasks', () => {
     deleteAllCompletions,
     // Subtasks
     getSubtasks,
+    estimateCompletionEffort,
     // Projects
     projectEffortTotals,
     loadProjectEffortTotals,

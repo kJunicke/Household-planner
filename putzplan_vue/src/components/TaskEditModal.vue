@@ -3,6 +3,8 @@ import type { Task } from '@/types/Task'
 import { ref, computed } from 'vue'
 import { canPostpone } from '@/lib/taskSchedule'
 import { TASK_TITLE_MAX_LENGTH } from '@/lib/limits'
+import { findDuplicateTask, normalizeTaskTitle } from '@/lib/taskDuplicates'
+import { useTaskStore } from '@/stores/taskStore'
 
 interface Props {
   task: Task
@@ -91,15 +93,27 @@ const editForm = ref({
   recurrence_days: props.task.recurrence_days,
 })
 
+const taskStore = useTaskStore()
+
+// Nur Hauptaufgaben: Unteraufgaben dürfen sich wiederholen (→ `findDuplicateTask`).
+// Nur bei echter Umbenennung — wie im Store (`updateTask`): ein schon bestehendes
+// Duplikat darf das Ändern des Aufwands nicht sperren.
+const duplicate = computed(() => {
+  const title = editForm.value.title.trim()
+  if (props.task.parent_task_id !== null) return undefined
+  if (normalizeTaskTitle(title) === normalizeTaskTitle(props.task.title)) return undefined
+  return findDuplicateTask(taskStore.tasks, title, props.task.task_id)
+})
+
 const canConfirm = computed(() => {
-  return editForm.value.title.trim().length > 0 && editForm.value.effort >= 1
+  return editForm.value.title.trim().length > 0 && editForm.value.effort >= 1 && !duplicate.value
 })
 
 const handleConfirm = () => {
   if (!canConfirm.value) return
 
   // Validierung: Wenn task_type !== 'recurring', setze recurrence_days = 0
-  const updates = { ...editForm.value }
+  const updates = { ...editForm.value, title: editForm.value.title.trim() }
   if (updates.task_type !== 'recurring') {
     updates.recurrence_days = 0
   }
@@ -130,9 +144,13 @@ const handleClose = () => {
                 class="form-control"
                 id="title"
                 v-model="editForm.title"
+                :class="{ 'is-invalid': duplicate }"
                 :maxlength="TASK_TITLE_MAX_LENGTH"
                 required
               />
+              <div v-if="duplicate" class="invalid-feedback">
+                „{{ duplicate.title }}" gibt es schon.
+              </div>
             </div>
 
             <div class="mb-3">

@@ -1,4 +1,5 @@
 import type { Task } from '@/types/Task'
+import { normalizeTaskTitle } from './taskDuplicates'
 
 /**
  * Suche über alle Aufgaben — die Relevanzregel des Such-Overlays der Pinnwand,
@@ -30,6 +31,10 @@ function categoryOf(task: Task): { category: SearchCategory; label: string } {
 export function searchTasks(tasks: readonly Task[], query: string): TaskSearchResult[] | null {
   const needle = query.trim().toLowerCase()
   if (!needle) return null
+  // „Exakt" heißt hier dasselbe wie „Duplikat" (→ `findDuplicateTask`): Relevanz
+  // 100 sagt dem Overlay, dass es den Titel schon gibt.
+  // Getrimmt wie der Titelvorschlag, den das Overlay ans Anlegen weitergibt.
+  const exact = normalizeTaskTitle(query.trim())
 
   // Unteraufgaben einmal nach Elternteil bündeln — sonst wird die Suche O(n²).
   const subtasksByParent = new Map<string, Task[]>()
@@ -43,7 +48,7 @@ export function searchTasks(tasks: readonly Task[], query: string): TaskSearchRe
 
   const relevanceOf = (task: Task): number => {
     const title = task.title.toLowerCase()
-    if (title === needle) return 100
+    if (normalizeTaskTitle(task.title) === exact) return 100
     if (title.startsWith(needle)) return 80
     if (title.includes(needle)) return 60
     const subtasks = subtasksByParent.get(task.task_id) || []

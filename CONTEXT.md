@@ -86,6 +86,20 @@ Architekturentscheidungen: [docs/adr/](docs/adr/).
 ### wieder dreckig
 - Manuelle Aktion: setzt eine erledigte Aufgabe wieder auf dran, obwohl die Kadenz noch läuft.
 - Die Einschätzung des Haushalts hat Vorrang vor dem Zeitplan; die App setzt sie nicht zurück.
+- Zwei Zugänge: der Knopf in der Erledigt-Liste und der Stecknadel-Knopf an einem **Treffer** der **Suche** — die Nadel, weil der Zettel damit zurück an die Wand kommt.
+
+### Hauptaufgabe
+- Aufgabe ohne Elternaufgabe (`parent_task_id` leer) — das, was als Zettel an der Wand hängt. Gegenbegriff: Unteraufgabe (Zettelchen).
+
+### Duplikat
+- Zwei nicht gelöschte **Hauptaufgaben** eines Haushalts mit demselben Titel. Gleich heißt: Leerraum am Rand egal, Leerraum innen zu einem Leerzeichen zusammengezogen, Groß-/Kleinschreibung egal.
+- Gibt es nicht: der Haushalt soll eine Aufgabe wiederfinden und erledigen, statt sie ein zweites Mal anzulegen. Anlegen und Umbenennen weisen ein Duplikat ab, die Datenbank hält es mit einem eindeutigen Index fest.
+- Unteraufgaben dürfen sich wiederholen („Am Projekt arbeiten" steht an jedem Projekt); gelöschte Aufgaben und damit alle **Quick-Aufgaben** zählen nicht.
+
+### Suche
+- Overlay hinter dem FAB der Pinnwand: findet Hauptaufgaben über ihren Titel und die ihrer Unteraufgaben.
+- Ein **Treffer** springt zum Zettel bzw. zur Zeile der Erledigt-Liste. Daneben direkt: **erledigen** (auch eine schon erledigte Aufgabe — dann eben noch einmal, mit Punkten; nicht bei Projekten) und **wieder dreckig** (nur bei erledigten). Beide schließen die Suche und springen ebenfalls, damit der **Fetzen** sichtbar wird.
+- Passt der Suchbegriff genau auf eine bestehende Aufgabe (→ *Duplikat*), wird „Aufgabe erstellen" nicht angeboten.
 
 ### verschieben
 - Manuelle Aktion: räumt eine Aufgabe bis zu einem Termin aus dem Weg, **ohne** Erledigung — keine Punkte, kein Verlaufseintrag, letzte Erledigung unangetastet; das Intervall läuft im gewohnten Rhythmus weiter.
