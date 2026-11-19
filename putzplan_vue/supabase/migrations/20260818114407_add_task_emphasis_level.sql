@@ -1,4 +1,4 @@
--- Nachdruck (Ticket 09a) — Persistenz und Zurücksetzen
+-- Nachdruck — Persistenz und Zurücksetzen
 --
 -- Nachdruck ist die von Hand gesetzte Aussage "diesmal ist es wichtig"
 -- (→ CONTEXT.md, "Nachdruck"). Nicht zu verwechseln mit der berechneten
@@ -114,7 +114,7 @@ BEGIN
   --
   -- Die Bedingung greift nach dem EIGENEN task_type, nicht nach dem Elternknoten:
   -- eine tägliche Unteraufgabe unter einem Projekt (z. B. "Am Projekt arbeiten")
-  -- verliert ihren Nachdruck also nächtlich. Das war bei 09a übersehen und ist am
+  -- verliert ihren Nachdruck also nächtlich. Das war zuerst übersehen und ist am
   -- 26.08.2026 so entschieden worden — Begründung im Glossar (CONTEXT.md,
   -- "Überstempeln"). Dieselbe Regel steht in complete-task und im Store.
   -- (Kommentar nachgetragen; die Migration selbst ist unverändert und angewandt.)

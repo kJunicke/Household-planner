@@ -19,7 +19,7 @@ import { useElementHeightVar } from '../composables/useElementHeightVar'
  * `SyncIndicator`, der nur hier im Header sitzt.
  *
  * Die Rangliste ist ersatzlos entfernt, der Store-Wert `weeklyRanking`
- * ebenfalls (Backlog-Ticket 50). Laut Glossar (Wochenziel) gibt es
+ * ebenfalls. Laut Glossar (Wochenziel) gibt es
  * ausdrücklich keine Rangliste — auch nicht künftig.
  *
  * Das „Putzplan"-Logo stand ursprünglich links neben der Rangliste und sollte

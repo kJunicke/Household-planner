@@ -80,8 +80,8 @@
 /* ============================================================================
    Pinnwand-Rohpalette — auf dem BLANKEN Wurzelelement, ungegated
    ----------------------------------------------------------------------------
-   Bis Ticket 08 hing diese Palette unter `:root[data-design='pinnwand']`. Sie
-   ist jetzt immer aktiv, unabhängig vom Aussehen-Schalter: der App-Header
+   Diese Palette hängt nicht unter `:root[data-design='pinnwand']`, sie ist
+   immer aktiv, unabhängig vom Aussehen-Schalter: der App-Header
    (`Header.vue`, der die Wochenziel-Leiste `WallStatusBar.vue` einbettet) ist
    die bewusste EINZIGE Ausnahme vom `data-design`-Umschalter — Papier-Optik in
    beiden Aussehen und auf jeder Route, siehe Kommentar in `Header.vue`. Damit

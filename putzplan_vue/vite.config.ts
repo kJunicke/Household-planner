@@ -47,9 +47,9 @@ const stamp = buildStamp()
 // https://vite.dev/config/
 export default defineConfig(({ command }) => ({
   // Im Prod-Build fallen console.log/debug/info weg — sie geben u. a.
-  // Nutzerdaten aus (Backlog-Ticket 12). `pure` statt `drop: ['console']`:
+  // Nutzerdaten aus. `pure` statt `drop: ['console']`:
   // console.error und console.warn bleiben, auf console.error verlaesst sich
-  // z. B. das Alt-Projekt ohne Arbeits-Unteraufgabe (Ticket 03). `pure`
+  // z. B. das Alt-Projekt ohne Arbeits-Unteraufgabe. `pure`
   // streicht nur Aufrufe, deren Ergebnis unbenutzt ist; Argumente mit
   // Seiteneffekten wertet esbuild weiterhin aus.
   esbuild:

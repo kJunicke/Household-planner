@@ -96,7 +96,7 @@ const qtyFieldOpen = ref<Set<string>>(new Set())
 const forcedAddOpen = ref<Set<string>>(new Set())
 const sectionOverride = ref<Map<string, boolean>>(new Map())
 
-// --- Gedämpfte (leere) Kategorien — Ticket 05 --------------------------------
+// --- Gedämpfte (leere) Kategorien --------------------------------------------
 // Abgeleiteter Zustand, nichts Gespeichertes: eine Kategorie ohne Einträge
 // (`group.total === 0`) ist gedämpft, bis sie in dieser Sitzung angetippt
 // wurde. `undampedCategories` hält NUR den Tipp fest — ob eine Kategorie noch
@@ -573,7 +573,7 @@ onUnmounted(() => {
 <template>
   <div class="page-container">
     <div class="container-fluid">
-      <!-- Der lange Zettel (Ticket 07/pinnwand-ausbau): dieselbe Papierhuelle
+      <!-- Der lange Zettel: dieselbe Papierhuelle
            wie im Einkauf, geteilt ueber `LongSheet`. Die Chip-Leiste rendert
            unconditional (wie vorher), das Blatt selbst nur, wenn es eine
            aktuelle Liste gibt. -->
@@ -1015,7 +1015,7 @@ onUnmounted(() => {
 /* ---- List Chip Bar ---- */
 /* `margin-bottom` steht hier statt als Bootstraps `.mb-3` im Template (das
    Template trug es bisher direkt): `.mb-3` ist bei Bootstrap `!important` und
-   liesse sich vom Pinnwand-Aussehen (LongSheet, Ticket 07) nicht mehr auf
+   liesse sich vom Pinnwand-Aussehen (LongSheet) nicht mehr auf
    -6px ziehen. Wert identisch mit dem bisherigen `.mb-3` (1rem). Genau das
    Problem, das ShoppingView fuer sich selbst schon so geloest hatte. */
 .list-chip-bar {
@@ -1355,7 +1355,7 @@ onUnmounted(() => {
   }
 }
 
-/* ---- Gedämpfte (leere) Kategorien — Ticket 05 -----------------------------
+/* ---- Gedämpfte (leere) Kategorien -----------------------------------------
    Verhalten (leer ⇒ gedämpft, Antippen hebt es für die Sitzung auf) sitzt in
    <script setup> und gilt in beiden Aussehen. Hier nur die Optik; die
    Kopfzeile behält ihre Mindesthöhe/Trefferfläche unverändert (Touch-Target),
@@ -1554,7 +1554,7 @@ onUnmounted(() => {
    Wort der Normalfall.
 
    Die Papierhuelle selbst (Kante, Kopfzeile) kommt aus `LongSheet.vue`
-   (Ticket 07) und wird dort einmal gepflegt. Was hier steht, ist der Rest
+   und wird dort einmal gepflegt. Was hier steht, ist der Rest
    des Blatts — Kategorie-Ueberschriften, Zeilen, Eingabezeilen — in eigenem
    Besitz dieser View, nach demselben Muster wie `ShoppingView.vue`, aber nur
    fuer das, was es hier wirklich gibt: kein `.qty-badge`, kein `.star-btn`,
@@ -1576,7 +1576,7 @@ onUnmounted(() => {
    `--pw-*` umgelegt, `.notes-block` liest also von selbst in Blattfarbe. Der
    Balken tut das nicht — er ist rund, randlos, schattenlos und animiert,
    das einzige Element mit dieser Form auf dem ganzen Blatt. */
-/* QC-Befund: Rahmen oben+unten frisst von den klassischen 6px zwei weg,
+/* Rahmen oben+unten frisst von den klassischen 6px zwei weg,
    die Fuellung blieb bei 2px zwischen zwei 2px-Linien optisch begraben statt
    sichtbar. Spurhoehe unter Pinnwand auf 10px angehoben, nur hier (nicht in
    der Basisregel oben, die bleibt bei 6px): 10px − 2px oben − 2px unten =
@@ -1779,7 +1779,7 @@ onUnmounted(() => {
 /* ---- Naechste freie Zeile statt Formularfeld ------------------------------
    Das leere Kaestchen (`.add-ghost-box`) fehlte hier zunaechst — ohne Papier
    fiel die 32px-Verschiebung gegenueber den Eintragsnamen nicht auf, mit
-   Papier schon (QC-Befund). Dieselbe Regel wie im Einkauf. */
+   Papier schon. Dieselbe Regel wie im Einkauf. */
 :root[data-design='pinnwand'] .add-line {
   gap: 8px;
   min-height: var(--touch-target-min);

@@ -1,5 +1,5 @@
 -- =================================================================
--- WOCHENZIEL AM HAUSHALT (Pinnwand-Redesign, Etappe 3 / Ticket 07)
+-- WOCHENZIEL AM HAUSHALT
 -- =================================================================
 -- Zwei Felder am Haushalt, nicht an der Person: das Wochenziel gehört
 -- dem Haushalt, jedes Mitglied darf es ändern.

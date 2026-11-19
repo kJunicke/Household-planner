@@ -587,13 +587,13 @@ export const useTaskStore = defineStore('tasks', () => {
   }
 
   // NACHDRUCK — Stempel-Automat 0 (kein Nachdruck) → 1 WICHTIG → 2 DRINGEND → 0
-  // (→ CONTEXT.md, "Überstempeln"; Ticket 09a).
+  // (→ CONTEXT.md, "Überstempeln").
   //
   // Aufgerufen von `onStampTap` in WallNote.vue — dem Tipp auf den Stempel in
   // der Fußzeile. Das ist der EINZIGE Aufrufer.
   //
-  // Bis zum 02.09.2026 hatte diese Funktion keinen: 09a lieferte Datenmodell und
-  // Automaten, die Bedienung am Zettel nie. Zwei Backlog-Tickets haben deshalb
+  // Bis zum 02.09.2026 hatte diese Funktion keinen: Datenmodell und
+  // Automat kamen ohne die Bedienung am Zettel. Zwei Backlog-Tickets haben deshalb
   // monatelang Randfälle eines Verhaltens beschrieben, das kein Nutzer auslösen
   // konnte, und eine Spec hat eine Regel umgekehrt, die niemand im Betrieb prüfen
   // konnte — weil sie nichts steuerte.
@@ -610,7 +610,7 @@ export const useTaskStore = defineStore('tasks', () => {
   //
   // AN EINEM PROJEKT SCHREIBT DIESER AUTOMAT ZWEI SPALTEN, nicht eine: der
   // Übergang 2 → 0 räumt den Stapel ab und zieht dabei einen neuen
-  // Projektspruch (Ticket `04`, → CONTEXT.md „Projektspruch"). Beide Werte
+  // Projektspruch (→ CONTEXT.md „Projektspruch"). Beide Werte
   // gehören zusammen — sie werden zusammen angewandt, zusammen geschrieben
   // und im Fehlerfall zusammen zurückgenommen. Ein halber Rückfall (Stufe
   // zurück, Spruch neu) wäre ein Zustand, den der Server nie gesehen hat.
@@ -637,7 +637,7 @@ export const useTaskStore = defineStore('tasks', () => {
         task.emphasis_level = next
 
         // ABRÄUMEN (2 → 0) DREHT DEN PROJEKTSPRUCH WEITER
-        // (→ CONTEXT.md, „Projektspruch"; Ticket `04`).
+        // (→ CONTEXT.md, „Projektspruch").
         //
         // Genau dieser eine Übergang, und nur an einem PROJEKT: solange der
         // Stapel wächst (0 → 1 → 2), bleibt der Untergrund liegen — die beiden
@@ -727,8 +727,8 @@ export const useTaskStore = defineStore('tasks', () => {
    *   Punktwert einer Leistung definiert, nicht als Vorzeichen.
    * - Die Zeile stehen zu lassen und nur `tasks.completed` zurückzusetzen ist
    *   „wieder dreckig" — laut Glossar eine Aussage über die Wohnung, kein
-   *   Korrigieren. Die Punkte blieben verbucht, und das Ticket verlangt
-   *   ausdrücklich, dass sie aus dem Balken verschwinden.
+   *   Korrigieren. Die Punkte blieben verbucht, sie müssen aber
+   *   aus dem Balken verschwinden.
    *
    * Zurückgeschrieben wird der Schnappschuss aus der Erledigung — nicht nur
    * `completed`. `last_completed_at` ist der Anker der Kadenz: bliebe der neue
@@ -746,7 +746,7 @@ export const useTaskStore = defineStore('tasks', () => {
    *
    * **Warum das Warten auf `settled` sein muss:** vor der Bestätigung gibt es
    * keine Zeile zum Löschen. Wer hier nicht wartet, löscht nichts und die
-   * Punkte bleiben — genau der stille Fehler, den das Ticket verbietet.
+   * Punkte bleiben — genau der stille Fehler, den das Zurücknehmen verhindern soll.
    *
    * **Doppeltipp:** der Riegel ist das synchrone `undoTickets.delete` ganz
    * oben, vor dem ersten `await` — dieselbe Regel wie bei `completeTask`. Ein

@@ -20,11 +20,11 @@
  * (`projectPhraseStackOf`). Geschrieben wird hier nichts — das tut
  * `taskStore.cycleEmphasisLevel` beim Abräumen des Stapels (Stufe 2 → 0), und nur dort.
  *
- * **Ein Projekt trägt auf ALLEN DREI Stufen einen Spruch**, seit dem 05.09.2026 (Ticket
- * `04`, Nacharbeit): `WICHTIG` und `DRINGEND` kommen an einem Projekt nicht mehr vor. Die
+ * **Ein Projekt trägt auf ALLEN DREI Stufen einen Spruch**: `WICHTIG` und `DRINGEND`
+ * kommen an einem Projekt nicht mehr vor. Die
  * Dringlichkeit liest man dort allein an der **Farbe** der obersten Lage ab
- * (blau → orange → rot), nicht am Wort. Vom Maintainer am Gerät entschieden, nachdem die
- * erste Fassung von `04` die Wörter auch auf Projekte gelegt hatte.
+ * (blau → orange → rot), nicht am Wort. Vom Maintainer am Gerät entschieden, nachdem eine
+ * erste Fassung die Wörter auch auf Projekte gelegt hatte.
  */
 
 import type { Task } from '@/types/Task'
@@ -166,7 +166,7 @@ export function findOverlongProjectPhrases(): string[] {
 /**
  * Alles, was diese Datei von einer Aufgabe braucht.
  *
- * Seit dem Weiterdrehen (Ticket `04`) steht `project_saying_index` **im `Task`-Interface**
+ * Seit dem Weiterdrehen steht `project_saying_index` **im `Task`-Interface**
  * (`src/types/Task.ts`) — es gibt keinen Cast mehr auf eine undeklarierte Spalte. Der
  * Grund für die Änderung: das Weiterdrehen muss die Spalte auch **schreiben** und im
  * Fehlerfall zurückrollen; ein zweiter Cast an einer zweiten Stelle wäre eine zweite
@@ -280,7 +280,7 @@ function fnv1a(input: string): number {
  * **Der Rückfall ist ein Notausgang, kein zweiter Regelweg.** Er greift nur, wenn die
  * Spalte fehlt, `null` ist oder außerhalb 0–99 liegt — seit die Migration in Produktion
  * ist, kommt das im Normalbetrieb nicht mehr vor. Er bleibt trotzdem stehen, weil ein
- * Projekt ohne Grundabdruck keine Fläche zum Überstempeln hätte (→ Ticket `02`) und ein
+ * Projekt ohne Grundabdruck keine Fläche zum Überstempeln hätte und ein
  * fehlender Stempel zudem die Breitenmessung in `WallView.vue` verfälschte, die ihn als
  * gesetzt voraussetzt. Eine Lücke wäre also teurer als ein falsches Wort.
  *

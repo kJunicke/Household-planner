@@ -34,8 +34,7 @@ const emit = defineEmits<Emits>()
 // diese Ableitung durch eine Handeingabe: `reset_recurring_tasks()`
 // schaltet die Kadenz-Weckklausel ab, sobald `postponed_until` gesetzt ist,
 // und macht das gewählte Datum zur ALLEINIGEN Weckquelle — an einer
-// erledigten Aufgabe holt das die nächste Fälligkeit zu früh zurück
-// (Ticket 04 / QC-Befund 1).
+// erledigten Aufgabe holt das die nächste Fälligkeit zu früh zurück.
 //
 // **`task.completed` allein taugt dafür NICHT als Wächter**, weil
 // `taskStore.postponeTask` es bei jeder Verschiebung selbst auf `true`
@@ -44,11 +43,11 @@ const emit = defineEmits<Emits>()
 // verschobene Aufgabe ist damit PER DEFINITION `completed`, und an dieser
 // einen Spalte sind „wirklich erledigt" und „bereits verschoben"
 // ununterscheidbar — dieselbe Falle wie in `WallDoneList.vue` (dortiger
-// Kommentar zu `rows()`, QC-Befund 2), nur beim Schreiben statt beim Lesen.
+// Kommentar zu `rows()`), nur beim Schreiben statt beim Lesen.
 // Das zweite Feld `postponed_until` trennt die beiden:
 //
-// - **wirklich erledigt** (`completed`, kein Datum) → verborgen. Befund 1
-//   bleibt geschlossen.
+// - **wirklich erledigt** (`completed`, kein Datum) → verborgen. Die
+//   nächste Fälligkeit kommt nicht zu früh zurück.
 // - **dran** (`!completed`) → sichtbar, unverändert.
 // - **bereits verschoben** (`completed` UND `postponed_until` gesetzt) →
 //   sichtbar. Ein neues Datum ist dort harmlos: die Aufgabe steht ohnehin
@@ -56,7 +55,8 @@ const emit = defineEmits<Emits>()
 //   Weckquelle, und ein zweites Verschieben tauscht nur eine Handeingabe
 //   gegen eine andere — es entsteht kein Zustand, den es vorher nicht gab.
 //   (Eine Zeile mit ECHTER Erledigung UND gesetztem Verschiebe-Datum — die
-//   Altdaten aus Befund 2 — zeigt den Knopf hier ebenfalls wieder. Das ist
+//   Altdaten aus `WallDoneList.vue`, `rows()` — zeigt den Knopf hier ebenfalls
+//   wieder. Das ist
 //   kein neuer Fehler, sondern der Weg, genau diese Zeilen zu bereinigen.)
 //
 // `canPostpone` prüft nur den `task_type` und kennt keinen der drei
@@ -68,7 +68,7 @@ const showPostpone = computed(
 
 // Der Typ „Projekt" steht in der Liste, ist aber KEIN Wechselziel — in keine
 // Richtung. Ohne die Option stünde das Feld bei einem Projekt auf einem Wert, den
-// es nicht gibt, und wäre leer (Ticket 03-4). Auswählbar darf sie trotzdem nicht
+// es nicht gibt, und wäre leer. Auswählbar darf sie trotzdem nicht
 // sein, weil ein Typwechsel Zustand hinterlässt, den dieses Modal nicht mitzieht:
 //
 // - Ein Projekt bekommt seine Unteraufgabe „Am Projekt arbeiten" NUR beim Anlegen

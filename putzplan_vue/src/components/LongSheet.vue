@@ -2,7 +2,7 @@
 /**
  * The **langer Zettel** shell — the paper itself, nothing on it.
  *
- * Extracted from ShoppingView (pinnwand-ausbau Ticket 07): only the paper's
+ * Extracted from ShoppingView: only the paper's
  * edge/tear ("Kante, Linien") and the list-switcher tab strip ("Kopfzeile"),
  * per the CONTEXT.md glossary entry for **langer Zettel**. Everything that
  * goes ON the paper — category headings, entries, add-lines — stays owned

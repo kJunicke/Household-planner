@@ -8,7 +8,7 @@ export interface Household {
   // schlicht in der Zeile.
   weekly_goal_points?: number | null
   week_start_day?: number | null // 0 = Sonntag … 6 = Samstag, gilt GERADE
-  // Anstehende Änderung des Wochenstarts (Ticket 08). Ein geänderter
+  // Anstehende Änderung des Wochenstarts. Ein geänderter
   // Wochenstart darf die laufende Woche nicht neu zuschneiden, deshalb liegt
   // der Wechseltag am Haushalt — haushaltsweit, nicht pro Gerät.
   week_start_day_pending?: number | null

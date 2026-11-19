@@ -1,7 +1,6 @@
 <script setup lang="ts">
 /**
- * Die vier beschrifteten Richtungen beim Long-Press — als Vollbild-Overlay
- * (Ticket 10, grundüberholt in Ticket 00b).
+ * Die vier beschrifteten Richtungen beim Long-Press — als Vollbild-Overlay.
  *
  * **Warum an den Bildschirmrändern und nicht um den Zettel herum:** ein Kranz
  * um den Zettel liegt genau dort, wo der Daumen liegt. „Im Moment blockiert man
@@ -34,7 +33,7 @@
  * Beide Angaben haben denselben Ursprung: den **Aufsetzpunkt** (`origin`), nicht
  * die Zettelmitte. Der Pfeil sagt, wie weit gezogen wurde — und ab derselben
  * Strecke, ab der eine Richtung anliegt (`COMMIT_DISTANCE`), ist er da. Zwei
- * Ursprünge wären der Fehler, den Ticket 00b abstellt: eine anliegende Richtung
+ * Ursprünge ergäben eine anliegende Richtung
  * ohne sichtbaren Pfeil.
  */
 import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue'
@@ -136,7 +135,7 @@ const edgePoint = (d: PressDirection) => {
 // beiden Seiten. Rechts steht der Randpunkt bei `vw - IN`; ist die längste
 // Zeile breiter als 2 × IN, ragt sie aus dem Fenster. Geklemmt wird deshalb der
 // **Randpunkt** — ausdrücklich nicht über ein kleineres `IN`, einen Wechsel der
-// Ausrichtung, Kürzen oder Drehen (alles verworfen, siehe Ticket 00b).
+// Ausrichtung, Kürzen oder Drehen (alles verworfen).
 //
 // **Gemessen, nicht geschätzt**, aus demselben Grund wie beim alten Kranz: eine
 // geschätzte Breite hier reichte den Fehler an die nächste Textänderung weiter
@@ -151,7 +150,7 @@ const edgePoint = (d: PressDirection) => {
 // Zeile die breitere ist, entscheidet die Schrift, nicht die Zahl der
 // Buchstaben („Aufwand" gegen „anpassen").
 //
-// **Heute löst die Klemme nie aus** (Ticket 17): sie greift erst ab ~100 px
+// **Heute löst die Klemme nie aus**: sie greift erst ab ~100 px
 // Zeilenbreite, die längste Beschriftung („anpassen") misst 68,4 px, und bei
 // 360–420 px Fensterbreite bleiben ≥ 20 px Luft. Wer eine längere Beschriftung
 // ergänzt, aktiviert sie — und muss vorher zwei bekannte Schwächen beheben:

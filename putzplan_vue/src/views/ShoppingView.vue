@@ -66,7 +66,7 @@ const vFocus = { mounted: (el: HTMLElement) => el.focus() }
 // --- Grace window (delayed move to the Gekauft block) -----------------------
 const { graceIds, markGrace, clearGrace, clearAllGrace } = useGraceWindow(6000)
 
-// --- Gedämpfte (leere) Kategorien — Ticket 05 --------------------------------
+// --- Gedämpfte (leere) Kategorien --------------------------------------------
 // Abgeleiteter Zustand, nichts Gespeichertes: eine Kategorie ohne Produkte
 // (`items.length === 0`, dieselbe „leer"-Definition wie in `compareCategoryGroups`)
 // ist gedämpft, bis sie in dieser Sitzung angetippt wurde. `undampedCategories`
@@ -195,7 +195,7 @@ const toggleSection = (group: ShoppingCategoryGroup) => {
  * 2. Die Regel gilt in BEIDEN Aussehen. Sie beschreibt den Ablauf beim
  *    Einkaufen, nicht das Aussehen, und steht deshalb absichtlich hier in
  *    TypeScript ohne jede Kopplung an `data-design`. Das „klassische Aussehen
- *    bleibt unverändert" aus Ticket 01 gilt ab hier nur noch optisch — auch das
+ *    bleibt unverändert" aus der Vorgabe gilt ab hier nur noch optisch — auch das
  *    ist bewusst so entschieden.
  */
 const purchasedPerCategory = computed(() => shoppingStore.purchasedPerCategory)
@@ -546,7 +546,7 @@ onUnmounted(() => {
 <template>
   <div class="page-container">
     <div class="container-fluid">
-      <!-- Der lange Zettel (Ticket 07/pinnwand-ausbau): Kante + Kopfzeile kommen
+      <!-- Der lange Zettel: Kante + Kopfzeile kommen
            aus `LongSheet`, geteilt mit Packlisten und To-do. Die Chip-Leiste
            rendert unconditional (wie vorher), das Blatt selbst nur, wenn es
            eine aktuelle Liste gibt — sonst zeigte ShoppingView vorher auch
@@ -1359,7 +1359,7 @@ onUnmounted(() => {
   font-size: var(--font-sm);
 }
 
-/* ---- Gedämpfte (leere) Kategorien — Ticket 05 -----------------------------
+/* ---- Gedämpfte (leere) Kategorien -----------------------------------------
    Verhalten (leer ⇒ gedämpft, Antippen hebt es für die Sitzung auf) sitzt in
    <script setup> und gilt in beiden Aussehen. Hier nur die Optik; die
    Kopfzeile behält ihre Mindesthöhe/Trefferfläche unverändert (Touch-Target),
@@ -1610,17 +1610,17 @@ onUnmounted(() => {
    greift keine einzige Regel — das klassische Aussehen oben bleibt Wort fuer
    Wort der Normalfall.
 
-   Die Papierhuelle selbst (`.sheet`, `.list-chip-bar` samt Kindern) lebt seit
-   Ticket 07 (pinnwand-ausbau) in `components/LongSheet.vue` — geteilt mit
+   Die Papierhuelle selbst (`.sheet`, `.list-chip-bar` samt Kindern) lebt
+   in `components/LongSheet.vue` — geteilt mit
    Packliste und To-do. Was hier unten steht, ist bewusst NICHT umgezogen: die
    Zeilen. `ListItemRow` (`:deep(.list-row)` & Co.) und `CategoryCombobox`
    werden weiterhin ausschliesslich innerhalb dieser View angefasst, verankert
    an `.cat-column` bzw. `.container-fluid` statt an `.sheet` — das Element
    gehoert jetzt LongSheet, seine eigene Scope-ID reicht hier nicht mehr hin.
    Packliste/To-do benutzen dieselben Komponenten ueber `ChecklistView.vue`
-   und bleiben unveraendert, bis sie ihre eigenen Tickets bekommen.
+   und bleiben unveraendert.
 
-   Die einzige geteilte Datei, die dieses Ticket wirklich umbaut, ist
+   Die einzige geteilte Datei, die der lange Zettel wirklich umbaut, ist
    `pinnwand.css` (Eingabefeld-Selektoren, Rail-Kontrast) — dort steht jeweils
    die Begruendung.
    ========================================================================== */

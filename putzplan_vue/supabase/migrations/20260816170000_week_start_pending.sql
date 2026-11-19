@@ -1,5 +1,5 @@
 -- =================================================================
--- WOCHENSTART-WECHSEL AM HAUSHALT (Pinnwand-Redesign, Etappe 3 / Ticket 08)
+-- WOCHENSTART-WECHSEL AM HAUSHALT
 -- =================================================================
 -- Ein geänderter Wochenstart darf die **laufende** Woche nicht neu
 -- zuschneiden — sonst verschwänden bereits gesammelte Punkte scheinbar.
