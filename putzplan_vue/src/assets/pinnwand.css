@@ -389,6 +389,17 @@
   transform: translate(2px, 2px);
 }
 
+/* Ablageziel beim Ziehen eines Eintrags: dasselbe Klebeband wie `.active`,
+   dazu eine Tintenkante, damit das Ziel eindeutig bleibt. Schlaegt die scoped
+   Regel aus `CategoryRail.vue`, die die Fuellung sonst mit dem Kork mischen
+   wuerde. */
+:root[data-design='pinnwand'] .cat-rail.dragging .rail-bubble.drop-target {
+  background: var(--pw-tape);
+  border-color: var(--pw-ink) var(--pw-ink) var(--pw-ink) var(--bubble-color);
+  box-shadow: 0 0 0 2px var(--pw-ink);
+  transform: translateX(-6px);
+}
+
 /* 44px sichtbar, per Pseudo-Element auf 48px treffbar. */
 :root[data-design='pinnwand'] .rail-toggle {
   position: relative;

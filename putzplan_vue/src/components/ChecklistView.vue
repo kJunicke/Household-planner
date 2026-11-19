@@ -508,7 +508,11 @@ const handleCategoryDelete = async (name: string, withItems: boolean) => {
 const justMovedId = ref<string | null>(null)
 let moveHighlightTimer: number | null = null
 
-const { bind: bindDrag } = useCategoryDrag({
+const {
+  bind: bindDrag,
+  dragging: itemDragging,
+  dropKey: railDropKey,
+} = useCategoryDrag({
   // Eigener Gruppenname je Listentyp: Packliste und To-do dürfen einander
   // nichts abgeben, auch wenn beide gleichzeitig im Baum hängen.
   group: `${props.railStorageKey}-items`,
@@ -867,6 +871,8 @@ onUnmounted(() => {
                 :groups="displaySections"
                 :active-key="activeCatKey"
                 :collapsed="railCollapsed"
+                :dragging="itemDragging"
+                :drop-key="railDropKey"
                 @select="scrollToCategory"
                 @update:collapsed="setRailCollapsed"
               />
