@@ -7,7 +7,7 @@ import { drawProjectPhraseSlot, projectPhraseSlotOf } from '@/lib/projectPhrases
 import { useHouseholdStore } from './householdStore'
 import { useAuthStore } from './authStore'
 import { useToastStore } from './toastStore'
-import type { RealtimeChannel } from '@supabase/supabase-js'
+import { FunctionsHttpError, type RealtimeChannel } from '@supabase/supabase-js'
 import {
   isInFlight,
   isNetworkError,
@@ -21,7 +21,7 @@ import { mergeLoadedRows, type ChangeDuringLoad } from '@/lib/rowMerge'
 import { collectKeysetPages } from '@/lib/keysetPages'
 import { onSessionEnd } from '@/lib/sessionEnd'
 import { findDuplicateTask, normalizeTaskTitle } from '@/lib/taskDuplicates'
-import { estimateParentPoints, isUnrated } from '@/lib/taskPoints'
+import { PROJECT_WORK_TITLE, estimateCompletionPoints, isUnrated } from '@/lib/taskPoints'
 
 /**
  * Optimistische Completion: trägt eine Client-Kennung, weil die `completion_id`
@@ -256,12 +256,16 @@ export const useTaskStore = defineStore('tasks', () => {
   // der Wert wird lokal sofort zu den Standardpunkten und geht mit an die Edge
   // Function, die ihn im selben Schritt speichert. Ohne ihn wird eine
   // unbewertete Aufgabe hier nicht erledigt.
+  /**
+   * Eine Aufgabe erledigen. `effortOverride`: angepasste Punkte (Erledigungs-
+   * Dialog, Projekt-Arbeit); `completionNote`: Notiz bzw. Begründung;
+   * `standardPoints`: erstes Bewerten einer unbewerteten Aufgabe.
+   */
   const completeTask = async (
     taskId: string,
-    effortOverride?: number,
-    completionNote?: string,
-    standardPoints?: number,
+    options: { effortOverride?: number; completionNote?: string; standardPoints?: number } = {},
   ) => {
+    const { effortOverride, completionNote, standardPoints } = options
     const authStore = useAuthStore()
     const toastStore = useToastStore()
     const householdStore = useHouseholdStore()
@@ -302,6 +306,9 @@ export const useTaskStore = defineStore('tasks', () => {
     // Im Apply entschieden: nur eine (lokal) unbewertete Aufgabe schickt
     // `standardPoints` — an einer bewerteten lehnte der Server ihn ab.
     let rateNow = false
+    // Meldung des Servers für den Toast, wenn sie dem Nutzer etwas sagt
+    // (bisher nur „wurde inzwischen bewertet“).
+    let serverMessage: string | null = null
 
     const { applied, settled } = runOptimistic<RowSnapshot[]>({
       entityId: taskId,
@@ -371,7 +378,7 @@ export const useTaskStore = defineStore('tasks', () => {
 
         // Optimistische Completion — mit Client-Kennung, damit das
         // INSERT-Echo sie ersetzt statt sie zu duplizieren.
-        const estimatedEffort = estimateCompletionEffort(task, effortOverride)
+        const estimatedEffort = estimateCompletionEffort(task, { effortOverride })
         const optimisticCompletion: OptimisticCompletion = {
           clientMutationId,
           completion_id: `optimistic-${clientMutationId}`,
@@ -413,6 +420,14 @@ export const useTaskStore = defineStore('tasks', () => {
 
         if (error) {
           console.error('Full error object:', JSON.stringify(error, null, 2))
+          // Inzwischen von jemand anderem bewertet: die Meldung des Servers
+          // geht so in den Toast (→ `onError`).
+          if (error instanceof FunctionsHttpError) {
+            const body = await error.context.json().catch(() => null)
+            if (body?.code === 'already_rated' && typeof body.error === 'string') {
+              serverMessage = body.error
+            }
+          }
           throw error
         }
         if (!data?.success) {
@@ -475,7 +490,12 @@ export const useTaskStore = defineStore('tasks', () => {
       },
 
       onError: () => {
-        toastStore.showToast(`Fehler beim Abschließen: ${taskTitle}`, 'error')
+        toastStore.showToast(
+          serverMessage
+            ? `${taskTitle}: ${serverMessage}`
+            : `Fehler beim Abschließen: ${taskTitle}`,
+          'error',
+        )
       },
     })
 
@@ -517,21 +537,20 @@ export const useTaskStore = defineStore('tasks', () => {
   })
 
   /**
-   * Schätzung des Punktwerts NUR fürs Wochen-Ranking. Die verbindliche Zahl
-   * rechnet die Edge Function; im UI wird diese Schätzung nirgends als
-   * Erfolgsmeldung gefeiert.
+   * Schätzung des Punktwerts einer Erledigung (`estimateCompletionPoints`) mit
+   * den Unteraufgaben aus dem Store: Wochen-Ranking, fliegende Zahl, Fetzen —
+   * beim ersten Bewerten mit `standardPoints`. Die verbindliche Zahl rechnet die
+   * Edge Function.
    */
-  const estimateCompletionEffort = (task: Task, effortOverride?: number): number => {
-    if (effortOverride !== undefined) return effortOverride
-    if (task.parent_task_id !== null) {
-      if (task.subtask_points_mode === 'checklist') return 0
-      return task.effort ?? 0
-    }
-    return estimateParentPoints(
-      task.effort ?? 0,
+  const estimateCompletionEffort = (
+    task: Task,
+    options: { effortOverride?: number; standardPoints?: number } = {},
+  ): number =>
+    estimateCompletionPoints(
+      task,
       tasks.value.filter((t) => t.parent_task_id === task.task_id),
+      options,
     )
-  }
 
   /**
    * Rücknahme mehrerer Task-Zeilen über das gemeinsame Muster
@@ -982,7 +1001,7 @@ export const useTaskStore = defineStore('tasks', () => {
       const { data: subtaskData, error: subtaskError } = await supabase
         .from('tasks')
         .insert({
-          title: 'Am Projekt arbeiten',
+          title: PROJECT_WORK_TITLE,
           effort: 1, // Default effort, will be overridden on completion
           recurrence_days: 0,
           task_type: 'daily', // Always visible, never recurs
