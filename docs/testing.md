@@ -95,3 +95,17 @@ reicht.
 Im ausgelieferten Bundle nach einer Zeichenkette suchen, die es **nur** im neuen Stand gibt.
 Und für den Gerätetest einen Vorschaltpunkt vorsehen, an dem der Tester ohne
 Entwicklerwerkzeug erkennt, welche Fassung läuft.
+
+## Testkonten und Testhaushalt
+
+Für den Browser-QC gibt es zwei bestätigte Konten im Live-Projekt, `qc-agent@putzplan.test` und
+`qc-agent-2@putzplan.test`, beide im eigenen Haushalt `QC-Test-Haushalt`. Dort darf der QC alles:
+erledigen, ausgleichen, den Kurs ändern. Der Haushalt des Paars bleibt unberührt. Die Zugangsdaten
+liegen in mastermind unter `Private/secrets/HouseholdPlanner/`.
+
+- **Einloggen tut Kilian selbst.** Ein Agent tippt kein Passwort in ein Formular, das an den
+  Live-Host schickt, auch nicht auf Bitte.
+- **Zwei Konten brauchen zwei Origins**, sonst überschreibt die zweite Sitzung die erste: der
+  Dev-Server mit `npm run dev -- --host`, dann `localhost:<port>` und `127.0.0.1:<port>`.
+- **Unbewertete Aufgaben entstehen über die Oberfläche nicht.** Für einen Test die Standardpunkte
+  der Testaufgabe per `db query --linked` auf `NULL` setzen, nur in `QC-Test-Haushalt`.
