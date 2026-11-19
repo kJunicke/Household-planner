@@ -1,6 +1,7 @@
 import { onBeforeUnmount, ref } from 'vue'
 import Sortable from 'sortablejs'
 
+import { followDragPointer } from '@/lib/dragPointer'
 import { dropTargetAt, releasedOver } from '@/lib/dropTargetAt'
 
 import { useDragAutoScroll } from './useDragAutoScroll'
@@ -41,6 +42,8 @@ export function useCategoryDrag(options: {
   /** `data-drop-key` der Blase unter dem Finger, sonst null. */
   const dropKey = ref<string | null>(null)
   let pointer: { x: number; y: number } | null = null
+  /** Meldet die Fingerverfolgung ab; `null`, solange nichts gezogen wird. */
+  let unfollow: (() => void) | null = null
   /**
    * Erst wenn der Finger einmal neben jeder Blase war, zählen Blasen als Ziel.
    * Die Leiste wird beim Greifen breiter und kann dann schon unter dem Finger
@@ -70,19 +73,9 @@ export function useCategoryDrag(options: {
     dropKey.value = next
   }
 
-  const trackPointer = (evt: Event) => {
-    const point = 'touches' in evt ? (evt as TouchEvent).touches[0] : (evt as MouseEvent)
-    if (!point) return
-    pointer = { x: point.clientX, y: point.clientY }
-    refreshDropKey()
-  }
-
-  const MOVE_EVENTS = ['touchmove', 'pointermove', 'mousemove'] as const
-  const END_EVENTS = ['touchend', 'touchcancel', 'pointerup', 'mouseup'] as const
-
   const endTracking = () => {
-    MOVE_EVENTS.forEach((type) => document.removeEventListener(type, trackPointer))
-    END_EVENTS.forEach((type) => document.removeEventListener(type, endLater))
+    unfollow?.()
+    unfollow = null
     dragging.value = false
     dropKey.value = null
     pointer = null
@@ -95,8 +88,13 @@ export function useCategoryDrag(options: {
 
   const startTracking = () => {
     endTracking()
-    MOVE_EVENTS.forEach((type) => document.addEventListener(type, trackPointer, { passive: true }))
-    END_EVENTS.forEach((type) => document.addEventListener(type, endLater, { passive: true }))
+    unfollow = followDragPointer({
+      onMove: (point) => {
+        pointer = point
+        refreshDropKey()
+      },
+      onEnd: endLater,
+    })
     dragging.value = true
   }
 
