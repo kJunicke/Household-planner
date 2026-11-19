@@ -757,7 +757,8 @@ const showCompletionModal = ref(false)
  * **Was fliegt, ist der gewählte Aufwand, nicht `effectivePoints`:** ein
  * `effortOverride` ersetzt die Rechnung samt `deduct`-Abzug — so rechnet auch
  * `estimateCompletionEffort`. Startpunkt ist die Zettelmitte, weil der Zug nicht
- * von der Ecke ausging. 0 kommt hier nicht an (das Modal lässt nur 1–5 zu).
+ * von der Ecke ausging. Bei 0 Punkten (in der Punktwahl der Erledigung erlaubt)
+ * fliegt nichts — „+0 P“ wäre kein Ereignis.
  */
 const handleCustomCompletion = async (effortOverride: number, note: string) => {
   const el = root.value
@@ -765,7 +766,7 @@ const handleCustomCompletion = async (effortOverride: number, note: string) => {
   const applied = await taskStore.completeTask(props.task.task_id, effortOverride, note)
   if (!applied) return
   showCompletionModal.value = false
-  if (origin) flyPoints(`+${effortOverride} P`, origin)
+  if (origin && effortOverride > 0) flyPoints(`+${effortOverride} P`, origin)
 }
 
 /** Folge-Dialog-Muster: Bearbeiten schließt, der nächste öffnet. */
@@ -794,7 +795,7 @@ const handleAssignmentConfirm = async (userId: string | null, permanent: boolean
 
 const handleCreateSubtask = async (subtaskData: {
   title: string
-  effort: 1 | 2 | 3 | 4 | 5
+  effort: number
   subtask_points_mode: 'checklist' | 'deduct' | 'bonus'
 }) => {
   const maxOrderIndex = subtasks.value.reduce((max, s) => Math.max(max, s.order_index), 0)

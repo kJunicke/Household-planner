@@ -271,7 +271,7 @@ const handleAssignmentConfirm = async (userId: string | null, permanent: boolean
 
 const handleCreateSubtask = async (subtaskData: {
   title: string
-  effort: 1 | 2 | 3 | 4 | 5
+  effort: number
   subtask_points_mode: 'checklist' | 'deduct' | 'bonus'
 }) => {
   const parent = targetTask.value

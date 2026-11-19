@@ -3,6 +3,7 @@ import { ref, computed, watch } from 'vue'
 import { TASK_TITLE_MAX_LENGTH } from '@/lib/limits'
 import { findDuplicateTask } from '@/lib/taskDuplicates'
 import { useTaskStore } from '@/stores/taskStore'
+import PointPicker from './PointPicker.vue'
 
 interface Props {
   initialTitle?: string
@@ -15,7 +16,7 @@ interface Emits {
     e: 'create',
     taskData: {
       title: string
-      effort: 1 | 2 | 3 | 4 | 5
+      effort: number
       recurrence_days: number
       task_type: 'recurring' | 'daily' | 'one-time' | 'project'
     },
@@ -32,7 +33,8 @@ const titleFromSearch = (query: string | undefined): string =>
 
 const formData = ref({
   title: titleFromSearch(props.initialTitle),
-  effort: 1 as 1 | 2 | 3 | 4 | 5,
+  // Keine Vorbelegung: neue Aufgaben werden bewusst bewertet, nie mit einem Zufallswert.
+  effort: null as number | null,
   recurrence_days: 0,
   task_type: 'recurring' as 'recurring' | 'daily' | 'one-time' | 'project',
 })
@@ -53,11 +55,13 @@ const taskStore = useTaskStore()
 const duplicate = computed(() => findDuplicateTask(taskStore.tasks, formData.value.title.trim()))
 
 const canConfirm = computed(() => {
-  return formData.value.title.trim().length > 0 && !duplicate.value
+  return (
+    formData.value.title.trim().length > 0 && formData.value.effort !== null && !duplicate.value
+  )
 })
 
 const handleConfirm = () => {
-  if (!canConfirm.value || props.isLoading) return
+  if (!canConfirm.value || props.isLoading || formData.value.effort === null) return
 
   emit('create', {
     title: formData.value.title.trim(),
@@ -101,14 +105,8 @@ const handleClose = () => {
             </div>
 
             <div class="mb-3">
-              <label class="form-label">Aufwand (1-5)</label>
-              <select v-model="formData.effort" class="form-select" :disabled="isLoading">
-                <option :value="1">1 - Sehr leicht</option>
-                <option :value="2">2 - Leicht</option>
-                <option :value="3">3 - Normal</option>
-                <option :value="4">4 - Schwer</option>
-                <option :value="5">5 - Sehr schwer</option>
-              </select>
+              <label class="form-label">Punkte</label>
+              <PointPicker v-model="formData.effort" kind="standard" :disabled="isLoading" />
             </div>
 
             <div class="mb-3">

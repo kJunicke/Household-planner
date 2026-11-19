@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import { COMPLETION_NOTE_MAX_LENGTH } from '@/lib/limits'
+import PointPicker from './PointPicker.vue'
 
 interface Props {
   projectTitle: string
@@ -17,8 +18,6 @@ const emit = defineEmits<Emits>()
 
 const selectedEffort = ref<number | null>(null)
 const note = ref('')
-
-const effortOptions = [1, 2, 3, 4, 5]
 
 const canConfirm = computed(() => {
   return selectedEffort.value !== null && note.value.trim().length > 0
@@ -48,18 +47,9 @@ const handleClose = () => {
           <p class="project-name">{{ projectTitle }}</p>
 
           <div class="effort-selection">
-            <label class="selection-label">Wie viel Aufwand war es? *</label>
-            <div class="effort-buttons">
-              <button
-                v-for="effort in effortOptions"
-                :key="effort"
-                class="effort-btn"
-                :class="{ active: selectedEffort === effort }"
-                @click="selectedEffort = effort"
-              >
-                {{ effort }}
-              </button>
-            </div>
+            <label class="selection-label">Wie viele Punkte war es? *</label>
+            <!-- `standard`: Projekt-Arbeit zählt mindestens 1 Punkt, wie vorher. -->
+            <PointPicker v-model="selectedEffort" kind="standard" :disabled="isLoading" />
           </div>
 
           <div class="note-input">
@@ -116,47 +106,7 @@ const handleClose = () => {
   margin-bottom: 0.75rem;
 }
 
-.effort-buttons {
-  display: flex;
-  gap: 0.5rem;
-}
-
-.effort-btn {
-  flex: 1;
-  padding: 0.75rem;
-  border: 2px solid var(--color-border);
-  background: var(--color-background);
-  color: var(--color-text-primary);
-  border-radius: var(--radius-md);
-  font-size: 1.125rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.15s;
-}
-
-.effort-btn:hover {
-  border-color: var(--color-primary);
-}
-
-.effort-btn.active {
-  background: var(--color-primary);
-  border-color: var(--color-primary);
-  color: white;
-}
-
 .note-input {
   margin-bottom: 1rem;
-}
-
-/* Mobile optimizations */
-@media (max-width: 576px) {
-  .effort-buttons {
-    gap: 0.375rem;
-  }
-
-  .effort-btn {
-    padding: 0.625rem;
-    font-size: 1rem;
-  }
 }
 </style>

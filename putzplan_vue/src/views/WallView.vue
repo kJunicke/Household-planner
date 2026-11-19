@@ -1209,7 +1209,7 @@ const openQuickFromSearch = () => {
 
 const handleCreateTask = async (taskData: {
   title: string
-  effort: 1 | 2 | 3 | 4 | 5
+  effort: number
   recurrence_days: number
   task_type: 'recurring' | 'daily' | 'one-time' | 'project'
 }) => {
@@ -1226,7 +1226,7 @@ const handleCreateTask = async (taskData: {
 
 const handleCreateQuickTask = async (data: {
   title: string
-  effort: 1 | 2 | 3 | 4 | 5
+  effort: number
   note?: string
 }) => {
   const result = await taskStore.createQuickTask(data)

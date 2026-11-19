@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
 import { COMPLETION_NOTE_MAX_LENGTH, TASK_TITLE_MAX_LENGTH } from '@/lib/limits'
+import PointPicker from './PointPicker.vue'
 
 interface Props {
   initialTitle?: string
@@ -13,7 +14,7 @@ interface Emits {
     e: 'complete',
     data: {
       title: string
-      effort: 1 | 2 | 3 | 4 | 5
+      effort: number
       note?: string
     },
   ): void
@@ -29,7 +30,7 @@ const titleFromSearch = (query: string | undefined): string =>
 
 const formData = ref({
   title: titleFromSearch(props.initialTitle),
-  effort: 1 as 1 | 2 | 3 | 4 | 5,
+  effort: null as number | null,
   note: '',
 })
 
@@ -43,10 +44,12 @@ watch(
   { immediate: true },
 )
 
-const canConfirm = computed(() => formData.value.title.trim().length > 0)
+const canConfirm = computed(
+  () => formData.value.title.trim().length > 0 && formData.value.effort !== null,
+)
 
 const handleConfirm = () => {
-  if (!canConfirm.value || props.isLoading) return
+  if (!canConfirm.value || props.isLoading || formData.value.effort === null) return
 
   emit('complete', {
     title: formData.value.title.trim(),
@@ -88,14 +91,8 @@ const handleClose = () => {
             </div>
 
             <div class="mb-3">
-              <label class="form-label">Punkte (1-5)</label>
-              <select v-model="formData.effort" class="form-select" :disabled="isLoading">
-                <option :value="1">1 - Sehr leicht</option>
-                <option :value="2">2 - Leicht</option>
-                <option :value="3">3 - Normal</option>
-                <option :value="4">4 - Schwer</option>
-                <option :value="5">5 - Sehr schwer</option>
-              </select>
+              <label class="form-label">Punkte</label>
+              <PointPicker v-model="formData.effort" kind="standard" :disabled="isLoading" />
             </div>
 
             <div class="mb-3">

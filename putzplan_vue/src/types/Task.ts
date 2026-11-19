@@ -2,8 +2,8 @@ export interface Task {
   task_id: string
   household_id: string
   title: string
-  effort: 1 | 2 | 3 | 4 | 5 // effort a cleaning activity usually takes.
-  //measured only with values 1-5
+  // Standardpunkte (→ CONTEXT.md): ganze Zahl 1–999, gilt bei jeder Erledigung.
+  effort: number
 
   // Task Type - categorizes task behavior
   // 'recurring': Traditional time-based tasks (recurrence_days > 0)

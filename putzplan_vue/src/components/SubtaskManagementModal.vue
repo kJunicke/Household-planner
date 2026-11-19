@@ -2,6 +2,7 @@
 import type { Task } from '@/types/Task'
 import { ref, computed } from 'vue'
 import { TASK_TITLE_MAX_LENGTH } from '@/lib/limits'
+import PointPicker from './PointPicker.vue'
 
 interface Props {
   parentTask: Task
@@ -14,7 +15,7 @@ interface Emits {
     e: 'createSubtask',
     subtaskData: {
       title: string
-      effort: 1 | 2 | 3 | 4 | 5
+      effort: number
       subtask_points_mode: 'checklist' | 'deduct' | 'bonus'
     },
   ): void
@@ -31,7 +32,7 @@ const isDailyTask = computed(() => props.parentTask.task_type === 'daily')
 
 // Add Subtask Form
 const newSubtaskTitle = ref('')
-const newSubtaskEffort = ref<1 | 2 | 3 | 4 | 5>(1)
+const newSubtaskEffort = ref<number | null>(null)
 const newSubtaskPointsMode = ref<'checklist' | 'deduct' | 'bonus'>('bonus') // Default: bonus (für Daily + Projects)
 
 // Available modes (filtered for projects and daily tasks)
@@ -85,15 +86,15 @@ const isDeductOverflow = computed(() => {
 // Check if adding this new subtask as deduct would cause overflow
 const wouldCauseDeductOverflow = computed(() => {
   if (newSubtaskPointsMode.value !== 'deduct') return false
-  return currentDeductSum.value + newSubtaskEffort.value > props.parentTask.effort
+  return currentDeductSum.value + (newSubtaskEffort.value ?? 0) > props.parentTask.effort
 })
 
 const canAddSubtask = computed(() => {
-  return newSubtaskTitle.value.trim().length > 0
+  return newSubtaskTitle.value.trim().length > 0 && newSubtaskEffort.value !== null
 })
 
 const handleAddSubtask = () => {
-  if (!canAddSubtask.value) return
+  if (!canAddSubtask.value || newSubtaskEffort.value === null) return
 
   emit('createSubtask', {
     title: newSubtaskTitle.value.trim(),
@@ -103,7 +104,7 @@ const handleAddSubtask = () => {
 
   // Reset form
   newSubtaskTitle.value = ''
-  newSubtaskEffort.value = 1
+  newSubtaskEffort.value = null
   newSubtaskPointsMode.value = 'bonus' // Reset to default (bonus für Daily/Projects)
 }
 
@@ -197,23 +198,8 @@ const handleDeleteSubtask = (subtaskId: string) => {
 
               <!-- Effort Selector (immer anzeigen bei Daily, da nur Bonus) -->
               <div class="form-column">
-                <label class="form-label-block">Aufwand:</label>
-                <div class="effort-selector">
-                  <label
-                    v-for="effort in [1, 2, 3, 4, 5]"
-                    :key="effort"
-                    class="effort-option"
-                    :class="{ active: newSubtaskEffort === effort }"
-                  >
-                    <input
-                      type="radio"
-                      :value="effort"
-                      v-model.number="newSubtaskEffort"
-                      name="subtaskEffort"
-                    />
-                    {{ effort }}
-                  </label>
-                </div>
+                <label class="form-label-block">Punkte:</label>
+                <PointPicker v-model="newSubtaskEffort" kind="standard" />
               </div>
 
               <button
@@ -497,44 +483,6 @@ const handleDeleteSubtask = (subtaskId: string) => {
   font-weight: 600;
   color: var(--color-text-primary);
   margin: 0;
-}
-
-/* Effort Selector */
-.effort-selector {
-  display: flex;
-  gap: 0.5rem;
-  width: 100%;
-}
-
-.effort-option {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex: 1;
-  min-width: 0;
-  height: 40px;
-  border: 2px solid var(--color-border);
-  border-radius: var(--radius-md);
-  cursor: pointer;
-  transition: all var(--transition-base);
-  font-weight: 600;
-  color: var(--color-text-secondary);
-  background: var(--color-background);
-}
-
-.effort-option:hover {
-  border-color: var(--color-primary);
-  background: var(--color-background-elevated);
-}
-
-.effort-option.active {
-  border-color: var(--color-primary);
-  background: var(--color-primary);
-  color: white;
-}
-
-.effort-option input[type='radio'] {
-  display: none;
 }
 
 /* Points Mode Selector (for Add Form) */

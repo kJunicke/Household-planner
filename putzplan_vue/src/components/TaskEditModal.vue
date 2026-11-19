@@ -5,6 +5,7 @@ import { canPostpone } from '@/lib/taskSchedule'
 import { TASK_TITLE_MAX_LENGTH } from '@/lib/limits'
 import { findDuplicateTask, normalizeTaskTitle } from '@/lib/taskDuplicates'
 import { useTaskStore } from '@/stores/taskStore'
+import PointPicker from './PointPicker.vue'
 
 interface Props {
   task: Task
@@ -88,7 +89,7 @@ const isProject = computed(() => props.task.task_type === 'project')
 
 const editForm = ref({
   title: props.task.title,
-  effort: props.task.effort,
+  effort: props.task.effort as number | null,
   task_type: props.task.task_type,
   recurrence_days: props.task.recurrence_days,
 })
@@ -106,14 +107,17 @@ const duplicate = computed(() => {
 })
 
 const canConfirm = computed(() => {
-  return editForm.value.title.trim().length > 0 && editForm.value.effort >= 1 && !duplicate.value
+  return (
+    editForm.value.title.trim().length > 0 && editForm.value.effort !== null && !duplicate.value
+  )
 })
 
 const handleConfirm = () => {
-  if (!canConfirm.value) return
+  const effort = editForm.value.effort
+  if (!canConfirm.value || effort === null) return
 
   // Validierung: Wenn task_type !== 'recurring', setze recurrence_days = 0
-  const updates = { ...editForm.value, title: editForm.value.title.trim() }
+  const updates = { ...editForm.value, effort, title: editForm.value.title.trim() }
   if (updates.task_type !== 'recurring') {
     updates.recurrence_days = 0
   }
@@ -164,15 +168,8 @@ const handleClose = () => {
             </div>
 
             <div class="mb-3">
-              <label for="effort" class="form-label">Aufwand</label>
-              <input
-                type="number"
-                class="form-control"
-                id="effort"
-                v-model.number="editForm.effort"
-                min="1"
-                required
-              />
+              <label class="form-label">Punkte</label>
+              <PointPicker v-model="editForm.effort" kind="standard" />
             </div>
 
             <div v-if="editForm.task_type === 'recurring'" class="mb-3">

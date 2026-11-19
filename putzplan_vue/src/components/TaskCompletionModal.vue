@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import { COMPLETION_NOTE_MAX_LENGTH } from '@/lib/limits'
+import PointPicker from './PointPicker.vue'
 
 interface Props {
   taskTitle: string
@@ -18,8 +19,6 @@ const emit = defineEmits<Emits>()
 
 const selectedEffort = ref<number | null>(null)
 const note = ref('')
-
-const effortOptions = [1, 2, 3, 4, 5]
 
 const canConfirm = computed(() => {
   // Effort selection is required, note is optional
@@ -42,7 +41,7 @@ const handleClose = () => {
     <div class="modal-backdrop" @click="handleClose">
       <div class="modal-content" @click.stop>
         <div class="modal-header">
-          <h3 class="modal-title">Aufwand anpassen</h3>
+          <h3 class="modal-title">Punkte anpassen</h3>
           <button class="btn-close" @click="handleClose" aria-label="Schließen"></button>
         </div>
 
@@ -50,21 +49,13 @@ const handleClose = () => {
           <p class="task-name">{{ taskTitle }}</p>
 
           <div class="effort-selection">
-            <label class="selection-label">Tatsächlicher Aufwand:</label>
-            <div class="effort-buttons">
-              <button
-                v-for="effort in effortOptions"
-                :key="effort"
-                class="effort-btn"
-                :class="{
-                  active: selectedEffort === effort,
-                  default: effort === defaultEffort,
-                }"
-                @click="selectedEffort = effort"
-              >
-                {{ effort }}
-              </button>
-            </div>
+            <label class="selection-label">Punkte dieses Mal:</label>
+            <PointPicker
+              v-model="selectedEffort"
+              kind="completion"
+              :default-points="defaultEffort"
+              :disabled="isLoading"
+            />
           </div>
 
           <div class="note-input">
@@ -108,12 +99,6 @@ const handleClose = () => {
   margin-bottom: 0.5rem;
 }
 
-.default-effort {
-  font-size: 0.875rem;
-  color: var(--color-text-secondary);
-  margin-bottom: 1.5rem;
-}
-
 .effort-selection {
   margin-bottom: 1.5rem;
 }
@@ -126,60 +111,7 @@ const handleClose = () => {
   margin-bottom: 0.75rem;
 }
 
-.effort-buttons {
-  display: flex;
-  gap: 0.5rem;
-}
-
-.effort-btn {
-  flex: 1;
-  padding: 0.75rem;
-  border: 2px solid var(--color-border);
-  background: var(--color-background);
-  color: var(--color-text-primary);
-  border-radius: var(--radius-md);
-  font-size: 1.125rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.15s;
-  position: relative;
-}
-
-.effort-btn:hover {
-  border-color: var(--color-primary);
-}
-
-.effort-btn.default {
-  border-color: var(--color-primary);
-  background: var(--color-background-elevated);
-  box-shadow: 0 0 0 1px var(--color-primary);
-}
-
-.effort-btn.active {
-  background: var(--color-primary);
-  border-color: var(--color-primary);
-  color: white;
-  box-shadow: none;
-}
-
-.effort-btn.active.default {
-  background: var(--color-primary);
-  box-shadow: 0 0 0 3px rgba(13, 110, 253, 0.25);
-}
-
 .note-input {
   margin-bottom: 1rem;
-}
-
-/* Mobile optimizations */
-@media (max-width: 576px) {
-  .effort-buttons {
-    gap: 0.375rem;
-  }
-
-  .effort-btn {
-    padding: 0.625rem;
-    font-size: 1rem;
-  }
 }
 </style>
