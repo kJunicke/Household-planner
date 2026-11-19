@@ -17,10 +17,19 @@ export interface WallSearch {
    * ihrer Unteraufgaben den Begriff enthält — genau die Zettel, die an der Wand
    * stehen bleiben.
    *
-   * Erledigte Treffer (die **losen Zettel**) kommen als eigenes Feld dazu; sie
-   * gehören nicht in diese Liste.
+   * Erledigte Treffer (die **losen Zettel**) stehen in `loose`, nie hier.
    */
   pinned: Task[]
+  /**
+   * **Lose Zettel**: erledigte Hauptaufgaben, die auf dieselbe Weise passen.
+   * Sie hängen nicht an der Wand und folgen in der Suche nach den angepinnten
+   * Treffern (→ CONTEXT.md „Suche"). Dass sie danach kommen, sagt nicht diese
+   * Liste, sondern ihre eigene Gruppe in `layoutWall`.
+   *
+   * Gelöschte Aufgaben fehlen hier wie oben — und damit jede **Quick-Aufgabe**,
+   * die erledigt *und* gelöscht angelegt wird.
+   */
+  loose: Task[]
   /**
    * „Aufgabe erstellen" anbieten? Nur, wenn es den Titel noch nicht gibt —
    * „genau" heißt hier dasselbe wie **Duplikat** (`findDuplicateTask`), sonst
@@ -48,16 +57,17 @@ export function searchWall(tasks: readonly Task[], query: string): WallSearch | 
     }
   }
 
-  const pinned = tasks.filter(
-    (task) =>
-      task.parent_task_id === null &&
-      isLive(task) &&
-      !task.completed &&
-      (task.title.toLowerCase().includes(needle) || parentsBySubtask.has(task.task_id)),
-  )
+  const pinned: Task[] = []
+  const loose: Task[] = []
+  for (const task of tasks) {
+    if (task.parent_task_id !== null || !isLive(task)) continue
+    if (!task.title.toLowerCase().includes(needle) && !parentsBySubtask.has(task.task_id)) continue
+    if (task.completed) loose.push(task)
+    else pinned.push(task)
+  }
 
   // Getrimmt wie der Titelvorschlag, den die Suche ans Anlegen weitergibt.
   const offerCreate = findDuplicateTask(tasks, query.trim()) === undefined
 
-  return { pinned, offerCreate }
+  return { pinned, loose, offerCreate }
 }

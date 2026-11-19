@@ -67,4 +67,28 @@ describe('stampStackOf', () => {
       expect(Math.abs(layer.tilt)).toBeLessThanOrEqual(14)
     }
   })
+
+  describe('loser Zettel', () => {
+    it('trägt nur den Grundabdruck ERLEDIGT', () => {
+      const stack = stampStackOf(task({ completed: true }), { loose: true })
+      expect(stack.map((layer) => [layer.text, layer.level, layer.top])).toEqual([
+        ['ERLEDIGT', 0, true],
+      ])
+    })
+
+    it('zeigt keinen Nachdruck, auch wenn noch einer gespeichert ist', () => {
+      expect(
+        stampStackOf(task({ completed: true, emphasis_level: 2 }), { loose: true }).map(
+          (layer) => layer.text,
+        ),
+      ).toEqual(['ERLEDIGT'])
+    })
+
+    it('liegt an derselben Stelle wie der Grundabdruck des angepinnten Zettels', () => {
+      const pinned = stampStackOf(task({}))[0]
+      const loose = stampStackOf(task({ completed: true }), { loose: true })[0]
+      expect(pinned).toBeDefined()
+      expect(loose).toMatchObject({ dx: pinned?.dx, dy: pinned?.dy, tilt: pinned?.tilt })
+    })
+  })
 })

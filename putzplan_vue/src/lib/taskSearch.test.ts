@@ -94,6 +94,46 @@ describe('searchWall', () => {
     expect(pinnedTitles(tasks, 'regale')).toEqual([])
   })
 
+  describe('lose Zettel', () => {
+    const looseTitles = (tasks: Task[], query: string) =>
+      searchWall(tasks, query)?.loose.map((t) => t.title)
+
+    it('liefert erledigte Hauptaufgaben als lose Treffer, getrennt von den angepinnten', () => {
+      const tasks = [
+        task('Bad erledigt', { completed: true }),
+        task('Bad offen'),
+        task('Fenster erledigt', { completed: true }),
+      ]
+      const search = searchWall(tasks, 'bad')
+      expect(search?.pinned.map((t) => t.title)).toEqual(['Bad offen'])
+      expect(search?.loose.map((t) => t.title)).toEqual(['Bad erledigt'])
+    })
+
+    it('findet lose Zettel auch über den Titel einer Unteraufgabe', () => {
+      const keller = task('Keller', { completed: true })
+      const tasks = [keller, task('Regale abwischen', { parent_task_id: keller.task_id })]
+      expect(looseTitles(tasks, 'regale')).toEqual(['Keller'])
+    })
+
+    it('zeigt gelöschte und Quick-Aufgaben nie als losen Zettel', () => {
+      const tasks = [
+        task('Bad gelöscht', { completed: true, deleted_at: '2026-11-19T10:00:00Z' }),
+        task('Bad quick', {
+          task_type: 'one-time',
+          completed: true,
+          deleted_at: '2026-11-19T10:00:00Z',
+        }),
+      ]
+      expect(looseTitles(tasks, 'bad')).toEqual([])
+    })
+
+    it('zeigt erledigte Unteraufgaben nie selbst als losen Zettel', () => {
+      const keller = task('Keller')
+      const tasks = [keller, task('Bad-Regal', { parent_task_id: keller.task_id, completed: true })]
+      expect(looseTitles(tasks, 'bad')).toEqual([])
+    })
+  })
+
   describe('„Aufgabe erstellen"', () => {
     it('wird angeboten, wenn keine Aufgabe genau so heißt', () => {
       const tasks = [task('Bad putzen')]
