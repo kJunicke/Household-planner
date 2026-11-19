@@ -25,6 +25,18 @@ Push auf `main` deployt sofort (GitHub Pages). Umgebung: Linux Mint, VS Code.
 - Nennt der User einen Skill, der zu fehlen scheint: erst danach suchen (`~/.claude/skills/`, aus mastermind `agents/skills/`),
   dann entscheiden.
 
+## Supabase
+
+- Projekt `uhgggnxsfqvmeduptdec` im **privaten** Supabase-Konto. Die CLI-Anmeldung eines Rechners
+  kann ein anderes Konto sein: dann den Token aus mastermind `Private/secrets/supabase-personal.env`
+  als `SUPABASE_ACCESS_TOKEN` setzen, nicht umloggen. Mit `supabase link --project-ref …` in
+  `putzplan_vue/` reichen Token und Link für `migration list`, `db query --linked` und
+  `db push --linked`; ein DB-Passwort braucht es nicht.
+- Migrationen wendet niemand automatisch an: nach dem Merge `supabase db push --linked`, vorher
+  `--dry-run`. Daten, die eine Migration umbaut, vorher mit `db query --linked` ansehen.
+- **`db push` legt keine Transaktion um die Datei.** Braucht eine Migration eine (`LOCK TABLE`,
+  alles-oder-nichts), schreibt sie `BEGIN;` … `COMMIT;` selbst.
+
 ## Kommentare
 
 - Ein Kommentar sagt **warum so** oder **was bricht, wenn man es ändert**. Was der Code tut, sagt der Code.
