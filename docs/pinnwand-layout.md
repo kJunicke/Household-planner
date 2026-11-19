@@ -1,8 +1,8 @@
 # Pinnwand-Layout — Herleitungen
 
 Begründungen für Zahlen und Entscheidungen der Wand, die im Code nur als Ergebnis stehen.
-Messfallen beim Nachmessen: [testing.md](testing.md). Warum jeder Zettel Platz für den ganzen
-Abdruckstapel freihält: [ADR-0003](adr/0003-der-stapel-haelt-seinen-platz-frei.md).
+Messfallen beim Nachmessen: [testing.md](testing.md). Warum der Abdruckstapel keinen Platz
+mehr freihält, sondern in Stift und Papierrand ragt: [ADR-0007](adr/0007-raster-statt-freiem-packen.md).
 
 ### Wandrand `EDGE` (WallView.vue)
 
@@ -35,30 +35,21 @@ Abdruckstapel freihält: [ADR-0003](adr/0003-der-stapel-haelt-seinen-platz-frei.
 - Die Marge geht immer nach oben: ein paar Pixel Breite sieht niemand, ein fehlendes halbes Pixel
   bricht den Titel um.
 
-### Stempelstapel: Zellbreite, Zentrierung, kein Halo-Zuschlag (WallNote.vue)
+### Stempelstapel: Stempelbereich und ragende Abdrücke (WallNote.vue)
 
-Alle drei Lagen liegen in derselben Grid-Zelle (`grid-area: 1 / 1`); die Zelle ist so breit wie
-die breiteste Lage, und **jede** Lage steht über `min-width: 100%` auf Zellbreite und zentriert
-ihr Wort (`text-align: center` an `.stamp-layer`, nicht nur an der obersten).
+Der Abdruck ist nur das Wort, ohne Kasten und Polster (ADR-0007). `.due-stamp` ist der
+**Stempelbereich**: ein Flex-Kind der Fußzeile, 44 px breit und so hoch wie die Griffzeile,
+das sich den Rest bis zum Stift nimmt. Die Lagen liegen absolut darin, am linken Rand
+verankert, und ragen nach rechts.
 
-- **Zellbreite für jede Lage:** Steht sie nur an der obersten, fällt eine Lage beim Überstempeln
-  auf ihre Textbreite zurück (rund 78 → 40 px) — der Abdruck sieht geschrumpft aus.
-- **Zentrierung in jeder Lage:** Ohne sie klebt das Wort im breiteren Kasten links und springt
-  beim Überstempeln, während der Kasten stehen bleibt (bis rund 25 px). Wer prüfen will, ob sich
-  ein Text bewegt, vergleicht seine Position vor und nach dem Tipp — nicht
-  `getComputedStyle().textAlign`; das misst eine Eigenschaft, keine Bewegung.
-- **Kein seitlicher Halo-Zuschlag:** Bei Lagen auf Zellbreite überdeckt ein Zuschlag in 261 von
-  282 Lagen den Rahmen der Lage darunter (bis rund 10 px) — die Abdrücke sehen seitlich
-  abgeschnitten aus. Ohne ihn liegt in 17 von 282 Fällen höchstens rund 4 px Kastenrand der
-  unteren Lage frei, kaum je ein Buchstabe. Entschieden für „ohne“.
-- **Halo deckend, Halo an der Zelle:** Mit durchsichtiger oberster Lage scheinen die unteren
-  Wörter durch die Buchstaben; ein Halo nur auf Wortbreite lässt längere Grundabdrücke
-  (Projektsprüche) seitlich herausschauen.
-- **Nur in Chrome gemessen:** `min-width: 100%` an einem Grid-Element mit inhaltsabhängiger Spur
-  ist eine zyklische Prozentangabe; laut Spezifikation bläht sie die Spur nicht auf, WebKit ist
-  hier für Abweichungen bekannt.
-
-Zahlen: Wand mit 94 Zetteln × 3 Stufen, Chrome.
+- **Links verankert, nicht zentriert:** links steht der Punkte-Sticker, und dorthin darf
+  kein Abdruck ragen; nach rechts liegen Stift und Eselsohr, in die er ragen darf.
+- **Trefffläche = Stempelbereich:** die Lagen tragen `pointer-events: none`. Stift und
+  Eselsohr stehen im DOM später und liegen über den Lagen, auch für den Finger.
+- **Nur gestempelte Lagen im DOM:** die unsichtbaren Platzhalter für die Breite
+  (ADR-0003) entfallen.
+- **Halo bleibt:** die oberste Lage ist deckend auf Papierfarbe, sonst scheinen die unteren
+  Wörter durch ihre Buchstaben. Ohne Polster sitzt er knapp am Wort.
 
 ### Freies Packen vor einer Sperrlinie (wallLayout.ts, `packFree`)
 

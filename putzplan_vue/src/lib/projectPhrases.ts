@@ -5,8 +5,9 @@
  * Fälligkeit, sondern einen Spruch aus einer festen Sammlung von hundert, die der
  * Maintainer festgelegt hat. Der Witz: je höher der Stapel, desto mehr Sprüche.
  *
- * **Höchstens zehn Zeichen je Spruch.** Der Stempel steht im Fluss der Fußzeile und geht
- * damit in die Zettelbreite und über sie in die Wandhöhe ein. Wer die Liste ergänzt,
+ * **Höchstens zehn Zeichen je Spruch.** Der Abdruck trägt keine Breite (ADR-0007), er
+ * ragt in Stift und Papierrand — wie weit, hängt am längsten Spruch, und der muss auf
+ * einem Zettel lesbar bleiben. Wer die Liste ergänzt,
  * prüft nur die Zeichenlänge — `PROJECT_PHRASE_MAX_LENGTH` und
  * `findOverlongProjectPhrases()` unten sind dafür da.
  *
@@ -14,9 +15,9 @@
  * Anlage eines Projekts gezogen und in `tasks.project_saying_index` gespeichert, damit
  * alle Geräte dasselbe Wort sehen und es ein Neuladen übersteht.
  *
- * Diese Datei kann drei Dinge: den gespeicherten Listenplatz **auflösen**
- * (`projectPhraseOf`), den nächsten **ziehen** (`drawProjectPhraseSlot`) und aus dem
- * einen gespeicherten Platz den **ganzen Abdruckstapel** ableiten
+ * Diese Datei kann zwei Dinge: den nächsten Listenplatz **ziehen**
+ * (`drawProjectPhraseSlot`) und aus dem einen gespeicherten Platz den **ganzen
+ * Abdruckstapel** ableiten, Grundabdruck zuunterst
  * (`projectPhraseStackOf`). Geschrieben wird hier nichts — das tut
  * `taskStore.cycleEmphasisLevel` beim Abräumen des Stapels (Stufe 2 → 0), und nur dort.
  *
@@ -30,7 +31,7 @@
 import type { Task } from '@/types/Task'
 
 /**
- * Die harte Grenze: der Stempel geht in die Zettelbreite ein.
+ * Die harte Grenze: so weit darf ein Spruch über den Stempelbereich hinausragen.
  *
  * @public — Diagnose in der Browserkonsole (mit `findOverlongProjectPhrases`).
  */
@@ -175,7 +176,7 @@ export function findOverlongProjectPhrases(): string[] {
  * Bewusst ein `Pick` und nicht `Task` selbst: diese Datei braucht zwei Felder, nicht
  * dreißig. Und bewusst **keine** Index-Signatur (früher
  * `{ task_id: string } & Partial<Record<string, unknown>>`): TypeScript weist einem Typ
- * mit Index-Signatur kein Interface ohne eine solche zu, `projectPhraseOf(props.task)`
+ * mit Index-Signatur kein Interface ohne eine solche zu, `projectPhraseStackOf(props.task)`
  * war damit ein Typfehler — zur Laufzeit unsichtbar, im Build-Gate rot.
  */
 type PhraseCarrier = Pick<Task, 'task_id' | 'project_saying_index'>
@@ -249,7 +250,7 @@ export function drawProjectPhraseSlot(currentSlot: number | null): number {
 /**
  * Ein Sonderfall wird **einmal je Projekt** gemeldet, nicht einmal je Neuzeichnen.
  *
- * `projectPhraseOf()` hängt an einem `computed` und läuft bei jedem Packlauf der Wand
+ * `projectPhraseStackOf()` hängt an einem `computed` und läuft bei jedem Packlauf der Wand
  * erneut — ungebremst wären das hunderte identische Zeilen je Layoutdurchgang, und die
  * Meldung ginge im Rauschen unter, statt aufzufallen.
  */
@@ -271,7 +272,8 @@ function fnv1a(input: string): number {
 }
 
 /**
- * Der Spruch eines Projekts.
+ * Der Listenplatz, mit dem tatsächlich gearbeitet wird: der gespeicherte, sonst der
+ * abgeleitete.
  *
  * Der Regelweg ist der **gespeicherte** Listenplatz — der Spruch gehört dem Haushalt,
  * nicht dem Gerät, und nur ein gespeicherter Wert lässt sich weiterdrehen
@@ -280,26 +282,14 @@ function fnv1a(input: string): number {
  * **Der Rückfall ist ein Notausgang, kein zweiter Regelweg.** Er greift nur, wenn die
  * Spalte fehlt, `null` ist oder außerhalb 0–99 liegt — seit die Migration in Produktion
  * ist, kommt das im Normalbetrieb nicht mehr vor. Er bleibt trotzdem stehen, weil ein
- * Projekt ohne Grundabdruck keine Fläche zum Überstempeln hätte und ein
- * fehlender Stempel zudem die Breitenmessung in `WallView.vue` verfälschte, die ihn als
- * gesetzt voraussetzt. Eine Lücke wäre also teurer als ein falsches Wort.
+ * Projekt ohne Grundabdruck keine Fläche zum Überstempeln hätte. Eine Lücke wäre also
+ * teurer als ein falsches Wort.
  *
  * **Er meldet sich aber.** Das ist der Punkt: der Rückfall ist selbst deterministisch,
  * sähe im Fehlerfall völlig plausibel aus und zeigte allen Geräten dasselbe *falsche*
  * Wort — ein stiller Notausgang, der nie auffällt. Deshalb `console.error` statt
  * schweigen. Aus `Math.random()` kommt der Platz trotzdem nicht: ein Spruch, der sich
  * beim Neuladen ändert, sähe nach einem zweiten, schlimmeren Fehler aus.
- */
-export function projectPhraseOf(task: PhraseCarrier): string {
-  return PROJECT_PHRASES[effectivePhraseSlot(task)]
-}
-
-/**
- * Der Platz, mit dem tatsächlich gearbeitet wird: der gespeicherte, sonst der abgeleitete.
- *
- * Eine eigene Funktion, weil ihn jetzt ZWEI Leser brauchen — der Grundabdruck und der
- * ganze Stapel — und beide denselben bekommen müssen. Stünde der Rückfall zweimal da,
- * könnten Grundabdruck und Stapel eines Projekts im Fehlerfall auseinanderlaufen.
  */
 function effectivePhraseSlot(task: PhraseCarrier): number {
   const stored = storedPhraseSlot(task)
