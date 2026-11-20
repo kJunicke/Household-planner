@@ -89,6 +89,12 @@ const showPot = (p: Pot) => {
             <span class="pot-text">
               <span class="pot-name">{{ potTitle(p) }}</span>
               <span class="pot-summary">{{ potSummary(p) }}</span>
+              <span
+                v-if="!p.closed_at && potStore.pendingJoinsOf(p.pot_id).length"
+                class="pot-pending"
+              >
+                <i class="bi bi-person-exclamation me-1"></i>Neu in der Gruppe — bitte bestätigen
+              </span>
             </span>
             <i class="bi bi-chevron-right text-muted"></i>
           </button>
@@ -106,6 +112,13 @@ const showPot = (p: Pot) => {
 </template>
 
 <style scoped>
+.pot-pending {
+  display: block;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--color-primary);
+}
+
 .pot-list {
   display: flex;
   flex-direction: column;

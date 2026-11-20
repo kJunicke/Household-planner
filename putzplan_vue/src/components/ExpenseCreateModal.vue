@@ -59,7 +59,7 @@ const amountCents = computed(() => {
 // ---------------------------------------------------------------
 
 type SplitMode = ExpenseSplit['kind']
-type ValueMode = Exclude<SplitMode, 'equal'>
+type ValueMode = Exclude<SplitMode, 'equal' | 'whole_group'>
 
 const modes: { value: SplitMode; label: string }[] = [
   { value: 'equal', label: 'Gleich' },
@@ -70,7 +70,18 @@ const modes: { value: SplitMode; label: string }[] = [
 const unitOf: Record<ValueMode, string> = { ratio: 'Teile', percent: '%', exact: '€' }
 
 const mode = ref<SplitMode>(editing?.split_kind ?? 'equal')
-const showAdvanced = ref(mode.value !== 'equal')
+const isQuickMode = (m: SplitMode) => m === 'equal' || m === 'whole_group'
+const showAdvanced = ref(!isQuickMode(mode.value))
+
+// Ganze Gruppe (CONTEXT.md § ganze Gruppe): wer beim Anlegen der Ausgabe dabei
+// ist, trägt mit; Nachzügler erst, wenn ein Haushaltsmitglied bestätigt.
+// Beim Bearbeiten zählt die Anlage-Zeit der Ausgabe, nicht die von heute.
+const wholeGroupIds = computed(() =>
+  potStore.wholeGroupCarriersAt(props.potId, editing?.created_at ?? new Date().toISOString()),
+)
+const toggleWholeGroup = () => {
+  mode.value = mode.value === 'whole_group' ? 'equal' : 'whole_group'
+}
 
 // Schnell: gleich auf alle, einzelne ab- und wieder anwählbar. Beim Bearbeiten
 // die gespeicherte Auswahl, soweit es die Teilnehmer noch gibt.
@@ -96,7 +107,7 @@ const valueTexts = ref<Record<ValueMode, Record<string, string>>>({
 
 // Beim Bearbeiten die gespeicherten Rohwerte als Eingabe zurückschreiben
 // (Beträge sind Cent, Verhältnis und Prozent die Zahl selbst).
-if (editing && editing.split_kind !== 'equal') {
+if (editing && !isQuickMode(editing.split_kind)) {
   const kind = editing.split_kind
   valueTexts.value[kind] = Object.fromEntries(
     Object.entries(editing.split_values).map(([id, raw]) => [
@@ -111,19 +122,24 @@ const parseValue = (text: string | undefined): number | null =>
   !text?.trim() ? 0 : parseEuroInput(text)
 
 const badInputIds = computed(() => {
-  if (mode.value === 'equal') return new Set<string>()
-  const texts = valueTexts.value[mode.value]
+  const current = mode.value
+  if (current === 'equal' || current === 'whole_group') return new Set<string>()
+  const texts = valueTexts.value[current]
   return new Set(participantOrder.value.filter((id) => parseValue(texts[id]) === null))
 })
 
 const split = computed((): ExpenseSplit => {
-  if (mode.value === 'equal') {
+  const current = mode.value
+  if (current === 'whole_group') {
+    return { kind: 'whole_group', participantIds: wholeGroupIds.value }
+  }
+  if (current === 'equal') {
     return { kind: 'equal', participantIds: participantOrder.value.filter(isSelected) }
   }
-  const texts = valueTexts.value[mode.value]
-  const toRaw = (n: number) => (mode.value === 'exact' ? Math.round(n * 100) : n)
+  const texts = valueTexts.value[current]
+  const toRaw = (n: number) => (current === 'exact' ? Math.round(n * 100) : n)
   return {
-    kind: mode.value,
+    kind: current,
     values: Object.fromEntries(
       participantOrder.value.map((id) => [id, toRaw(parseValue(texts[id]) ?? 0)]),
     ),
@@ -176,6 +192,7 @@ const sharesById = computed(() => {
 })
 
 const splitTitle = computed(() => {
+  if (mode.value === 'whole_group') return 'Ganze Gruppe'
   if (mode.value !== 'equal') return modes.find((m) => m.value === mode.value)?.label
   return selectedIds.value.length === participantOrder.value.length
     ? 'Gleich auf alle'
@@ -280,8 +297,11 @@ const handleSubmit = () => {
                 :key="m.value"
                 type="button"
                 role="radio"
-                :aria-checked="mode === m.value"
-                :class="['mode-btn', mode === m.value && 'active']"
+                :aria-checked="mode === m.value || (m.value === 'equal' && mode === 'whole_group')"
+                :class="[
+                  'mode-btn',
+                  (mode === m.value || (m.value === 'equal' && mode === 'whole_group')) && 'active',
+                ]"
                 @click="mode = m.value"
               >
                 {{ m.label }}
@@ -289,7 +309,18 @@ const handleSubmit = () => {
             </div>
 
             <div class="split-box">
-              <div class="split-kind"><i class="bi bi-people me-1"></i> {{ splitTitle }}</div>
+              <div class="split-kind-row">
+                <div class="split-kind"><i class="bi bi-people me-1"></i> {{ splitTitle }}</div>
+                <button
+                  v-if="isQuickMode(mode)"
+                  type="button"
+                  :class="['group-toggle', mode === 'whole_group' && 'on']"
+                  :aria-pressed="mode === 'whole_group'"
+                  @click="toggleWholeGroup"
+                >
+                  <i class="bi bi-people-fill me-1"></i>Ganze Gruppe
+                </button>
+              </div>
               <div v-for="p in participants" :key="p.participant_id" class="share-row">
                 <button
                   v-if="mode === 'equal'"
@@ -306,6 +337,13 @@ const handleSubmit = () => {
                   ></i>
                   <span class="share-name">{{ potStore.participantName(p.participant_id) }}</span>
                 </button>
+                <span v-else-if="mode === 'whole_group'" class="share-name">
+                  {{ potStore.participantName(p.participant_id) }}
+                  <span v-if="!wholeGroupIds.includes(p.participant_id)" class="share-note">
+                    ·
+                    {{ p.rejected ? 'später dazugekommen, nicht dabei' : 'wartet auf Bestätigung' }}
+                  </span>
+                </span>
                 <template v-else>
                   <span class="share-name">{{ potStore.participantName(p.participant_id) }}</span>
                   <span class="share-input">
@@ -329,6 +367,9 @@ const handleSubmit = () => {
                       : '–'
                   }}
                 </span>
+              </div>
+              <div v-if="mode === 'whole_group'" class="split-hint">
+                Auch wer später dazukommt, trägt mit — sobald ein Haushaltsmitglied das bestätigt.
               </div>
               <div v-if="splitProblem" class="split-problem" role="status">
                 <i class="bi bi-exclamation-circle me-1"></i>{{ splitProblem }}
@@ -474,6 +515,39 @@ const handleSubmit = () => {
   flex-shrink: 0;
   min-width: 4.5rem;
   text-align: right;
+}
+
+.split-kind-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+.group-toggle {
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  background: none;
+  color: inherit;
+  font-size: 0.8rem;
+  padding: 2px 10px;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.group-toggle.on {
+  background: var(--color-primary);
+  border-color: var(--color-primary);
+  color: #fff;
+}
+
+.share-note,
+.split-hint {
+  font-size: 0.8rem;
+  color: var(--color-text-secondary);
+}
+
+.split-hint {
+  margin-top: 6px;
 }
 
 .split-problem {
