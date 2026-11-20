@@ -694,7 +694,7 @@ const lineChartOptions = computed(() => ({
 <template>
   <div class="page-container">
     <div class="container mt-4">
-      <!-- Titel kommt vom Tab darüber (Statistiken/Ausgleich) -->
+      <!-- Titel kommt vom Tab darüber (Statistik/Ausgleich) -->
 
       <!-- Loading State -->
       <div v-if="isLoading" class="empty-state">

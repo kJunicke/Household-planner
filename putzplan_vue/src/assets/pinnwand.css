@@ -334,7 +334,7 @@
    Bootstrap selbst mit `!important` deklariert. Gegen `!important` hilft
    Spezifitaet grundsaetzlich nicht, egal wie tief der Selektor geschachtelt
    ist — nur ein spaeteres `!important` gewinnt. Ohne das hier bleibt auf
-   `.card.shadow-sm` (z. B. drei Karten auf /uebersicht) Bootstraps weicher
+   `.card.shadow-sm` (z. B. drei Karten auf /kasse) Bootstraps weicher
    Glow `rgba(0,0,0,.075) 0 2px 4px` unter der harten Papierkante stehen: genau
    die Mischform aus weichem Verlauf und harter Kontur, die das neue Aussehen
    ausschliessen soll. Die Utility-Klassen stehen in den Templates.

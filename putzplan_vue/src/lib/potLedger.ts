@@ -1,3 +1,5 @@
+import { formatEuroInput } from './settlementAmount'
+
 /**
  * Topf-Rechnung (CONTEXT.md § Topf, § Ausgabe, § Aufteilung, § Rückzahlung):
  * rein, ohne Datenbank und Oberfläche. Gerechnet wird in ganzen Cent.
@@ -11,7 +13,7 @@
  * Aufteilung einer Ausgabe, so wie sie gespeichert ist (Rohwerte, keine Euro).
  * `equal`: gleich auf die gewählten Teilnehmer — „gleich auf alle“ wählt alle.
  */
-export type ExpenseSplit = { kind: 'equal'; participantIds: readonly string[] }
+type ExpenseSplit = { kind: 'equal'; participantIds: readonly string[] }
 
 export interface LedgerExpense {
   payerId: string
@@ -63,4 +65,9 @@ export function potBalances(
     add(repayment.toId, -repayment.amountCents)
   }
   return balances
+}
+
+/** Cent-Betrag zum Lesen: „12,34 €“. */
+export function formatCents(cents: number): string {
+  return `${formatEuroInput(cents / 100)} €`
 }
