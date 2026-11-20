@@ -16,13 +16,18 @@ const router = createRouter({
       component: () => import('../views/HistoryView.vue'),
     },
     {
+      path: '/kasse',
+      name: 'kasse',
+      component: () => import('../views/KasseView.vue'),
+    },
+    {
+      // Alter Name des Tabs; Lesezeichen und installierte PWAs zeigen noch hin.
       path: '/uebersicht',
-      name: 'uebersicht',
-      component: () => import('../views/UebersichtView.vue'),
+      redirect: '/kasse',
     },
     {
       path: '/stats',
-      redirect: '/uebersicht',
+      redirect: '/kasse',
     },
     {
       path: '/listen',
