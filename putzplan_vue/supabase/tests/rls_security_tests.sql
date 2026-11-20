@@ -618,17 +618,17 @@ DO $$
 BEGIN
   BEGIN
     PERFORM create_household('Gasthaus', 'E');
-    RAISE EXCEPTION 'FAILED 21: Gast legt Haushalt an';
+    RAISE EXCEPTION 'FAILED 28: Gast legt Haushalt an';
   EXCEPTION WHEN insufficient_privilege THEN
-    IF SQLERRM <> 'anonymous_not_allowed' THEN RAISE EXCEPTION 'FAILED 21: Meldung %', SQLERRM; END IF;
+    IF SQLERRM <> 'anonymous_not_allowed' THEN RAISE EXCEPTION 'FAILED 28: Meldung %', SQLERRM; END IF;
   END;
   BEGIN
     PERFORM join_household('TESTAAAA', 'E');
-    RAISE EXCEPTION 'FAILED 21: Gast tritt Haushalt bei';
+    RAISE EXCEPTION 'FAILED 28: Gast tritt Haushalt bei';
   EXCEPTION WHEN insufficient_privilege THEN
-    IF SQLERRM <> 'anonymous_not_allowed' THEN RAISE EXCEPTION 'FAILED 21: Meldung %', SQLERRM; END IF;
+    IF SQLERRM <> 'anonymous_not_allowed' THEN RAISE EXCEPTION 'FAILED 28: Meldung %', SQLERRM; END IF;
   END;
-  RAISE NOTICE 'ok 21: Gast kann keinen Haushalt anlegen und keinem beitreten';
+  RAISE NOTICE 'ok 28: Gast kann keinen Haushalt anlegen und keinem beitreten';
 END $$;
 
 -- Auch ohne die RPCs: keine Mitgliedschaft für ein anonymes Konto, egal auf
@@ -640,11 +640,11 @@ BEGIN
   BEGIN
     INSERT INTO household_members (user_id, household_id, display_name)
     VALUES ('e0000000-0000-0000-0000-00000000000e', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'E');
-    RAISE EXCEPTION 'FAILED 22: anonymes Konto als Mitglied eingetragen';
+    RAISE EXCEPTION 'FAILED 29: anonymes Konto als Mitglied eingetragen';
   EXCEPTION WHEN check_violation THEN
-    IF SQLERRM <> 'anonymous_not_allowed' THEN RAISE EXCEPTION 'FAILED 22: Meldung %', SQLERRM; END IF;
+    IF SQLERRM <> 'anonymous_not_allowed' THEN RAISE EXCEPTION 'FAILED 29: Meldung %', SQLERRM; END IF;
   END;
-  RAISE NOTICE 'ok 22: Mitgliedschaft für anonyme Konten auf keinem Weg';
+  RAISE NOTICE 'ok 29: Mitgliedschaft für anonyme Konten auf keinem Weg';
 END $$;
 
 -- Listen für die Gastlinks: HA hat zwei Einkaufslisten (LA1 wird geteilt,
@@ -679,11 +679,11 @@ DECLARE s guest_shares; s2 guest_shares;
 BEGIN
   s := create_guest_share('shopping_list', '5a000000-0000-0000-0000-0000000000a1');
   IF s.household_id <> 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa' OR length(s.secret) < 22 THEN
-    RAISE EXCEPTION 'FAILED 23: Freigabe %', s;
+    RAISE EXCEPTION 'FAILED 30: Freigabe %', s;
   END IF;
   s2 := create_guest_share('shopping_list', '5a000000-0000-0000-0000-0000000000a1');
   IF s2.share_id <> s.share_id OR s2.secret <> s.secret THEN
-    RAISE EXCEPTION 'FAILED 23: zweites Teilen legt eine zweite Freigabe an';
+    RAISE EXCEPTION 'FAILED 30: zweites Teilen legt eine zweite Freigabe an';
   END IF;
   PERFORM set_config('test.secret_la1', s.secret, true);
   PERFORM set_config('test.share_la1', s.share_id::text, true);
@@ -693,25 +693,25 @@ BEGIN
   s := create_guest_share('todo_list', '7a000000-0000-0000-0000-0000000000a1');
   BEGIN
     PERFORM create_guest_share('shopping_list', '5b000000-0000-0000-0000-0000000000b1');
-    RAISE EXCEPTION 'FAILED 23: A teilt eine Liste aus HB';
+    RAISE EXCEPTION 'FAILED 30: A teilt eine Liste aus HB';
   EXCEPTION WHEN raise_exception THEN
-    IF SQLERRM <> 'share_target_not_found' THEN RAISE EXCEPTION 'FAILED 23: Meldung %', SQLERRM; END IF;
+    IF SQLERRM <> 'share_target_not_found' THEN RAISE EXCEPTION 'FAILED 30: Meldung %', SQLERRM; END IF;
   END;
   BEGIN
     PERFORM create_guest_share('shopping_list', '9a000000-0000-0000-0000-0000000000a1');
-    RAISE EXCEPTION 'FAILED 23: Packliste als Einkaufsliste geteilt';
+    RAISE EXCEPTION 'FAILED 30: Packliste als Einkaufsliste geteilt';
   EXCEPTION WHEN raise_exception THEN
-    IF SQLERRM <> 'share_target_not_found' THEN RAISE EXCEPTION 'FAILED 23: Meldung %', SQLERRM; END IF;
+    IF SQLERRM <> 'share_target_not_found' THEN RAISE EXCEPTION 'FAILED 30: Meldung %', SQLERRM; END IF;
   END;
   BEGIN
     PERFORM create_guest_share('household', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa');
-    RAISE EXCEPTION 'FAILED 23: unbekannte Zielart angenommen';
+    RAISE EXCEPTION 'FAILED 30: unbekannte Zielart angenommen';
   EXCEPTION WHEN invalid_parameter_value THEN NULL;
   END;
   IF (SELECT count(*) FROM guest_shares) <> 3 THEN
-    RAISE EXCEPTION 'FAILED 23: A sieht % Freigaben (erwartet 3)', (SELECT count(*) FROM guest_shares);
+    RAISE EXCEPTION 'FAILED 30: A sieht % Freigaben (erwartet 3)', (SELECT count(*) FROM guest_shares);
   END IF;
-  RAISE NOTICE 'ok 23: Mitglied teilt jede Listenart genau einmal, nur im eigenen Haushalt';
+  RAISE NOTICE 'ok 30: Mitglied teilt jede Listenart genau einmal, nur im eigenen Haushalt';
 END $$;
 
 -- -----------------------------------------------------------------
@@ -721,20 +721,20 @@ SELECT set_config('request.jwt.claims', '{"sub":"b0000000-0000-0000-0000-0000000
 
 DO $$
 BEGIN
-  IF (SELECT count(*) FROM guest_shares) <> 0 THEN RAISE EXCEPTION 'FAILED 24: B sieht Freigaben aus HA'; END IF;
+  IF (SELECT count(*) FROM guest_shares) <> 0 THEN RAISE EXCEPTION 'FAILED 31: B sieht Freigaben aus HA'; END IF;
   BEGIN
     PERFORM renew_guest_share(current_setting('test.share_la1')::uuid);
-    RAISE EXCEPTION 'FAILED 24: B erneuert Freigabe aus HA';
+    RAISE EXCEPTION 'FAILED 31: B erneuert Freigabe aus HA';
   EXCEPTION WHEN raise_exception THEN
-    IF SQLERRM <> 'share_not_found' THEN RAISE EXCEPTION 'FAILED 24: Meldung %', SQLERRM; END IF;
+    IF SQLERRM <> 'share_not_found' THEN RAISE EXCEPTION 'FAILED 31: Meldung %', SQLERRM; END IF;
   END;
   BEGIN
     PERFORM end_guest_share(current_setting('test.share_la1')::uuid);
-    RAISE EXCEPTION 'FAILED 24: B beendet Freigabe aus HA';
+    RAISE EXCEPTION 'FAILED 31: B beendet Freigabe aus HA';
   EXCEPTION WHEN raise_exception THEN
-    IF SQLERRM <> 'share_not_found' THEN RAISE EXCEPTION 'FAILED 24: Meldung %', SQLERRM; END IF;
+    IF SQLERRM <> 'share_not_found' THEN RAISE EXCEPTION 'FAILED 31: Meldung %', SQLERRM; END IF;
   END;
-  RAISE NOTICE 'ok 24: fremde Freigaben unsichtbar und nicht verwaltbar';
+  RAISE NOTICE 'ok 31: fremde Freigaben unsichtbar und nicht verwaltbar';
 END $$;
 
 -- -----------------------------------------------------------------
@@ -747,14 +747,14 @@ DECLARE n integer;
 BEGIN
   SELECT (SELECT count(*) FROM shopping_lists) + (SELECT count(*) FROM shopping_items)
        + (SELECT count(*) FROM packing_lists) + (SELECT count(*) FROM guest_shares) INTO n;
-  IF n <> 0 THEN RAISE EXCEPTION 'FAILED 25: Gast sieht vor dem Einlösen % Zeilen', n; END IF;
+  IF n <> 0 THEN RAISE EXCEPTION 'FAILED 32: Gast sieht vor dem Einlösen % Zeilen', n; END IF;
   BEGIN
     PERFORM redeem_guest_link('falsch');
-    RAISE EXCEPTION 'FAILED 25: falsches Geheimnis eingelöst';
+    RAISE EXCEPTION 'FAILED 32: falsches Geheimnis eingelöst';
   EXCEPTION WHEN raise_exception THEN
-    IF SQLERRM <> 'invalid_guest_link' THEN RAISE EXCEPTION 'FAILED 25: Meldung %', SQLERRM; END IF;
+    IF SQLERRM <> 'invalid_guest_link' THEN RAISE EXCEPTION 'FAILED 32: Meldung %', SQLERRM; END IF;
   END;
-  RAISE NOTICE 'ok 25: ohne eingelösten Link sieht der Gast nichts';
+  RAISE NOTICE 'ok 32: ohne eingelösten Link sieht der Gast nichts';
 END $$;
 
 DO $$
@@ -763,17 +763,17 @@ BEGIN
   SELECT * INTO r FROM redeem_guest_link(current_setting('test.secret_la1'));
   IF r.target_kind <> 'shopping_list' OR r.target_id <> '5a000000-0000-0000-0000-0000000000a1'
      OR r.household_id <> 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa' OR r.household_name <> 'Haushalt A' THEN
-    RAISE EXCEPTION 'FAILED 26: Einlösen liefert %', r;
+    RAISE EXCEPTION 'FAILED 33: Einlösen liefert %', r;
   END IF;
   -- Zweimal einlösen schadet nicht (Neuladen der Seite).
   PERFORM redeem_guest_link(current_setting('test.secret_la1'));
 
   SELECT count(*) INTO n FROM shopping_lists;
-  IF n <> 1 THEN RAISE EXCEPTION 'FAILED 26: Gast sieht % Einkaufslisten (erwartet 1)', n; END IF;
+  IF n <> 1 THEN RAISE EXCEPTION 'FAILED 33: Gast sieht % Einkaufslisten (erwartet 1)', n; END IF;
   SELECT count(*) INTO n FROM shopping_items;
-  IF n <> 1 THEN RAISE EXCEPTION 'FAILED 26: Gast sieht % Artikel (erwartet 1)', n; END IF;
+  IF n <> 1 THEN RAISE EXCEPTION 'FAILED 33: Gast sieht % Artikel (erwartet 1)', n; END IF;
   SELECT count(*) INTO n FROM shopping_categories;
-  IF n <> 1 THEN RAISE EXCEPTION 'FAILED 26: Gast sieht % Kategorien (erwartet 1)', n; END IF;
+  IF n <> 1 THEN RAISE EXCEPTION 'FAILED 33: Gast sieht % Kategorien (erwartet 1)', n; END IF;
   SELECT (SELECT count(*) FROM households) + (SELECT count(*) FROM household_members)
        + (SELECT count(*) FROM tasks) + (SELECT count(*) FROM task_completions)
        + (SELECT count(*) FROM notes) + (SELECT count(*) FROM settlements)
@@ -782,14 +782,16 @@ BEGIN
        + (SELECT count(*) FROM packing_categories)
        + (SELECT count(*) FROM todo_lists) + (SELECT count(*) FROM todo_items)
        + (SELECT count(*) FROM todo_categories)
+       + (SELECT count(*) FROM pots) + (SELECT count(*) FROM pot_participants)
+       + (SELECT count(*) FROM pot_expenses) + (SELECT count(*) FROM pot_repayments)
        + (SELECT count(*) FROM guest_shares) INTO n;
-  IF n <> 0 THEN RAISE EXCEPTION 'FAILED 26: Gast sieht % fremde Zeilen', n; END IF;
+  IF n <> 0 THEN RAISE EXCEPTION 'FAILED 33: Gast sieht % fremde Zeilen', n; END IF;
   BEGIN
     PERFORM count(*) FROM guest_grants;
-    RAISE EXCEPTION 'FAILED 26: Gast liest guest_grants';
+    RAISE EXCEPTION 'FAILED 33: Gast liest guest_grants';
   EXCEPTION WHEN insufficient_privilege THEN NULL;
   END;
-  RAISE NOTICE 'ok 26: eingelöster Link öffnet genau diese Liste und nichts sonst';
+  RAISE NOTICE 'ok 33: eingelöster Link öffnet genau diese Liste und nichts sonst';
 END $$;
 
 DO $$
@@ -802,18 +804,18 @@ BEGIN
   SET purchased = true, name = 'Vollkornbrot', category = 'Kühlung',
       last_purchased_by = 'e0000000-0000-0000-0000-00000000000e'
   WHERE shopping_item_id = '51000000-0000-0000-0000-0000000000e1';
-  IF NOT FOUND THEN RAISE EXCEPTION 'FAILED 27: Gast kann Eintrag nicht ändern'; END IF;
+  IF NOT FOUND THEN RAISE EXCEPTION 'FAILED 34: Gast kann Eintrag nicht ändern'; END IF;
   DELETE FROM shopping_items WHERE shopping_item_id = '51000000-0000-0000-0000-0000000000e1';
   GET DIAGNOSTICS n = ROW_COUNT;
-  IF n <> 1 THEN RAISE EXCEPTION 'FAILED 27: Gast kann Eintrag nicht löschen'; END IF;
+  IF n <> 1 THEN RAISE EXCEPTION 'FAILED 34: Gast kann Eintrag nicht löschen'; END IF;
   INSERT INTO shopping_categories (category_id, household_id, list_id, name)
   VALUES ('5c000000-0000-0000-0000-0000000000e1', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', '5a000000-0000-0000-0000-0000000000a1', 'Brot');
   UPDATE shopping_categories SET sort_order = 3 WHERE category_id = '5c000000-0000-0000-0000-0000000000e1';
-  IF NOT FOUND THEN RAISE EXCEPTION 'FAILED 27: Gast kann Kategorie nicht einsortieren'; END IF;
+  IF NOT FOUND THEN RAISE EXCEPTION 'FAILED 34: Gast kann Kategorie nicht einsortieren'; END IF;
   DELETE FROM shopping_categories WHERE category_id = '5c000000-0000-0000-0000-0000000000e1';
   GET DIAGNOSTICS n = ROW_COUNT;
-  IF n <> 1 THEN RAISE EXCEPTION 'FAILED 27: Gast kann Kategorie nicht löschen'; END IF;
-  RAISE NOTICE 'ok 27: Gast schreibt Einträge und Kategorien der geteilten Liste';
+  IF n <> 1 THEN RAISE EXCEPTION 'FAILED 34: Gast kann Kategorie nicht löschen'; END IF;
+  RAISE NOTICE 'ok 34: Gast schreibt Einträge und Kategorien der geteilten Liste';
 END $$;
 
 DO $$
@@ -822,62 +824,62 @@ BEGIN
   BEGIN
     INSERT INTO shopping_items (household_id, list_id, name)
     VALUES ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', '5a000000-0000-0000-0000-0000000000a2', 'Einbruch');
-    RAISE EXCEPTION 'FAILED 28: Gast schreibt in nicht geteilte Liste';
+    RAISE EXCEPTION 'FAILED 35: Gast schreibt in nicht geteilte Liste';
   EXCEPTION WHEN insufficient_privilege THEN NULL;
   END;
   BEGIN
     INSERT INTO shopping_items (household_id, list_id, name)
     VALUES ('bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', '5a000000-0000-0000-0000-0000000000a1', 'Falscher Haushalt');
-    RAISE EXCEPTION 'FAILED 28: Gast schreibt Zeile mit fremder household_id';
+    RAISE EXCEPTION 'FAILED 35: Gast schreibt Zeile mit fremder household_id';
   EXCEPTION WHEN insufficient_privilege THEN NULL;
   END;
   BEGIN
     UPDATE shopping_items SET list_id = '5a000000-0000-0000-0000-0000000000a2'
     WHERE shopping_item_id = '51000000-0000-0000-0000-0000000000a1';
-    RAISE EXCEPTION 'FAILED 28: Gast verschiebt Eintrag in nicht geteilte Liste';
+    RAISE EXCEPTION 'FAILED 35: Gast verschiebt Eintrag in nicht geteilte Liste';
   EXCEPTION WHEN insufficient_privilege THEN NULL;
   END;
   BEGIN
     INSERT INTO shopping_categories (household_id, list_id, name)
     VALUES ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', '5a000000-0000-0000-0000-0000000000a2', 'Einbruch');
-    RAISE EXCEPTION 'FAILED 28: Gast legt Kategorie in nicht geteilter Liste an';
+    RAISE EXCEPTION 'FAILED 35: Gast legt Kategorie in nicht geteilter Liste an';
   EXCEPTION WHEN insufficient_privilege THEN NULL;
   END;
   UPDATE shopping_items SET name = 'gehackt' WHERE shopping_item_id = '51000000-0000-0000-0000-0000000000a2';
   GET DIAGNOSTICS n = ROW_COUNT;
-  IF n <> 0 THEN RAISE EXCEPTION 'FAILED 28: Gast ändert Eintrag einer nicht geteilten Liste'; END IF;
+  IF n <> 0 THEN RAISE EXCEPTION 'FAILED 35: Gast ändert Eintrag einer nicht geteilten Liste'; END IF;
   UPDATE shopping_lists SET name = 'Umbenannt' WHERE list_id = '5a000000-0000-0000-0000-0000000000a1';
   GET DIAGNOSTICS n = ROW_COUNT;
-  IF n <> 0 THEN RAISE EXCEPTION 'FAILED 28: Gast benennt die Liste um'; END IF;
+  IF n <> 0 THEN RAISE EXCEPTION 'FAILED 35: Gast benennt die Liste um'; END IF;
   DELETE FROM shopping_lists WHERE list_id = '5a000000-0000-0000-0000-0000000000a1';
   GET DIAGNOSTICS n = ROW_COUNT;
-  IF n <> 0 THEN RAISE EXCEPTION 'FAILED 28: Gast löscht die Liste'; END IF;
+  IF n <> 0 THEN RAISE EXCEPTION 'FAILED 35: Gast löscht die Liste'; END IF;
   BEGIN
     INSERT INTO shopping_lists (household_id, name) VALUES ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'Neu');
-    RAISE EXCEPTION 'FAILED 28: Gast legt Liste an';
+    RAISE EXCEPTION 'FAILED 35: Gast legt Liste an';
   EXCEPTION WHEN insufficient_privilege THEN NULL;
   END;
-  RAISE NOTICE 'ok 28: Gast bleibt in der geteilten Liste, die Liste selbst ist schreibgeschützt';
+  RAISE NOTICE 'ok 35: Gast bleibt in der geteilten Liste, die Liste selbst ist schreibgeschützt';
 END $$;
 
 DO $$
 BEGIN
   BEGIN
     PERFORM create_guest_share('shopping_list', '5a000000-0000-0000-0000-0000000000a2');
-    RAISE EXCEPTION 'FAILED 29: Gast teilt eine Liste';
+    RAISE EXCEPTION 'FAILED 36: Gast teilt eine Liste';
   EXCEPTION WHEN insufficient_privilege THEN NULL;
   END;
   BEGIN
     PERFORM renew_guest_share(current_setting('test.share_la1')::uuid);
-    RAISE EXCEPTION 'FAILED 29: Gast erneuert den Link';
+    RAISE EXCEPTION 'FAILED 36: Gast erneuert den Link';
   EXCEPTION WHEN insufficient_privilege THEN NULL;
   END;
   BEGIN
     PERFORM end_guest_share(current_setting('test.share_la1')::uuid);
-    RAISE EXCEPTION 'FAILED 29: Gast beendet die Freigabe';
+    RAISE EXCEPTION 'FAILED 36: Gast beendet die Freigabe';
   EXCEPTION WHEN insufficient_privilege THEN NULL;
   END;
-  RAISE NOTICE 'ok 29: Gast verwaltet keine Freigaben';
+  RAISE NOTICE 'ok 36: Gast verwaltet keine Freigaben';
 END $$;
 
 -- Packliste: Einträge ohne eigene household_id, Zugriff über die Liste.
@@ -886,24 +888,24 @@ DECLARE n integer;
 BEGIN
   PERFORM redeem_guest_link(current_setting('test.secret_pa1'));
   SELECT count(*) INTO n FROM packing_items;
-  IF n <> 1 THEN RAISE EXCEPTION 'FAILED 30: Gast sieht % Packeinträge (erwartet 1)', n; END IF;
+  IF n <> 1 THEN RAISE EXCEPTION 'FAILED 37: Gast sieht % Packeinträge (erwartet 1)', n; END IF;
   INSERT INTO packing_items (list_id, name, created_by)
   VALUES ('9a000000-0000-0000-0000-0000000000a1', 'Schlafsack', 'e0000000-0000-0000-0000-00000000000e');
   UPDATE packing_items SET packed = true WHERE item_id = '91000000-0000-0000-0000-0000000000a1';
-  IF NOT FOUND THEN RAISE EXCEPTION 'FAILED 30: Gast hakt Packeintrag nicht ab'; END IF;
+  IF NOT FOUND THEN RAISE EXCEPTION 'FAILED 37: Gast hakt Packeintrag nicht ab'; END IF;
   BEGIN
     INSERT INTO packing_items (list_id, name) VALUES ('9a000000-0000-0000-0000-0000000000a2', 'Einbruch');
-    RAISE EXCEPTION 'FAILED 30: Gast schreibt in nicht geteilte Packliste';
+    RAISE EXCEPTION 'FAILED 37: Gast schreibt in nicht geteilte Packliste';
   EXCEPTION WHEN insufficient_privilege THEN NULL;
   END;
   BEGIN
     UPDATE packing_items SET list_id = '9a000000-0000-0000-0000-0000000000a2'
     WHERE item_id = '91000000-0000-0000-0000-0000000000a1';
-    RAISE EXCEPTION 'FAILED 30: Gast verschiebt Packeintrag';
+    RAISE EXCEPTION 'FAILED 37: Gast verschiebt Packeintrag';
   EXCEPTION WHEN insufficient_privilege THEN NULL;
   END;
-  IF (SELECT count(*) FROM todo_lists) <> 0 THEN RAISE EXCEPTION 'FAILED 30: Gast sieht To-do-Liste'; END IF;
-  RAISE NOTICE 'ok 30: Packliste per Link, To-do-Liste ohne Link unsichtbar';
+  IF (SELECT count(*) FROM todo_lists) <> 0 THEN RAISE EXCEPTION 'FAILED 37: Gast sieht To-do-Liste'; END IF;
+  RAISE NOTICE 'ok 37: Packliste per Link, To-do-Liste ohne Link unsichtbar';
 END $$;
 
 -- Ein zweiter Gast mit demselben Link sieht dasselbe; ohne Link nichts.
@@ -911,10 +913,10 @@ SELECT set_config('request.jwt.claims', '{"sub":"e2000000-0000-0000-0000-0000000
 
 DO $$
 BEGIN
-  IF (SELECT count(*) FROM shopping_items) <> 0 THEN RAISE EXCEPTION 'FAILED 31: E2 erbt die Gewährung von E'; END IF;
+  IF (SELECT count(*) FROM shopping_items) <> 0 THEN RAISE EXCEPTION 'FAILED 38: E2 erbt die Gewährung von E'; END IF;
   PERFORM redeem_guest_link(current_setting('test.secret_la1'));
-  IF (SELECT count(*) FROM shopping_items) <> 1 THEN RAISE EXCEPTION 'FAILED 31: E2 sieht die Liste nicht'; END IF;
-  RAISE NOTICE 'ok 31: jede Sitzung braucht den Link selbst';
+  IF (SELECT count(*) FROM shopping_items) <> 1 THEN RAISE EXCEPTION 'FAILED 38: E2 sieht die Liste nicht'; END IF;
+  RAISE NOTICE 'ok 38: jede Sitzung braucht den Link selbst';
 END $$;
 
 -- -----------------------------------------------------------------
@@ -926,11 +928,11 @@ DO $$
 DECLARE s guest_shares;
 BEGIN
   s := renew_guest_share(current_setting('test.share_la1')::uuid);
-  IF s.secret = current_setting('test.secret_la1') THEN RAISE EXCEPTION 'FAILED 32: Geheimnis unverändert'; END IF;
+  IF s.secret = current_setting('test.secret_la1') THEN RAISE EXCEPTION 'FAILED 39: Geheimnis unverändert'; END IF;
   PERFORM set_config('test.secret_la1_neu', s.secret, true);
   PERFORM end_guest_share(current_setting('test.share_pa1')::uuid);
-  IF (SELECT count(*) FROM guest_shares) <> 2 THEN RAISE EXCEPTION 'FAILED 32: Freigabe nicht beendet'; END IF;
-  RAISE NOTICE 'ok 32: Mitglied erneuert und beendet';
+  IF (SELECT count(*) FROM guest_shares) <> 2 THEN RAISE EXCEPTION 'FAILED 39: Freigabe nicht beendet'; END IF;
+  RAISE NOTICE 'ok 39: Mitglied erneuert und beendet';
 END $$;
 
 SELECT set_config('request.jwt.claims', '{"sub":"e0000000-0000-0000-0000-00000000000e","role":"authenticated","is_anonymous":true}', true);
@@ -941,28 +943,28 @@ BEGIN
   SELECT (SELECT count(*) FROM shopping_lists) + (SELECT count(*) FROM shopping_items)
        + (SELECT count(*) FROM shopping_categories)
        + (SELECT count(*) FROM packing_lists) + (SELECT count(*) FROM packing_items) INTO n;
-  IF n <> 0 THEN RAISE EXCEPTION 'FAILED 33: nach Erneuern/Beenden sieht der Gast noch % Zeilen', n; END IF;
+  IF n <> 0 THEN RAISE EXCEPTION 'FAILED 40: nach Erneuern/Beenden sieht der Gast noch % Zeilen', n; END IF;
   BEGIN
     INSERT INTO shopping_items (household_id, list_id, name)
     VALUES ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', '5a000000-0000-0000-0000-0000000000a1', 'Zu spät');
-    RAISE EXCEPTION 'FAILED 33: Gast schreibt nach dem Erneuern';
+    RAISE EXCEPTION 'FAILED 40: Gast schreibt nach dem Erneuern';
   EXCEPTION WHEN insufficient_privilege THEN NULL;
   END;
   BEGIN
     PERFORM redeem_guest_link(current_setting('test.secret_la1'));
-    RAISE EXCEPTION 'FAILED 33: alter Link nach Erneuern gültig';
+    RAISE EXCEPTION 'FAILED 40: alter Link nach Erneuern gültig';
   EXCEPTION WHEN raise_exception THEN
-    IF SQLERRM <> 'invalid_guest_link' THEN RAISE EXCEPTION 'FAILED 33: Meldung %', SQLERRM; END IF;
+    IF SQLERRM <> 'invalid_guest_link' THEN RAISE EXCEPTION 'FAILED 40: Meldung %', SQLERRM; END IF;
   END;
   BEGIN
     PERFORM redeem_guest_link(current_setting('test.secret_pa1'));
-    RAISE EXCEPTION 'FAILED 33: beendeter Link gültig';
+    RAISE EXCEPTION 'FAILED 40: beendeter Link gültig';
   EXCEPTION WHEN raise_exception THEN
-    IF SQLERRM <> 'invalid_guest_link' THEN RAISE EXCEPTION 'FAILED 33: Meldung %', SQLERRM; END IF;
+    IF SQLERRM <> 'invalid_guest_link' THEN RAISE EXCEPTION 'FAILED 40: Meldung %', SQLERRM; END IF;
   END;
   PERFORM redeem_guest_link(current_setting('test.secret_la1_neu'));
-  IF (SELECT count(*) FROM shopping_items) <> 1 THEN RAISE EXCEPTION 'FAILED 33: neuer Link öffnet nichts'; END IF;
-  RAISE NOTICE 'ok 33: erneuerter oder beendeter Link gewährt nichts mehr, der neue schon';
+  IF (SELECT count(*) FROM shopping_items) <> 1 THEN RAISE EXCEPTION 'FAILED 40: neuer Link öffnet nichts'; END IF;
+  RAISE NOTICE 'ok 40: erneuerter oder beendeter Link gewährt nichts mehr, der neue schon';
 END $$;
 
 -- Mitglieder lösen keine Gastlinks ein.
@@ -972,11 +974,11 @@ DO $$
 BEGIN
   BEGIN
     PERFORM redeem_guest_link(current_setting('test.secret_la1_neu'));
-    RAISE EXCEPTION 'FAILED 34: Mitglied aus HB löst Gastlink ein';
+    RAISE EXCEPTION 'FAILED 41: Mitglied aus HB löst Gastlink ein';
   EXCEPTION WHEN insufficient_privilege THEN
-    IF SQLERRM <> 'not_a_guest' THEN RAISE EXCEPTION 'FAILED 34: Meldung %', SQLERRM; END IF;
+    IF SQLERRM <> 'not_a_guest' THEN RAISE EXCEPTION 'FAILED 41: Meldung %', SQLERRM; END IF;
   END;
-  RAISE NOTICE 'ok 34: nur anonyme Sitzungen lösen Gastlinks ein';
+  RAISE NOTICE 'ok 41: nur anonyme Sitzungen lösen Gastlinks ein';
 END $$;
 
 -- Eine gelöschte Liste nimmt ihre Freigabe mit.
@@ -986,9 +988,9 @@ DO $$
 BEGIN
   DELETE FROM todo_lists WHERE list_id = '7a000000-0000-0000-0000-0000000000a1';
   IF EXISTS (SELECT 1 FROM guest_shares WHERE target_id = '7a000000-0000-0000-0000-0000000000a1') THEN
-    RAISE EXCEPTION 'FAILED 35: Freigabe überlebt die gelöschte Liste';
+    RAISE EXCEPTION 'FAILED 42: Freigabe überlebt die gelöschte Liste';
   END IF;
-  RAISE NOTICE 'ok 35: Liste gelöscht → Freigabe weg';
+  RAISE NOTICE 'ok 42: Liste gelöscht → Freigabe weg';
 END $$;
 
 -- Nicht angemeldet erreicht niemand Freigaben oder Gastlink-RPCs.
@@ -1008,11 +1010,11 @@ BEGIN
   ] LOOP
     BEGIN
       EXECUTE f;
-      RAISE EXCEPTION 'FAILED 36: anon darf: %', f;
+      RAISE EXCEPTION 'FAILED 43: anon darf: %', f;
     EXCEPTION WHEN insufficient_privilege THEN NULL;
     END;
   END LOOP;
-  RAISE NOTICE 'ok 36: anon erreicht weder Freigaben noch Gastlink-RPCs';
+  RAISE NOTICE 'ok 43: anon erreicht weder Freigaben noch Gastlink-RPCs';
 END $$;
 
 RESET ROLE;
