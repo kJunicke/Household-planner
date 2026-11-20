@@ -571,6 +571,228 @@ BEGIN
   RAISE NOTICE 'ok 27: abgeschlossener Topf lesbar, aber schreibgeschützt';
 END $$;
 
+-- -----------------------------------------------------------------
+-- Ereignistöpfe (ab 50): anlegen, Teilnehmer eintragen, abschließen,
+-- wieder öffnen, löschen. Weiter als A in HA (A, A2, C, A3).
+-- -----------------------------------------------------------------
+
+-- Anlegen per RPC: Topf und Teilnehmer in einem Zug, Mitglieder mit ihrem
+-- Anzeigenamen, weitere per Namen.
+DO $$
+DECLARE
+  n integer;
+  v_pot pots;
+BEGIN
+  SELECT * INTO v_pot FROM create_event_pot(
+    '50000000-0000-0000-0000-00000000000a', 'Urlaub Sylt',
+    ARRAY['a0000000-0000-0000-0000-00000000000a', 'a2000000-0000-0000-0000-0000000000a2']::uuid[],
+    ARRAY['Kim']);
+  IF v_pot.pot_id IS DISTINCT FROM '50000000-0000-0000-0000-00000000000a' OR v_pot.kind <> 'event'
+     OR v_pot.closed_at IS NOT NULL OR v_pot.household_id <> 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'
+     OR v_pot.created_by IS DISTINCT FROM 'a0000000-0000-0000-0000-00000000000a' THEN
+    RAISE EXCEPTION 'FAILED 50: Topf falsch angelegt: %', v_pot;
+  END IF;
+  SELECT count(*) INTO n FROM pot_participants WHERE pot_id = v_pot.pot_id;
+  IF n <> 3 THEN RAISE EXCEPTION 'FAILED 50: % Teilnehmer (erwartet 3)', n; END IF;
+  SELECT count(*) INTO n FROM pot_participants
+  WHERE pot_id = v_pot.pot_id AND user_id = 'a2000000-0000-0000-0000-0000000000a2' AND name = 'A2';
+  IF n <> 1 THEN RAISE EXCEPTION 'FAILED 50: Mitglied A2 nicht mit Anzeigenamen eingetragen'; END IF;
+  SELECT count(*) INTO n FROM pot_participants WHERE pot_id = v_pot.pot_id AND name = 'Kim' AND user_id IS NULL;
+  IF n <> 1 THEN RAISE EXCEPTION 'FAILED 50: Kim nicht eingetragen'; END IF;
+
+  BEGIN
+    PERFORM create_event_pot(gen_random_uuid(), 'Doppelt', ARRAY[]::uuid[], ARRAY['Kim', 'kim']);
+    RAISE EXCEPTION 'FAILED 50: doppelter Name beim Anlegen angenommen';
+  EXCEPTION WHEN unique_violation THEN NULL;
+  END;
+  BEGIN
+    PERFORM create_event_pot(gen_random_uuid(), 'Mit Fremdem',
+      ARRAY['b0000000-0000-0000-0000-00000000000b']::uuid[], ARRAY[]::text[]);
+    RAISE EXCEPTION 'FAILED 50: Mitglied eines fremden Haushalts als Teilnehmer angenommen';
+  EXCEPTION WHEN raise_exception OR check_violation OR invalid_parameter_value THEN NULL;
+  END;
+  BEGIN
+    PERFORM create_event_pot(gen_random_uuid(), '', ARRAY[]::uuid[], ARRAY['Kim']);
+    RAISE EXCEPTION 'FAILED 50: leerer Topfname angenommen';
+  EXCEPTION WHEN check_violation THEN NULL;
+  END;
+  BEGIN
+    PERFORM create_event_pot(gen_random_uuid(), 'Ohne Leute', ARRAY[]::uuid[], ARRAY[]::text[]);
+    RAISE EXCEPTION 'FAILED 50: Topf ohne Teilnehmer angenommen';
+  EXCEPTION WHEN raise_exception OR check_violation OR invalid_parameter_value THEN NULL;
+  END;
+  -- Nichts von den abgewiesenen Versuchen bleibt liegen.
+  SELECT count(*) INTO n FROM pots WHERE kind = 'event';
+  IF n <> 2 THEN RAISE EXCEPTION 'FAILED 50: % Ereignistöpfe (erwartet 2)', n; END IF;
+  -- Direkt anlegen geht nicht, nur per RPC.
+  BEGIN
+    INSERT INTO pots (household_id, name, kind) VALUES ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'Direkt', 'event');
+    RAISE EXCEPTION 'FAILED 50: Ereignistopf direkt angelegt';
+  EXCEPTION WHEN insufficient_privilege THEN NULL;
+  END;
+  RAISE NOTICE 'ok 50: Ereignistopf mit Mitgliedern und Namen angelegt, Ungültiges abgewiesen';
+END $$;
+
+-- Teilnehmer per Namen nachtragen: nur in offene Ereignistöpfe des eigenen
+-- Hauses, Name eindeutig ohne Groß-/Kleinschreibung, nur eigene Mitglieder.
+DO $$
+DECLARE n integer;
+BEGIN
+  INSERT INTO pot_participants (pot_id, household_id, name)
+  VALUES ('50000000-0000-0000-0000-00000000000a', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'Lea');
+  BEGIN
+    INSERT INTO pot_participants (pot_id, household_id, name)
+    VALUES ('50000000-0000-0000-0000-00000000000a', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'LEA');
+    RAISE EXCEPTION 'FAILED 51: doppelter Name LEA angenommen';
+  EXCEPTION WHEN unique_violation THEN NULL;
+  END;
+  BEGIN
+    INSERT INTO pot_participants (pot_id, household_id, name)
+    SELECT pot_id, household_id, 'Gast' FROM pots WHERE kind = 'household';
+    RAISE EXCEPTION 'FAILED 51: Gast in den Haushaltstopf eingetragen';
+  EXCEPTION WHEN insufficient_privilege THEN NULL;
+  END;
+  BEGIN
+    INSERT INTO pot_participants (pot_id, household_id, name, user_id)
+    VALUES ('50000000-0000-0000-0000-00000000000a', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'B',
+            'b0000000-0000-0000-0000-00000000000b');
+    RAISE EXCEPTION 'FAILED 51: Mitglied eines fremden Haushalts als Teilnehmer eingetragen';
+  EXCEPTION WHEN insufficient_privilege THEN NULL;
+  END;
+  INSERT INTO pot_participants (pot_id, household_id, name, user_id)
+  VALUES ('50000000-0000-0000-0000-00000000000a', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'C',
+          'c0000000-0000-0000-0000-00000000000c');
+  SELECT count(*) INTO n FROM pot_participants WHERE pot_id = '50000000-0000-0000-0000-00000000000a';
+  IF n <> 5 THEN RAISE EXCEPTION 'FAILED 51: % Teilnehmer (erwartet 5)', n; END IF;
+  RAISE NOTICE 'ok 51: Teilnehmer per Namen nachgetragen, doppelt und fremd abgewiesen';
+END $$;
+
+-- Abschließen macht den Topf samt Teilnehmern und Einträgen schreibgeschützt;
+-- wieder öffnen hebt das auf. Nur `closed_at` ist änderbar.
+DO $$
+DECLARE
+  n integer;
+  pa uuid := (SELECT participant_id FROM pot_participants
+              WHERE pot_id = '50000000-0000-0000-0000-00000000000a' AND user_id = 'a0000000-0000-0000-0000-00000000000a');
+  pk uuid := (SELECT participant_id FROM pot_participants
+              WHERE pot_id = '50000000-0000-0000-0000-00000000000a' AND name = 'Kim');
+BEGIN
+  INSERT INTO pot_expenses (expense_id, pot_id, household_id, payer_participant_id, amount_cents, description,
+                            split_kind, split_values)
+  VALUES ('e5000000-0000-0000-0000-00000000000a', '50000000-0000-0000-0000-00000000000a',
+          'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', pa, 3000, 'Fähre', 'equal', jsonb_build_object(pa::text, 1, pk::text, 1));
+  INSERT INTO pot_repayments (repayment_id, pot_id, household_id, from_participant_id, to_participant_id, amount_cents)
+  VALUES ('f5000000-0000-0000-0000-00000000000a', '50000000-0000-0000-0000-00000000000a',
+          'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', pk, pa, 1000);
+
+  UPDATE pots SET closed_at = now() WHERE pot_id = '50000000-0000-0000-0000-00000000000a';
+  GET DIAGNOSTICS n = ROW_COUNT;
+  IF n <> 1 THEN RAISE EXCEPTION 'FAILED 52: Ereignistopf nicht abschließbar'; END IF;
+
+  BEGIN
+    INSERT INTO pot_participants (pot_id, household_id, name)
+    VALUES ('50000000-0000-0000-0000-00000000000a', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'Nachzügler');
+    RAISE EXCEPTION 'FAILED 52: Teilnehmer in abgeschlossenen Topf eingetragen';
+  EXCEPTION WHEN insufficient_privilege THEN NULL;
+  END;
+  UPDATE pot_participants SET name = 'Kimberly' WHERE participant_id = pk;
+  GET DIAGNOSTICS n = ROW_COUNT;
+  IF n <> 0 THEN RAISE EXCEPTION 'FAILED 52: Teilnehmer in abgeschlossenem Topf umbenannt'; END IF;
+  DELETE FROM pot_participants WHERE participant_id = pk;
+  GET DIAGNOSTICS n = ROW_COUNT;
+  IF n <> 0 THEN RAISE EXCEPTION 'FAILED 52: Teilnehmer aus abgeschlossenem Topf entfernt'; END IF;
+  UPDATE pot_repayments SET amount_cents = 1 WHERE repayment_id = 'f5000000-0000-0000-0000-00000000000a';
+  GET DIAGNOSTICS n = ROW_COUNT;
+  IF n <> 0 THEN RAISE EXCEPTION 'FAILED 52: Rückzahlung in abgeschlossenem Topf geändert'; END IF;
+  DELETE FROM pot_repayments WHERE repayment_id = 'f5000000-0000-0000-0000-00000000000a';
+  GET DIAGNOSTICS n = ROW_COUNT;
+  IF n <> 0 THEN RAISE EXCEPTION 'FAILED 52: Rückzahlung in abgeschlossenem Topf gelöscht'; END IF;
+  UPDATE pot_expenses SET amount_cents = 1 WHERE expense_id = 'e5000000-0000-0000-0000-00000000000a';
+  GET DIAGNOSTICS n = ROW_COUNT;
+  IF n <> 0 THEN RAISE EXCEPTION 'FAILED 52: Ausgabe in abgeschlossenem Topf geändert'; END IF;
+  BEGIN
+    UPDATE pots SET name = 'Umbenannt' WHERE pot_id = '50000000-0000-0000-0000-00000000000a';
+    GET DIAGNOSTICS n = ROW_COUNT;
+    IF n <> 0 THEN RAISE EXCEPTION 'FAILED 52: abgeschlossener Topf umbenannt'; END IF;
+  EXCEPTION WHEN insufficient_privilege THEN NULL;
+  END;
+  BEGIN
+    UPDATE pots SET kind = 'household', household_id = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb'
+    WHERE pot_id = '50000000-0000-0000-0000-00000000000a';
+    RAISE EXCEPTION 'FAILED 52: Art oder Haushalt eines Topfs geändert';
+  EXCEPTION WHEN insufficient_privilege THEN NULL;
+  END;
+
+  UPDATE pots SET closed_at = NULL WHERE pot_id = '50000000-0000-0000-0000-00000000000a';
+  GET DIAGNOSTICS n = ROW_COUNT;
+  IF n <> 1 THEN RAISE EXCEPTION 'FAILED 52: abgeschlossener Topf nicht wieder zu öffnen'; END IF;
+  UPDATE pot_repayments SET amount_cents = 1500 WHERE repayment_id = 'f5000000-0000-0000-0000-00000000000a';
+  GET DIAGNOSTICS n = ROW_COUNT;
+  IF n <> 1 THEN RAISE EXCEPTION 'FAILED 52: wieder geöffneter Topf nimmt nichts an'; END IF;
+  RAISE NOTICE 'ok 52: abschließen sperrt Teilnehmer, Ausgaben, Rückzahlungen; wieder öffnen entsperrt';
+END $$;
+
+-- Ein fremder Haushalt schließt und öffnet nichts; der Haushaltstopf wird nie
+-- abgeschlossen (26), die Ereignistöpfe lassen sich löschen — offen wie
+-- abgeschlossen, samt Teilnehmern und Einträgen.
+SELECT set_config('role', 'authenticated', true),
+       set_config('request.jwt.claims', '{"sub":"b0000000-0000-0000-0000-00000000000b","role":"authenticated"}', true);
+
+DO $$
+DECLARE n integer;
+BEGIN
+  UPDATE pots SET closed_at = now() WHERE pot_id = '50000000-0000-0000-0000-00000000000a';
+  GET DIAGNOSTICS n = ROW_COUNT;
+  IF n <> 0 THEN RAISE EXCEPTION 'FAILED 53: B schließt Topf von HA ab'; END IF;
+  UPDATE pots SET closed_at = NULL WHERE pot_id = '99999999-0000-0000-0000-00000000000a';
+  GET DIAGNOSTICS n = ROW_COUNT;
+  IF n <> 0 THEN RAISE EXCEPTION 'FAILED 53: B öffnet Topf von HA wieder'; END IF;
+  BEGIN
+    PERFORM create_event_pot(gen_random_uuid(), 'B in A', ARRAY['a0000000-0000-0000-0000-00000000000a']::uuid[],
+                             ARRAY[]::text[]);
+    RAISE EXCEPTION 'FAILED 53: B legt Topf mit Mitglied aus HA an';
+  EXCEPTION WHEN raise_exception OR check_violation OR invalid_parameter_value THEN NULL;
+  END;
+  RAISE NOTICE 'ok 53: fremder Haushalt schließt, öffnet und belegt nichts';
+END $$;
+
+SELECT set_config('role', 'authenticated', true),
+       set_config('request.jwt.claims', '{"sub":"a0000000-0000-0000-0000-00000000000a","role":"authenticated"}', true);
+
+DO $$
+DECLARE n integer;
+BEGIN
+  DELETE FROM pots WHERE pot_id IN ('50000000-0000-0000-0000-00000000000a', '99999999-0000-0000-0000-00000000000a');
+  GET DIAGNOSTICS n = ROW_COUNT;
+  IF n <> 2 THEN RAISE EXCEPTION 'FAILED 54: % Ereignistöpfe gelöscht (erwartet 2)', n; END IF;
+  SELECT count(*) INTO n FROM pot_participants
+  WHERE pot_id IN ('50000000-0000-0000-0000-00000000000a', '99999999-0000-0000-0000-00000000000a');
+  IF n <> 0 THEN RAISE EXCEPTION 'FAILED 54: Teilnehmer gelöschter Töpfe übrig'; END IF;
+  SELECT count(*) INTO n FROM pot_expenses
+  WHERE pot_id IN ('50000000-0000-0000-0000-00000000000a', '99999999-0000-0000-0000-00000000000a');
+  IF n <> 0 THEN RAISE EXCEPTION 'FAILED 54: Ausgaben gelöschter Töpfe übrig'; END IF;
+  SELECT count(*) INTO n FROM pots WHERE kind = 'household';
+  IF n <> 1 THEN RAISE EXCEPTION 'FAILED 54: Haushaltstopf weg'; END IF;
+  RAISE NOTICE 'ok 54: Ereignistöpfe samt Inhalt löschbar, offen wie abgeschlossen';
+END $$;
+
+-- Ohne Haushalt (C ist in 06 beigetreten; D hat einen eigenen) — eine
+-- anonyme Sitzung legt keinen Topf an.
+RESET ROLE;
+INSERT INTO auth.users (id, is_anonymous) VALUES ('e5000000-0000-0000-0000-00000000000e', true);
+SELECT set_config('role', 'authenticated', true),
+       set_config('request.jwt.claims', '{"sub":"e5000000-0000-0000-0000-00000000000e","role":"authenticated","is_anonymous":true}', true);
+
+DO $$
+BEGIN
+  BEGIN
+    PERFORM create_event_pot(gen_random_uuid(), 'Gasttopf', ARRAY[]::uuid[], ARRAY['Gast']);
+    RAISE EXCEPTION 'FAILED 55: anonyme Sitzung legt Topf an';
+  EXCEPTION WHEN raise_exception OR insufficient_privilege THEN NULL;
+  END;
+  RAISE NOTICE 'ok 55: anonyme Sitzung legt keinen Topf an';
+END $$;
+
 -- =================================================================
 -- Als anon (nicht angemeldet)
 -- =================================================================
@@ -585,6 +807,7 @@ BEGIN
     'SELECT get_user_household_id(''a0000000-0000-0000-0000-00000000000a'')',
     'SELECT create_household(''x'', ''y'')',
     'SELECT join_household(''TESTAAAA'', ''y'')',
+    'SELECT create_event_pot(gen_random_uuid(), ''x'', ARRAY[]::uuid[], ARRAY[''y''])',
     'SELECT count(*) FROM pots',
     'SELECT count(*) FROM pot_participants',
     'SELECT count(*) FROM pot_expenses',
