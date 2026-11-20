@@ -26,6 +26,8 @@ import CategoryEditModal from '@/components/CategoryEditModal.vue'
 import ListAddBar from '@/components/ListAddBar.vue'
 import LongSheet from '@/components/LongSheet.vue'
 import { SHOPPING_ITEM_NAME_MAX_LENGTH } from '@/lib/limits'
+import type { GuestShareKind } from '@/types/GuestShare'
+import { useGuestShareStore } from '@/stores/guestShareStore'
 
 export interface ChecklistLabels {
   /** Title of the "new list" modal, e.g. 'Neue Packliste'. */
@@ -64,9 +66,17 @@ const props = defineProps<{
   labels: ChecklistLabels
   /** localStorage key for the rail's collapsed state (one per list type). */
   railStorageKey: string
+  /** Listenart für den Gastlink. */
+  shareKind: GuestShareKind
+  /**
+   * Gastansicht (CONTEXT.md § Gast): nur die geteilte Liste — kein Bearbeiten
+   * oder Anlegen von Listen, die Listen-Notiz nur zum Lesen.
+   */
+  guest?: boolean
 }>()
 
 const store = props.store
+const guestShareStore = useGuestShareStore()
 const { isOnline } = useNetworkStatus()
 
 // --- Modals -----------------------------------------------------------------
@@ -567,6 +577,7 @@ onMounted(async () => {
   await store.loadCategories()
   notesDraft.value = store.currentList?.notes ?? ''
   store.subscribe()
+  if (!props.guest) void guestShareStore.load()
 })
 
 onUnmounted(() => {
@@ -592,8 +603,14 @@ onUnmounted(() => {
                 :class="['list-chip', store.currentListId === list.list_id && 'active']"
                 @click="store.currentListId = list.list_id"
               >
+                <i
+                  v-if="!guest && guestShareStore.shareFor(shareKind, list.list_id)"
+                  class="bi bi-link-45deg chip-shared"
+                  title="Per Gastlink geteilt"
+                ></i>
                 <span>{{ list.name }}</span>
                 <button
+                  v-if="!guest"
                   class="chip-edit-btn"
                   @click.stop="openEditModal(list)"
                   :title="`'${list.name}' bearbeiten`"
@@ -602,6 +619,7 @@ onUnmounted(() => {
                 </button>
               </button>
               <button
+                v-if="!guest"
                 class="list-chip add-chip"
                 @click="openCreateList"
                 :title="labels.createListChipTitle"
@@ -651,7 +669,7 @@ onUnmounted(() => {
           </div>
 
           <!-- Listen-Notiz -->
-          <div class="notes-block">
+          <div v-if="!guest || notesDraft.trim()" class="notes-block">
             <button class="notes-toggle" @click="notesOpen = !notesOpen">
               <i class="bi me-1" :class="labels.notesIcon"></i>
               <span class="notes-title">{{ labels.notesTitle }}</span>
@@ -667,6 +685,7 @@ onUnmounted(() => {
                 rows="3"
                 maxlength="5000"
                 :placeholder="labels.notesPlaceholder"
+                :readonly="guest"
                 @focus="notesFocused = true"
                 @blur="saveNotes"
               ></textarea>
@@ -936,6 +955,7 @@ onUnmounted(() => {
   <ListEditModal
     v-if="showListEditModal && editingList"
     :list="editingList"
+    :share-kind="shareKind"
     @rename="handleRenameList"
     @delete="handleDeleteList"
     @close="closeListEditModal"
@@ -1098,6 +1118,11 @@ onUnmounted(() => {
 }
 .chip-edit-btn:hover {
   opacity: 1;
+}
+.chip-shared {
+  margin-right: 2px;
+  font-size: 0.8rem;
+  opacity: 0.7;
 }
 
 /* ---- Progress Header ---- */
