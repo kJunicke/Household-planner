@@ -1,9 +1,17 @@
 <script setup lang="ts">
 import { useAuthStore } from '@/stores/authStore'
 import { useHouseholdStore } from '@/stores/householdStore'
-import { ref } from 'vue'
+import { defineAsyncComponent, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import BrandLogo from '@/components/BrandLogo.vue'
+import type { DevLogin } from '@/lib/devLogins'
+
+// Ein-Tipp-Anmeldung für Testkonten, nur auf dem Dev-Server (docs/testing.md).
+// Hinter `import.meta.env.DEV`, damit Knöpfe und Zugangsdaten im
+// Produktions-Build gar nicht erst vorkommen.
+const DevLoginButtons = import.meta.env.DEV
+  ? defineAsyncComponent(() => import('@/components/dev/DevLoginButtons.vue'))
+  : null
 
 const authStore = useAuthStore()
 const householdStore = useHouseholdStore()
@@ -28,6 +36,12 @@ const handleLogin = async () => {
   } else {
     errorMessage.value = result.error || 'Login fehlgeschlagen'
   }
+}
+
+const loginAs = (login: DevLogin) => {
+  email.value = login.email
+  password.value = login.password
+  void handleLogin()
 }
 </script>
 
@@ -75,6 +89,8 @@ const handleLogin = async () => {
               <span v-else>Anmelden</span>
             </button>
           </form>
+
+          <DevLoginButtons v-if="DevLoginButtons" :disabled="isLoading" @login="loginAs" />
 
           <div class="auth-footer">
             <p>
