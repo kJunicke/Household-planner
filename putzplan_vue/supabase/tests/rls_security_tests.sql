@@ -602,24 +602,24 @@ BEGIN
   UPDATE pot_expenses SET amount_cents = 1000, description = 'Strom Oktober', updated_by_participant_id = pa2
   WHERE expense_id = 'eeeeeeee-0000-0000-0000-0000000000a8';
   GET DIAGNOSTICS n = ROW_COUNT;
-  IF n <> 1 THEN RAISE EXCEPTION 'FAILED 28: A2 kann die Ausgabe von A nicht ändern'; END IF;
+  IF n <> 1 THEN RAISE EXCEPTION 'FAILED 44: A2 kann die Ausgabe von A nicht ändern'; END IF;
   UPDATE pot_repayments SET amount_cents = 500, updated_by_participant_id = pa2
   WHERE repayment_id = 'ffffffff-0000-0000-0000-0000000000a8';
   GET DIAGNOSTICS n = ROW_COUNT;
-  IF n <> 1 THEN RAISE EXCEPTION 'FAILED 28: A2 kann die Rückzahlung von A nicht ändern'; END IF;
+  IF n <> 1 THEN RAISE EXCEPTION 'FAILED 44: A2 kann die Rückzahlung von A nicht ändern'; END IF;
 
   SELECT * INTO e FROM pot_expenses WHERE expense_id = 'eeeeeeee-0000-0000-0000-0000000000a8';
   IF e.updated_by_participant_id IS DISTINCT FROM pa2 THEN
-    RAISE EXCEPTION 'FAILED 28: „zuletzt geändert von“ nicht A2';
+    RAISE EXCEPTION 'FAILED 44: „zuletzt geändert von“ nicht A2';
   END IF;
   SELECT * INTO r FROM pot_repayments WHERE repayment_id = 'ffffffff-0000-0000-0000-0000000000a8';
 
   DELETE FROM pot_expenses WHERE expense_id = 'eeeeeeee-0000-0000-0000-0000000000a8';
   GET DIAGNOSTICS n = ROW_COUNT;
-  IF n <> 1 THEN RAISE EXCEPTION 'FAILED 28: A2 kann die Ausgabe von A nicht löschen'; END IF;
+  IF n <> 1 THEN RAISE EXCEPTION 'FAILED 44: A2 kann die Ausgabe von A nicht löschen'; END IF;
   DELETE FROM pot_repayments WHERE repayment_id = 'ffffffff-0000-0000-0000-0000000000a8';
   GET DIAGNOSTICS n = ROW_COUNT;
-  IF n <> 1 THEN RAISE EXCEPTION 'FAILED 28: A2 kann die Rückzahlung von A nicht löschen'; END IF;
+  IF n <> 1 THEN RAISE EXCEPTION 'FAILED 44: A2 kann die Rückzahlung von A nicht löschen'; END IF;
 
   -- Rückgängig: dieselbe Zeile wieder einfügen, wie der Client sie vorher hatte.
   INSERT INTO pot_expenses (expense_id, pot_id, household_id, payer_participant_id, amount_cents, spent_on, description,
@@ -633,11 +633,11 @@ BEGIN
   SELECT count(*) INTO n FROM pot_expenses
   WHERE expense_id = e.expense_id AND created_at = e.created_at AND updated_at = e.updated_at
     AND amount_cents = 1000 AND updated_by_participant_id = pa2;
-  IF n <> 1 THEN RAISE EXCEPTION 'FAILED 28: gelöschte Ausgabe nicht unverändert wiederhergestellt'; END IF;
+  IF n <> 1 THEN RAISE EXCEPTION 'FAILED 44: gelöschte Ausgabe nicht unverändert wiederhergestellt'; END IF;
   SELECT count(*) INTO n FROM pot_repayments
   WHERE repayment_id = r.repayment_id AND created_at = r.created_at AND amount_cents = 500;
-  IF n <> 1 THEN RAISE EXCEPTION 'FAILED 28: gelöschte Rückzahlung nicht wiederhergestellt'; END IF;
-  RAISE NOTICE 'ok 28: Mitglied ändert und löscht fremde Einträge, Rückgängig stellt sie wieder her';
+  IF n <> 1 THEN RAISE EXCEPTION 'FAILED 44: gelöschte Rückzahlung nicht wiederhergestellt'; END IF;
+  RAISE NOTICE 'ok 44: Mitglied ändert und löscht fremde Einträge, Rückgängig stellt sie wieder her';
 END $$;
 
 -- =================================================================
