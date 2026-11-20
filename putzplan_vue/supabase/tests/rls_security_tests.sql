@@ -1960,4 +1960,20 @@ END $$;
 
 RESET ROLE;
 
+-- Gastlinks live: guest_shares in der Realtime-Publikation, aber ohne
+-- REPLICA IDENTITY FULL — DELETE-Ereignisse sollen kein Geheimnis tragen.
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_publication_tables
+    WHERE pubname = 'supabase_realtime' AND schemaname = 'public' AND tablename = 'guest_shares'
+  ) THEN
+    RAISE EXCEPTION 'FAILED 87: guest_shares fehlt in supabase_realtime';
+  END IF;
+  IF (SELECT relreplident FROM pg_class WHERE oid = 'public.guest_shares'::regclass) = 'f' THEN
+    RAISE EXCEPTION 'FAILED 87: guest_shares hat REPLICA IDENTITY FULL';
+  END IF;
+  RAISE NOTICE 'ok 87: guest_shares live, DELETE-Ereignisse nur mit Kennung';
+END $$;
+
 ROLLBACK;
