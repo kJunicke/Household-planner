@@ -1,5 +1,5 @@
 import type { User, Session } from '@supabase/supabase-js'
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import { supabase } from '@/lib/supabase'
 import { defineStore } from 'pinia'
 import { useToastStore } from './toastStore'
@@ -8,6 +8,12 @@ import { endSession } from '@/lib/sessionEnd'
 export const useAuthStore = defineStore('auth', () => {
   const user = ref<User | null>(null)
   const session = ref<Session | null>(null)
+
+  /**
+   * Gast (CONTEXT.md § Gast): eine Anonymanmeldung über einen Gastlink. Nie
+   * Haushaltsmitglied; der Router hält ihn in der Gastansicht.
+   */
+  const isGuest = computed(() => user.value?.is_anonymous === true)
 
   /**
    * Setzt `user`/`session` aus einer Supabase-Sitzung (Listener und logout).
@@ -77,6 +83,23 @@ export const useAuthStore = defineStore('auth', () => {
     return { success: true }
   }
 
+  /**
+   * Anonym anmelden, um einen Gastlink einzulösen. Wirft den Fehler weiter:
+   * die Gastansicht ordnet ihn selbst ein (`guestFailure`) und zeigt eine
+   * eigene Meldung statt eines Toasts.
+   */
+  async function signInAsGuest() {
+    const { data, error } = await supabase.auth.signInAnonymously()
+    if (error) throw error
+    applySession(data.session)
+  }
+
+  /** Gastsitzung verlassen, um sich mit Konto anzumelden. */
+  async function leaveGuestSession() {
+    await supabase.auth.signOut()
+    applySession(null)
+  }
+
   // Verhindert doppelte Listener bei mehrfachem initializeAuth()-Aufruf
   let authListenerRegistered = false
 
@@ -99,6 +122,9 @@ export const useAuthStore = defineStore('auth', () => {
   return {
     user,
     session,
+    isGuest,
+    signInAsGuest,
+    leaveGuestSession,
     login,
     logout,
     register,

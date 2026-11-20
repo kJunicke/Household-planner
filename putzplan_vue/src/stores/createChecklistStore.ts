@@ -85,8 +85,13 @@ export function createChecklistStore(config: ChecklistStoreConfig) {
 
     const queue = createMutationQueue({
       storageKey: `${config.storeId}_mutation_queue`,
+      // Gäste bekommen einen Gast-Besitzer: direkt schreiben, nichts speichern.
       owner: () =>
-        queueOwner(useAuthStore().user?.id, useHouseholdStore().currentHousehold?.household_id),
+        queueOwner(
+          useAuthStore().user?.id,
+          useHouseholdStore().currentHousehold?.household_id,
+          useAuthStore().isGuest,
+        ),
       syncSourceKey: config.storeId,
       process: (m) => processMutation(m),
       onDiscarded: (discarded) => {

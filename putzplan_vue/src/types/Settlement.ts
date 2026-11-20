@@ -1,4 +1,9 @@
-export type SettlementMethod = 'activity' | 'money' | 'surprise' | 'other'
+/**
+ * Art des Ausgleichs. `pot`: mit dem Haushaltstopf verrechnet (CONTEXT.md
+ * § Ausgleich) — dazu gehört eine Rückzahlung im Haushaltstopf, angelegt in
+ * derselben Datenbank-Funktion (Migration 20261120112541).
+ */
+export type SettlementMethod = 'activity' | 'money' | 'surprise' | 'other' | 'pot'
 
 export interface Settlement {
   settlement_id: string
@@ -9,7 +14,8 @@ export interface Settlement {
   method: SettlementMethod
   description: string | null
   /**
-   * Gezahlter Betrag in Euro, nur bei `money`; ältere Geld-Ausgleiche haben keinen.
+   * Gezahlter bzw. verrechneter Betrag in Euro, nur bei `money` und `pot`;
+   * ältere Geld-Ausgleiche haben keinen.
    * NUMERIC, im Store beim Ankommen zur Zahl gemacht (`settlementFromWire`).
    */
   paid_euros?: number | null

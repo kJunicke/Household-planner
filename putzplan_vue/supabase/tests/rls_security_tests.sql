@@ -6,7 +6,7 @@
 -- am Ende immer zurück. Jeder bestandene Fall meldet eine NOTICE „ok …“.
 --
 -- Prüft den Endstand NACH 20261102120000, 20261102120100 und
--- 20261102120200 (alle drei Security-Stufen).
+-- 20261102120200 (alle drei Security-Stufen) sowie die Töpfe (ab 21).
 --
 -- Ausführen — NIE gegen Prod (legt Test-User in auth.users an; zwar mit
 -- ROLLBACK, aber trotzdem nicht):
@@ -326,6 +326,546 @@ BEGIN
 END $$;
 
 -- =================================================================
+-- Töpfe (CONTEXT.md § Topf): Haushaltstopf, Ausgaben, Rückzahlungen
+-- Stand hier: HA = A, A2, C (Beitritt in 06) · HB = B · HD = D (Anlage in 09)
+-- =================================================================
+-- Fremde Zeilen in HB als postgres anlegen, damit „sieht nichts“ etwas
+-- zu verbergen hat.
+RESET ROLE;
+INSERT INTO pot_expenses (expense_id, pot_id, household_id, payer_participant_id, amount_cents, description, split_kind, split_values)
+SELECT 'eeeeeeee-0000-0000-0000-00000000000b', p.pot_id, p.household_id, t.participant_id, 1000, 'Einkauf B',
+       'equal', jsonb_build_object(t.participant_id::text, 1)
+FROM pots p JOIN pot_participants t USING (pot_id)
+WHERE p.household_id = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb';
+INSERT INTO pot_participants (participant_id, pot_id, household_id, name)
+SELECT 'fb000000-0000-0000-0000-00000000000b', pot_id, household_id, 'Gast in B'
+FROM pots WHERE household_id = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb';
+INSERT INTO pot_repayments (repayment_id, pot_id, household_id, from_participant_id, to_participant_id, amount_cents)
+SELECT 'ffffffff-0000-0000-0000-00000000000b', p.pot_id, p.household_id, 'fb000000-0000-0000-0000-00000000000b', t.participant_id, 500
+FROM pots p JOIN pot_participants t USING (pot_id)
+WHERE p.household_id = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb' AND t.user_id IS NOT NULL;
+
+DO $$
+DECLARE n integer;
+BEGIN
+  SELECT count(*) INTO n FROM pots WHERE kind = 'household';
+  IF n <> 3 THEN RAISE EXCEPTION 'FAILED 21: % Haushaltstöpfe (erwartet 3: HA, HB, HD)', n; END IF;
+  SELECT count(*) INTO n FROM (
+    SELECT household_id FROM pots WHERE kind = 'household' GROUP BY household_id HAVING count(*) = 1
+  ) x;
+  IF n <> 3 THEN RAISE EXCEPTION 'FAILED 21: nicht genau ein Haushaltstopf je Haushalt'; END IF;
+  SELECT count(*) INTO n FROM pot_participants t JOIN pots p USING (pot_id)
+  WHERE p.household_id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa' AND p.kind = 'household'
+    AND t.user_id IN ('a0000000-0000-0000-0000-00000000000a', 'a2000000-0000-0000-0000-0000000000a2',
+                      'c0000000-0000-0000-0000-00000000000c');
+  IF n <> 3 THEN RAISE EXCEPTION 'FAILED 21: Haushaltstopf HA hat % Mitglieder als Teilnehmer (erwartet 3)', n; END IF;
+  SELECT count(*) INTO n FROM pot_participants t JOIN pots p USING (pot_id)
+  WHERE p.kind = 'household'
+    AND p.household_id = (SELECT household_id FROM household_members WHERE user_id = 'd0000000-0000-0000-0000-00000000000d');
+  IF n <> 1 THEN RAISE EXCEPTION 'FAILED 21: Haushaltstopf des neuen Haushalts von D hat % Teilnehmer', n; END IF;
+  BEGIN
+    INSERT INTO pots (household_id, name, kind) VALUES ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'Zweiter', 'household');
+    RAISE EXCEPTION 'FAILED 21: zweiter Haushaltstopf angelegt';
+  EXCEPTION WHEN unique_violation THEN NULL;
+  END;
+  RAISE NOTICE 'ok 21: Haushaltstopf genau einmal je Haushalt (neu und bestehend), Mitglieder sind Teilnehmer';
+END $$;
+
+-- Gleicher Anzeigename wie ein Teilnehmer (Groß-/Kleinschreibung egal) bricht
+-- den Beitritt nicht, der Name bekommt eine Nummer.
+DO $$
+DECLARE v text;
+BEGIN
+  INSERT INTO auth.users (id, email) VALUES ('a3000000-0000-0000-0000-0000000000a3', 'a3@test.invalid');
+  INSERT INTO household_members (user_id, household_id, display_name, user_color)
+  VALUES ('a3000000-0000-0000-0000-0000000000a3', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'a2', '#F39C12');
+  SELECT name INTO v FROM pot_participants WHERE user_id = 'a3000000-0000-0000-0000-0000000000a3';
+  IF v IS DISTINCT FROM 'a2 2' THEN RAISE EXCEPTION 'FAILED 22: Teilnehmername % (erwartet „a2 2“)', v; END IF;
+  BEGIN
+    INSERT INTO pot_participants (pot_id, household_id, name)
+    SELECT pot_id, household_id, 'A2' FROM pots WHERE household_id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
+    RAISE EXCEPTION 'FAILED 22: doppelter Teilnehmername angenommen';
+  EXCEPTION WHEN unique_violation THEN NULL;
+  END;
+  RAISE NOTICE 'ok 22: Teilnehmernamen je Topf eindeutig ohne Groß-/Kleinschreibung, Beitritt nummeriert';
+END $$;
+
+SELECT set_config('role', 'authenticated', true),
+       set_config('request.jwt.claims', '{"sub":"a0000000-0000-0000-0000-00000000000a","role":"authenticated"}', true);
+
+DO $$
+DECLARE n integer;
+BEGIN
+  SELECT count(*) INTO n FROM pots;
+  IF n <> 1 THEN RAISE EXCEPTION 'FAILED 23: A sieht % Töpfe (erwartet 1)', n; END IF;
+  SELECT count(*) INTO n FROM pot_participants WHERE household_id <> 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
+  IF n <> 0 THEN RAISE EXCEPTION 'FAILED 23: A sieht % fremde Teilnehmer', n; END IF;
+  SELECT count(*) INTO n FROM pot_expenses;
+  IF n <> 0 THEN RAISE EXCEPTION 'FAILED 23: A sieht % fremde Ausgaben', n; END IF;
+  SELECT count(*) INTO n FROM pot_repayments;
+  IF n <> 0 THEN RAISE EXCEPTION 'FAILED 23: A sieht % fremde Rückzahlungen', n; END IF;
+  RAISE NOTICE 'ok 23: A sieht nur Topf und Teilnehmer des eigenen Hauses';
+END $$;
+
+-- Die Kennungen aus HB sind A unsichtbar; der Test kennt sie als feste
+-- Werte bzw. setzt erfundene ein — RLS muss beides abweisen.
+DO $$
+DECLARE n integer;
+BEGIN
+  BEGIN
+    INSERT INTO pot_expenses (pot_id, household_id, payer_participant_id, amount_cents, description, split_kind, split_values)
+    VALUES (gen_random_uuid(), 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', 'fb000000-0000-0000-0000-00000000000b',
+            100, 'Fremd', 'equal', '{}');
+    RAISE EXCEPTION 'FAILED 24: Ausgabe in HB angelegt';
+  EXCEPTION WHEN insufficient_privilege THEN NULL;
+  END;
+  BEGIN
+    INSERT INTO pot_repayments (pot_id, household_id, from_participant_id, to_participant_id, amount_cents)
+    VALUES (gen_random_uuid(), 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', gen_random_uuid(), gen_random_uuid(), 100);
+    RAISE EXCEPTION 'FAILED 24: Rückzahlung in HB angelegt';
+  EXCEPTION WHEN insufficient_privilege THEN NULL;
+  END;
+  BEGIN
+    INSERT INTO pot_participants (pot_id, household_id, name)
+    VALUES (gen_random_uuid(), 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', 'Eindringling');
+    RAISE EXCEPTION 'FAILED 24: Teilnehmer in HB angelegt';
+  EXCEPTION WHEN insufficient_privilege THEN NULL;
+  END;
+  BEGIN
+    INSERT INTO pots (household_id, name, kind) VALUES ('bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', 'Fremd', 'event');
+    RAISE EXCEPTION 'FAILED 24: Topf in HB angelegt';
+  EXCEPTION WHEN insufficient_privilege THEN NULL;
+  END;
+  UPDATE pot_expenses SET amount_cents = 1 WHERE expense_id = 'eeeeeeee-0000-0000-0000-00000000000b';
+  GET DIAGNOSTICS n = ROW_COUNT;
+  IF n <> 0 THEN RAISE EXCEPTION 'FAILED 24: fremde Ausgabe geändert'; END IF;
+  DELETE FROM pot_expenses WHERE expense_id = 'eeeeeeee-0000-0000-0000-00000000000b';
+  GET DIAGNOSTICS n = ROW_COUNT;
+  IF n <> 0 THEN RAISE EXCEPTION 'FAILED 24: fremde Ausgabe gelöscht'; END IF;
+  UPDATE pot_repayments SET amount_cents = 1 WHERE repayment_id = 'ffffffff-0000-0000-0000-00000000000b';
+  GET DIAGNOSTICS n = ROW_COUNT;
+  IF n <> 0 THEN RAISE EXCEPTION 'FAILED 24: fremde Rückzahlung geändert'; END IF;
+  DELETE FROM pot_repayments WHERE repayment_id = 'ffffffff-0000-0000-0000-00000000000b';
+  GET DIAGNOSTICS n = ROW_COUNT;
+  IF n <> 0 THEN RAISE EXCEPTION 'FAILED 24: fremde Rückzahlung gelöscht'; END IF;
+  UPDATE pot_participants SET name = 'Gekapert' WHERE participant_id = 'fb000000-0000-0000-0000-00000000000b';
+  GET DIAGNOSTICS n = ROW_COUNT;
+  IF n <> 0 THEN RAISE EXCEPTION 'FAILED 24: fremder Teilnehmer geändert'; END IF;
+  DELETE FROM pots WHERE household_id = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb';
+  GET DIAGNOSTICS n = ROW_COUNT;
+  IF n <> 0 THEN RAISE EXCEPTION 'FAILED 24: fremder Topf gelöscht'; END IF;
+  RAISE NOTICE 'ok 24: A schreibt nichts in Töpfe von HB';
+END $$;
+
+-- Eigenes Haus: Ausgabe und Rückzahlung anlegen, ändern, löschen; Teilnehmer
+-- und Haushalt müssen zum Topf passen.
+DO $$
+DECLARE
+  n integer;
+  my_pot uuid := (SELECT pot_id FROM pots WHERE kind = 'household');
+  pa uuid := (SELECT participant_id FROM pot_participants WHERE user_id = 'a0000000-0000-0000-0000-00000000000a');
+  pa2 uuid := (SELECT participant_id FROM pot_participants WHERE user_id = 'a2000000-0000-0000-0000-0000000000a2');
+BEGIN
+  INSERT INTO pot_expenses (expense_id, pot_id, household_id, payer_participant_id, amount_cents, description,
+                            split_kind, split_values, updated_by_participant_id)
+  VALUES ('eeeeeeee-0000-0000-0000-00000000000a', my_pot, 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', pa, 1000, 'Wocheneinkauf',
+          'equal', jsonb_build_object(pa::text, 1, pa2::text, 1), pa);
+  UPDATE pot_expenses SET amount_cents = 1200, updated_by_participant_id = pa2
+  WHERE expense_id = 'eeeeeeee-0000-0000-0000-00000000000a';
+  IF NOT FOUND THEN RAISE EXCEPTION 'FAILED 25: eigene Ausgabe nicht änderbar'; END IF;
+  INSERT INTO pot_repayments (repayment_id, pot_id, household_id, from_participant_id, to_participant_id, amount_cents)
+  VALUES ('ffffffff-0000-0000-0000-00000000000a', my_pot, 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', pa2, pa, 600);
+  BEGIN
+    UPDATE pot_expenses SET household_id = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb'
+    WHERE expense_id = 'eeeeeeee-0000-0000-0000-00000000000a';
+    RAISE EXCEPTION 'FAILED 25: Ausgabe in fremden Haushalt verschoben';
+  EXCEPTION WHEN insufficient_privilege THEN NULL;
+  END;
+  BEGIN
+    INSERT INTO pot_expenses (pot_id, household_id, payer_participant_id, amount_cents, description, split_kind, split_values)
+    VALUES (my_pot, 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'fb000000-0000-0000-0000-00000000000b',
+            100, 'Zahler aus HB', 'equal', '{}');
+    RAISE EXCEPTION 'FAILED 25: Zahler aus fremdem Topf angenommen';
+  EXCEPTION WHEN foreign_key_violation THEN NULL;
+  END;
+  BEGIN
+    INSERT INTO pot_expenses (pot_id, household_id, payer_participant_id, amount_cents, description, split_kind, split_values)
+    VALUES (my_pot, 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', pa, 0, 'Null', 'equal', '{}');
+    RAISE EXCEPTION 'FAILED 25: Betrag 0 angenommen';
+  EXCEPTION WHEN check_violation THEN NULL;
+  END;
+  BEGIN
+    INSERT INTO pot_repayments (pot_id, household_id, from_participant_id, to_participant_id, amount_cents)
+    VALUES (my_pot, 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', pa, pa, 100);
+    RAISE EXCEPTION 'FAILED 25: Rückzahlung an sich selbst angenommen';
+  EXCEPTION WHEN check_violation THEN NULL;
+  END;
+  DELETE FROM pot_repayments WHERE repayment_id = 'ffffffff-0000-0000-0000-00000000000a';
+  GET DIAGNOSTICS n = ROW_COUNT;
+  IF n <> 1 THEN RAISE EXCEPTION 'FAILED 25: eigene Rückzahlung nicht löschbar'; END IF;
+  RAISE NOTICE 'ok 25: Ausgaben und Rückzahlungen im eigenen Topf schreibbar, Bezüge bleiben im Topf';
+END $$;
+
+-- Haushaltstopf und seine Teilnehmer legt nur die Datenbank an; abschließen
+-- und löschen lässt sich der Haushaltstopf nicht.
+DO $$
+DECLARE n integer;
+BEGIN
+  BEGIN
+    INSERT INTO pots (household_id, name, kind) VALUES ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'Zweiter', 'household');
+    RAISE EXCEPTION 'FAILED 26: Haushaltstopf vom Client angelegt';
+  EXCEPTION WHEN insufficient_privilege OR unique_violation THEN NULL;
+  END;
+  DELETE FROM pots WHERE kind = 'household';
+  GET DIAGNOSTICS n = ROW_COUNT;
+  IF n <> 0 THEN RAISE EXCEPTION 'FAILED 26: Haushaltstopf gelöscht'; END IF;
+  BEGIN
+    UPDATE pots SET closed_at = now() WHERE kind = 'household';
+    GET DIAGNOSTICS n = ROW_COUNT;
+    IF n <> 0 THEN RAISE EXCEPTION 'FAILED 26: Haushaltstopf abgeschlossen'; END IF;
+  EXCEPTION WHEN insufficient_privilege OR check_violation THEN NULL;
+  END;
+  RAISE NOTICE 'ok 26: Haushaltstopf weder anlegbar noch löschbar noch abschließbar';
+END $$;
+
+-- Abgeschlossener Topf nimmt nichts mehr an (Ereignistopf, als postgres angelegt).
+RESET ROLE;
+INSERT INTO pots (pot_id, household_id, name, kind, closed_at)
+VALUES ('99999999-0000-0000-0000-00000000000a', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'Urlaub', 'event', now());
+INSERT INTO pot_participants (participant_id, pot_id, household_id, name, user_id) VALUES
+  ('9a000000-0000-0000-0000-00000000000a', '99999999-0000-0000-0000-00000000000a', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
+   'A', 'a0000000-0000-0000-0000-00000000000a'),
+  ('9a200000-0000-0000-0000-0000000000a2', '99999999-0000-0000-0000-00000000000a', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
+   'A2', 'a2000000-0000-0000-0000-0000000000a2');
+INSERT INTO pot_expenses (expense_id, pot_id, household_id, payer_participant_id, amount_cents, description, split_kind, split_values)
+VALUES ('eeeeeeee-0000-0000-0000-0000000000ae', '99999999-0000-0000-0000-00000000000a', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
+        '9a000000-0000-0000-0000-00000000000a', 500, 'Fähre', 'equal', '{}');
+SELECT set_config('role', 'authenticated', true),
+       set_config('request.jwt.claims', '{"sub":"a0000000-0000-0000-0000-00000000000a","role":"authenticated"}', true);
+
+DO $$
+DECLARE n integer;
+BEGIN
+  BEGIN
+    INSERT INTO pot_expenses (pot_id, household_id, payer_participant_id, amount_cents, description, split_kind, split_values)
+    VALUES ('99999999-0000-0000-0000-00000000000a', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
+            '9a000000-0000-0000-0000-00000000000a', 100, 'Nachzügler', 'equal', '{}');
+    RAISE EXCEPTION 'FAILED 27: Ausgabe in abgeschlossenem Topf angelegt';
+  EXCEPTION WHEN insufficient_privilege THEN NULL;
+  END;
+  BEGIN
+    INSERT INTO pot_repayments (pot_id, household_id, from_participant_id, to_participant_id, amount_cents)
+    VALUES ('99999999-0000-0000-0000-00000000000a', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
+            '9a200000-0000-0000-0000-0000000000a2', '9a000000-0000-0000-0000-00000000000a', 100);
+    RAISE EXCEPTION 'FAILED 27: Rückzahlung in abgeschlossenem Topf angelegt';
+  EXCEPTION WHEN insufficient_privilege THEN NULL;
+  END;
+  UPDATE pot_expenses SET amount_cents = 1 WHERE expense_id = 'eeeeeeee-0000-0000-0000-0000000000ae';
+  GET DIAGNOSTICS n = ROW_COUNT;
+  IF n <> 0 THEN RAISE EXCEPTION 'FAILED 27: Ausgabe in abgeschlossenem Topf geändert'; END IF;
+  DELETE FROM pot_expenses WHERE expense_id = 'eeeeeeee-0000-0000-0000-0000000000ae';
+  GET DIAGNOSTICS n = ROW_COUNT;
+  IF n <> 0 THEN RAISE EXCEPTION 'FAILED 27: Ausgabe in abgeschlossenem Topf gelöscht'; END IF;
+  SELECT count(*) INTO n FROM pot_expenses WHERE expense_id = 'eeeeeeee-0000-0000-0000-0000000000ae';
+  IF n <> 1 THEN RAISE EXCEPTION 'FAILED 27: abgeschlossener Topf nicht mehr lesbar'; END IF;
+  RAISE NOTICE 'ok 27: abgeschlossener Topf lesbar, aber schreibgeschützt';
+END $$;
+
+-- Fremde Einträge: A legt an, A2 ändert und löscht sie. Rückgängig legt die
+-- gelöschte Zeile mit derselben Kennung und denselben Zeitstempeln wieder an.
+DO $$
+DECLARE
+  my_pot uuid := (SELECT pot_id FROM pots WHERE kind = 'household');
+  pa uuid := (SELECT participant_id FROM pot_participants WHERE pot_id = my_pot AND user_id = 'a0000000-0000-0000-0000-00000000000a');
+  pa2 uuid := (SELECT participant_id FROM pot_participants WHERE pot_id = my_pot AND user_id = 'a2000000-0000-0000-0000-0000000000a2');
+BEGIN
+  INSERT INTO pot_expenses (expense_id, pot_id, household_id, payer_participant_id, amount_cents, description,
+                            split_kind, split_values, updated_by_participant_id)
+  VALUES ('eeeeeeee-0000-0000-0000-0000000000a8', my_pot, 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', pa, 900, 'Strom',
+          'equal', jsonb_build_object(pa::text, 1, pa2::text, 1), pa);
+  INSERT INTO pot_repayments (repayment_id, pot_id, household_id, from_participant_id, to_participant_id, amount_cents,
+                              updated_by_participant_id)
+  VALUES ('ffffffff-0000-0000-0000-0000000000a8', my_pot, 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', pa2, pa, 450, pa);
+END $$;
+
+SELECT set_config('role', 'authenticated', true),
+       set_config('request.jwt.claims', '{"sub":"a2000000-0000-0000-0000-0000000000a2","role":"authenticated"}', true);
+
+DO $$
+DECLARE
+  n integer;
+  pa2 uuid := (SELECT participant_id FROM pot_participants p JOIN pots USING (pot_id)
+               WHERE pots.kind = 'household' AND p.user_id = 'a2000000-0000-0000-0000-0000000000a2');
+  e pot_expenses;
+  r pot_repayments;
+BEGIN
+  UPDATE pot_expenses SET amount_cents = 1000, description = 'Strom Oktober', updated_by_participant_id = pa2
+  WHERE expense_id = 'eeeeeeee-0000-0000-0000-0000000000a8';
+  GET DIAGNOSTICS n = ROW_COUNT;
+  IF n <> 1 THEN RAISE EXCEPTION 'FAILED 44: A2 kann die Ausgabe von A nicht ändern'; END IF;
+  UPDATE pot_repayments SET amount_cents = 500, updated_by_participant_id = pa2
+  WHERE repayment_id = 'ffffffff-0000-0000-0000-0000000000a8';
+  GET DIAGNOSTICS n = ROW_COUNT;
+  IF n <> 1 THEN RAISE EXCEPTION 'FAILED 44: A2 kann die Rückzahlung von A nicht ändern'; END IF;
+
+  SELECT * INTO e FROM pot_expenses WHERE expense_id = 'eeeeeeee-0000-0000-0000-0000000000a8';
+  IF e.updated_by_participant_id IS DISTINCT FROM pa2 THEN
+    RAISE EXCEPTION 'FAILED 44: „zuletzt geändert von“ nicht A2';
+  END IF;
+  SELECT * INTO r FROM pot_repayments WHERE repayment_id = 'ffffffff-0000-0000-0000-0000000000a8';
+
+  DELETE FROM pot_expenses WHERE expense_id = 'eeeeeeee-0000-0000-0000-0000000000a8';
+  GET DIAGNOSTICS n = ROW_COUNT;
+  IF n <> 1 THEN RAISE EXCEPTION 'FAILED 44: A2 kann die Ausgabe von A nicht löschen'; END IF;
+  DELETE FROM pot_repayments WHERE repayment_id = 'ffffffff-0000-0000-0000-0000000000a8';
+  GET DIAGNOSTICS n = ROW_COUNT;
+  IF n <> 1 THEN RAISE EXCEPTION 'FAILED 44: A2 kann die Rückzahlung von A nicht löschen'; END IF;
+
+  -- Rückgängig: dieselbe Zeile wieder einfügen, wie der Client sie vorher hatte.
+  INSERT INTO pot_expenses (expense_id, pot_id, household_id, payer_participant_id, amount_cents, spent_on, description,
+                            split_kind, split_values, updated_by_participant_id, created_at, updated_at)
+  VALUES (e.expense_id, e.pot_id, e.household_id, e.payer_participant_id, e.amount_cents, e.spent_on, e.description,
+          e.split_kind, e.split_values, e.updated_by_participant_id, e.created_at, e.updated_at);
+  INSERT INTO pot_repayments (repayment_id, pot_id, household_id, from_participant_id, to_participant_id, amount_cents,
+                              paid_on, updated_by_participant_id, created_at, updated_at)
+  VALUES (r.repayment_id, r.pot_id, r.household_id, r.from_participant_id, r.to_participant_id, r.amount_cents,
+          r.paid_on, r.updated_by_participant_id, r.created_at, r.updated_at);
+  SELECT count(*) INTO n FROM pot_expenses
+  WHERE expense_id = e.expense_id AND created_at = e.created_at AND updated_at = e.updated_at
+    AND amount_cents = 1000 AND updated_by_participant_id = pa2;
+  IF n <> 1 THEN RAISE EXCEPTION 'FAILED 44: gelöschte Ausgabe nicht unverändert wiederhergestellt'; END IF;
+  SELECT count(*) INTO n FROM pot_repayments
+  WHERE repayment_id = r.repayment_id AND created_at = r.created_at AND amount_cents = 500;
+  IF n <> 1 THEN RAISE EXCEPTION 'FAILED 44: gelöschte Rückzahlung nicht wiederhergestellt'; END IF;
+  RAISE NOTICE 'ok 44: Mitglied ändert und löscht fremde Einträge, Rückgängig stellt sie wieder her';
+END $$;
+
+SELECT set_config('role', 'authenticated', true),
+       set_config('request.jwt.claims', '{"sub":"a0000000-0000-0000-0000-00000000000a","role":"authenticated"}', true);
+
+-- -----------------------------------------------------------------
+-- Ereignistöpfe (ab 50): anlegen, Teilnehmer eintragen, abschließen,
+-- wieder öffnen, löschen. Weiter als A in HA (A, A2, C, A3).
+-- -----------------------------------------------------------------
+
+-- Anlegen per RPC: Topf und Teilnehmer in einem Zug, Mitglieder mit ihrem
+-- Anzeigenamen, weitere per Namen.
+DO $$
+DECLARE
+  n integer;
+  v_pot pots;
+BEGIN
+  SELECT * INTO v_pot FROM create_event_pot(
+    '50000000-0000-0000-0000-00000000000a', 'Urlaub Sylt',
+    ARRAY['a0000000-0000-0000-0000-00000000000a', 'a2000000-0000-0000-0000-0000000000a2']::uuid[],
+    ARRAY['Kim']);
+  IF v_pot.pot_id IS DISTINCT FROM '50000000-0000-0000-0000-00000000000a' OR v_pot.kind <> 'event'
+     OR v_pot.closed_at IS NOT NULL OR v_pot.household_id <> 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'
+     OR v_pot.created_by IS DISTINCT FROM 'a0000000-0000-0000-0000-00000000000a' THEN
+    RAISE EXCEPTION 'FAILED 50: Topf falsch angelegt: %', v_pot;
+  END IF;
+  SELECT count(*) INTO n FROM pot_participants WHERE pot_id = v_pot.pot_id;
+  IF n <> 3 THEN RAISE EXCEPTION 'FAILED 50: % Teilnehmer (erwartet 3)', n; END IF;
+  SELECT count(*) INTO n FROM pot_participants
+  WHERE pot_id = v_pot.pot_id AND user_id = 'a2000000-0000-0000-0000-0000000000a2' AND name = 'A2';
+  IF n <> 1 THEN RAISE EXCEPTION 'FAILED 50: Mitglied A2 nicht mit Anzeigenamen eingetragen'; END IF;
+  SELECT count(*) INTO n FROM pot_participants WHERE pot_id = v_pot.pot_id AND name = 'Kim' AND user_id IS NULL;
+  IF n <> 1 THEN RAISE EXCEPTION 'FAILED 50: Kim nicht eingetragen'; END IF;
+
+  BEGIN
+    PERFORM create_event_pot(gen_random_uuid(), 'Doppelt', ARRAY[]::uuid[], ARRAY['Kim', 'kim']);
+    RAISE EXCEPTION 'FAILED 50: doppelter Name beim Anlegen angenommen';
+  EXCEPTION WHEN unique_violation THEN NULL;
+  END;
+  BEGIN
+    PERFORM create_event_pot(gen_random_uuid(), 'Mit Fremdem',
+      ARRAY['b0000000-0000-0000-0000-00000000000b']::uuid[], ARRAY[]::text[]);
+    RAISE EXCEPTION 'FAILED 50: Mitglied eines fremden Haushalts als Teilnehmer angenommen';
+  EXCEPTION WHEN raise_exception OR check_violation OR invalid_parameter_value THEN NULL;
+  END;
+  BEGIN
+    PERFORM create_event_pot(gen_random_uuid(), '', ARRAY[]::uuid[], ARRAY['Kim']);
+    RAISE EXCEPTION 'FAILED 50: leerer Topfname angenommen';
+  EXCEPTION WHEN check_violation THEN NULL;
+  END;
+  BEGIN
+    PERFORM create_event_pot(gen_random_uuid(), 'Ohne Leute', ARRAY[]::uuid[], ARRAY[]::text[]);
+    RAISE EXCEPTION 'FAILED 50: Topf ohne Teilnehmer angenommen';
+  EXCEPTION WHEN raise_exception OR check_violation OR invalid_parameter_value THEN NULL;
+  END;
+  -- Nichts von den abgewiesenen Versuchen bleibt liegen.
+  SELECT count(*) INTO n FROM pots WHERE kind = 'event';
+  IF n <> 2 THEN RAISE EXCEPTION 'FAILED 50: % Ereignistöpfe (erwartet 2)', n; END IF;
+  -- Direkt anlegen geht nicht, nur per RPC.
+  BEGIN
+    INSERT INTO pots (household_id, name, kind) VALUES ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'Direkt', 'event');
+    RAISE EXCEPTION 'FAILED 50: Ereignistopf direkt angelegt';
+  EXCEPTION WHEN insufficient_privilege THEN NULL;
+  END;
+  RAISE NOTICE 'ok 50: Ereignistopf mit Mitgliedern und Namen angelegt, Ungültiges abgewiesen';
+END $$;
+
+-- Teilnehmer per Namen nachtragen: nur in offene Ereignistöpfe des eigenen
+-- Hauses, Name eindeutig ohne Groß-/Kleinschreibung, nur eigene Mitglieder.
+DO $$
+DECLARE n integer;
+BEGIN
+  INSERT INTO pot_participants (pot_id, household_id, name)
+  VALUES ('50000000-0000-0000-0000-00000000000a', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'Lea');
+  BEGIN
+    INSERT INTO pot_participants (pot_id, household_id, name)
+    VALUES ('50000000-0000-0000-0000-00000000000a', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'LEA');
+    RAISE EXCEPTION 'FAILED 51: doppelter Name LEA angenommen';
+  EXCEPTION WHEN unique_violation THEN NULL;
+  END;
+  BEGIN
+    INSERT INTO pot_participants (pot_id, household_id, name)
+    SELECT pot_id, household_id, 'Gast' FROM pots WHERE kind = 'household';
+    RAISE EXCEPTION 'FAILED 51: Gast in den Haushaltstopf eingetragen';
+  EXCEPTION WHEN insufficient_privilege THEN NULL;
+  END;
+  BEGIN
+    INSERT INTO pot_participants (pot_id, household_id, name, user_id)
+    VALUES ('50000000-0000-0000-0000-00000000000a', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'B',
+            'b0000000-0000-0000-0000-00000000000b');
+    RAISE EXCEPTION 'FAILED 51: Mitglied eines fremden Haushalts als Teilnehmer eingetragen';
+  EXCEPTION WHEN insufficient_privilege THEN NULL;
+  END;
+  INSERT INTO pot_participants (pot_id, household_id, name, user_id)
+  VALUES ('50000000-0000-0000-0000-00000000000a', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'C',
+          'c0000000-0000-0000-0000-00000000000c');
+  SELECT count(*) INTO n FROM pot_participants WHERE pot_id = '50000000-0000-0000-0000-00000000000a';
+  IF n <> 5 THEN RAISE EXCEPTION 'FAILED 51: % Teilnehmer (erwartet 5)', n; END IF;
+  RAISE NOTICE 'ok 51: Teilnehmer per Namen nachgetragen, doppelt und fremd abgewiesen';
+END $$;
+
+-- Abschließen macht den Topf samt Teilnehmern und Einträgen schreibgeschützt;
+-- wieder öffnen hebt das auf. Nur `closed_at` ist änderbar.
+DO $$
+DECLARE
+  n integer;
+  pa uuid := (SELECT participant_id FROM pot_participants
+              WHERE pot_id = '50000000-0000-0000-0000-00000000000a' AND user_id = 'a0000000-0000-0000-0000-00000000000a');
+  pk uuid := (SELECT participant_id FROM pot_participants
+              WHERE pot_id = '50000000-0000-0000-0000-00000000000a' AND name = 'Kim');
+BEGIN
+  INSERT INTO pot_expenses (expense_id, pot_id, household_id, payer_participant_id, amount_cents, description,
+                            split_kind, split_values)
+  VALUES ('e5000000-0000-0000-0000-00000000000a', '50000000-0000-0000-0000-00000000000a',
+          'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', pa, 3000, 'Fähre', 'equal', jsonb_build_object(pa::text, 1, pk::text, 1));
+  INSERT INTO pot_repayments (repayment_id, pot_id, household_id, from_participant_id, to_participant_id, amount_cents)
+  VALUES ('f5000000-0000-0000-0000-00000000000a', '50000000-0000-0000-0000-00000000000a',
+          'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', pk, pa, 1000);
+
+  UPDATE pots SET closed_at = now() WHERE pot_id = '50000000-0000-0000-0000-00000000000a';
+  GET DIAGNOSTICS n = ROW_COUNT;
+  IF n <> 1 THEN RAISE EXCEPTION 'FAILED 52: Ereignistopf nicht abschließbar'; END IF;
+
+  BEGIN
+    INSERT INTO pot_participants (pot_id, household_id, name)
+    VALUES ('50000000-0000-0000-0000-00000000000a', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'Nachzügler');
+    RAISE EXCEPTION 'FAILED 52: Teilnehmer in abgeschlossenen Topf eingetragen';
+  EXCEPTION WHEN insufficient_privilege THEN NULL;
+  END;
+  UPDATE pot_participants SET name = 'Kimberly' WHERE participant_id = pk;
+  GET DIAGNOSTICS n = ROW_COUNT;
+  IF n <> 0 THEN RAISE EXCEPTION 'FAILED 52: Teilnehmer in abgeschlossenem Topf umbenannt'; END IF;
+  DELETE FROM pot_participants WHERE participant_id = pk;
+  GET DIAGNOSTICS n = ROW_COUNT;
+  IF n <> 0 THEN RAISE EXCEPTION 'FAILED 52: Teilnehmer aus abgeschlossenem Topf entfernt'; END IF;
+  UPDATE pot_repayments SET amount_cents = 1 WHERE repayment_id = 'f5000000-0000-0000-0000-00000000000a';
+  GET DIAGNOSTICS n = ROW_COUNT;
+  IF n <> 0 THEN RAISE EXCEPTION 'FAILED 52: Rückzahlung in abgeschlossenem Topf geändert'; END IF;
+  DELETE FROM pot_repayments WHERE repayment_id = 'f5000000-0000-0000-0000-00000000000a';
+  GET DIAGNOSTICS n = ROW_COUNT;
+  IF n <> 0 THEN RAISE EXCEPTION 'FAILED 52: Rückzahlung in abgeschlossenem Topf gelöscht'; END IF;
+  UPDATE pot_expenses SET amount_cents = 1 WHERE expense_id = 'e5000000-0000-0000-0000-00000000000a';
+  GET DIAGNOSTICS n = ROW_COUNT;
+  IF n <> 0 THEN RAISE EXCEPTION 'FAILED 52: Ausgabe in abgeschlossenem Topf geändert'; END IF;
+  BEGIN
+    UPDATE pots SET name = 'Umbenannt' WHERE pot_id = '50000000-0000-0000-0000-00000000000a';
+    GET DIAGNOSTICS n = ROW_COUNT;
+    IF n <> 0 THEN RAISE EXCEPTION 'FAILED 52: abgeschlossener Topf umbenannt'; END IF;
+  EXCEPTION WHEN insufficient_privilege THEN NULL;
+  END;
+  BEGIN
+    UPDATE pots SET kind = 'household', household_id = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb'
+    WHERE pot_id = '50000000-0000-0000-0000-00000000000a';
+    RAISE EXCEPTION 'FAILED 52: Art oder Haushalt eines Topfs geändert';
+  EXCEPTION WHEN insufficient_privilege THEN NULL;
+  END;
+
+  UPDATE pots SET closed_at = NULL WHERE pot_id = '50000000-0000-0000-0000-00000000000a';
+  GET DIAGNOSTICS n = ROW_COUNT;
+  IF n <> 1 THEN RAISE EXCEPTION 'FAILED 52: abgeschlossener Topf nicht wieder zu öffnen'; END IF;
+  UPDATE pot_repayments SET amount_cents = 1500 WHERE repayment_id = 'f5000000-0000-0000-0000-00000000000a';
+  GET DIAGNOSTICS n = ROW_COUNT;
+  IF n <> 1 THEN RAISE EXCEPTION 'FAILED 52: wieder geöffneter Topf nimmt nichts an'; END IF;
+  RAISE NOTICE 'ok 52: abschließen sperrt Teilnehmer, Ausgaben, Rückzahlungen; wieder öffnen entsperrt';
+END $$;
+
+-- Ein fremder Haushalt schließt und öffnet nichts; der Haushaltstopf wird nie
+-- abgeschlossen (26), die Ereignistöpfe lassen sich löschen — offen wie
+-- abgeschlossen, samt Teilnehmern und Einträgen.
+SELECT set_config('role', 'authenticated', true),
+       set_config('request.jwt.claims', '{"sub":"b0000000-0000-0000-0000-00000000000b","role":"authenticated"}', true);
+
+DO $$
+DECLARE n integer;
+BEGIN
+  UPDATE pots SET closed_at = now() WHERE pot_id = '50000000-0000-0000-0000-00000000000a';
+  GET DIAGNOSTICS n = ROW_COUNT;
+  IF n <> 0 THEN RAISE EXCEPTION 'FAILED 53: B schließt Topf von HA ab'; END IF;
+  UPDATE pots SET closed_at = NULL WHERE pot_id = '99999999-0000-0000-0000-00000000000a';
+  GET DIAGNOSTICS n = ROW_COUNT;
+  IF n <> 0 THEN RAISE EXCEPTION 'FAILED 53: B öffnet Topf von HA wieder'; END IF;
+  BEGIN
+    PERFORM create_event_pot(gen_random_uuid(), 'B in A', ARRAY['a0000000-0000-0000-0000-00000000000a']::uuid[],
+                             ARRAY[]::text[]);
+    RAISE EXCEPTION 'FAILED 53: B legt Topf mit Mitglied aus HA an';
+  EXCEPTION WHEN raise_exception OR check_violation OR invalid_parameter_value THEN NULL;
+  END;
+  RAISE NOTICE 'ok 53: fremder Haushalt schließt, öffnet und belegt nichts';
+END $$;
+
+SELECT set_config('role', 'authenticated', true),
+       set_config('request.jwt.claims', '{"sub":"a0000000-0000-0000-0000-00000000000a","role":"authenticated"}', true);
+
+DO $$
+DECLARE n integer;
+BEGIN
+  DELETE FROM pots WHERE pot_id IN ('50000000-0000-0000-0000-00000000000a', '99999999-0000-0000-0000-00000000000a');
+  GET DIAGNOSTICS n = ROW_COUNT;
+  IF n <> 2 THEN RAISE EXCEPTION 'FAILED 54: % Ereignistöpfe gelöscht (erwartet 2)', n; END IF;
+  SELECT count(*) INTO n FROM pot_participants
+  WHERE pot_id IN ('50000000-0000-0000-0000-00000000000a', '99999999-0000-0000-0000-00000000000a');
+  IF n <> 0 THEN RAISE EXCEPTION 'FAILED 54: Teilnehmer gelöschter Töpfe übrig'; END IF;
+  SELECT count(*) INTO n FROM pot_expenses
+  WHERE pot_id IN ('50000000-0000-0000-0000-00000000000a', '99999999-0000-0000-0000-00000000000a');
+  IF n <> 0 THEN RAISE EXCEPTION 'FAILED 54: Ausgaben gelöschter Töpfe übrig'; END IF;
+  SELECT count(*) INTO n FROM pots WHERE kind = 'household';
+  IF n <> 1 THEN RAISE EXCEPTION 'FAILED 54: Haushaltstopf weg'; END IF;
+  RAISE NOTICE 'ok 54: Ereignistöpfe samt Inhalt löschbar, offen wie abgeschlossen';
+END $$;
+
+-- Ohne Haushalt (C ist in 06 beigetreten; D hat einen eigenen) — eine
+-- anonyme Sitzung legt keinen Topf an.
+RESET ROLE;
+INSERT INTO auth.users (id, is_anonymous) VALUES ('e5000000-0000-0000-0000-00000000000e', true);
+SELECT set_config('role', 'authenticated', true),
+       set_config('request.jwt.claims', '{"sub":"e5000000-0000-0000-0000-00000000000e","role":"authenticated","is_anonymous":true}', true);
+
+DO $$
+BEGIN
+  BEGIN
+    PERFORM create_event_pot(gen_random_uuid(), 'Gasttopf', ARRAY[]::uuid[], ARRAY['Gast']);
+    RAISE EXCEPTION 'FAILED 55: anonyme Sitzung legt Topf an';
+  EXCEPTION WHEN raise_exception OR insufficient_privilege THEN NULL;
+  END;
+  RAISE NOTICE 'ok 55: anonyme Sitzung legt keinen Topf an';
+END $$;
+
+-- =================================================================
 -- Als anon (nicht angemeldet)
 -- =================================================================
 SELECT set_config('role', 'anon', true),
@@ -338,7 +878,12 @@ BEGIN
     'SELECT reset_recurring_tasks()',
     'SELECT get_user_household_id(''a0000000-0000-0000-0000-00000000000a'')',
     'SELECT create_household(''x'', ''y'')',
-    'SELECT join_household(''TESTAAAA'', ''y'')'
+    'SELECT join_household(''TESTAAAA'', ''y'')',
+    'SELECT create_event_pot(gen_random_uuid(), ''x'', ARRAY[]::uuid[], ARRAY[''y''])',
+    'SELECT count(*) FROM pots',
+    'SELECT count(*) FROM pot_participants',
+    'SELECT count(*) FROM pot_expenses',
+    'SELECT count(*) FROM pot_repayments'
   ] LOOP
     BEGIN
       EXECUTE f;
@@ -346,7 +891,1167 @@ BEGIN
     EXCEPTION WHEN insufficient_privilege THEN NULL;
     END;
   END LOOP;
-  RAISE NOTICE 'ok 20: anon erreicht keine der RPCs';
+  RAISE NOTICE 'ok 20: anon erreicht keine der RPCs und keine Topf-Tabelle';
+END $$;
+
+RESET ROLE;
+
+-- =================================================================
+-- Gäste (Anonymanmeldung) und Gastlinks
+-- =================================================================
+-- E, E2: anonyme Sitzungen (Supabase-Anonymanmeldung = Rolle authenticated
+-- plus Claim is_anonymous). Sie sind nie Haushaltsmitglieder; ein Gastlink
+-- gewährt genau eine Liste.
+INSERT INTO auth.users (id, is_anonymous) VALUES
+  ('e0000000-0000-0000-0000-00000000000e', true),
+  ('e2000000-0000-0000-0000-0000000000e2', true);
+
+SELECT set_config('role', 'authenticated', true),
+       set_config('request.jwt.claims', '{"sub":"e0000000-0000-0000-0000-00000000000e","role":"authenticated","is_anonymous":true}', true);
+
+DO $$
+BEGIN
+  BEGIN
+    PERFORM create_household('Gasthaus', 'E');
+    RAISE EXCEPTION 'FAILED 28: Gast legt Haushalt an';
+  EXCEPTION WHEN insufficient_privilege THEN
+    IF SQLERRM <> 'anonymous_not_allowed' THEN RAISE EXCEPTION 'FAILED 28: Meldung %', SQLERRM; END IF;
+  END;
+  BEGIN
+    PERFORM join_household('TESTAAAA', 'E');
+    RAISE EXCEPTION 'FAILED 28: Gast tritt Haushalt bei';
+  EXCEPTION WHEN insufficient_privilege THEN
+    IF SQLERRM <> 'anonymous_not_allowed' THEN RAISE EXCEPTION 'FAILED 28: Meldung %', SQLERRM; END IF;
+  END;
+  RAISE NOTICE 'ok 28: Gast kann keinen Haushalt anlegen und keinem beitreten';
+END $$;
+
+-- Auch ohne die RPCs: keine Mitgliedschaft für ein anonymes Konto, egal auf
+-- welchem Weg (hier als Eigentümer, an RLS vorbei).
+RESET ROLE;
+
+DO $$
+BEGIN
+  BEGIN
+    INSERT INTO household_members (user_id, household_id, display_name)
+    VALUES ('e0000000-0000-0000-0000-00000000000e', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'E');
+    RAISE EXCEPTION 'FAILED 29: anonymes Konto als Mitglied eingetragen';
+  EXCEPTION WHEN check_violation THEN
+    IF SQLERRM <> 'anonymous_not_allowed' THEN RAISE EXCEPTION 'FAILED 29: Meldung %', SQLERRM; END IF;
+  END;
+  RAISE NOTICE 'ok 29: Mitgliedschaft für anonyme Konten auf keinem Weg';
+END $$;
+
+-- Listen für die Gastlinks: HA hat zwei Einkaufslisten (LA1 wird geteilt,
+-- LA2 nicht), zwei Packlisten und eine To-do-Liste; HB eine Einkaufsliste.
+INSERT INTO shopping_lists (list_id, household_id, name) VALUES
+  ('5a000000-0000-0000-0000-0000000000a1', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'LA1'),
+  ('5a000000-0000-0000-0000-0000000000a2', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'LA2'),
+  ('5b000000-0000-0000-0000-0000000000b1', 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', 'LB1');
+INSERT INTO shopping_items (shopping_item_id, household_id, list_id, name) VALUES
+  ('51000000-0000-0000-0000-0000000000a1', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', '5a000000-0000-0000-0000-0000000000a1', 'Milch'),
+  ('51000000-0000-0000-0000-0000000000a2', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', '5a000000-0000-0000-0000-0000000000a2', 'Geheim');
+INSERT INTO shopping_categories (category_id, household_id, list_id, name) VALUES
+  ('5c000000-0000-0000-0000-0000000000a1', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', '5a000000-0000-0000-0000-0000000000a1', 'Kühlung'),
+  ('5c000000-0000-0000-0000-0000000000a2', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', '5a000000-0000-0000-0000-0000000000a2', 'Geheimfach');
+INSERT INTO packing_lists (list_id, household_id, name) VALUES
+  ('9a000000-0000-0000-0000-0000000000a1', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'PA1'),
+  ('9a000000-0000-0000-0000-0000000000a2', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'PA2');
+INSERT INTO packing_items (item_id, list_id, name) VALUES
+  ('91000000-0000-0000-0000-0000000000a1', '9a000000-0000-0000-0000-0000000000a1', 'Zelt'),
+  ('91000000-0000-0000-0000-0000000000a2', '9a000000-0000-0000-0000-0000000000a2', 'Pass');
+INSERT INTO todo_lists (list_id, household_id, name) VALUES
+  ('7a000000-0000-0000-0000-0000000000a1', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'TA1');
+
+-- -----------------------------------------------------------------
+-- Als A (Mitglied HA): Freigaben anlegen
+-- -----------------------------------------------------------------
+SELECT set_config('role', 'authenticated', true),
+       set_config('request.jwt.claims', '{"sub":"a0000000-0000-0000-0000-00000000000a","role":"authenticated"}', true);
+
+DO $$
+DECLARE s guest_shares; s2 guest_shares;
+BEGIN
+  s := create_guest_share('shopping_list', '5a000000-0000-0000-0000-0000000000a1');
+  IF s.household_id <> 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa' OR length(s.secret) < 22 THEN
+    RAISE EXCEPTION 'FAILED 30: Freigabe %', s;
+  END IF;
+  s2 := create_guest_share('shopping_list', '5a000000-0000-0000-0000-0000000000a1');
+  IF s2.share_id <> s.share_id OR s2.secret <> s.secret THEN
+    RAISE EXCEPTION 'FAILED 30: zweites Teilen legt eine zweite Freigabe an';
+  END IF;
+  PERFORM set_config('test.secret_la1', s.secret, true);
+  PERFORM set_config('test.share_la1', s.share_id::text, true);
+  s := create_guest_share('packing_list', '9a000000-0000-0000-0000-0000000000a1');
+  PERFORM set_config('test.secret_pa1', s.secret, true);
+  PERFORM set_config('test.share_pa1', s.share_id::text, true);
+  s := create_guest_share('todo_list', '7a000000-0000-0000-0000-0000000000a1');
+  BEGIN
+    PERFORM create_guest_share('shopping_list', '5b000000-0000-0000-0000-0000000000b1');
+    RAISE EXCEPTION 'FAILED 30: A teilt eine Liste aus HB';
+  EXCEPTION WHEN raise_exception THEN
+    IF SQLERRM <> 'share_target_not_found' THEN RAISE EXCEPTION 'FAILED 30: Meldung %', SQLERRM; END IF;
+  END;
+  BEGIN
+    PERFORM create_guest_share('shopping_list', '9a000000-0000-0000-0000-0000000000a1');
+    RAISE EXCEPTION 'FAILED 30: Packliste als Einkaufsliste geteilt';
+  EXCEPTION WHEN raise_exception THEN
+    IF SQLERRM <> 'share_target_not_found' THEN RAISE EXCEPTION 'FAILED 30: Meldung %', SQLERRM; END IF;
+  END;
+  BEGIN
+    PERFORM create_guest_share('household', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa');
+    RAISE EXCEPTION 'FAILED 30: unbekannte Zielart angenommen';
+  EXCEPTION WHEN invalid_parameter_value THEN NULL;
+  END;
+  IF (SELECT count(*) FROM guest_shares) <> 3 THEN
+    RAISE EXCEPTION 'FAILED 30: A sieht % Freigaben (erwartet 3)', (SELECT count(*) FROM guest_shares);
+  END IF;
+  RAISE NOTICE 'ok 30: Mitglied teilt jede Listenart genau einmal, nur im eigenen Haushalt';
+END $$;
+
+-- -----------------------------------------------------------------
+-- Als B (Mitglied HB): fremde Freigaben
+-- -----------------------------------------------------------------
+SELECT set_config('request.jwt.claims', '{"sub":"b0000000-0000-0000-0000-00000000000b","role":"authenticated"}', true);
+
+DO $$
+BEGIN
+  IF (SELECT count(*) FROM guest_shares) <> 0 THEN RAISE EXCEPTION 'FAILED 31: B sieht Freigaben aus HA'; END IF;
+  BEGIN
+    PERFORM renew_guest_share(current_setting('test.share_la1')::uuid);
+    RAISE EXCEPTION 'FAILED 31: B erneuert Freigabe aus HA';
+  EXCEPTION WHEN raise_exception THEN
+    IF SQLERRM <> 'share_not_found' THEN RAISE EXCEPTION 'FAILED 31: Meldung %', SQLERRM; END IF;
+  END;
+  BEGIN
+    PERFORM end_guest_share(current_setting('test.share_la1')::uuid);
+    RAISE EXCEPTION 'FAILED 31: B beendet Freigabe aus HA';
+  EXCEPTION WHEN raise_exception THEN
+    IF SQLERRM <> 'share_not_found' THEN RAISE EXCEPTION 'FAILED 31: Meldung %', SQLERRM; END IF;
+  END;
+  RAISE NOTICE 'ok 31: fremde Freigaben unsichtbar und nicht verwaltbar';
+END $$;
+
+-- -----------------------------------------------------------------
+-- Als Gast E
+-- -----------------------------------------------------------------
+SELECT set_config('request.jwt.claims', '{"sub":"e0000000-0000-0000-0000-00000000000e","role":"authenticated","is_anonymous":true}', true);
+
+DO $$
+DECLARE n integer;
+BEGIN
+  SELECT (SELECT count(*) FROM shopping_lists) + (SELECT count(*) FROM shopping_items)
+       + (SELECT count(*) FROM packing_lists) + (SELECT count(*) FROM guest_shares) INTO n;
+  IF n <> 0 THEN RAISE EXCEPTION 'FAILED 32: Gast sieht vor dem Einlösen % Zeilen', n; END IF;
+  BEGIN
+    PERFORM redeem_guest_link('falsch');
+    RAISE EXCEPTION 'FAILED 32: falsches Geheimnis eingelöst';
+  EXCEPTION WHEN raise_exception THEN
+    IF SQLERRM <> 'invalid_guest_link' THEN RAISE EXCEPTION 'FAILED 32: Meldung %', SQLERRM; END IF;
+  END;
+  RAISE NOTICE 'ok 32: ohne eingelösten Link sieht der Gast nichts';
+END $$;
+
+DO $$
+DECLARE r record; n integer;
+BEGIN
+  SELECT * INTO r FROM redeem_guest_link(current_setting('test.secret_la1'));
+  IF r.target_kind <> 'shopping_list' OR r.target_id <> '5a000000-0000-0000-0000-0000000000a1'
+     OR r.household_id <> 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa' OR r.household_name <> 'Haushalt A' THEN
+    RAISE EXCEPTION 'FAILED 33: Einlösen liefert %', r;
+  END IF;
+  -- Zweimal einlösen schadet nicht (Neuladen der Seite).
+  PERFORM redeem_guest_link(current_setting('test.secret_la1'));
+
+  SELECT count(*) INTO n FROM shopping_lists;
+  IF n <> 1 THEN RAISE EXCEPTION 'FAILED 33: Gast sieht % Einkaufslisten (erwartet 1)', n; END IF;
+  SELECT count(*) INTO n FROM shopping_items;
+  IF n <> 1 THEN RAISE EXCEPTION 'FAILED 33: Gast sieht % Artikel (erwartet 1)', n; END IF;
+  SELECT count(*) INTO n FROM shopping_categories;
+  IF n <> 1 THEN RAISE EXCEPTION 'FAILED 33: Gast sieht % Kategorien (erwartet 1)', n; END IF;
+  SELECT (SELECT count(*) FROM households) + (SELECT count(*) FROM household_members)
+       + (SELECT count(*) FROM tasks) + (SELECT count(*) FROM task_completions)
+       + (SELECT count(*) FROM notes) + (SELECT count(*) FROM settlements)
+       + (SELECT count(*) FROM point_benchmarks)
+       + (SELECT count(*) FROM packing_lists) + (SELECT count(*) FROM packing_items)
+       + (SELECT count(*) FROM packing_categories)
+       + (SELECT count(*) FROM todo_lists) + (SELECT count(*) FROM todo_items)
+       + (SELECT count(*) FROM todo_categories)
+       + (SELECT count(*) FROM pots) + (SELECT count(*) FROM pot_participants)
+       + (SELECT count(*) FROM pot_expenses) + (SELECT count(*) FROM pot_repayments)
+       + (SELECT count(*) FROM guest_shares) INTO n;
+  IF n <> 0 THEN RAISE EXCEPTION 'FAILED 33: Gast sieht % fremde Zeilen', n; END IF;
+  BEGIN
+    PERFORM count(*) FROM guest_grants;
+    RAISE EXCEPTION 'FAILED 33: Gast liest guest_grants';
+  EXCEPTION WHEN insufficient_privilege THEN NULL;
+  END;
+  RAISE NOTICE 'ok 33: eingelöster Link öffnet genau diese Liste und nichts sonst';
+END $$;
+
+DO $$
+DECLARE n integer;
+BEGIN
+  -- Einträge: anlegen, abhaken, bearbeiten, einsortieren, löschen
+  INSERT INTO shopping_items (shopping_item_id, household_id, list_id, name)
+  VALUES ('51000000-0000-0000-0000-0000000000e1', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', '5a000000-0000-0000-0000-0000000000a1', 'Brot');
+  UPDATE shopping_items
+  SET purchased = true, name = 'Vollkornbrot', category = 'Kühlung',
+      last_purchased_by = 'e0000000-0000-0000-0000-00000000000e'
+  WHERE shopping_item_id = '51000000-0000-0000-0000-0000000000e1';
+  IF NOT FOUND THEN RAISE EXCEPTION 'FAILED 34: Gast kann Eintrag nicht ändern'; END IF;
+  DELETE FROM shopping_items WHERE shopping_item_id = '51000000-0000-0000-0000-0000000000e1';
+  GET DIAGNOSTICS n = ROW_COUNT;
+  IF n <> 1 THEN RAISE EXCEPTION 'FAILED 34: Gast kann Eintrag nicht löschen'; END IF;
+  INSERT INTO shopping_categories (category_id, household_id, list_id, name)
+  VALUES ('5c000000-0000-0000-0000-0000000000e1', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', '5a000000-0000-0000-0000-0000000000a1', 'Brot');
+  UPDATE shopping_categories SET sort_order = 3 WHERE category_id = '5c000000-0000-0000-0000-0000000000e1';
+  IF NOT FOUND THEN RAISE EXCEPTION 'FAILED 34: Gast kann Kategorie nicht einsortieren'; END IF;
+  DELETE FROM shopping_categories WHERE category_id = '5c000000-0000-0000-0000-0000000000e1';
+  GET DIAGNOSTICS n = ROW_COUNT;
+  IF n <> 1 THEN RAISE EXCEPTION 'FAILED 34: Gast kann Kategorie nicht löschen'; END IF;
+  RAISE NOTICE 'ok 34: Gast schreibt Einträge und Kategorien der geteilten Liste';
+END $$;
+
+DO $$
+DECLARE n integer;
+BEGIN
+  BEGIN
+    INSERT INTO shopping_items (household_id, list_id, name)
+    VALUES ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', '5a000000-0000-0000-0000-0000000000a2', 'Einbruch');
+    RAISE EXCEPTION 'FAILED 35: Gast schreibt in nicht geteilte Liste';
+  EXCEPTION WHEN insufficient_privilege THEN NULL;
+  END;
+  BEGIN
+    INSERT INTO shopping_items (household_id, list_id, name)
+    VALUES ('bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', '5a000000-0000-0000-0000-0000000000a1', 'Falscher Haushalt');
+    RAISE EXCEPTION 'FAILED 35: Gast schreibt Zeile mit fremder household_id';
+  EXCEPTION WHEN insufficient_privilege THEN NULL;
+  END;
+  BEGIN
+    UPDATE shopping_items SET list_id = '5a000000-0000-0000-0000-0000000000a2'
+    WHERE shopping_item_id = '51000000-0000-0000-0000-0000000000a1';
+    RAISE EXCEPTION 'FAILED 35: Gast verschiebt Eintrag in nicht geteilte Liste';
+  EXCEPTION WHEN insufficient_privilege THEN NULL;
+  END;
+  BEGIN
+    INSERT INTO shopping_categories (household_id, list_id, name)
+    VALUES ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', '5a000000-0000-0000-0000-0000000000a2', 'Einbruch');
+    RAISE EXCEPTION 'FAILED 35: Gast legt Kategorie in nicht geteilter Liste an';
+  EXCEPTION WHEN insufficient_privilege THEN NULL;
+  END;
+  UPDATE shopping_items SET name = 'gehackt' WHERE shopping_item_id = '51000000-0000-0000-0000-0000000000a2';
+  GET DIAGNOSTICS n = ROW_COUNT;
+  IF n <> 0 THEN RAISE EXCEPTION 'FAILED 35: Gast ändert Eintrag einer nicht geteilten Liste'; END IF;
+  UPDATE shopping_lists SET name = 'Umbenannt' WHERE list_id = '5a000000-0000-0000-0000-0000000000a1';
+  GET DIAGNOSTICS n = ROW_COUNT;
+  IF n <> 0 THEN RAISE EXCEPTION 'FAILED 35: Gast benennt die Liste um'; END IF;
+  DELETE FROM shopping_lists WHERE list_id = '5a000000-0000-0000-0000-0000000000a1';
+  GET DIAGNOSTICS n = ROW_COUNT;
+  IF n <> 0 THEN RAISE EXCEPTION 'FAILED 35: Gast löscht die Liste'; END IF;
+  BEGIN
+    INSERT INTO shopping_lists (household_id, name) VALUES ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'Neu');
+    RAISE EXCEPTION 'FAILED 35: Gast legt Liste an';
+  EXCEPTION WHEN insufficient_privilege THEN NULL;
+  END;
+  RAISE NOTICE 'ok 35: Gast bleibt in der geteilten Liste, die Liste selbst ist schreibgeschützt';
+END $$;
+
+DO $$
+BEGIN
+  BEGIN
+    PERFORM create_guest_share('shopping_list', '5a000000-0000-0000-0000-0000000000a2');
+    RAISE EXCEPTION 'FAILED 36: Gast teilt eine Liste';
+  EXCEPTION WHEN insufficient_privilege THEN NULL;
+  END;
+  BEGIN
+    PERFORM renew_guest_share(current_setting('test.share_la1')::uuid);
+    RAISE EXCEPTION 'FAILED 36: Gast erneuert den Link';
+  EXCEPTION WHEN insufficient_privilege THEN NULL;
+  END;
+  BEGIN
+    PERFORM end_guest_share(current_setting('test.share_la1')::uuid);
+    RAISE EXCEPTION 'FAILED 36: Gast beendet die Freigabe';
+  EXCEPTION WHEN insufficient_privilege THEN NULL;
+  END;
+  RAISE NOTICE 'ok 36: Gast verwaltet keine Freigaben';
+END $$;
+
+-- Packliste: Einträge ohne eigene household_id, Zugriff über die Liste.
+DO $$
+DECLARE n integer;
+BEGIN
+  PERFORM redeem_guest_link(current_setting('test.secret_pa1'));
+  SELECT count(*) INTO n FROM packing_items;
+  IF n <> 1 THEN RAISE EXCEPTION 'FAILED 37: Gast sieht % Packeinträge (erwartet 1)', n; END IF;
+  INSERT INTO packing_items (list_id, name, created_by)
+  VALUES ('9a000000-0000-0000-0000-0000000000a1', 'Schlafsack', 'e0000000-0000-0000-0000-00000000000e');
+  UPDATE packing_items SET packed = true WHERE item_id = '91000000-0000-0000-0000-0000000000a1';
+  IF NOT FOUND THEN RAISE EXCEPTION 'FAILED 37: Gast hakt Packeintrag nicht ab'; END IF;
+  BEGIN
+    INSERT INTO packing_items (list_id, name) VALUES ('9a000000-0000-0000-0000-0000000000a2', 'Einbruch');
+    RAISE EXCEPTION 'FAILED 37: Gast schreibt in nicht geteilte Packliste';
+  EXCEPTION WHEN insufficient_privilege THEN NULL;
+  END;
+  BEGIN
+    UPDATE packing_items SET list_id = '9a000000-0000-0000-0000-0000000000a2'
+    WHERE item_id = '91000000-0000-0000-0000-0000000000a1';
+    RAISE EXCEPTION 'FAILED 37: Gast verschiebt Packeintrag';
+  EXCEPTION WHEN insufficient_privilege THEN NULL;
+  END;
+  IF (SELECT count(*) FROM todo_lists) <> 0 THEN RAISE EXCEPTION 'FAILED 37: Gast sieht To-do-Liste'; END IF;
+  RAISE NOTICE 'ok 37: Packliste per Link, To-do-Liste ohne Link unsichtbar';
+END $$;
+
+-- Ein zweiter Gast mit demselben Link sieht dasselbe; ohne Link nichts.
+SELECT set_config('request.jwt.claims', '{"sub":"e2000000-0000-0000-0000-0000000000e2","role":"authenticated","is_anonymous":true}', true);
+
+DO $$
+BEGIN
+  IF (SELECT count(*) FROM shopping_items) <> 0 THEN RAISE EXCEPTION 'FAILED 38: E2 erbt die Gewährung von E'; END IF;
+  PERFORM redeem_guest_link(current_setting('test.secret_la1'));
+  IF (SELECT count(*) FROM shopping_items) <> 1 THEN RAISE EXCEPTION 'FAILED 38: E2 sieht die Liste nicht'; END IF;
+  RAISE NOTICE 'ok 38: jede Sitzung braucht den Link selbst';
+END $$;
+
+-- -----------------------------------------------------------------
+-- Als A: erneuern und beenden
+-- -----------------------------------------------------------------
+SELECT set_config('request.jwt.claims', '{"sub":"a0000000-0000-0000-0000-00000000000a","role":"authenticated"}', true);
+
+DO $$
+DECLARE s guest_shares;
+BEGIN
+  s := renew_guest_share(current_setting('test.share_la1')::uuid);
+  IF s.secret = current_setting('test.secret_la1') THEN RAISE EXCEPTION 'FAILED 39: Geheimnis unverändert'; END IF;
+  PERFORM set_config('test.secret_la1_neu', s.secret, true);
+  PERFORM end_guest_share(current_setting('test.share_pa1')::uuid);
+  IF (SELECT count(*) FROM guest_shares) <> 2 THEN RAISE EXCEPTION 'FAILED 39: Freigabe nicht beendet'; END IF;
+  RAISE NOTICE 'ok 39: Mitglied erneuert und beendet';
+END $$;
+
+SELECT set_config('request.jwt.claims', '{"sub":"e0000000-0000-0000-0000-00000000000e","role":"authenticated","is_anonymous":true}', true);
+
+DO $$
+DECLARE n integer;
+BEGIN
+  SELECT (SELECT count(*) FROM shopping_lists) + (SELECT count(*) FROM shopping_items)
+       + (SELECT count(*) FROM shopping_categories)
+       + (SELECT count(*) FROM packing_lists) + (SELECT count(*) FROM packing_items) INTO n;
+  IF n <> 0 THEN RAISE EXCEPTION 'FAILED 40: nach Erneuern/Beenden sieht der Gast noch % Zeilen', n; END IF;
+  BEGIN
+    INSERT INTO shopping_items (household_id, list_id, name)
+    VALUES ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', '5a000000-0000-0000-0000-0000000000a1', 'Zu spät');
+    RAISE EXCEPTION 'FAILED 40: Gast schreibt nach dem Erneuern';
+  EXCEPTION WHEN insufficient_privilege THEN NULL;
+  END;
+  BEGIN
+    PERFORM redeem_guest_link(current_setting('test.secret_la1'));
+    RAISE EXCEPTION 'FAILED 40: alter Link nach Erneuern gültig';
+  EXCEPTION WHEN raise_exception THEN
+    IF SQLERRM <> 'invalid_guest_link' THEN RAISE EXCEPTION 'FAILED 40: Meldung %', SQLERRM; END IF;
+  END;
+  BEGIN
+    PERFORM redeem_guest_link(current_setting('test.secret_pa1'));
+    RAISE EXCEPTION 'FAILED 40: beendeter Link gültig';
+  EXCEPTION WHEN raise_exception THEN
+    IF SQLERRM <> 'invalid_guest_link' THEN RAISE EXCEPTION 'FAILED 40: Meldung %', SQLERRM; END IF;
+  END;
+  PERFORM redeem_guest_link(current_setting('test.secret_la1_neu'));
+  IF (SELECT count(*) FROM shopping_items) <> 1 THEN RAISE EXCEPTION 'FAILED 40: neuer Link öffnet nichts'; END IF;
+  RAISE NOTICE 'ok 40: erneuerter oder beendeter Link gewährt nichts mehr, der neue schon';
+END $$;
+
+-- Mitglieder lösen keine Gastlinks ein.
+SELECT set_config('request.jwt.claims', '{"sub":"b0000000-0000-0000-0000-00000000000b","role":"authenticated"}', true);
+
+DO $$
+BEGIN
+  BEGIN
+    PERFORM redeem_guest_link(current_setting('test.secret_la1_neu'));
+    RAISE EXCEPTION 'FAILED 41: Mitglied aus HB löst Gastlink ein';
+  EXCEPTION WHEN insufficient_privilege THEN
+    IF SQLERRM <> 'not_a_guest' THEN RAISE EXCEPTION 'FAILED 41: Meldung %', SQLERRM; END IF;
+  END;
+  RAISE NOTICE 'ok 41: nur anonyme Sitzungen lösen Gastlinks ein';
+END $$;
+
+-- Eine gelöschte Liste nimmt ihre Freigabe mit.
+SELECT set_config('request.jwt.claims', '{"sub":"a0000000-0000-0000-0000-00000000000a","role":"authenticated"}', true);
+
+DO $$
+BEGIN
+  DELETE FROM todo_lists WHERE list_id = '7a000000-0000-0000-0000-0000000000a1';
+  IF EXISTS (SELECT 1 FROM guest_shares WHERE target_id = '7a000000-0000-0000-0000-0000000000a1') THEN
+    RAISE EXCEPTION 'FAILED 42: Freigabe überlebt die gelöschte Liste';
+  END IF;
+  RAISE NOTICE 'ok 42: Liste gelöscht → Freigabe weg';
+END $$;
+
+-- -----------------------------------------------------------------
+-- Gastlinks für Töpfe (ab 70). A legt zwei Ereignistöpfe an: PT wird
+-- geteilt, PU nicht. Der Haushaltstopf lässt sich nie teilen.
+-- -----------------------------------------------------------------
+DO $$
+DECLARE s guest_shares;
+BEGIN
+  PERFORM create_event_pot('70000000-0000-0000-0000-0000000000a1', 'Urlaub PT',
+    ARRAY['a0000000-0000-0000-0000-00000000000a', 'a2000000-0000-0000-0000-0000000000a2']::uuid[], ARRAY['Kim']);
+  PERFORM create_event_pot('70000000-0000-0000-0000-0000000000a2', 'Feier PU',
+    ARRAY['a0000000-0000-0000-0000-00000000000a']::uuid[], ARRAY['Geheim']);
+  INSERT INTO pot_expenses (expense_id, pot_id, household_id, payer_participant_id, amount_cents, description,
+                            split_kind, split_values)
+  SELECT '7e000000-0000-0000-0000-0000000000a1', pot_id, household_id, participant_id, 2000, 'Fähre', 'equal',
+         jsonb_build_object(participant_id::text, 1)
+  FROM pot_participants WHERE pot_id = '70000000-0000-0000-0000-0000000000a1' AND name = 'Kim';
+  INSERT INTO pot_expenses (expense_id, pot_id, household_id, payer_participant_id, amount_cents, description,
+                            split_kind, split_values)
+  SELECT '7e000000-0000-0000-0000-0000000000a2', pot_id, household_id, participant_id, 900, 'Geheim', 'equal',
+         jsonb_build_object(participant_id::text, 1)
+  FROM pot_participants WHERE pot_id = '70000000-0000-0000-0000-0000000000a2' AND name = 'Geheim';
+
+  s := create_guest_share('pot', '70000000-0000-0000-0000-0000000000a1');
+  IF s.target_kind <> 'pot' OR s.household_id <> 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa' THEN
+    RAISE EXCEPTION 'FAILED 70: Freigabe des Topfs %', s;
+  END IF;
+  PERFORM set_config('test.secret_pt', s.secret, true);
+  PERFORM set_config('test.share_pt', s.share_id::text, true);
+  BEGIN
+    PERFORM create_guest_share('pot', (SELECT pot_id FROM pots WHERE kind = 'household'));
+    RAISE EXCEPTION 'FAILED 70: Haushaltstopf geteilt';
+  EXCEPTION WHEN raise_exception THEN
+    IF SQLERRM <> 'share_target_not_found' THEN RAISE EXCEPTION 'FAILED 70: Meldung %', SQLERRM; END IF;
+  END;
+  BEGIN
+    PERFORM create_guest_share('pot', '5a000000-0000-0000-0000-0000000000a1');
+    RAISE EXCEPTION 'FAILED 70: Liste als Topf geteilt';
+  EXCEPTION WHEN raise_exception THEN
+    IF SQLERRM <> 'share_target_not_found' THEN RAISE EXCEPTION 'FAILED 70: Meldung %', SQLERRM; END IF;
+  END;
+  RAISE NOTICE 'ok 70: Mitglied teilt einen Ereignistopf, nie den Haushaltstopf';
+END $$;
+
+-- Haushaltstopf von HB: auch B teilt ihn nicht, und A nicht den fremden Topf.
+SELECT set_config('request.jwt.claims', '{"sub":"b0000000-0000-0000-0000-00000000000b","role":"authenticated"}', true);
+
+DO $$
+BEGIN
+  BEGIN
+    PERFORM create_guest_share('pot', (SELECT pot_id FROM pots WHERE kind = 'household'));
+    RAISE EXCEPTION 'FAILED 70: B teilt den Haushaltstopf';
+  EXCEPTION WHEN raise_exception THEN NULL;
+  END;
+  BEGIN
+    PERFORM create_guest_share('pot', '70000000-0000-0000-0000-0000000000a2');
+    RAISE EXCEPTION 'FAILED 70: B teilt einen Topf aus HA';
+  EXCEPTION WHEN raise_exception THEN
+    IF SQLERRM <> 'share_target_not_found' THEN RAISE EXCEPTION 'FAILED 70: Meldung %', SQLERRM; END IF;
+  END;
+  RAISE NOTICE 'ok 70: kein Haushaltstopf und kein fremder Topf teilbar';
+END $$;
+
+-- Neuer Gast G (anonym), der nur den Topf-Link hat.
+RESET ROLE;
+INSERT INTO auth.users (id, is_anonymous) VALUES ('e7000000-0000-0000-0000-0000000000e7', true);
+SELECT set_config('role', 'authenticated', true),
+       set_config('request.jwt.claims', '{"sub":"e7000000-0000-0000-0000-0000000000e7","role":"authenticated","is_anonymous":true}', true);
+
+DO $$
+DECLARE r record; n integer;
+BEGIN
+  SELECT (SELECT count(*) FROM pots) + (SELECT count(*) FROM pot_participants)
+       + (SELECT count(*) FROM pot_expenses) INTO n;
+  IF n <> 0 THEN RAISE EXCEPTION 'FAILED 71: Gast sieht vor dem Einlösen % Topf-Zeilen', n; END IF;
+
+  SELECT * INTO r FROM redeem_guest_link(current_setting('test.secret_pt'));
+  IF r.target_kind <> 'pot' OR r.target_id <> '70000000-0000-0000-0000-0000000000a1'
+     OR r.household_name <> 'Haushalt A' THEN
+    RAISE EXCEPTION 'FAILED 71: Einlösen liefert %', r;
+  END IF;
+  SELECT count(*) INTO n FROM pots;
+  IF n <> 1 THEN RAISE EXCEPTION 'FAILED 71: Gast sieht % Töpfe (erwartet 1)', n; END IF;
+  SELECT count(*) INTO n FROM pot_participants WHERE pot_id = '70000000-0000-0000-0000-0000000000a1';
+  IF n <> 3 THEN RAISE EXCEPTION 'FAILED 71: Gast sieht % Teilnehmer des Topfs (erwartet 3)', n; END IF;
+  SELECT count(*) INTO n FROM pot_participants WHERE pot_id <> '70000000-0000-0000-0000-0000000000a1';
+  IF n <> 0 THEN RAISE EXCEPTION 'FAILED 71: Gast sieht % Teilnehmer anderer Töpfe', n; END IF;
+  SELECT count(*) INTO n FROM pot_expenses;
+  IF n <> 1 THEN RAISE EXCEPTION 'FAILED 71: Gast sieht % Ausgaben (erwartet 1)', n; END IF;
+  SELECT (SELECT count(*) FROM households) + (SELECT count(*) FROM household_members)
+       + (SELECT count(*) FROM tasks) + (SELECT count(*) FROM settlements)
+       + (SELECT count(*) FROM shopping_lists) + (SELECT count(*) FROM shopping_items)
+       + (SELECT count(*) FROM packing_lists) + (SELECT count(*) FROM todo_lists)
+       + (SELECT count(*) FROM pot_repayments) + (SELECT count(*) FROM guest_shares) INTO n;
+  IF n <> 0 THEN RAISE EXCEPTION 'FAILED 71: Gast sieht % fremde Zeilen', n; END IF;
+  RAISE NOTICE 'ok 71: Topf-Link öffnet genau diesen Topf und nichts sonst';
+END $$;
+
+-- „Ich bin neu“: Name eindeutig ohne Groß-/Kleinschreibung, nur in den
+-- geteilten, offenen Topf, ohne Konto dahinter.
+DO $$
+DECLARE p pot_participants; n integer;
+BEGIN
+  p := join_pot_as_guest('70000000-0000-0000-0000-0000000000a1', '  Lena ');
+  IF p.name <> 'Lena' OR p.user_id IS NOT NULL OR p.household_id <> 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa' THEN
+    RAISE EXCEPTION 'FAILED 72: Teilnehmer falsch eingetragen: %', p;
+  END IF;
+  PERFORM set_config('test.lena', p.participant_id::text, true);
+  BEGIN
+    PERFORM join_pot_as_guest('70000000-0000-0000-0000-0000000000a1', 'LENA');
+    RAISE EXCEPTION 'FAILED 72: doppelter Name LENA angenommen';
+  EXCEPTION WHEN unique_violation THEN NULL;
+  END;
+  BEGIN
+    PERFORM join_pot_as_guest('70000000-0000-0000-0000-0000000000a1', 'kim');
+    RAISE EXCEPTION 'FAILED 72: doppelter Name kim angenommen';
+  EXCEPTION WHEN unique_violation THEN NULL;
+  END;
+  BEGIN
+    PERFORM join_pot_as_guest('70000000-0000-0000-0000-0000000000a2', 'Lena');
+    RAISE EXCEPTION 'FAILED 72: Gast tritt einem nicht geteilten Topf bei';
+  EXCEPTION WHEN raise_exception THEN
+    IF SQLERRM <> 'pot_not_shared' THEN RAISE EXCEPTION 'FAILED 72: Meldung %', SQLERRM; END IF;
+  END;
+  BEGIN
+    PERFORM join_pot_as_guest('70000000-0000-0000-0000-0000000000a1', '');
+    RAISE EXCEPTION 'FAILED 72: leerer Name angenommen';
+  EXCEPTION WHEN check_violation THEN NULL;
+  END;
+  BEGIN
+    INSERT INTO pot_participants (pot_id, household_id, name)
+    VALUES ('70000000-0000-0000-0000-0000000000a1', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'Direkt');
+    RAISE EXCEPTION 'FAILED 72: Gast trägt Teilnehmer direkt ein';
+  EXCEPTION WHEN insufficient_privilege THEN NULL;
+  END;
+  SELECT count(*) INTO n FROM pot_participants;
+  IF n <> 4 THEN RAISE EXCEPTION 'FAILED 72: Gast sieht % Teilnehmer (erwartet 4)', n; END IF;
+  RAISE NOTICE 'ok 72: Ich bin neu trägt genau einmal ein, Duplikate abgewiesen';
+END $$;
+
+-- Ausgaben und Rückzahlungen: anlegen, bearbeiten, löschen — nur im Topf.
+DO $$
+DECLARE
+  n integer;
+  lena uuid := current_setting('test.lena')::uuid;
+  kim uuid := (SELECT participant_id FROM pot_participants
+               WHERE pot_id = '70000000-0000-0000-0000-0000000000a1' AND name = 'Kim');
+BEGIN
+  INSERT INTO pot_expenses (expense_id, pot_id, household_id, payer_participant_id, amount_cents, description,
+                            split_kind, split_values, updated_by_participant_id)
+  VALUES ('7e000000-0000-0000-0000-0000000000e1', '70000000-0000-0000-0000-0000000000a1',
+          'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', lena, 1200, 'Pizza', 'equal',
+          jsonb_build_object(lena::text, 1, kim::text, 1), lena);
+  UPDATE pot_expenses SET amount_cents = 1300, updated_by_participant_id = lena
+  WHERE expense_id = '7e000000-0000-0000-0000-0000000000a1';
+  IF NOT FOUND THEN RAISE EXCEPTION 'FAILED 73: Gast ändert fremde Ausgabe nicht'; END IF;
+  DELETE FROM pot_expenses WHERE expense_id = '7e000000-0000-0000-0000-0000000000e1';
+  GET DIAGNOSTICS n = ROW_COUNT;
+  IF n <> 1 THEN RAISE EXCEPTION 'FAILED 73: Gast löscht Ausgabe nicht'; END IF;
+  INSERT INTO pot_repayments (repayment_id, pot_id, household_id, from_participant_id, to_participant_id,
+                              amount_cents, updated_by_participant_id)
+  VALUES ('7f000000-0000-0000-0000-0000000000e1', '70000000-0000-0000-0000-0000000000a1',
+          'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', lena, kim, 500, lena);
+  UPDATE pot_repayments SET amount_cents = 600 WHERE repayment_id = '7f000000-0000-0000-0000-0000000000e1';
+  IF NOT FOUND THEN RAISE EXCEPTION 'FAILED 73: Gast ändert Rückzahlung nicht'; END IF;
+
+  BEGIN
+    INSERT INTO pot_expenses (pot_id, household_id, payer_participant_id, amount_cents, description, split_kind)
+    SELECT '70000000-0000-0000-0000-0000000000a2', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', lena, 100, 'Einbruch', 'equal';
+    RAISE EXCEPTION 'FAILED 73: Gast schreibt in nicht geteilten Topf';
+  EXCEPTION WHEN insufficient_privilege THEN NULL;
+  END;
+  BEGIN
+    INSERT INTO pot_expenses (pot_id, household_id, payer_participant_id, amount_cents, description, split_kind)
+    VALUES ('70000000-0000-0000-0000-0000000000a1', 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', lena, 100, 'Falsch', 'equal');
+    RAISE EXCEPTION 'FAILED 73: Gast schreibt Zeile mit fremder household_id';
+  EXCEPTION WHEN insufficient_privilege THEN NULL;
+  END;
+  UPDATE pot_expenses SET amount_cents = 1 WHERE expense_id = '7e000000-0000-0000-0000-0000000000a2';
+  GET DIAGNOSTICS n = ROW_COUNT;
+  IF n <> 0 THEN RAISE EXCEPTION 'FAILED 73: Gast ändert Ausgabe eines nicht geteilten Topfs'; END IF;
+  DELETE FROM pot_expenses WHERE expense_id = '7e000000-0000-0000-0000-0000000000a2';
+  GET DIAGNOSTICS n = ROW_COUNT;
+  IF n <> 0 THEN RAISE EXCEPTION 'FAILED 73: Gast löscht Ausgabe eines nicht geteilten Topfs'; END IF;
+  -- Verrechnete Rückzahlungen gibt es nur im Haushaltstopf; eine Verknüpfung
+  -- mit einem Ausgleich kann der Gast auch nicht selbst herstellen.
+  BEGIN
+    INSERT INTO pot_repayments (pot_id, household_id, from_participant_id, to_participant_id, amount_cents,
+                                settlement_id)
+    VALUES ('70000000-0000-0000-0000-0000000000a1', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', lena, kim, 100,
+            gen_random_uuid());
+    RAISE EXCEPTION 'FAILED 73: Gast verknüpft Rückzahlung mit einem Ausgleich';
+  EXCEPTION WHEN check_violation OR foreign_key_violation OR insufficient_privilege THEN NULL;
+  END;
+  RAISE NOTICE 'ok 73: Gast trägt Ausgaben und Rückzahlungen ein, ändert und löscht sie, nur im Topf';
+END $$;
+
+-- Was Gästen nie zusteht: abschließen, löschen, Töpfe anlegen, Links verwalten.
+DO $$
+DECLARE n integer;
+BEGIN
+  UPDATE pots SET closed_at = now() WHERE pot_id = '70000000-0000-0000-0000-0000000000a1';
+  GET DIAGNOSTICS n = ROW_COUNT;
+  IF n <> 0 THEN RAISE EXCEPTION 'FAILED 74: Gast schließt den Topf ab'; END IF;
+  DELETE FROM pots WHERE pot_id = '70000000-0000-0000-0000-0000000000a1';
+  GET DIAGNOSTICS n = ROW_COUNT;
+  IF n <> 0 THEN RAISE EXCEPTION 'FAILED 74: Gast löscht den Topf'; END IF;
+  UPDATE pot_participants SET name = 'Umbenannt' WHERE pot_id = '70000000-0000-0000-0000-0000000000a1';
+  GET DIAGNOSTICS n = ROW_COUNT;
+  IF n <> 0 THEN RAISE EXCEPTION 'FAILED 74: Gast benennt Teilnehmer um'; END IF;
+  DELETE FROM pot_participants WHERE pot_id = '70000000-0000-0000-0000-0000000000a1';
+  GET DIAGNOSTICS n = ROW_COUNT;
+  IF n <> 0 THEN RAISE EXCEPTION 'FAILED 74: Gast entfernt Teilnehmer'; END IF;
+  BEGIN
+    PERFORM create_event_pot(gen_random_uuid(), 'Gasttopf', ARRAY[]::uuid[], ARRAY['X']);
+    RAISE EXCEPTION 'FAILED 74: Gast legt Topf an';
+  EXCEPTION WHEN insufficient_privilege THEN NULL;
+  END;
+  BEGIN
+    PERFORM create_guest_share('pot', '70000000-0000-0000-0000-0000000000a1');
+    RAISE EXCEPTION 'FAILED 74: Gast teilt den Topf';
+  EXCEPTION WHEN insufficient_privilege THEN NULL;
+  END;
+  BEGIN
+    PERFORM renew_guest_share(current_setting('test.share_pt')::uuid);
+    RAISE EXCEPTION 'FAILED 74: Gast erneuert den Topf-Link';
+  EXCEPTION WHEN insufficient_privilege THEN NULL;
+  END;
+  BEGIN
+    PERFORM end_guest_share(current_setting('test.share_pt')::uuid);
+    RAISE EXCEPTION 'FAILED 74: Gast beendet die Topf-Freigabe';
+  EXCEPTION WHEN insufficient_privilege THEN NULL;
+  END;
+  RAISE NOTICE 'ok 74: Gast schließt nicht ab, löscht nichts, verwaltet keine Links';
+END $$;
+
+-- Mitglieder treten keinem Topf als Gast bei.
+SELECT set_config('request.jwt.claims', '{"sub":"a0000000-0000-0000-0000-00000000000a","role":"authenticated"}', true);
+
+DO $$
+BEGIN
+  BEGIN
+    PERFORM join_pot_as_guest('70000000-0000-0000-0000-0000000000a1', 'Zweitname');
+    RAISE EXCEPTION 'FAILED 75: Mitglied tritt als Gast bei';
+  EXCEPTION WHEN insufficient_privilege THEN
+    IF SQLERRM <> 'not_a_guest' THEN RAISE EXCEPTION 'FAILED 75: Meldung %', SQLERRM; END IF;
+  END;
+  -- A schließt den Topf für den nächsten Fall ab.
+  UPDATE pots SET closed_at = now() WHERE pot_id = '70000000-0000-0000-0000-0000000000a1';
+  IF NOT FOUND THEN RAISE EXCEPTION 'FAILED 75: A schließt nicht ab'; END IF;
+  RAISE NOTICE 'ok 75: nur Gäste treten per Ich bin neu bei';
+END $$;
+
+-- Abgeschlossener Topf: der Gast sieht den Endstand, schreibt nichts mehr.
+SELECT set_config('request.jwt.claims', '{"sub":"e7000000-0000-0000-0000-0000000000e7","role":"authenticated","is_anonymous":true}', true);
+
+DO $$
+DECLARE n integer; lena uuid := current_setting('test.lena')::uuid;
+BEGIN
+  SELECT count(*) INTO n FROM pots WHERE closed_at IS NOT NULL;
+  IF n <> 1 THEN RAISE EXCEPTION 'FAILED 76: Gast sieht den abgeschlossenen Topf nicht'; END IF;
+  SELECT (SELECT count(*) FROM pot_expenses) + (SELECT count(*) FROM pot_repayments) INTO n;
+  IF n <> 2 THEN RAISE EXCEPTION 'FAILED 76: Gast sieht % Einträge im Endstand (erwartet 2)', n; END IF;
+  BEGIN
+    INSERT INTO pot_expenses (pot_id, household_id, payer_participant_id, amount_cents, description, split_kind)
+    VALUES ('70000000-0000-0000-0000-0000000000a1', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', lena, 100, 'Zu spät', 'equal');
+    RAISE EXCEPTION 'FAILED 76: Ausgabe in abgeschlossenem Topf';
+  EXCEPTION WHEN insufficient_privilege THEN NULL;
+  END;
+  BEGIN
+    INSERT INTO pot_repayments (pot_id, household_id, from_participant_id, to_participant_id, amount_cents)
+    SELECT '70000000-0000-0000-0000-0000000000a1', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', lena, participant_id, 100
+    FROM pot_participants WHERE name = 'Kim';
+    RAISE EXCEPTION 'FAILED 76: Rückzahlung in abgeschlossenem Topf';
+  EXCEPTION WHEN insufficient_privilege THEN NULL;
+  END;
+  UPDATE pot_expenses SET amount_cents = 1 WHERE expense_id = '7e000000-0000-0000-0000-0000000000a1';
+  GET DIAGNOSTICS n = ROW_COUNT;
+  IF n <> 0 THEN RAISE EXCEPTION 'FAILED 76: Ausgabe in abgeschlossenem Topf geändert'; END IF;
+  DELETE FROM pot_repayments WHERE repayment_id = '7f000000-0000-0000-0000-0000000000e1';
+  GET DIAGNOSTICS n = ROW_COUNT;
+  IF n <> 0 THEN RAISE EXCEPTION 'FAILED 76: Rückzahlung in abgeschlossenem Topf gelöscht'; END IF;
+  BEGIN
+    PERFORM join_pot_as_guest('70000000-0000-0000-0000-0000000000a1', 'Nachzügler');
+    RAISE EXCEPTION 'FAILED 76: Beitritt zu abgeschlossenem Topf';
+  EXCEPTION WHEN raise_exception THEN
+    IF SQLERRM <> 'pot_closed' THEN RAISE EXCEPTION 'FAILED 76: Meldung %', SQLERRM; END IF;
+  END;
+  RAISE NOTICE 'ok 76: abgeschlossener Topf für Gäste nur lesbar';
+END $$;
+
+-- Erneuern sperrt den Gast aus; ein gelöschter Topf nimmt seine Freigabe mit.
+SELECT set_config('request.jwt.claims', '{"sub":"a0000000-0000-0000-0000-00000000000a","role":"authenticated"}', true);
+SELECT renew_guest_share(current_setting('test.share_pt')::uuid);
+SELECT set_config('request.jwt.claims', '{"sub":"e7000000-0000-0000-0000-0000000000e7","role":"authenticated","is_anonymous":true}', true);
+
+DO $$
+DECLARE n integer;
+BEGIN
+  SELECT (SELECT count(*) FROM pots) + (SELECT count(*) FROM pot_participants)
+       + (SELECT count(*) FROM pot_expenses) + (SELECT count(*) FROM pot_repayments) INTO n;
+  IF n <> 0 THEN RAISE EXCEPTION 'FAILED 77: nach Erneuern sieht der Gast noch % Topf-Zeilen', n; END IF;
+  BEGIN
+    PERFORM join_pot_as_guest('70000000-0000-0000-0000-0000000000a1', 'Wieder da');
+    RAISE EXCEPTION 'FAILED 77: Beitritt nach Erneuern';
+  EXCEPTION WHEN raise_exception THEN
+    IF SQLERRM <> 'pot_not_shared' THEN RAISE EXCEPTION 'FAILED 77: Meldung %', SQLERRM; END IF;
+  END;
+  RAISE NOTICE 'ok 77: erneuerter Topf-Link gewährt nichts mehr';
+END $$;
+
+SELECT set_config('request.jwt.claims', '{"sub":"a0000000-0000-0000-0000-00000000000a","role":"authenticated"}', true);
+
+DO $$
+BEGIN
+  DELETE FROM pots WHERE pot_id = '70000000-0000-0000-0000-0000000000a1';
+  IF EXISTS (SELECT 1 FROM guest_shares WHERE target_id = '70000000-0000-0000-0000-0000000000a1') THEN
+    RAISE EXCEPTION 'FAILED 78: Freigabe überlebt den gelöschten Topf';
+  END IF;
+  RAISE NOTICE 'ok 78: Topf gelöscht → Freigabe weg';
+END $$;
+
+-- Nicht angemeldet erreicht niemand Freigaben oder Gastlink-RPCs.
+SELECT set_config('role', 'anon', true),
+       set_config('request.jwt.claims', '{"role":"anon"}', true);
+
+DO $$
+DECLARE f text;
+BEGIN
+  FOREACH f IN ARRAY ARRAY[
+    'SELECT create_guest_share(''shopping_list'', ''5a000000-0000-0000-0000-0000000000a1'')',
+    'SELECT renew_guest_share(''5a000000-0000-0000-0000-0000000000a1'')',
+    'SELECT end_guest_share(''5a000000-0000-0000-0000-0000000000a1'')',
+    'SELECT redeem_guest_link(''x'')',
+    'SELECT join_pot_as_guest(''70000000-0000-0000-0000-0000000000a1'', ''x'')',
+    'SELECT guest_target_household(''shopping_list'', ''5a000000-0000-0000-0000-0000000000a1'')',
+    'SELECT count(*) FROM guest_shares'
+  ] LOOP
+    BEGIN
+      EXECUTE f;
+      RAISE EXCEPTION 'FAILED 43: anon darf: %', f;
+    EXCEPTION WHEN insufficient_privilege THEN NULL;
+    END;
+  END LOOP;
+  RAISE NOTICE 'ok 43: anon erreicht weder Freigaben noch Gastlink-RPCs';
+END $$;
+
+RESET ROLE;
+
+-- =================================================================
+-- Verrechnen mit dem Haushaltstopf (CONTEXT.md § Ausgleich)
+-- =================================================================
+-- Eine Datenbank-Funktion legt den Ausgleich (Punkte, Art 'pot') und die
+-- Rückzahlung im Haushaltstopf (Euro) an — beides oder nichts. Wer in der
+-- Bilanz hinten liegt (from) und im Topf gut hat, bekommt die Rückzahlung:
+-- sie läuft vom Ausgleichs-Empfänger (to) an ihn.
+SELECT set_config('role', 'authenticated', true),
+       set_config('request.jwt.claims', '{"sub":"a0000000-0000-0000-0000-00000000000a","role":"authenticated"}', true);
+
+DO $$
+DECLARE
+  s settlements;
+  r pot_repayments;
+  n integer;
+BEGIN
+  s := settle_with_household_pot('a0000000-0000-0000-0000-00000000000a', 'a2000000-0000-0000-0000-0000000000a2',
+                                 4, 250, 'Kino', '2026-11-20 10:00+01');
+  IF s.method <> 'pot' OR s.points_settled <> 4 OR s.paid_euros <> 2.50
+     OR s.created_by <> 'a0000000-0000-0000-0000-00000000000a'
+     OR s.household_id <> 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa' THEN
+    RAISE EXCEPTION 'FAILED 60: Ausgleich falsch angelegt: %', s;
+  END IF;
+  SELECT count(*) INTO n FROM pot_repayments WHERE settlement_id = s.settlement_id;
+  IF n <> 1 THEN RAISE EXCEPTION 'FAILED 60: % Rückzahlungen zum Ausgleich (erwartet 1)', n; END IF;
+  SELECT * INTO r FROM pot_repayments WHERE settlement_id = s.settlement_id;
+  IF r.amount_cents <> 250 OR r.paid_on <> '2026-11-20' THEN
+    RAISE EXCEPTION 'FAILED 60: Rückzahlung falsch: %', r;
+  END IF;
+  IF (SELECT kind FROM pots WHERE pot_id = r.pot_id) <> 'household'
+     OR r.household_id <> 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa' THEN
+    RAISE EXCEPTION 'FAILED 60: Rückzahlung nicht im Haushaltstopf';
+  END IF;
+  IF (SELECT user_id FROM pot_participants WHERE participant_id = r.from_participant_id)
+       <> 'a2000000-0000-0000-0000-0000000000a2'
+     OR (SELECT user_id FROM pot_participants WHERE participant_id = r.to_participant_id)
+       <> 'a0000000-0000-0000-0000-00000000000a'
+     OR (SELECT user_id FROM pot_participants WHERE participant_id = r.updated_by_participant_id)
+       <> 'a0000000-0000-0000-0000-00000000000a' THEN
+    RAISE EXCEPTION 'FAILED 60: Rückzahlung in falscher Richtung oder falscher Bearbeiter';
+  END IF;
+  SELECT count(*) INTO n FROM pot_repayments WHERE pot_id = '99999999-0000-0000-0000-00000000000a';
+  IF n <> 0 THEN RAISE EXCEPTION 'FAILED 60: Ereignistopf verrechnet'; END IF;
+  RAISE NOTICE 'ok 60: verrechnen legt Ausgleich und Rückzahlung im Haushaltstopf zusammen an';
+END $$;
+
+-- Beides oder nichts: die Rückzahlung scheitert (Betrag über ihrem Limit,
+-- für den Ausgleich noch gültig) → auch kein Ausgleich.
+DO $$
+DECLARE n integer;
+BEGIN
+  BEGIN
+    PERFORM settle_with_household_pot('a0000000-0000-0000-0000-00000000000a', 'a2000000-0000-0000-0000-0000000000a2',
+                                      3, 100000000, 'Atomar', now());
+    RAISE EXCEPTION 'FAILED 61: zu große Rückzahlung angenommen';
+  EXCEPTION WHEN check_violation THEN NULL;
+  END;
+  SELECT count(*) INTO n FROM settlements WHERE description = 'Atomar';
+  IF n <> 0 THEN RAISE EXCEPTION 'FAILED 61: Ausgleich ohne Rückzahlung angelegt'; END IF;
+  SELECT count(*) INTO n FROM pot_repayments WHERE amount_cents = 100000000;
+  IF n <> 0 THEN RAISE EXCEPTION 'FAILED 61: Rückzahlung ohne Ausgleich angelegt'; END IF;
+  RAISE NOTICE 'ok 61: Ausgleich und Rückzahlung entstehen gemeinsam oder gar nicht';
+END $$;
+
+-- An der Funktion vorbei geht es nicht: kein Ausgleich der Art 'pot'
+-- direkt, keine Rückzahlung, die sich an einen Ausgleich hängt, und eine
+-- verknüpfte Rückzahlung lässt sich weder ändern noch allein löschen.
+DO $$
+DECLARE
+  v_settlement uuid;
+  v_repayment uuid;
+  n integer;
+BEGIN
+  SELECT settlement_id INTO v_settlement FROM settlements WHERE description = 'Kino';
+  SELECT repayment_id INTO v_repayment FROM pot_repayments WHERE settlement_id = v_settlement;
+  BEGIN
+    INSERT INTO settlements (household_id, from_user_id, to_user_id, points_settled, method, paid_euros, created_by)
+    VALUES ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'a0000000-0000-0000-0000-00000000000a',
+            'a2000000-0000-0000-0000-0000000000a2', 2, 'pot', 1, 'a0000000-0000-0000-0000-00000000000a');
+    RAISE EXCEPTION 'FAILED 62: Ausgleich der Art pot ohne Rückzahlung angelegt';
+  EXCEPTION WHEN insufficient_privilege THEN NULL;
+  END;
+  BEGIN
+    INSERT INTO pot_repayments (pot_id, household_id, from_participant_id, to_participant_id, amount_cents, settlement_id)
+    SELECT pot_id, household_id, to_participant_id, from_participant_id, 100,
+           (SELECT settlement_id FROM settlements WHERE method = 'money' LIMIT 1)
+    FROM pot_repayments WHERE repayment_id = v_repayment;
+    RAISE EXCEPTION 'FAILED 62: Rückzahlung an einen Ausgleich gehängt';
+  EXCEPTION WHEN check_violation THEN
+    IF SQLERRM <> 'repayment_settlement_mismatch' THEN RAISE EXCEPTION 'FAILED 62: Meldung %', SQLERRM; END IF;
+  END;
+  -- Eine ganze Zeile mit settlement_id = null (Rückgängig legt sie so neu an) geht.
+  INSERT INTO pot_repayments (pot_id, household_id, from_participant_id, to_participant_id, amount_cents, settlement_id)
+  SELECT pot_id, household_id, to_participant_id, from_participant_id, 100, NULL
+  FROM pot_repayments WHERE repayment_id = v_repayment;
+  BEGIN
+    UPDATE pot_repayments SET amount_cents = 1 WHERE repayment_id = v_repayment;
+    RAISE EXCEPTION 'FAILED 62: verknüpfte Rückzahlung geändert';
+  EXCEPTION WHEN check_violation THEN NULL;
+  END;
+  BEGIN
+    DELETE FROM pot_repayments WHERE repayment_id = v_repayment;
+    RAISE EXCEPTION 'FAILED 62: verknüpfte Rückzahlung allein gelöscht';
+  EXCEPTION WHEN check_violation THEN NULL;
+  END;
+  -- Löscht die Anlegerin den Ausgleich (5-Minuten-Fenster), geht die
+  -- Rückzahlung mit.
+  DELETE FROM settlements WHERE settlement_id = v_settlement;
+  GET DIAGNOSTICS n = ROW_COUNT;
+  IF n <> 1 THEN RAISE EXCEPTION 'FAILED 62: eigener Ausgleich nicht löschbar'; END IF;
+  SELECT count(*) INTO n FROM pot_repayments WHERE repayment_id = v_repayment;
+  IF n <> 0 THEN RAISE EXCEPTION 'FAILED 62: Rückzahlung überlebt den gelöschten Ausgleich'; END IF;
+  RAISE NOTICE 'ok 62: verrechnen nur über die Funktion, gelöschter Ausgleich nimmt die Rückzahlung mit';
+END $$;
+
+-- Nur Mitglieder, nur im eigenen Haushalt: B (HB) nicht für HA, kein Gast.
+SELECT set_config('role', 'authenticated', true),
+       set_config('request.jwt.claims', '{"sub":"b0000000-0000-0000-0000-00000000000b","role":"authenticated"}', true);
+
+DO $$
+BEGIN
+  BEGIN
+    PERFORM settle_with_household_pot('a0000000-0000-0000-0000-00000000000a', 'a2000000-0000-0000-0000-0000000000a2',
+                                      1, 100, 'Fremd', now());
+    RAISE EXCEPTION 'FAILED 63: B verrechnet in HA';
+  EXCEPTION WHEN check_violation THEN
+    IF SQLERRM <> 'settlement_party_not_in_household' THEN RAISE EXCEPTION 'FAILED 63: Meldung %', SQLERRM; END IF;
+  END;
+  RAISE NOTICE 'ok 63: kein Verrechnen in einem fremden Haushalt';
+END $$;
+
+SELECT set_config('role', 'authenticated', true),
+       set_config('request.jwt.claims', '{"sub":"e0000000-0000-0000-0000-00000000000e","role":"authenticated","is_anonymous":true}', true);
+
+DO $$
+BEGIN
+  BEGIN
+    PERFORM settle_with_household_pot('a0000000-0000-0000-0000-00000000000a', 'a2000000-0000-0000-0000-0000000000a2',
+                                      1, 100, 'Gast', now());
+    RAISE EXCEPTION 'FAILED 64: Gast verrechnet';
+  EXCEPTION WHEN insufficient_privilege THEN
+    IF SQLERRM <> 'anonymous_not_allowed' THEN RAISE EXCEPTION 'FAILED 64: Meldung %', SQLERRM; END IF;
+  END;
+  RAISE NOTICE 'ok 64: Gast verrechnet nicht';
+END $$;
+
+SELECT set_config('role', 'anon', true),
+       set_config('request.jwt.claims', '{"role":"anon"}', true);
+
+DO $$
+BEGIN
+  BEGIN
+    PERFORM settle_with_household_pot('a0000000-0000-0000-0000-00000000000a', 'a2000000-0000-0000-0000-0000000000a2',
+                                      1, 100, 'anon', now());
+    RAISE EXCEPTION 'FAILED 65: anon verrechnet';
+  EXCEPTION WHEN insufficient_privilege THEN NULL;
+  END;
+  RAISE NOTICE 'ok 65: anon erreicht das Verrechnen nicht';
+END $$;
+
+-- -----------------------------------------------------------------
+-- Ganze Gruppe mit Bestätigung (ab 80). A legt den Topf PG mit A und A2
+-- an; eine Ausgabe „ganze Gruppe“ von gestern steht schon drin. Wer danach
+-- beitritt, kommt unbestätigt hinein; entscheiden dürfen nur Mitglieder des
+-- Haushalts, einmal, solange der Topf offen ist.
+-- -----------------------------------------------------------------
+SELECT set_config('role', 'authenticated', true),
+       set_config('request.jwt.claims', '{"sub":"a0000000-0000-0000-0000-00000000000a","role":"authenticated"}', true);
+
+DO $$
+DECLARE s guest_shares; p pot_participants;
+BEGIN
+  PERFORM create_event_pot('80000000-0000-0000-0000-0000000000a1', 'Ferienhaus PG',
+    ARRAY['a0000000-0000-0000-0000-00000000000a', 'a2000000-0000-0000-0000-0000000000a2']::uuid[], ARRAY[]::text[]);
+  INSERT INTO pot_expenses (pot_id, household_id, payer_participant_id, amount_cents, description,
+                            split_kind, created_at)
+  SELECT pot_id, household_id, participant_id, 9000, 'Anzahlung', 'whole_group', now() - interval '1 day'
+  FROM pot_participants
+  WHERE pot_id = '80000000-0000-0000-0000-0000000000a1' AND user_id = 'a0000000-0000-0000-0000-00000000000a';
+
+  -- Ein Mitglied trägt einen Namen nach, auch mit `confirmed = true`: er
+  -- beginnt trotzdem unbestätigt.
+  INSERT INTO pot_participants (participant_id, pot_id, household_id, name, confirmed)
+  VALUES ('8f000000-0000-0000-0000-0000000000b1', '80000000-0000-0000-0000-0000000000a1',
+          'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'Nachzügler', true);
+  SELECT * INTO p FROM pot_participants WHERE participant_id = '8f000000-0000-0000-0000-0000000000b1';
+  IF p.confirmed OR p.rejected THEN
+    RAISE EXCEPTION 'FAILED 80: nachgetragener Teilnehmer beginnt entschieden: %', p;
+  END IF;
+
+  s := create_guest_share('pot', '80000000-0000-0000-0000-0000000000a1');
+  PERFORM set_config('test.secret_pg', s.secret, true);
+  RAISE NOTICE 'ok 80: von einem Mitglied Nachgetragener beginnt unbestätigt';
+END $$;
+
+-- Gast H tritt über „Ich bin neu“ bei und versucht, über sich selbst und den
+-- Nachzügler zu entscheiden.
+RESET ROLE;
+INSERT INTO auth.users (id, is_anonymous) VALUES ('e8000000-0000-0000-0000-0000000000e8', true);
+SELECT set_config('role', 'authenticated', true),
+       set_config('request.jwt.claims', '{"sub":"e8000000-0000-0000-0000-0000000000e8","role":"authenticated","is_anonymous":true}', true);
+
+DO $$
+DECLARE p pot_participants; n integer;
+BEGIN
+  PERFORM redeem_guest_link(current_setting('test.secret_pg'));
+  p := join_pot_as_guest('80000000-0000-0000-0000-0000000000a1', 'Hanna');
+  IF p.confirmed OR p.rejected THEN
+    RAISE EXCEPTION 'FAILED 81: Gast beginnt entschieden: %', p;
+  END IF;
+  PERFORM set_config('test.hanna', p.participant_id::text, true);
+  RAISE NOTICE 'ok 81: Gast über Ich bin neu beginnt unbestätigt';
+
+  BEGIN
+    PERFORM decide_whole_group_join(p.participant_id, true);
+    RAISE EXCEPTION 'FAILED 82: Gast bestätigt sich selbst';
+  EXCEPTION WHEN insufficient_privilege THEN
+    IF SQLERRM <> 'anonymous_not_allowed' THEN RAISE EXCEPTION 'FAILED 82: Meldung %', SQLERRM; END IF;
+  END;
+  BEGIN
+    PERFORM decide_whole_group_join('8f000000-0000-0000-0000-0000000000b1', false);
+    RAISE EXCEPTION 'FAILED 82: Gast lehnt einen anderen ab';
+  EXCEPTION WHEN insufficient_privilege THEN NULL;
+  END;
+  BEGIN
+    UPDATE pot_participants SET confirmed = true WHERE pot_id = '80000000-0000-0000-0000-0000000000a1';
+    GET DIAGNOSTICS n = ROW_COUNT;
+    IF n <> 0 THEN RAISE EXCEPTION 'FAILED 82: Gast bestätigt % Teilnehmer direkt', n; END IF;
+  EXCEPTION WHEN insufficient_privilege THEN NULL;
+  END;
+END $$;
+
+RESET ROLE;
+
+DO $$
+DECLARE n integer;
+BEGIN
+  SELECT count(*) INTO n FROM pot_participants
+  WHERE pot_id = '80000000-0000-0000-0000-0000000000a1' AND user_id IS NULL AND (confirmed OR rejected);
+  IF n <> 0 THEN RAISE EXCEPTION 'FAILED 82: % Nachzügler nach Gast-Versuchen entschieden', n; END IF;
+  RAISE NOTICE 'ok 82: Gast kann nicht bestätigen und nicht ablehnen';
+END $$;
+
+-- B (fremder Haushalt) entscheidet nicht über Teilnehmer aus HA.
+SELECT set_config('role', 'authenticated', true),
+       set_config('request.jwt.claims', '{"sub":"b0000000-0000-0000-0000-00000000000b","role":"authenticated"}', true);
+
+DO $$
+BEGIN
+  BEGIN
+    PERFORM decide_whole_group_join(current_setting('test.hanna')::uuid, true);
+    RAISE EXCEPTION 'FAILED 83: B bestätigt einen Teilnehmer aus HA';
+  EXCEPTION WHEN raise_exception THEN
+    IF SQLERRM <> 'participant_not_found' THEN RAISE EXCEPTION 'FAILED 83: Meldung %', SQLERRM; END IF;
+  END;
+  RAISE NOTICE 'ok 83: kein Entscheiden im fremden Haushalt';
+END $$;
+
+-- A bestätigt Hanna, A2 lehnt den Nachzügler ab; die Entscheidung bleibt.
+SELECT set_config('request.jwt.claims', '{"sub":"a0000000-0000-0000-0000-00000000000a","role":"authenticated"}', true);
+
+DO $$
+DECLARE p pot_participants;
+BEGIN
+  p := decide_whole_group_join(current_setting('test.hanna')::uuid, true);
+  IF NOT p.confirmed OR p.rejected THEN RAISE EXCEPTION 'FAILED 84: Bestätigen ergibt %', p; END IF;
+  -- Dieselbe Entscheidung noch einmal (zweites Gerät) ist kein Fehler.
+  p := decide_whole_group_join(current_setting('test.hanna')::uuid, true);
+  BEGIN
+    PERFORM decide_whole_group_join(current_setting('test.hanna')::uuid, false);
+    RAISE EXCEPTION 'FAILED 84: Bestätigung nachträglich abgelehnt';
+  EXCEPTION WHEN raise_exception THEN
+    IF SQLERRM <> 'already_decided' THEN RAISE EXCEPTION 'FAILED 84: Meldung %', SQLERRM; END IF;
+  END;
+END $$;
+
+SELECT set_config('request.jwt.claims', '{"sub":"a2000000-0000-0000-0000-0000000000a2","role":"authenticated"}', true);
+
+DO $$
+DECLARE p pot_participants;
+BEGIN
+  p := decide_whole_group_join('8f000000-0000-0000-0000-0000000000b1', false);
+  IF p.confirmed OR NOT p.rejected THEN RAISE EXCEPTION 'FAILED 84: Ablehnen ergibt %', p; END IF;
+  BEGIN
+    PERFORM decide_whole_group_join('8f000000-0000-0000-0000-0000000000b1', true);
+    RAISE EXCEPTION 'FAILED 84: Ablehnung nachträglich bestätigt';
+  EXCEPTION WHEN raise_exception THEN
+    IF SQLERRM <> 'already_decided' THEN RAISE EXCEPTION 'FAILED 84: Meldung %', SQLERRM; END IF;
+  END;
+  RAISE NOTICE 'ok 84: Mitglieder bestätigen und lehnen ab, einmal und endgültig';
+END $$;
+
+-- Abgeschlossener Topf: nichts mehr zu entscheiden.
+DO $$
+DECLARE p pot_participants;
+BEGIN
+  INSERT INTO pot_participants (pot_id, household_id, name)
+  VALUES ('80000000-0000-0000-0000-0000000000a1', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'Spät')
+  RETURNING * INTO p;
+  UPDATE pots SET closed_at = now() WHERE pot_id = '80000000-0000-0000-0000-0000000000a1';
+  BEGIN
+    PERFORM decide_whole_group_join(p.participant_id, true);
+    RAISE EXCEPTION 'FAILED 85: Entscheidung im abgeschlossenen Topf';
+  EXCEPTION WHEN raise_exception THEN
+    IF SQLERRM <> 'pot_closed' THEN RAISE EXCEPTION 'FAILED 85: Meldung %', SQLERRM; END IF;
+  END;
+  RAISE NOTICE 'ok 85: abgeschlossener Topf nimmt keine Entscheidung an';
+END $$;
+
+SELECT set_config('role', 'anon', true),
+       set_config('request.jwt.claims', '{"role":"anon"}', true);
+
+DO $$
+BEGIN
+  BEGIN
+    PERFORM decide_whole_group_join(current_setting('test.hanna')::uuid, true);
+    RAISE EXCEPTION 'FAILED 86: anon entscheidet';
+  EXCEPTION WHEN insufficient_privilege THEN NULL;
+  END;
+  RAISE NOTICE 'ok 86: anon erreicht das Entscheiden nicht';
+END $$;
+
+RESET ROLE;
+
+-- Gastlinks live: guest_shares in der Realtime-Publikation, aber ohne
+-- REPLICA IDENTITY FULL — DELETE-Ereignisse sollen kein Geheimnis tragen.
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_publication_tables
+    WHERE pubname = 'supabase_realtime' AND schemaname = 'public' AND tablename = 'guest_shares'
+  ) THEN
+    RAISE EXCEPTION 'FAILED 87: guest_shares fehlt in supabase_realtime';
+  END IF;
+  IF (SELECT relreplident FROM pg_class WHERE oid = 'public.guest_shares'::regclass) = 'f' THEN
+    RAISE EXCEPTION 'FAILED 87: guest_shares hat REPLICA IDENTITY FULL';
+  END IF;
+  RAISE NOTICE 'ok 87: guest_shares live, DELETE-Ereignisse nur mit Kennung';
+END $$;
+
+-- -----------------------------------------------------------------
+-- Austritt aus dem Haushalt: der Haushaltstopf merkt sich den Zeitpunkt
+-- (`pot_participants.left_at`), damit frühere Ausgaben „ganze Gruppe“
+-- bleiben, wie sie sind, und spätere den Ehemaligen nicht mehr treffen.
+-- -----------------------------------------------------------------
+SELECT set_config('role', 'authenticated', true),
+       set_config('request.jwt.claims', '{"sub":"a2000000-0000-0000-0000-0000000000a2","role":"authenticated"}', true);
+
+DELETE FROM household_members WHERE user_id = 'a2000000-0000-0000-0000-0000000000a2';
+
+RESET ROLE;
+
+DO $$
+DECLARE n integer;
+BEGIN
+  SELECT count(*) INTO n FROM pot_participants pp JOIN pots p USING (pot_id)
+  WHERE p.kind = 'household' AND pp.user_id = 'a2000000-0000-0000-0000-0000000000a2'
+    AND pp.left_at IS NOT NULL;
+  IF n <> 1 THEN RAISE EXCEPTION 'FAILED 88: Austritt nicht vermerkt (% Zeilen)', n; END IF;
+  SELECT count(*) INTO n FROM pot_participants pp JOIN pots p USING (pot_id)
+  WHERE p.kind = 'household' AND pp.user_id = 'a0000000-0000-0000-0000-00000000000a'
+    AND pp.left_at IS NOT NULL;
+  IF n <> 0 THEN RAISE EXCEPTION 'FAILED 88: Bleibender als ausgetreten vermerkt'; END IF;
+  SELECT count(*) INTO n FROM pot_participants pp JOIN pots p USING (pot_id)
+  WHERE p.kind = 'event' AND pp.left_at IS NOT NULL;
+  IF n <> 0 THEN RAISE EXCEPTION 'FAILED 88: Austritt in einem Topf für einen Anlass vermerkt'; END IF;
+  RAISE NOTICE 'ok 88: Austritt aus dem Haushalt steht am Teilnehmer des Haushaltstopfs';
+END $$;
+
+-- Rückkehr: derselbe Teilnehmer, wieder ohne Austritt.
+INSERT INTO household_members (user_id, household_id, display_name, user_color)
+VALUES ('a2000000-0000-0000-0000-0000000000a2', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'A2', '#E74C3C');
+
+DO $$
+DECLARE n integer;
+BEGIN
+  SELECT count(*) INTO n FROM pot_participants pp JOIN pots p USING (pot_id)
+  WHERE p.kind = 'household' AND pp.user_id = 'a2000000-0000-0000-0000-0000000000a2'
+    AND pp.left_at IS NULL;
+  IF n <> 1 THEN RAISE EXCEPTION 'FAILED 89: Rückkehrer hat % Teilnehmer ohne Austritt', n; END IF;
+  RAISE NOTICE 'ok 89: Rückkehr in den Haushalt leert den Austritt';
+END $$;
+
+-- Konto gelöscht: die Mitgliedschaft fällt weg, der Teilnehmer bleibt
+-- ohne Konto, mit Austritt.
+INSERT INTO auth.users (id, email) VALUES ('e1000000-0000-0000-0000-0000000000e1', 'e1@test.invalid');
+INSERT INTO household_members (user_id, household_id, display_name, user_color)
+VALUES ('e1000000-0000-0000-0000-0000000000e1', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'Ella', '#4A90E2');
+DELETE FROM auth.users WHERE id = 'e1000000-0000-0000-0000-0000000000e1';
+
+DO $$
+DECLARE n integer;
+BEGIN
+  SELECT count(*) INTO n FROM pot_participants pp JOIN pots p USING (pot_id)
+  WHERE p.kind = 'household' AND p.household_id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'
+    AND pp.name = 'Ella' AND pp.user_id IS NULL AND pp.left_at IS NOT NULL;
+  IF n <> 1 THEN RAISE EXCEPTION 'FAILED 90: gelöschtes Konto ohne Austritt (% Zeilen)', n; END IF;
+  RAISE NOTICE 'ok 90: gelöschtes Konto gilt im Haushaltstopf als ausgetreten';
+END $$;
+
+-- Den Austritt setzt nur die Datenbank: ein Client kann ihn beim Anlegen
+-- nicht mitschicken.
+SELECT set_config('role', 'authenticated', true),
+       set_config('request.jwt.claims', '{"sub":"a0000000-0000-0000-0000-00000000000a","role":"authenticated"}', true);
+
+DO $$
+DECLARE p pot_participants;
+BEGIN
+  INSERT INTO pot_participants (pot_id, household_id, name, left_at)
+  SELECT pot_id, household_id, 'Schon weg', now() FROM pots
+  WHERE household_id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa' AND kind = 'event' AND closed_at IS NULL
+  LIMIT 1
+  RETURNING * INTO p;
+  IF p.participant_id IS NULL THEN RAISE EXCEPTION 'FAILED 91: kein offener Topf für den Test'; END IF;
+  IF p.left_at IS NOT NULL THEN RAISE EXCEPTION 'FAILED 91: Client setzt den Austritt'; END IF;
+  RAISE NOTICE 'ok 91: neue Teilnehmer beginnen ohne Austritt';
 END $$;
 
 RESET ROLE;

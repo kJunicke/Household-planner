@@ -36,8 +36,9 @@ await authStore.initializeAuth()
 
 const householdStore = useHouseholdStore()
 
-// Load household after auth is initialized
-if (authStore.user) {
+// Load household after auth is initialized. Ein Gast hat keinen; den Rahmen
+// seiner geteilten Liste setzt die Gastansicht nach dem Einlösen.
+if (authStore.user && !authStore.isGuest) {
   await householdStore.loadUserHousehold()
 }
 
@@ -63,7 +64,9 @@ watch(
     }
     if (previousUserId !== null) {
       await householdStore.loadUserHousehold()
-      await router.replace('/')
+      // `force`: stand man schon auf `/`, liefe der Guard sonst nicht, und ein
+      // Konto ohne Haushalt bliebe vor der leeren Wand statt in der Einrichtung.
+      await router.replace({ path: '/', force: true })
     }
   },
 )

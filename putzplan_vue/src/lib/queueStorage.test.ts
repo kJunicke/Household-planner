@@ -4,6 +4,7 @@ import type { PendingMutation } from '@/types/PendingMutation'
 
 import {
   adoptLegacyQueue,
+  isGuestOwner,
   legacyListsBelong,
   ownedKey,
   queueOwner,
@@ -165,5 +166,37 @@ describe('Altbestand nur in den eigenen Haushalt', () => {
     expect(legacyListsBelong([mutation('u1')], own)).toBe(true)
     expect(legacyListsBelong([create('c1', 'list2'), mutation('u1')], own)).toBe(true)
     expect(legacyListsBelong([create('c1', 'x')], own)).toBe(false)
+  })
+})
+
+describe('Gäste: keine Offline-Warteschlange', () => {
+  const G = queueOwner('anon1', 'house1', true)!
+
+  it('bekommen einen eigenen, als Gast erkennbaren Besitzer', () => {
+    expect(G).toBe('guest:anon1:house1')
+    expect(isGuestOwner(G)).toBe(true)
+    expect(isGuestOwner(A)).toBe(false)
+    expect(isGuestOwner(null)).toBe(false)
+    expect(queueOwner('anon1', null, true)).toBeNull()
+  })
+
+  it('speichern nie etwas', () => {
+    const s = fakeStorage()
+    writeOwnedQueue(s, BASE, G, [mutation('g1')])
+    expect(s.data.size).toBe(0)
+  })
+
+  it('lesen nichts und räumen einen alten Rest weg', () => {
+    const s = fakeStorage({ [ownedKey(BASE, G)]: JSON.stringify([mutation('g1')]) })
+    expect(readOwnedQueue(s, BASE, G)).toEqual([])
+    expect(s.data.size).toBe(0)
+  })
+
+  it('übernehmen keinen Altbestand', () => {
+    const legacy = JSON.stringify([mutation('old')])
+    const s = fakeStorage({ [BASE]: legacy })
+    expect(readOwnedQueue(s, BASE, G, () => true)).toEqual([])
+    expect(adoptLegacyQueue(s, BASE, G, () => true)).toEqual([])
+    expect(s.data.get(BASE)).toBe(legacy)
   })
 })

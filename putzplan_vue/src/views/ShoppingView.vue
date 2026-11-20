@@ -18,8 +18,18 @@ import CategoryEditModal from '@/components/CategoryEditModal.vue'
 import CategoryCombobox from '@/components/CategoryCombobox.vue'
 import LongSheet from '@/components/LongSheet.vue'
 import { SHOPPING_ITEM_NAME_MAX_LENGTH } from '@/lib/limits'
+import { useGuestShareStore } from '@/stores/guestShareStore'
+
+const props = defineProps<{
+  /**
+   * Gastansicht (CONTEXT.md § Gast): nur die geteilte Liste — kein Bearbeiten
+   * oder Anlegen von Listen.
+   */
+  guest?: boolean
+}>()
 
 const shoppingStore = useShoppingStore()
+const guestShareStore = useGuestShareStore()
 const householdStore = useHouseholdStore()
 const { isOnline } = useNetworkStatus()
 
@@ -540,6 +550,7 @@ onMounted(async () => {
   await shoppingStore.loadItems()
   await shoppingStore.loadCategories()
   shoppingStore.subscribeToItems()
+  if (!props.guest) void guestShareStore.load()
 })
 
 onUnmounted(() => {
@@ -566,8 +577,14 @@ onUnmounted(() => {
                 :class="['list-chip', shoppingStore.currentListId === list.list_id && 'active']"
                 @click="shoppingStore.currentListId = list.list_id"
               >
+                <i
+                  v-if="!guest && guestShareStore.shareFor('shopping_list', list.list_id)"
+                  class="bi bi-link-45deg chip-shared"
+                  title="Per Gastlink geteilt"
+                ></i>
                 <span>{{ list.name }}</span>
                 <button
+                  v-if="!guest"
                   class="chip-edit-btn"
                   @click.stop="openEditModal(list)"
                   :title="`'${list.name}' bearbeiten`"
@@ -576,6 +593,7 @@ onUnmounted(() => {
                 </button>
               </button>
               <button
+                v-if="!guest"
                 class="list-chip add-chip"
                 @click="showCreateListModal = true"
                 title="Neue Liste erstellen"
@@ -960,6 +978,7 @@ onUnmounted(() => {
   <ListEditModal
     v-if="showListEditModal && editingList"
     :list="editingList"
+    share-kind="shopping_list"
     @rename="handleRenameList"
     @delete="handleDeleteList"
     @close="closeListEditModal"
@@ -1070,6 +1089,11 @@ onUnmounted(() => {
 }
 .chip-edit-btn:hover {
   opacity: 1;
+}
+.chip-shared {
+  margin-right: 2px;
+  font-size: 0.8rem;
+  opacity: 0.7;
 }
 
 /* ---- Top add-bar ---- */

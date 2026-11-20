@@ -143,6 +143,12 @@ export interface QueuePassIO {
   now?: () => number
   /** true = sofort aufhören (z. B. die Sitzung hat gewechselt). */
   shouldStop?: () => boolean
+  /**
+   * Direkt schreiben statt warten (Gäste, CONTEXT.md § Gast): jeder Fehlschlag,
+   * auch ein Netzfehler, verwirft die Mutation sofort. Nichts wartet auf
+   * später, nichts spielt nach einem Wiederverbinden noch einmal ab.
+   */
+  direct?: boolean
 }
 
 export interface QueuePassResult {
@@ -180,7 +186,8 @@ export async function runQueuePass(io: QueuePassIO): Promise<QueuePassResult> {
       done = await io.process(m)
     } catch (error) {
       m.lastError = describeError(error)
-      const j = judgeFailure(m, error, now(), io.maxRetries)
+      const judged = judgeFailure(m, error, now(), io.maxRetries)
+      const j = io.direct ? { ...judged, verdict: 'discard' as const, serverNotice: false } : judged
       m.retries = j.retries
       m.lastFailedAt = j.lastFailedAt
       m.serverRetries = j.serverRetries
