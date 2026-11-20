@@ -2,7 +2,7 @@
 import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { usePotStore } from '@/stores/potStore'
-import { participantNameProblem } from '@/lib/potRules'
+import { participantNameProblem, potTitle } from '@/lib/potRules'
 import { POT_PARTICIPANT_NAME_MAX_LENGTH } from '@/lib/limits'
 import { formatCents, suggestTransfers } from '@/lib/potLedger'
 import { entryChangeLine } from '@/lib/potEntryChange'
@@ -26,7 +26,7 @@ const router = useRouter()
 const showCreateModal = ref(false)
 const editingExpense = ref<PotExpense | null>(null)
 
-const title = computed(() => (props.pot.kind === 'household' ? 'Haushaltstopf' : props.pot.name))
+const title = computed(() => potTitle(props.pot))
 
 const balanceRows = computed(() => {
   const balances = potStore.balancesOf(props.pot.pot_id)
