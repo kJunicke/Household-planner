@@ -7,7 +7,7 @@ import { defineConfig, type Plugin } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import vueDevTools from 'vite-plugin-vue-devtools'
 import { VitePWA } from 'vite-plugin-pwa'
-import { devLoginsFromFiles } from './src/lib/devLogins'
+import { devLoginsFromFiles, isDevLoginFile } from './src/lib/devLogins'
 
 /**
  * Die Kennung des ausgelieferten Standes — zur Anzeige in den Einstellungen.
@@ -104,10 +104,13 @@ function devLogins(): Plugin {
   function readFiles() {
     if (!dir) return []
     try {
-      return readdirSync(dir).map((name) => {
-        const path = join(dir, name)
-        return { name, path, text: readFileSync(path, 'utf-8') }
-      })
+      // Nur `qc-login*.env`: die übrigen Geheimnisse im Ordner bleiben ungelesen.
+      return readdirSync(dir)
+        .filter(isDevLoginFile)
+        .map((name) => {
+          const path = join(dir, name)
+          return { name, path, text: readFileSync(path, 'utf-8') }
+        })
     } catch {
       return []
     }
