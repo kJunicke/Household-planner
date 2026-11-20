@@ -8,6 +8,9 @@ import {
   suggestTransfers,
   type LedgerExpense,
   type LedgerRepayment,
+  type GroupParticipant,
+  wholeGroupCarriers,
+  pendingWholeGroupJoins,
 } from './potLedger'
 
 // Teilnehmer in fester Reihenfolge des Topfs (Anlage, dann Kennung).
@@ -472,5 +475,118 @@ describe('formatCents', () => {
     expect(formatCents(1234)).toBe('12,34 €')
     expect(formatCents(5)).toBe('0,05 €')
     expect(formatCents(0)).toBe('0,00 €')
+  })
+})
+
+// Ganze Gruppe: Anna und Ben sind seit Anfang dabei, Cleo kommt am 10. dazu.
+const group = (cleo: Partial<GroupParticipant> = {}): GroupParticipant[] => [
+  { id: 'anna', joinedAt: '2026-11-01T10:00:00Z', decision: null },
+  { id: 'ben', joinedAt: '2026-11-01T10:00:00Z', decision: null },
+  { id: 'cleo', joinedAt: '2026-11-10T10:00:00Z', decision: null, ...cleo },
+]
+
+describe('wholeGroupCarriers', () => {
+  it('zählt einen später Beigetretenen bei früheren Ausgaben erst nach Bestätigung', () => {
+    expect(wholeGroupCarriers('2026-11-05T12:00:00Z', group())).toEqual(['anna', 'ben'])
+    expect(wholeGroupCarriers('2026-11-05T12:00:00Z', group({ decision: 'confirmed' }))).toEqual([
+      'anna',
+      'ben',
+      'cleo',
+    ])
+  })
+
+  it('lässt einen Abgelehnten bei früheren Ausgaben für immer heraus', () => {
+    expect(wholeGroupCarriers('2026-11-05T12:00:00Z', group({ decision: 'rejected' }))).toEqual([
+      'anna',
+      'ben',
+    ])
+  })
+
+  it('zählt jeden bei Ausgaben, die nach seinem Beitritt angelegt wurden — auch abgelehnt', () => {
+    expect(wholeGroupCarriers('2026-11-12T12:00:00Z', group())).toEqual(['anna', 'ben', 'cleo'])
+    expect(wholeGroupCarriers('2026-11-12T12:00:00Z', group({ decision: 'rejected' }))).toEqual([
+      'anna',
+      'ben',
+      'cleo',
+    ])
+  })
+})
+
+describe('potBalances — ganze Gruppe', () => {
+  // Anna zahlt am 5. für die ganze Gruppe 90 €, Cleo kommt am 10. dazu.
+  const deposit = (cleo: Partial<GroupParticipant>): LedgerExpense => ({
+    payerId: 'anna',
+    amountCents: 9000,
+    split: {
+      kind: 'whole_group',
+      participantIds: wholeGroupCarriers('2026-11-05T12:00:00Z', group(cleo)),
+    },
+  })
+
+  it('ändert die Salden erst, wenn der Neue bestätigt ist', () => {
+    const before = potBalances(participants, [deposit({})], [])
+    expect(before).toEqual(
+      new Map([
+        ['anna', 4500],
+        ['ben', -4500],
+        ['cleo', 0],
+      ]),
+    )
+    const after = potBalances(participants, [deposit({ decision: 'confirmed' })], [])
+    expect(after).toEqual(
+      new Map([
+        ['anna', 6000],
+        ['ben', -3000],
+        ['cleo', -3000],
+      ]),
+    )
+  })
+
+  it('lässt die Salden nach einer Ablehnung, wie sie sind', () => {
+    expect(potBalances(participants, [deposit({ decision: 'rejected' })], [])).toEqual(
+      potBalances(participants, [deposit({})], []),
+    )
+  })
+})
+
+describe('splitValidity — ganze Gruppe', () => {
+  it('ist ungültig, wenn niemand aus der Gruppe trägt', () => {
+    expect(
+      splitValidity(
+        { amountCents: 100, split: { kind: 'whole_group', participantIds: [] } },
+        participants,
+      ),
+    ).toEqual({ valid: false, reason: 'nobody' })
+  })
+})
+
+describe('pendingWholeGroupJoins', () => {
+  // Anzahlung am 5. (vor Cleo), Grillen am 12. (nach Cleo), beide ganze Gruppe.
+  const expenses = [
+    { id: 'anzahlung', createdAt: '2026-11-05T12:00:00Z', payerId: 'anna', amountCents: 9000 },
+    { id: 'grillen', createdAt: '2026-11-12T12:00:00Z', payerId: 'ben', amountCents: 3000 },
+  ]
+
+  it('meldet den Neuen mit den früheren Ausgaben und dem, was er davon tragen würde', () => {
+    expect(pendingWholeGroupJoins(group(), expenses, participants)).toEqual([
+      {
+        participantId: 'cleo',
+        shares: [{ expenseId: 'anzahlung', cents: 3000 }],
+        totalCents: 3000,
+      },
+    ])
+  })
+
+  it('meldet nichts mehr nach Bestätigung oder Ablehnung', () => {
+    expect(
+      pendingWholeGroupJoins(group({ decision: 'confirmed' }), expenses, participants),
+    ).toEqual([])
+    expect(pendingWholeGroupJoins(group({ decision: 'rejected' }), expenses, participants)).toEqual(
+      [],
+    )
+  })
+
+  it('meldet nichts, wenn es vor dem Beitritt keine Ausgabe „ganze Gruppe“ gab', () => {
+    expect(pendingWholeGroupJoins(group(), expenses.slice(1), participants)).toEqual([])
   })
 })

@@ -12,13 +12,15 @@ import { formatEuroInput } from './settlementAmount'
 /**
  * Aufteilung einer Ausgabe, so wie sie gespeichert ist (Rohwerte, keine Euro).
  * `equal`: gleich auf die gewählten Teilnehmer — „gleich auf alle“ wählt alle.
+ * `whole_group`: gleich auf die ganze Gruppe; gespeichert wird keine Auswahl,
+ *   die Träger löst `wholeGroupCarriers` je Ausgabe auf.
  * `ratio`: Teilnehmer → Gewicht (2:1 → 2 und 1), bis zwei Nachkommastellen.
  * `percent`: Teilnehmer → Prozent, bis zwei Nachkommastellen; gültig bei 100.
  * `exact`: Teilnehmer → Cent; gültig, wenn die Summe der Betrag ist.
  * Teilnehmer mit 0 oder ohne Eintrag tragen nichts.
  */
 export type ExpenseSplit =
-  | { kind: 'equal'; participantIds: readonly string[] }
+  | { kind: 'equal' | 'whole_group'; participantIds: readonly string[] }
   | { kind: 'ratio' | 'percent' | 'exact'; values: Readonly<Record<string, number>> }
 
 export interface LedgerExpense {
@@ -35,6 +37,83 @@ export interface LedgerRepayment {
 }
 
 /**
+ * Ein Teilnehmer, wie die ganze Gruppe ihn sieht (CONTEXT.md § ganze Gruppe).
+ * `joinedAt`: Beitritt (Anlage des Teilnehmers), ISO-Zeit. `decision`: was ein
+ * Haushaltsmitglied entschieden hat — ob er auch die Ausgaben „ganze Gruppe“
+ * mitträgt, die schon vor seinem Beitritt angelegt waren; `null` = offen.
+ */
+export interface GroupParticipant {
+  id: string
+  joinedAt: string
+  decision: 'confirmed' | 'rejected' | null
+}
+
+/**
+ * Wer eine Ausgabe „ganze Gruppe“ trägt, in der Reihenfolge von `group`: wer
+ * beim Anlegen der Ausgabe schon dabei war, und wer später dazukam, sobald
+ * seine Aufnahme bestätigt ist. Offen oder abgelehnt trägt der Neue nur, was
+ * nach seinem Beitritt angelegt wurde. `group` enthält nur, wer heute
+ * teilnimmt (im Haushaltstopf: die heutigen Mitglieder).
+ */
+export function wholeGroupCarriers(
+  expenseCreatedAt: string,
+  group: readonly GroupParticipant[],
+): string[] {
+  const created = Date.parse(expenseCreatedAt)
+  return group
+    .filter((p) => p.decision === 'confirmed' || Date.parse(p.joinedAt) <= created)
+    .map((p) => p.id)
+}
+
+/** Eine Ausgabe „ganze Gruppe“ mit dem, was die Meldung über sie braucht. */
+interface WholeGroupExpense {
+  id: string
+  createdAt: string
+  payerId: string
+  amountCents: number
+}
+
+/** Ein Neuer, über dessen Aufnahme ein Haushaltsmitglied entscheiden soll. */
+export interface PendingJoin {
+  participantId: string
+  /** Die früheren Ausgaben „ganze Gruppe“ und sein Anteil daran nach Bestätigung. */
+  shares: { expenseId: string; cents: number }[]
+  totalCents: number
+}
+
+/**
+ * Die Meldung zur ganzen Gruppe: jeder Neue ohne Entscheidung, für den es
+ * Ausgaben „ganze Gruppe“ von vor seinem Beitritt gibt, mit seinem Anteil an
+ * jeder — so viel, wie er nach einer Bestätigung trüge. Reihenfolge wie `group`.
+ */
+export function pendingWholeGroupJoins(
+  group: readonly GroupParticipant[],
+  wholeGroupExpenses: readonly WholeGroupExpense[],
+  participantOrder: readonly string[],
+): PendingJoin[] {
+  return group
+    .filter((p) => p.decision === null)
+    .map((p): PendingJoin => {
+      const shares = wholeGroupExpenses
+        .filter((e) => Date.parse(e.createdAt) < Date.parse(p.joinedAt))
+        .map((e) => {
+          const carriers = [...wholeGroupCarriers(e.createdAt, group), p.id]
+          const cents = expenseShares(
+            { ...e, split: { kind: 'whole_group', participantIds: carriers } },
+            participantOrder,
+          ).get(p.id)
+          return { expenseId: e.id, cents: cents ?? 0 }
+        })
+      return {
+        participantId: p.id,
+        shares,
+        totalCents: shares.reduce((sum, s) => sum + s.cents, 0),
+      }
+    })
+    .filter((join) => join.shares.length > 0)
+}
+
+/**
  * Ganzzahlige Gewichte je Teilnehmer in Topf-Reihenfolge. Rohwerte mit
  * Nachkommastellen (Verhältnis, Prozent) zählen in Hundertsteln, damit die
  * Rechnung in ganzen Zahlen bleibt. Wer 0 trägt, fällt heraus.
@@ -43,7 +122,7 @@ function splitWeights(
   split: ExpenseSplit,
   participantOrder: readonly string[],
 ): [string, number][] {
-  if (split.kind === 'equal') {
+  if (split.kind === 'equal' || split.kind === 'whole_group') {
     const chosen = new Set(split.participantIds)
     return participantOrder.filter((id) => chosen.has(id)).map((id) => [id, 1])
   }
@@ -102,7 +181,7 @@ export function splitValidity(
   participantOrder: readonly string[],
 ): SplitValidity {
   const { split } = expense
-  if (split.kind !== 'equal') {
+  if ('values' in split) {
     const values = split.values
     if (participantOrder.some((id) => (values[id] ?? 0) < 0)) {
       return { valid: false, reason: 'negative' }
