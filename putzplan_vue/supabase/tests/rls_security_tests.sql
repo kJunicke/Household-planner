@@ -1796,6 +1796,168 @@ BEGIN
   RAISE NOTICE 'ok 65: anon erreicht das Verrechnen nicht';
 END $$;
 
+-- -----------------------------------------------------------------
+-- Ganze Gruppe mit Bestätigung (ab 80). A legt den Topf PG mit A und A2
+-- an; eine Ausgabe „ganze Gruppe“ von gestern steht schon drin. Wer danach
+-- beitritt, kommt unbestätigt hinein; entscheiden dürfen nur Mitglieder des
+-- Haushalts, einmal, solange der Topf offen ist.
+-- -----------------------------------------------------------------
+SELECT set_config('role', 'authenticated', true),
+       set_config('request.jwt.claims', '{"sub":"a0000000-0000-0000-0000-00000000000a","role":"authenticated"}', true);
+
+DO $$
+DECLARE s guest_shares; p pot_participants;
+BEGIN
+  PERFORM create_event_pot('80000000-0000-0000-0000-0000000000a1', 'Ferienhaus PG',
+    ARRAY['a0000000-0000-0000-0000-00000000000a', 'a2000000-0000-0000-0000-0000000000a2']::uuid[], ARRAY[]::text[]);
+  INSERT INTO pot_expenses (pot_id, household_id, payer_participant_id, amount_cents, description,
+                            split_kind, created_at)
+  SELECT pot_id, household_id, participant_id, 9000, 'Anzahlung', 'whole_group', now() - interval '1 day'
+  FROM pot_participants
+  WHERE pot_id = '80000000-0000-0000-0000-0000000000a1' AND user_id = 'a0000000-0000-0000-0000-00000000000a';
+
+  -- Ein Mitglied trägt einen Namen nach, auch mit `confirmed = true`: er
+  -- beginnt trotzdem unbestätigt.
+  INSERT INTO pot_participants (participant_id, pot_id, household_id, name, confirmed)
+  VALUES ('8f000000-0000-0000-0000-0000000000b1', '80000000-0000-0000-0000-0000000000a1',
+          'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'Nachzügler', true);
+  SELECT * INTO p FROM pot_participants WHERE participant_id = '8f000000-0000-0000-0000-0000000000b1';
+  IF p.confirmed OR p.rejected THEN
+    RAISE EXCEPTION 'FAILED 80: nachgetragener Teilnehmer beginnt entschieden: %', p;
+  END IF;
+
+  s := create_guest_share('pot', '80000000-0000-0000-0000-0000000000a1');
+  PERFORM set_config('test.secret_pg', s.secret, true);
+  RAISE NOTICE 'ok 80: von einem Mitglied Nachgetragener beginnt unbestätigt';
+END $$;
+
+-- Gast H tritt über „Ich bin neu“ bei und versucht, über sich selbst und den
+-- Nachzügler zu entscheiden.
+RESET ROLE;
+INSERT INTO auth.users (id, is_anonymous) VALUES ('e8000000-0000-0000-0000-0000000000e8', true);
+SELECT set_config('role', 'authenticated', true),
+       set_config('request.jwt.claims', '{"sub":"e8000000-0000-0000-0000-0000000000e8","role":"authenticated","is_anonymous":true}', true);
+
+DO $$
+DECLARE p pot_participants; n integer;
+BEGIN
+  PERFORM redeem_guest_link(current_setting('test.secret_pg'));
+  p := join_pot_as_guest('80000000-0000-0000-0000-0000000000a1', 'Hanna');
+  IF p.confirmed OR p.rejected THEN
+    RAISE EXCEPTION 'FAILED 81: Gast beginnt entschieden: %', p;
+  END IF;
+  PERFORM set_config('test.hanna', p.participant_id::text, true);
+  RAISE NOTICE 'ok 81: Gast über Ich bin neu beginnt unbestätigt';
+
+  BEGIN
+    PERFORM decide_whole_group_join(p.participant_id, true);
+    RAISE EXCEPTION 'FAILED 82: Gast bestätigt sich selbst';
+  EXCEPTION WHEN insufficient_privilege THEN
+    IF SQLERRM <> 'anonymous_not_allowed' THEN RAISE EXCEPTION 'FAILED 82: Meldung %', SQLERRM; END IF;
+  END;
+  BEGIN
+    PERFORM decide_whole_group_join('8f000000-0000-0000-0000-0000000000b1', false);
+    RAISE EXCEPTION 'FAILED 82: Gast lehnt einen anderen ab';
+  EXCEPTION WHEN insufficient_privilege THEN NULL;
+  END;
+  BEGIN
+    UPDATE pot_participants SET confirmed = true WHERE pot_id = '80000000-0000-0000-0000-0000000000a1';
+    GET DIAGNOSTICS n = ROW_COUNT;
+    IF n <> 0 THEN RAISE EXCEPTION 'FAILED 82: Gast bestätigt % Teilnehmer direkt', n; END IF;
+  EXCEPTION WHEN insufficient_privilege THEN NULL;
+  END;
+END $$;
+
+RESET ROLE;
+
+DO $$
+DECLARE n integer;
+BEGIN
+  SELECT count(*) INTO n FROM pot_participants
+  WHERE pot_id = '80000000-0000-0000-0000-0000000000a1' AND user_id IS NULL AND (confirmed OR rejected);
+  IF n <> 0 THEN RAISE EXCEPTION 'FAILED 82: % Nachzügler nach Gast-Versuchen entschieden', n; END IF;
+  RAISE NOTICE 'ok 82: Gast kann nicht bestätigen und nicht ablehnen';
+END $$;
+
+-- B (fremder Haushalt) entscheidet nicht über Teilnehmer aus HA.
+SELECT set_config('role', 'authenticated', true),
+       set_config('request.jwt.claims', '{"sub":"b0000000-0000-0000-0000-00000000000b","role":"authenticated"}', true);
+
+DO $$
+BEGIN
+  BEGIN
+    PERFORM decide_whole_group_join(current_setting('test.hanna')::uuid, true);
+    RAISE EXCEPTION 'FAILED 83: B bestätigt einen Teilnehmer aus HA';
+  EXCEPTION WHEN raise_exception THEN
+    IF SQLERRM <> 'participant_not_found' THEN RAISE EXCEPTION 'FAILED 83: Meldung %', SQLERRM; END IF;
+  END;
+  RAISE NOTICE 'ok 83: kein Entscheiden im fremden Haushalt';
+END $$;
+
+-- A bestätigt Hanna, A2 lehnt den Nachzügler ab; die Entscheidung bleibt.
+SELECT set_config('request.jwt.claims', '{"sub":"a0000000-0000-0000-0000-00000000000a","role":"authenticated"}', true);
+
+DO $$
+DECLARE p pot_participants;
+BEGIN
+  p := decide_whole_group_join(current_setting('test.hanna')::uuid, true);
+  IF NOT p.confirmed OR p.rejected THEN RAISE EXCEPTION 'FAILED 84: Bestätigen ergibt %', p; END IF;
+  -- Dieselbe Entscheidung noch einmal (zweites Gerät) ist kein Fehler.
+  p := decide_whole_group_join(current_setting('test.hanna')::uuid, true);
+  BEGIN
+    PERFORM decide_whole_group_join(current_setting('test.hanna')::uuid, false);
+    RAISE EXCEPTION 'FAILED 84: Bestätigung nachträglich abgelehnt';
+  EXCEPTION WHEN raise_exception THEN
+    IF SQLERRM <> 'already_decided' THEN RAISE EXCEPTION 'FAILED 84: Meldung %', SQLERRM; END IF;
+  END;
+END $$;
+
+SELECT set_config('request.jwt.claims', '{"sub":"a2000000-0000-0000-0000-0000000000a2","role":"authenticated"}', true);
+
+DO $$
+DECLARE p pot_participants;
+BEGIN
+  p := decide_whole_group_join('8f000000-0000-0000-0000-0000000000b1', false);
+  IF p.confirmed OR NOT p.rejected THEN RAISE EXCEPTION 'FAILED 84: Ablehnen ergibt %', p; END IF;
+  BEGIN
+    PERFORM decide_whole_group_join('8f000000-0000-0000-0000-0000000000b1', true);
+    RAISE EXCEPTION 'FAILED 84: Ablehnung nachträglich bestätigt';
+  EXCEPTION WHEN raise_exception THEN
+    IF SQLERRM <> 'already_decided' THEN RAISE EXCEPTION 'FAILED 84: Meldung %', SQLERRM; END IF;
+  END;
+  RAISE NOTICE 'ok 84: Mitglieder bestätigen und lehnen ab, einmal und endgültig';
+END $$;
+
+-- Abgeschlossener Topf: nichts mehr zu entscheiden.
+DO $$
+DECLARE p pot_participants;
+BEGIN
+  INSERT INTO pot_participants (pot_id, household_id, name)
+  VALUES ('80000000-0000-0000-0000-0000000000a1', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'Spät')
+  RETURNING * INTO p;
+  UPDATE pots SET closed_at = now() WHERE pot_id = '80000000-0000-0000-0000-0000000000a1';
+  BEGIN
+    PERFORM decide_whole_group_join(p.participant_id, true);
+    RAISE EXCEPTION 'FAILED 85: Entscheidung im abgeschlossenen Topf';
+  EXCEPTION WHEN raise_exception THEN
+    IF SQLERRM <> 'pot_closed' THEN RAISE EXCEPTION 'FAILED 85: Meldung %', SQLERRM; END IF;
+  END;
+  RAISE NOTICE 'ok 85: abgeschlossener Topf nimmt keine Entscheidung an';
+END $$;
+
+SELECT set_config('role', 'anon', true),
+       set_config('request.jwt.claims', '{"role":"anon"}', true);
+
+DO $$
+BEGIN
+  BEGIN
+    PERFORM decide_whole_group_join(current_setting('test.hanna')::uuid, true);
+    RAISE EXCEPTION 'FAILED 86: anon entscheidet';
+  EXCEPTION WHEN insufficient_privilege THEN NULL;
+  END;
+  RAISE NOTICE 'ok 86: anon erreicht das Entscheiden nicht';
+END $$;
+
 RESET ROLE;
 
 ROLLBACK;

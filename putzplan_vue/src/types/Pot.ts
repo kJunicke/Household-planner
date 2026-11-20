@@ -20,16 +20,20 @@ export interface PotParticipant {
   name: string
   /** Das Haushaltsmitglied hinter dem Teilnehmer; `null` bei Gästen. */
   user_id: string | null
-  /** Zählt bei Ausgaben auf die ganze Gruppe mit. */
+  /**
+   * Ganze Gruppe (CONTEXT.md § ganze Gruppe): ein Haushaltsmitglied hat
+   * bestätigt, dass er auch die Ausgaben „ganze Gruppe“ von vor seinem
+   * Beitritt mitträgt (`confirmed`), oder das abgelehnt (`rejected`). Beide
+   * falsch: noch offen. Migration 20261120114704.
+   */
   confirmed: boolean
+  rejected: boolean
   created_at: string
 }
 
 /**
  * Ausgabe (→ CONTEXT.md § Ausgabe) mit den Rohwerten ihrer Aufteilung:
- * `split_values` bildet Teilnehmer-Kennungen auf Rohwerte ab. Die Datenbank
- * kennt zusätzlich die ganze Gruppe; der Client führt hier nur die Arten, die
- * er rechnen kann.
+ * `split_values` bildet Teilnehmer-Kennungen auf Rohwerte ab.
  */
 export interface PotExpense {
   expense_id: string
@@ -42,9 +46,10 @@ export interface PotExpense {
   description: string
   /**
    * `equal`: gleich auf die Teilnehmer in `split_values` (Wert 1);
+   * `whole_group`: gleich auf die ganze Gruppe, `split_values` leer;
    * `ratio`: Gewicht, `percent`: Prozent, `exact`: Cent je Teilnehmer.
    */
-  split_kind: 'equal' | 'ratio' | 'percent' | 'exact'
+  split_kind: 'equal' | 'whole_group' | 'ratio' | 'percent' | 'exact'
   split_values: Record<string, number>
   updated_by_participant_id: string | null
   created_at: string

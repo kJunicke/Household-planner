@@ -5,7 +5,16 @@ import type { Pot, PotExpense, PotParticipant, PotRepayment } from '@/types/Pot'
 import { supabase } from '@/lib/supabase'
 import { onSessionEnd } from '@/lib/sessionEnd'
 import { isInFlight, runOptimistic } from '@/lib/optimistic'
-import { expenseShares, potBalances, type ExpenseSplit, type LedgerExpense } from '@/lib/potLedger'
+import {
+  expenseShares,
+  pendingWholeGroupJoins,
+  potBalances,
+  wholeGroupCarriers,
+  type ExpenseSplit,
+  type GroupParticipant,
+  type LedgerExpense,
+  type PendingJoin,
+} from '@/lib/potLedger'
 import { currentParticipants } from '@/lib/potRules'
 import { rememberGuestParticipant, rememberedGuestParticipant } from '@/lib/guestIdentity'
 import { useAuthStore } from './authStore'
@@ -88,20 +97,63 @@ export const usePotStore = defineStore('pot', () => {
           b.paid_on.localeCompare(a.paid_on) || Date.parse(b.created_at) - Date.parse(a.created_at),
       )
 
+  /**
+   * Die ganze Gruppe eines Topfs (CONTEXT.md § ganze Gruppe): wer heute
+   * teilnimmt, mit Beitritt und Entscheidung über frühere Ausgaben.
+   */
+  const groupOf = (potId: string): GroupParticipant[] =>
+    currentParticipantsOf(potId).map((p) => ({
+      id: p.participant_id,
+      joinedAt: p.created_at,
+      decision: p.confirmed ? 'confirmed' : p.rejected ? 'rejected' : null,
+    }))
+
+  /**
+   * Wer eine Ausgabe „ganze Gruppe“ trägt, die zu `createdAt` angelegt wurde
+   * bzw. wird: alle, die da schon dabei waren, und bestätigte Nachzügler.
+   */
+  const wholeGroupCarriersAt = (potId: string, createdAt: string): string[] =>
+    wholeGroupCarriers(createdAt, groupOf(potId))
+
   const toLedgerExpense = (e: PotExpense): LedgerExpense => ({
     payerId: e.payer_participant_id,
     amountCents: e.amount_cents,
     split:
       e.split_kind === 'equal'
         ? { kind: 'equal', participantIds: Object.keys(e.split_values) }
-        : { kind: e.split_kind, values: e.split_values },
+        : e.split_kind === 'whole_group'
+          ? { kind: 'whole_group', participantIds: wholeGroupCarriersAt(e.pot_id, e.created_at) }
+          : { kind: e.split_kind, values: e.split_values },
   })
 
-  /** Rohwerte fürs Speichern: wer nichts trägt, steht nicht drin. */
+  /**
+   * Rohwerte fürs Speichern: wer nichts trägt, steht nicht drin. Die ganze
+   * Gruppe speichert keine Auswahl — wer trägt, ergibt sich beim Rechnen.
+   */
   const toSplitValues = (split: ExpenseSplit): Record<string, number> =>
-    split.kind === 'equal'
-      ? Object.fromEntries(split.participantIds.map((id) => [id, 1]))
-      : Object.fromEntries(Object.entries(split.values).filter(([, v]) => v > 0))
+    split.kind === 'whole_group'
+      ? {}
+      : split.kind === 'equal'
+        ? Object.fromEntries(split.participantIds.map((id) => [id, 1]))
+        : Object.fromEntries(Object.entries(split.values).filter(([, v]) => v > 0))
+
+  /**
+   * Die Meldung zur ganzen Gruppe: Nachzügler, über deren Aufnahme in frühere
+   * Ausgaben „ganze Gruppe“ noch niemand entschieden hat, mit Beträgen.
+   */
+  const pendingJoinsOf = (potId: string): PendingJoin[] =>
+    pendingWholeGroupJoins(
+      groupOf(potId),
+      expenses.value
+        .filter((e) => e.pot_id === potId && e.split_kind === 'whole_group')
+        .map((e) => ({
+          id: e.expense_id,
+          createdAt: e.created_at,
+          payerId: e.payer_participant_id,
+          amountCents: e.amount_cents,
+        })),
+      participantsOf(potId).map((p) => p.participant_id),
+    )
 
   /** Euro je Person einer Ausgabe in Cent, in Topf-Reihenfolge. */
   const sharesOf = (e: PotExpense): Map<string, number> =>
@@ -681,7 +733,9 @@ export const usePotStore = defineStore('pot', () => {
       household_id: householdId,
       name: name.trim(),
       user_id: null,
-      confirmed: true,
+      // Neue Teilnehmer beginnen offen; die Datenbank erzwingt das ohnehin.
+      confirmed: false,
+      rejected: false,
       created_at: new Date().toISOString(),
     }
     const { applied } = runOptimistic<PotParticipant>({
@@ -710,6 +764,55 @@ export const usePotStore = defineStore('pot', () => {
           duplicate
             ? `${row.name} gibt es in diesem Topf schon`
             : 'Teilnehmer konnte nicht eingetragen werden',
+          'error',
+        )
+      },
+    })
+    return applied
+  }
+
+  /**
+   * Ganze Gruppe: ein Haushaltsmitglied bestätigt (`confirm: true`) oder lehnt
+   * ab, dass ein Nachzügler die früheren Ausgaben „ganze Gruppe“ mitträgt
+   * (RPC `decide_whole_group_join`; Gäste weist die Datenbank ab). Endgültig:
+   * hat ein anderes Gerät schon anders entschieden, gilt dessen Entscheidung.
+   */
+  const decideWholeGroupJoin = (participantId: string, confirm: boolean): boolean => {
+    const toastStore = useToastStore()
+    const findRow = () => participants.value.find((p) => p.participant_id === participantId)
+    if (!findRow()) return false
+    const { applied } = runOptimistic<PotParticipant>({
+      entityId: participantId,
+      apply: () => {
+        const row = findRow()
+        if (!row) return null
+        const before = { ...row }
+        row.confirmed = confirm
+        row.rejected = !confirm
+        return before
+      },
+      commit: async () => {
+        const { data, error } = await supabase.rpc('decide_whole_group_join', {
+          p_participant_id: participantId,
+          p_confirm: confirm,
+        })
+        if (error) throw error
+        const row = findRow()
+        const saved = data as PotParticipant
+        if (row) Object.assign(row, saved)
+      },
+      revert: (before) => {
+        const row = findRow()
+        if (row) Object.assign(row, before)
+      },
+      onError: (error) => {
+        if ((error as { message?: string } | null)?.message === 'already_decided') {
+          toastStore.showToast('Darüber hat schon jemand anders entschieden', 'info')
+          void load()
+          return
+        }
+        toastStore.showToast(
+          confirm ? 'Bestätigen hat nicht geklappt' : 'Ablehnen hat nicht geklappt',
           'error',
         )
       },
@@ -825,6 +928,9 @@ export const usePotStore = defineStore('pot', () => {
     householdPot,
     participantsOf,
     currentParticipantsOf,
+    wholeGroupCarriersAt,
+    pendingJoinsOf,
+    decideWholeGroupJoin,
     expensesOf,
     repaymentsOf,
     balancesOf,
