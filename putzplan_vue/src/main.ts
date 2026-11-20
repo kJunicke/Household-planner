@@ -64,7 +64,9 @@ watch(
     }
     if (previousUserId !== null) {
       await householdStore.loadUserHousehold()
-      await router.replace('/')
+      // `force`: stand man schon auf `/`, liefe der Guard sonst nicht, und ein
+      // Konto ohne Haushalt bliebe vor der leeren Wand statt in der Einrichtung.
+      await router.replace({ path: '/', force: true })
     }
   },
 )
