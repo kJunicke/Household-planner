@@ -144,6 +144,37 @@ export function potBalances(
   return balances
 }
 
+/**
+ * Überweisungsvorschläge (CONTEXT.md § Rückzahlung): wer wem wie viel
+ * überweist, damit alle Salden auf null gehen.
+ *
+ * Immer zahlt der größte Schuldner an den größten Gläubiger, so viel wie
+ * der kleinere der beiden Beträge. Jede Überweisung bringt mindestens einen
+ * Teilnehmer auf null, also sind es höchstens n−1. Bei gleichen Beträgen
+ * entscheidet die Reihenfolge von `balances` (die des Topfs), damit jedes
+ * Gerät dieselben Vorschläge zeigt.
+ */
+export function suggestTransfers(balances: ReadonlyMap<string, number>): LedgerRepayment[] {
+  const open = [...balances].map(([id, cents]) => ({ id, cents })).filter((p) => p.cents !== 0)
+  // Größter Betrag zuerst; bei Gleichstand der Erste in der Reihenfolge.
+  const largest = (sign: 1 | -1) =>
+    open.reduce<{ id: string; cents: number } | null>(
+      (best, p) => (p.cents * sign > 0 && (!best || p.cents * sign > best.cents * sign) ? p : best),
+      null,
+    )
+
+  const transfers: LedgerRepayment[] = []
+  for (;;) {
+    const creditor = largest(1)
+    const debtor = largest(-1)
+    if (!creditor || !debtor) return transfers
+    const amountCents = Math.min(creditor.cents, -debtor.cents)
+    transfers.push({ fromId: debtor.id, toId: creditor.id, amountCents })
+    creditor.cents -= amountCents
+    debtor.cents += amountCents
+  }
+}
+
 /** Cent-Betrag zum Lesen: „12,34 €“. */
 export function formatCents(cents: number): string {
   return `${formatEuroInput(cents / 100)} €`

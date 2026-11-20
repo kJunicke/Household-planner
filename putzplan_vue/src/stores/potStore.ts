@@ -60,6 +60,15 @@ export const usePotStore = defineStore('pot', () => {
           Date.parse(b.created_at) - Date.parse(a.created_at),
       )
 
+  /** Neueste zuerst, wie die Ausgaben. */
+  const repaymentsOf = (potId: string): PotRepayment[] =>
+    repayments.value
+      .filter((r) => r.pot_id === potId)
+      .sort(
+        (a, b) =>
+          b.paid_on.localeCompare(a.paid_on) || Date.parse(b.created_at) - Date.parse(a.created_at),
+      )
+
   const toLedgerExpense = (e: PotExpense): LedgerExpense => ({
     payerId: e.payer_participant_id,
     amountCents: e.amount_cents,
@@ -142,7 +151,10 @@ export const usePotStore = defineStore('pot', () => {
       ...((e.data ?? []) as PotExpense[]).filter((x) => !isInFlight(x.expense_id)),
       ...expenses.value.filter((x) => isInFlight(x.expense_id)),
     ]
-    repayments.value = (r.data ?? []) as PotRepayment[]
+    repayments.value = [
+      ...((r.data ?? []) as PotRepayment[]).filter((x) => !isInFlight(x.repayment_id)),
+      ...repayments.value.filter((x) => isInFlight(x.repayment_id)),
+    ]
     loaded.value = true
   }
 
@@ -289,6 +301,68 @@ export const usePotStore = defineStore('pot', () => {
     return applied
   }
 
+  // ---------------------------------------------------------------
+  // Rückzahlungen
+  // ---------------------------------------------------------------
+
+  /**
+   * Rückzahlung eintragen: `fromId` hat `toId` im Topf `potId` Geld überwiesen.
+   * Frei eingetragen oder aus einem Überweisungsvorschlag; optimistisch mit
+   * Client-ID wie bei Ausgaben.
+   */
+  const createRepayment = (input: {
+    potId: string
+    fromId: string
+    toId: string
+    amountCents: number
+    paidOn: string
+  }): boolean => {
+    const householdId = activeHouseholdId
+    if (!householdId) return false
+    const toastStore = useToastStore()
+    const now = new Date().toISOString()
+    const row: PotRepayment = {
+      repayment_id: crypto.randomUUID(),
+      pot_id: input.potId,
+      household_id: householdId,
+      from_participant_id: input.fromId,
+      to_participant_id: input.toId,
+      amount_cents: input.amountCents,
+      paid_on: input.paidOn,
+      updated_by_participant_id: myParticipantId(input.potId),
+      created_at: now,
+      updated_at: now,
+    }
+
+    const { applied } = runOptimistic<PotRepayment>({
+      entityId: row.repayment_id,
+      apply: () => {
+        repayments.value.push(row)
+        return row
+      },
+      commit: async () => {
+        const { error } = await supabase.from('pot_repayments').insert({
+          repayment_id: row.repayment_id,
+          pot_id: row.pot_id,
+          household_id: row.household_id,
+          from_participant_id: row.from_participant_id,
+          to_participant_id: row.to_participant_id,
+          amount_cents: row.amount_cents,
+          paid_on: row.paid_on,
+          updated_by_participant_id: row.updated_by_participant_id,
+        })
+        if (error) throw error
+      },
+      revert: (snapshot) => {
+        repayments.value = repayments.value.filter((x) => x.repayment_id !== snapshot.repayment_id)
+      },
+      onError: () => {
+        toastStore.showToast('Rückzahlung konnte nicht eingetragen werden', 'error')
+      },
+    })
+    return applied
+  }
+
   watch(
     () => householdStore.currentHousehold?.household_id ?? null,
     (householdId) => {
@@ -309,10 +383,12 @@ export const usePotStore = defineStore('pot', () => {
     householdPot,
     participantsOf,
     expensesOf,
+    repaymentsOf,
     balancesOf,
     sharesOf,
     participantName,
     myParticipantId,
     createExpense,
+    createRepayment,
   }
 })
