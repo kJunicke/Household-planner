@@ -102,6 +102,23 @@ const deletePot = () => {
 const formatClosedAt = (iso: string) =>
   new Date(iso).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' })
 
+// ---------------------------------------------------------------
+// Ganze Gruppe: Nachzügler bestätigen oder ablehnen (nur Mitglieder)
+// ---------------------------------------------------------------
+const pendingJoins = computed(() => {
+  if (!isOpen.value) return []
+  const byId = new Map(potStore.expensesOf(props.pot.pot_id).map((e) => [e.expense_id, e]))
+  return potStore.pendingJoinsOf(props.pot.pot_id).map((join) => ({
+    ...join,
+    name: potStore.participantName(join.participantId),
+    rows: join.shares.map((s) => ({
+      ...s,
+      description: byId.get(s.expenseId)?.description ?? '',
+      amountCents: byId.get(s.expenseId)?.amount_cents ?? 0,
+    })),
+  }))
+})
+
 // Überweisungsvorschläge: wer wem wie viel, damit alle Salden aufgehen.
 const transfers = computed(() => suggestTransfers(potStore.balancesOf(props.pot.pot_id)))
 
@@ -158,6 +175,7 @@ const entries = computed<Entry[]>(() => {
 
 const splitLabel: Record<PotExpense['split_kind'], string> = {
   equal: 'gleich',
+  whole_group: 'ganze Gruppe',
   ratio: 'nach Verhältnis',
   percent: 'nach Prozent',
   exact: 'nach Beträgen',
@@ -243,6 +261,47 @@ const handleDelete = () => {
       <i class="bi bi-lock me-1"></i> Abgeschlossen am {{ formatClosedAt(pot.closed_at) }} —
       schreibgeschützt
     </div>
+
+    <!-- Ganze Gruppe: Meldung, wenn jemand dazugekommen ist -->
+    <section v-if="pendingJoins.length > 0" class="mb-4">
+      <div v-for="join in pendingJoins" :key="join.participantId" class="join-notice">
+        <div class="join-title">
+          <i class="bi bi-person-exclamation me-1"></i>
+          <strong>{{ join.name }}</strong> ist neu in der Gruppe
+        </div>
+        <p class="join-question">
+          Soll {{ join.name }} diese früheren Ausgaben für die ganze Gruppe mittragen?
+        </p>
+        <div v-for="row in join.rows" :key="row.expenseId" class="join-row">
+          <span class="join-expense">
+            {{ row.description }}
+            <span class="text-muted">({{ formatCents(row.amountCents) }})</span>
+          </span>
+          <span class="join-share">{{ formatCents(row.cents) }}</span>
+        </div>
+        <div class="join-row join-total">
+          <span>Zusammen</span>
+          <span>{{ formatCents(join.totalCents) }}</span>
+        </div>
+        <div v-if="!guest" class="join-actions">
+          <button
+            class="btn btn-sm btn-primary"
+            @click="potStore.decideWholeGroupJoin(join.participantId, true)"
+          >
+            <i class="bi bi-check-lg me-1"></i> Bestätigen
+          </button>
+          <button
+            class="btn btn-sm btn-outline-secondary"
+            @click="potStore.decideWholeGroupJoin(join.participantId, false)"
+          >
+            Ablehnen
+          </button>
+        </div>
+        <p v-else class="join-guest-hint">
+          Bestätigen kann nur jemand aus dem Haushalt. Bis dahin bleiben die Salden, wie sie sind.
+        </p>
+      </div>
+    </section>
 
     <!-- Saldo je Person -->
     <section class="mb-4">
@@ -610,6 +669,54 @@ button.expense-item:disabled {
 .repayment-amount {
   font-weight: 500;
   color: var(--color-text-secondary);
+}
+
+.join-notice {
+  padding: var(--spacing-md);
+  background: var(--color-background-elevated);
+  border: 1px solid var(--color-primary);
+  border-radius: var(--radius-lg);
+  margin-bottom: var(--spacing-sm);
+}
+
+.join-question,
+.join-guest-hint {
+  font-size: 0.9rem;
+  margin: 4px 0 var(--spacing-sm);
+}
+
+.join-guest-hint {
+  color: var(--color-text-secondary);
+  margin: var(--spacing-sm) 0 0;
+}
+
+.join-row {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--spacing-sm);
+  font-size: 0.9rem;
+}
+
+.join-expense {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.join-share {
+  white-space: nowrap;
+}
+
+.join-total {
+  font-weight: 600;
+  border-top: 1px solid var(--color-border);
+  margin-top: 4px;
+  padding-top: 4px;
+}
+
+.join-actions {
+  display: flex;
+  gap: var(--spacing-sm);
+  margin-top: var(--spacing-sm);
 }
 
 .transfer-list {

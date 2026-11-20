@@ -20,7 +20,8 @@ import { formatEuroInput } from './settlementAmount'
  * Teilnehmer mit 0 oder ohne Eintrag tragen nichts.
  */
 export type ExpenseSplit =
-  | { kind: 'equal' | 'whole_group'; participantIds: readonly string[] }
+  | { kind: 'equal'; participantIds: readonly string[] }
+  | { kind: 'whole_group'; participantIds: readonly string[] }
   | { kind: 'ratio' | 'percent' | 'exact'; values: Readonly<Record<string, number>> }
 
 export interface LedgerExpense {
