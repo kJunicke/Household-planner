@@ -149,6 +149,8 @@ export const useSettlementStore = defineStore('settlement', () => {
 
     if (!householdStore.currentHousehold || !authStore.user) return null
 
+    if (payload.method === 'pot') return settleWithHouseholdPot(payload)
+
     try {
       const { data, error } = await supabase
         .from('settlements')
@@ -176,6 +178,49 @@ export const useSettlementStore = defineStore('settlement', () => {
     } catch (error) {
       console.error('Error creating settlement:', error)
       toastStore.showToast('Fehler beim Eintragen des Ausgleichs', 'error')
+      return null
+    }
+  }
+
+  /**
+   * Mit dem Haushaltstopf verrechnen (CONTEXT.md § Ausgleich): eine
+   * Datenbank-Funktion legt Ausgleich und Rückzahlung im Haushaltstopf
+   * gemeinsam an oder gar nicht. Die Rückzahlung kommt per Realtime in den
+   * Topf-Store.
+   */
+  const settleWithHouseholdPot = async (payload: {
+    fromUserId: string
+    toUserId: string
+    pointsSettled: number
+    paidEuros?: number
+    description?: string
+    settledAt?: string
+  }) => {
+    const toastStore = useToastStore()
+    const amountCents = Math.round((payload.paidEuros ?? 0) * 100)
+    if (amountCents <= 0) return null
+
+    try {
+      const { data, error } = await supabase.rpc('settle_with_household_pot', {
+        p_from_user_id: payload.fromUserId,
+        p_to_user_id: payload.toUserId,
+        p_points: payload.pointsSettled,
+        p_amount_cents: amountCents,
+        p_description: payload.description?.trim() || null,
+        p_settled_at: payload.settledAt ?? new Date().toISOString(),
+      })
+
+      if (error) throw error
+
+      const row = settlementFromWire(data as Settlement)
+      if (!settlements.value.some((s) => s.settlement_id === row.settlement_id)) {
+        settlements.value.unshift(row)
+      }
+      toastStore.showToast('Mit dem Haushaltstopf verrechnet', 'success', 2000)
+      return row
+    } catch (error) {
+      console.error('Error settling with household pot:', error)
+      toastStore.showToast('Verrechnen fehlgeschlagen — nichts wurde eingetragen', 'error')
       return null
     }
   }

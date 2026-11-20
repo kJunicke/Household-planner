@@ -3,10 +3,13 @@ import { describe, expect, it } from 'vitest'
 import {
   euroAmountFromWire,
   formatEuroInput,
+  householdPotCredit,
   openBalance,
   parseEuroInput,
+  potOffsetPoints,
   suggestEuros,
 } from './settlementAmount'
+import { potBalances } from './potLedger'
 
 describe('suggestEuros', () => {
   it('rechnet Punkte mal Kurs', () => {
@@ -83,5 +86,62 @@ describe('euroAmountFromWire', () => {
 
   it('Unlesbares wird kein Betrag statt NaN', () => {
     expect(euroAmountFromWire('abc')).toBeNull()
+  })
+})
+
+describe('potOffsetPoints', () => {
+  it('nimmt die offene Bilanz, wenn das Guthaben reicht', () => {
+    expect(potOffsetPoints(3, 500, 1)).toBe(3)
+  })
+
+  it('begrenzt auf das Guthaben nach Kurs, abgerundet auf ganze Punkte', () => {
+    expect(potOffsetPoints(10, 500, 1)).toBe(5)
+    expect(potOffsetPoints(10, 581, 0.83)).toBe(7)
+    expect(potOffsetPoints(10, 580, 0.83)).toBe(6)
+  })
+
+  it('ist 0 ohne offene Bilanz oder wenn das Guthaben keinen Punkt deckt', () => {
+    expect(potOffsetPoints(0, 500, 1)).toBe(0)
+    expect(potOffsetPoints(10, 99, 1)).toBe(0)
+    expect(potOffsetPoints(10, -300, 1)).toBe(0)
+  })
+})
+
+describe('householdPotCredit', () => {
+  it('ist das Guthaben von from, soweit to es schuldet', () => {
+    const balances = new Map([
+      ['kim', 500],
+      ['jo', -500],
+    ])
+    expect(householdPotCredit(balances, 'kim', 'jo')).toBe(500)
+    expect(householdPotCredit(balances, 'jo', 'kim')).toBe(0)
+  })
+
+  it('nimmt bei mehr Teilnehmern nur, was to schuldet', () => {
+    const balances = new Map([
+      ['kim', 500],
+      ['jo', -200],
+      ['ali', -300],
+    ])
+    expect(householdPotCredit(balances, 'kim', 'jo')).toBe(200)
+  })
+
+  it('kennt Unbekannte als 0', () => {
+    expect(householdPotCredit(new Map(), 'kim', 'jo')).toBe(0)
+  })
+
+  it('wird von der Rückzahlung to → from gesenkt, die beim Verrechnen entsteht', () => {
+    const order = ['kim', 'jo']
+    const expenses = [
+      {
+        payerId: 'kim',
+        amountCents: 1000,
+        split: { kind: 'equal' as const, participantIds: order },
+      },
+    ]
+    const before = potBalances(order, expenses, [])
+    expect(householdPotCredit(before, 'kim', 'jo')).toBe(500)
+    const after = potBalances(order, expenses, [{ fromId: 'jo', toId: 'kim', amountCents: 300 }])
+    expect(householdPotCredit(after, 'kim', 'jo')).toBe(200)
   })
 })

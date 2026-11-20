@@ -62,6 +62,12 @@ export interface PotRepayment {
   /** 'YYYY-MM-DD' */
   paid_on: string
   updated_by_participant_id: string | null
+  /**
+   * Der Ausgleich, mit dem diese Rückzahlung verrechnet wurde (CONTEXT.md
+   * § Ausgleich). Solche Rückzahlungen ändert und löscht nur ihr Ausgleich;
+   * frisch eingetragene haben das Feld noch nicht.
+   */
+  settlement_id?: string | null
   created_at: string
   updated_at: string
 }
