@@ -3,6 +3,9 @@ import { onMounted, onUnmounted, ref, computed } from 'vue'
 import { useSettlementStore } from '@/stores/settlementStore'
 import { useHouseholdStore } from '@/stores/householdStore'
 import { useAuthStore } from '@/stores/authStore'
+import { usePotStore } from '@/stores/potStore'
+import { useRouter } from 'vue-router'
+import { formatCents } from '@/lib/potLedger'
 import SettlementCreateModal from '@/components/SettlementCreateModal.vue'
 import type { SettlementMethod } from '@/types/Settlement'
 import { formatEuroInput, MAX_EUROS_PER_POINT, parseEuroInput } from '@/lib/settlementAmount'
@@ -10,6 +13,8 @@ import { formatEuroInput, MAX_EUROS_PER_POINT, parseEuroInput } from '@/lib/sett
 const settlementStore = useSettlementStore()
 const householdStore = useHouseholdStore()
 const authStore = useAuthStore()
+const potStore = usePotStore()
+const router = useRouter()
 
 const showCreateModal = ref(false)
 const preselectedFromId = ref<string | undefined>(undefined)
@@ -57,6 +62,22 @@ const saveRate = async () => {
   if (await householdStore.updateEurosPerPoint(rateInput.value)) editingRate.value = false
 }
 
+// Haushaltstopf neben der Bilanz: eigene Zeile in Euro, getrennt von den
+// Bilanz-Karten, die nur Punkte zeigen (CONTEXT.md § Ausgleich).
+const householdPotLine = computed(() => {
+  const pot = potStore.householdPot
+  if (!pot) return null
+  const creditors = [...potStore.balancesOf(pot.pot_id)]
+    .filter(([, cents]) => cents > 0)
+    .sort((a, b) => b[1] - a[1])
+    .map(([id, cents]) => `${potStore.participantName(id)} hat ${formatCents(cents)} gut`)
+  return { potId: pot.pot_id, text: creditors.length ? creditors.join(', ') : 'ausgeglichen' }
+})
+
+const openHouseholdPot = (potId: string) => {
+  void router.push({ name: 'kasse', query: { tab: 'toepfe', topf: potId } })
+}
+
 const formatEuros = (value: number) => `${formatEuroInput(value)} €`
 
 const formatDate = (iso: string) =>
@@ -99,7 +120,7 @@ onUnmounted(() => {
 <template>
   <div class="page-container">
     <div class="container-fluid">
-      <!-- Titel kommt vom Tab darüber (Statistiken/Ausgleich) -->
+      <!-- Titel kommt vom Tab darüber (Statistik/Ausgleich) -->
       <div class="page-header-row">
         <form v-if="editingRate" class="rate-edit" @submit.prevent="saveRate">
           <span>1 Pkt. =</span>
@@ -178,6 +199,20 @@ onUnmounted(() => {
             </div>
           </div>
         </section>
+
+        <!-- Haushaltstopf: springt zum Topf -->
+        <button
+          v-if="householdPotLine"
+          type="button"
+          class="pot-line mb-4"
+          @click="openHouseholdPot(householdPotLine.potId)"
+        >
+          <i class="bi bi-house-heart pot-line-icon"></i>
+          <span class="pot-line-text">
+            <strong>Haushaltstopf:</strong> {{ householdPotLine.text }}
+          </span>
+          <i class="bi bi-chevron-right text-muted"></i>
+        </button>
 
         <!-- Punkte-Übersicht pro User -->
         <section class="mb-4">
@@ -372,6 +407,33 @@ onUnmounted(() => {
   font-weight: 700;
   font-size: 1.1rem;
   flex-shrink: 0;
+}
+
+/* Haushaltstopf-Zeile */
+.pot-line {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  width: 100%;
+  padding: var(--spacing-md);
+  background: var(--color-background-elevated);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+  text-align: left;
+  color: inherit;
+  font-size: 0.9rem;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.pot-line-icon {
+  color: var(--color-primary);
+  font-size: 1.1rem;
+}
+
+.pot-line-text {
+  flex: 1;
+  min-width: 0;
 }
 
 /* Points overview */

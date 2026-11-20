@@ -39,7 +39,7 @@ function calendarDaysBetween(from: Date, to: Date): number {
 
 // Kalendertag als YYYY-MM-DD in lokaler Zeit. Nicht toISOString(): das rechnet
 // nach UTC um und verschiebt in MEZ/MESZ das Datum um einen Tag.
-function toIsoDate(date: Date): string {
+export function toIsoDate(date: Date): string {
   const month = String(date.getMonth() + 1).padStart(2, '0')
   const day = String(date.getDate()).padStart(2, '0')
   return `${date.getFullYear()}-${month}-${day}`
