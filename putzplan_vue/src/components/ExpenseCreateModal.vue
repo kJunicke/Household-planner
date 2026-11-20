@@ -24,7 +24,8 @@ const emit = defineEmits<{
 
 const potStore = usePotStore()
 
-const participants = computed(() => potStore.participantsOf(props.potId))
+// Wer heute dabei ist: im Haushaltstopf ohne ehemalige Mitglieder.
+const participants = computed(() => potStore.currentParticipantsOf(props.potId))
 
 // Wer einträgt, hat meist selbst bezahlt.
 const payerId = ref(
