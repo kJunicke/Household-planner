@@ -217,6 +217,19 @@ describe('splitValidity', () => {
     })
   })
 
+  it('meldet bei leeren Prozenten und Beträgen den ganzen Fehlbetrag', () => {
+    expect(check(500, { kind: 'percent', values: {} })).toEqual({
+      valid: false,
+      reason: 'percent_off',
+      missingHundredthPercent: 10000,
+    })
+    expect(check(500, { kind: 'exact', values: { anna: 0 } })).toEqual({
+      valid: false,
+      reason: 'exact_off',
+      missingCents: 500,
+    })
+  })
+
   it('meldet zu viele Prozent negativ', () => {
     expect(check(100, { kind: 'percent', values: { anna: 60, ben: 45.5 } })).toEqual({
       valid: false,

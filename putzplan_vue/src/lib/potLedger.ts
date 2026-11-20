@@ -109,7 +109,6 @@ export function splitValidity(
     }
   }
   const weights = splitWeights(split, participantOrder)
-  if (weights.length === 0) return { valid: false, reason: 'nobody' }
   const total = weights.reduce((sum, [, w]) => sum + w, 0)
   if (split.kind === 'percent' && total !== 10000) {
     return { valid: false, reason: 'percent_off', missingHundredthPercent: 10000 - total }
@@ -117,6 +116,7 @@ export function splitValidity(
   if (split.kind === 'exact' && total !== expense.amountCents) {
     return { valid: false, reason: 'exact_off', missingCents: expense.amountCents - total }
   }
+  if (weights.length === 0) return { valid: false, reason: 'nobody' }
   return { valid: true }
 }
 
