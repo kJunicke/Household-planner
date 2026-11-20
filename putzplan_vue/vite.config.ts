@@ -1,10 +1,13 @@
 import { execSync } from 'node:child_process'
+import { existsSync, readdirSync, readFileSync } from 'node:fs'
+import { dirname, join } from 'node:path'
 import { fileURLToPath, URL } from 'node:url'
 
 import { defineConfig, type Plugin } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import vueDevTools from 'vite-plugin-vue-devtools'
 import { VitePWA } from 'vite-plugin-pwa'
+import { devLoginsFromFiles } from './src/lib/devLogins'
 
 /**
  * Die Kennung des ausgelieferten Standes — zur Anzeige in den Einstellungen.
@@ -66,6 +69,83 @@ function guestPage(): Plugin {
   }
 }
 
+function findSecretsDir(): string | undefined {
+  let current = fileURLToPath(new URL('.', import.meta.url))
+  for (;;) {
+    const candidate = join(current, 'Private', 'secrets', 'HouseholdPlanner')
+    if (existsSync(candidate)) return candidate
+    const parent = dirname(current)
+    if (parent === current) return undefined
+    current = parent
+  }
+}
+
+/**
+ * Testkonten für die Ein-Tipp-Anmeldung, nur auf dem Dev-Server
+ * (docs/testing.md). Das Repo ist öffentlich, die Konten liegen im
+ * Live-Projekt: die Zugangsdaten bleiben in mastermind `Private/secrets/`
+ * und kommen nur als virtuelles Modul `virtual:dev-logins` in den Browser.
+ * `apply: 'serve'`: im Build gibt es weder Plugin noch Modul; App und Login
+ * laden die Dev-Komponenten hinter `import.meta.env.DEV`.
+ *
+ * Ordner: `HP_DEV_LOGINS_DIR`, sonst der erste `Private/secrets/HouseholdPlanner`
+ * auf dem Weg nach oben (mastermind; Haupt-Checkout und Worktrees liegen
+ * verschieden tief). Fehlt er, ist die Liste leer und es gibt keine Knöpfe.
+ *
+ * Mit `--host` ist der Dev-Server im LAN erreichbar; das Modul bekommt nur
+ * ein Aufruf von diesem Rechner selbst.
+ */
+function devLogins(): Plugin {
+  const moduleId = 'virtual:dev-logins'
+  const resolvedId = '\0' + moduleId
+  const dir = process.env.HP_DEV_LOGINS_DIR ?? findSecretsDir()
+  const loopback = new Set(['127.0.0.1', '::1', '::ffff:127.0.0.1'])
+
+  function readFiles() {
+    if (!dir) return []
+    try {
+      return readdirSync(dir).map((name) => {
+        const path = join(dir, name)
+        return { name, path, text: readFileSync(path, 'utf-8') }
+      })
+    } catch {
+      return []
+    }
+  }
+
+  return {
+    name: 'dev-logins',
+    apply: 'serve',
+    configureServer(server) {
+      server.middlewares.use((req, res, next) => {
+        let url = req.url ?? ''
+        try {
+          url = decodeURIComponent(url)
+        } catch {
+          // kaputte Kodierung: roh prüfen
+        }
+        if (url.includes(moduleId) && !loopback.has(req.socket.remoteAddress ?? '')) {
+          res.statusCode = 403
+          res.end()
+          return
+        }
+        next()
+      })
+    },
+    resolveId(source) {
+      return source === moduleId ? resolvedId : undefined
+    },
+    load(id) {
+      if (id !== resolvedId) return undefined
+      const files = readFiles()
+      // Geänderte Zugangsdaten ohne Neustart des Dev-Servers übernehmen.
+      for (const file of files) this.addWatchFile(file.path)
+      const logins = devLoginsFromFiles(files)
+      return `export default ${JSON.stringify(logins)}`
+    }
+  }
+}
+
 // https://vite.dev/config/
 export default defineConfig(({ command }) => ({
   // Im Prod-Build fallen console.log/debug/info weg — sie geben u. a.
@@ -84,6 +164,7 @@ export default defineConfig(({ command }) => ({
     vue(),
     vueDevTools(),
     guestPage(),
+    devLogins(),
     VitePWA({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.ico', 'robots.txt', 'apple-touch-icon.png'],

@@ -1,11 +1,17 @@
 <script setup lang="ts">
-import { computed, ref, watchEffect } from 'vue'
+import { computed, defineAsyncComponent, ref, watchEffect } from 'vue'
 import { useRoute } from 'vue-router'
 import Header from './components/Header.vue'
 import BottomNav from './components/BottomNav.vue'
 import ToastContainer from './components/ToastContainer.vue'
 import { useAuthStore } from './stores/authStore'
 import { useHouseholdStore } from './stores/householdStore'
+
+// Kontowechsel ohne Abmelden für Testkonten, nur auf dem Dev-Server
+// (docs/testing.md). Im Produktions-Build fällt er samt Zugangsdaten weg.
+const DevAccountSwitcher = import.meta.env.DEV
+  ? defineAsyncComponent(() => import('./components/dev/DevAccountSwitcher.vue'))
+  : null
 
 const route = useRoute()
 const authStore = useAuthStore()
@@ -44,6 +50,7 @@ const viewKey = computed(() => (showNavigation.value ? lastViewKey.value : undef
     <router-view :key="viewKey" />
     <BottomNav v-if="showNavigation" />
     <ToastContainer />
+    <DevAccountSwitcher v-if="DevAccountSwitcher && route.name !== 'login'" />
   </div>
 </template>
 
