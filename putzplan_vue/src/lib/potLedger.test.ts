@@ -4,6 +4,7 @@ import {
   expenseShares,
   formatCents,
   potBalances,
+  splitValidity,
   suggestTransfers,
   type LedgerExpense,
   type LedgerRepayment,
@@ -58,6 +59,218 @@ describe('expenseShares', () => {
       const sum = [...shares.values()].reduce((a, b) => a + b, 0)
       expect(sum).toBe(amountCents)
     }
+  })
+})
+
+describe('expenseShares — Verhältnis', () => {
+  it('teilt im Verhältnis 2:1, Cent-Rest an den größten Bruchteil', () => {
+    const shares = expenseShares(
+      { payerId: 'anna', amountCents: 1000, split: { kind: 'ratio', values: { anna: 2, ben: 1 } } },
+      participants,
+    )
+    // 666,67 / 333,33 → anna bekommt den Rest-Cent
+    expect(shares).toEqual(
+      new Map([
+        ['anna', 667],
+        ['ben', 333],
+      ]),
+    )
+  })
+})
+
+describe('expenseShares — Verhältnis mit Nachkommastellen und Gleichstand', () => {
+  it('rechnet 1,5 : 1 genau', () => {
+    const shares = expenseShares(
+      {
+        payerId: 'anna',
+        amountCents: 500,
+        split: { kind: 'ratio', values: { anna: 1.5, cleo: 1 } },
+      },
+      participants,
+    )
+    expect(shares).toEqual(
+      new Map([
+        ['anna', 300],
+        ['cleo', 200],
+      ]),
+    )
+  })
+
+  it('gibt Rest-Cent bei gleichen Bruchteilen an die ersten in Topf-Reihenfolge', () => {
+    const shares = expenseShares(
+      {
+        payerId: 'anna',
+        amountCents: 1001,
+        split: { kind: 'ratio', values: { cleo: 2, ben: 2, anna: 2 } },
+      },
+      participants,
+    )
+    expect(shares).toEqual(
+      new Map([
+        ['anna', 334],
+        ['ben', 334],
+        ['cleo', 333],
+      ]),
+    )
+  })
+
+  it('lässt Teilnehmer mit Gewicht 0 weg', () => {
+    const shares = expenseShares(
+      { payerId: 'anna', amountCents: 100, split: { kind: 'ratio', values: { anna: 0, ben: 1 } } },
+      participants,
+    )
+    expect(shares).toEqual(new Map([['ben', 100]]))
+  })
+})
+
+describe('expenseShares — Prozent', () => {
+  it('teilt 50 / 30 / 20 Prozent', () => {
+    const shares = expenseShares(
+      {
+        payerId: 'anna',
+        amountCents: 2000,
+        split: { kind: 'percent', values: { anna: 50, ben: 30, cleo: 20 } },
+      },
+      participants,
+    )
+    expect(shares).toEqual(
+      new Map([
+        ['anna', 1000],
+        ['ben', 600],
+        ['cleo', 400],
+      ]),
+    )
+  })
+
+  it('rundet 33,33 / 33,33 / 33,34 Prozent auf den Cent genau zum Betrag', () => {
+    const shares = expenseShares(
+      {
+        payerId: 'anna',
+        amountCents: 100,
+        split: { kind: 'percent', values: { anna: 33.33, ben: 33.33, cleo: 33.34 } },
+      },
+      participants,
+    )
+    // 33,33 / 33,33 / 33,34 Cent → abgerundet 33/33/33, Rest-Cent an cleo (größter Bruchteil)
+    expect(shares).toEqual(
+      new Map([
+        ['anna', 33],
+        ['ben', 33],
+        ['cleo', 34],
+      ]),
+    )
+  })
+})
+
+describe('expenseShares — genaue Beträge', () => {
+  it('übernimmt die Cent je Person unverändert', () => {
+    const shares = expenseShares(
+      {
+        payerId: 'anna',
+        amountCents: 1234,
+        split: { kind: 'exact', values: { anna: 1000, cleo: 234 } },
+      },
+      participants,
+    )
+    expect(shares).toEqual(
+      new Map([
+        ['anna', 1000],
+        ['cleo', 234],
+      ]),
+    )
+  })
+})
+
+describe('splitValidity', () => {
+  const check = (amountCents: number, split: Parameters<typeof splitValidity>[0]['split']) =>
+    splitValidity({ amountCents, split }, participants)
+
+  it('nimmt eine Auswahl mit mindestens einem Teilnehmer an', () => {
+    expect(check(100, { kind: 'equal', participantIds: ['ben'] })).toEqual({ valid: true })
+  })
+
+  it('weist eine leere Auswahl ab', () => {
+    expect(check(100, { kind: 'equal', participantIds: [] })).toEqual({
+      valid: false,
+      reason: 'nobody',
+    })
+  })
+
+  it('weist ein Verhältnis ohne positives Gewicht ab', () => {
+    expect(check(100, { kind: 'ratio', values: { anna: 0 } })).toEqual({
+      valid: false,
+      reason: 'nobody',
+    })
+    expect(check(100, { kind: 'ratio', values: { anna: 2, ben: 1 } })).toEqual({ valid: true })
+  })
+
+  it('weist negative Werte ab', () => {
+    expect(check(100, { kind: 'ratio', values: { anna: 2, ben: -1 } })).toEqual({
+      valid: false,
+      reason: 'negative',
+    })
+  })
+
+  it('nimmt Prozente an, die genau 100 ergeben', () => {
+    expect(
+      check(100, { kind: 'percent', values: { anna: 33.33, ben: 33.33, cleo: 33.34 } }),
+    ).toEqual({ valid: true })
+  })
+
+  it('meldet fehlende Prozent in Hundertstel-Prozent', () => {
+    expect(check(100, { kind: 'percent', values: { anna: 50, ben: 40 } })).toEqual({
+      valid: false,
+      reason: 'percent_off',
+      missingHundredthPercent: 1000,
+    })
+  })
+
+  it('meldet bei leeren Prozenten und Beträgen den ganzen Fehlbetrag', () => {
+    expect(check(500, { kind: 'percent', values: {} })).toEqual({
+      valid: false,
+      reason: 'percent_off',
+      missingHundredthPercent: 10000,
+    })
+    expect(check(500, { kind: 'exact', values: { anna: 0 } })).toEqual({
+      valid: false,
+      reason: 'exact_off',
+      missingCents: 500,
+    })
+  })
+
+  it('meldet zu viele Prozent negativ', () => {
+    expect(check(100, { kind: 'percent', values: { anna: 60, ben: 45.5 } })).toEqual({
+      valid: false,
+      reason: 'percent_off',
+      missingHundredthPercent: -550,
+    })
+  })
+
+  it('nimmt genaue Beträge an, die den Betrag ergeben', () => {
+    expect(check(1234, { kind: 'exact', values: { anna: 1000, cleo: 234 } })).toEqual({
+      valid: true,
+    })
+  })
+
+  it('meldet den Fehlbetrag genauer Beträge in Cent, zu viel negativ', () => {
+    expect(check(1234, { kind: 'exact', values: { anna: 1000 } })).toEqual({
+      valid: false,
+      reason: 'exact_off',
+      missingCents: 234,
+    })
+    expect(check(1000, { kind: 'exact', values: { anna: 600, ben: 500 } })).toEqual({
+      valid: false,
+      reason: 'exact_off',
+      missingCents: -100,
+    })
+  })
+
+  it('zählt nur Werte von Teilnehmern des Topfs', () => {
+    expect(check(1000, { kind: 'exact', values: { anna: 500, fremd: 500 } })).toEqual({
+      valid: false,
+      reason: 'exact_off',
+      missingCents: 500,
+    })
   })
 })
 
@@ -120,6 +333,47 @@ describe('potBalances', () => {
       ]),
     )
     expect([...balances.values()].reduce((a, b) => a + b, 0)).toBe(0)
+  })
+
+  it('rechnet Verhältnis, Prozent und genaue Beträge mit, Summe null', () => {
+    const balances = potBalances(
+      participants,
+      [
+        {
+          payerId: 'anna',
+          amountCents: 999,
+          split: { kind: 'ratio', values: { ben: 2, cleo: 1 } },
+        },
+        {
+          payerId: 'ben',
+          amountCents: 1000,
+          split: { kind: 'percent', values: { anna: 25, ben: 25, cleo: 50 } },
+        },
+        { payerId: 'cleo', amountCents: 300, split: { kind: 'exact', values: { anna: 300 } } },
+      ],
+      [],
+    )
+    // anna: +999 −250 −300 = 449; ben: −666 +1000 −250 = 84; cleo: −333 −500 +300 = −533
+    expect(balances).toEqual(
+      new Map([
+        ['anna', 449],
+        ['ben', 84],
+        ['cleo', -533],
+      ]),
+    )
+  })
+
+  it('summiert sich bei jeder Art und jedem Betrag genau zum Betrag', () => {
+    const splits = [
+      { kind: 'ratio', values: { anna: 3, ben: 1.25, cleo: 0.5 } },
+      { kind: 'percent', values: { anna: 12.5, ben: 80, cleo: 7.5 } },
+    ] as const
+    for (const split of splits) {
+      for (const amountCents of [1, 2, 7, 99, 101, 12345, 99999999]) {
+        const shares = expenseShares({ payerId: 'anna', amountCents, split }, participants)
+        expect([...shares.values()].reduce((a, b) => a + b, 0)).toBe(amountCents)
+      }
+    }
   })
 
   it('Rückzahlungen senken die Salden zwischen beiden', () => {
