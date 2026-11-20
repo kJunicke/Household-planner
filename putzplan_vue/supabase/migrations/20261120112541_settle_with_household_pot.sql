@@ -57,15 +57,13 @@ ALTER TABLE public.pot_repayments
   ADD COLUMN IF NOT EXISTS settlement_id UUID UNIQUE
     REFERENCES public.settlements(settlement_id) ON DELETE CASCADE;
 
--- Der Client setzt `settlement_id` nie: INSERT nur auf die übrigen Spalten.
--- (UPDATE ist schon auf Spalten beschränkt, `settlement_id` gehört nicht dazu.)
-REVOKE INSERT ON public.pot_repayments FROM authenticated;
-GRANT INSERT (repayment_id, pot_id, household_id, from_participant_id, to_participant_id,
-              amount_cents, paid_on, updated_by_participant_id, created_at, updated_at)
-  ON public.pot_repayments TO authenticated;
-
--- Verknüpfte Rückzahlung: nicht ändern, nicht allein löschen. Löscht jemand
--- den Ausgleich, ist er beim Kaskaden-Löschen schon weg — dann darf sie gehen.
+-- Anlegen: eine Rückzahlung hängt nur an einem Ausgleich der Art 'pot' im
+-- selben Haushalt. Solche Ausgleiche legt nur die Funktion unten an, und zwar
+-- samt Rückzahlung; UNIQUE lässt keine zweite zu. Der Client darf die Spalte
+-- mitschicken (null), etwa wenn Rückgängig eine Zeile unverändert neu anlegt.
+-- Ändern und löschen: eine verknüpfte Rückzahlung gar nicht, solange ihr
+-- Ausgleich besteht. Beim Kaskaden-Löschen ist er schon weg — dann darf sie
+-- gehen. (UPDATE ist ohnehin auf Spalten ohne `settlement_id` beschränkt.)
 CREATE OR REPLACE FUNCTION public.guard_settlement_repayment()
 RETURNS trigger
 LANGUAGE plpgsql
@@ -73,6 +71,15 @@ SECURITY DEFINER
 SET search_path = public, pg_temp
 AS $$
 BEGIN
+  IF TG_OP = 'INSERT' THEN
+    IF NEW.settlement_id IS NOT NULL AND NOT EXISTS (
+         SELECT 1 FROM public.settlements s
+         WHERE s.settlement_id = NEW.settlement_id
+           AND s.method = 'pot' AND s.household_id = NEW.household_id) THEN
+      RAISE EXCEPTION 'repayment_settlement_mismatch' USING ERRCODE = '23514';
+    END IF;
+    RETURN NEW;
+  END IF;
   IF OLD.settlement_id IS NOT NULL
      AND EXISTS (SELECT 1 FROM public.settlements s WHERE s.settlement_id = OLD.settlement_id) THEN
     RAISE EXCEPTION 'repayment_belongs_to_settlement' USING ERRCODE = '23514';
@@ -87,7 +94,7 @@ REVOKE ALL ON FUNCTION public.guard_settlement_repayment() FROM PUBLIC, anon, au
 
 DROP TRIGGER IF EXISTS trg_guard_settlement_repayment ON public.pot_repayments;
 CREATE TRIGGER trg_guard_settlement_repayment
-  BEFORE UPDATE OR DELETE ON public.pot_repayments
+  BEFORE INSERT OR UPDATE OR DELETE ON public.pot_repayments
   FOR EACH ROW EXECUTE FUNCTION public.guard_settlement_repayment();
 
 -- -----------------------------------------------------------------
@@ -183,8 +190,6 @@ COMMIT;
 -- DROP FUNCTION IF EXISTS public.settle_with_household_pot(uuid, uuid, integer, integer, text, timestamptz);
 -- DROP TRIGGER IF EXISTS trg_guard_settlement_repayment ON public.pot_repayments;
 -- DROP FUNCTION IF EXISTS public.guard_settlement_repayment();
--- REVOKE INSERT ON public.pot_repayments FROM authenticated;
--- GRANT INSERT ON public.pot_repayments TO authenticated;
 -- ALTER TABLE public.pot_repayments DROP COLUMN IF EXISTS settlement_id;
 -- DROP POLICY IF EXISTS "Users can create settlements in their household" ON public.settlements;
 -- CREATE POLICY "Users can create settlements in their household"

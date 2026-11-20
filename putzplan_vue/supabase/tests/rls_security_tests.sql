@@ -1402,8 +1402,13 @@ BEGIN
            (SELECT settlement_id FROM settlements WHERE method = 'money' LIMIT 1)
     FROM pot_repayments WHERE repayment_id = v_repayment;
     RAISE EXCEPTION 'FAILED 62: Rückzahlung an einen Ausgleich gehängt';
-  EXCEPTION WHEN insufficient_privilege THEN NULL;
+  EXCEPTION WHEN check_violation THEN
+    IF SQLERRM <> 'repayment_settlement_mismatch' THEN RAISE EXCEPTION 'FAILED 62: Meldung %', SQLERRM; END IF;
   END;
+  -- Eine ganze Zeile mit settlement_id = null (Rückgängig legt sie so neu an) geht.
+  INSERT INTO pot_repayments (pot_id, household_id, from_participant_id, to_participant_id, amount_cents, settlement_id)
+  SELECT pot_id, household_id, to_participant_id, from_participant_id, 100, NULL
+  FROM pot_repayments WHERE repayment_id = v_repayment;
   BEGIN
     UPDATE pot_repayments SET amount_cents = 1 WHERE repayment_id = v_repayment;
     RAISE EXCEPTION 'FAILED 62: verknüpfte Rückzahlung geändert';
