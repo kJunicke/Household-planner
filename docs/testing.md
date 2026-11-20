@@ -98,14 +98,65 @@ Entwicklerwerkzeug erkennt, welche Fassung läuft.
 
 ## Testkonten und Testhaushalt
 
-Für den Browser-QC gibt es zwei bestätigte Konten im Live-Projekt, `qc-agent@putzplan.test` und
-`qc-agent-2@putzplan.test`, beide im eigenen Haushalt `QC-Test-Haushalt`. Dort darf der QC alles:
-erledigen, ausgleichen, den Kurs ändern. Der Haushalt des Paars bleibt unberührt. Die Zugangsdaten
-liegen in mastermind unter `Private/secrets/HouseholdPlanner/`.
+Für den Browser-QC gibt es drei bestätigte Konten im Live-Projekt:
 
-- **Einloggen tut Kilian selbst.** Ein Agent tippt kein Passwort in ein Formular, das an den
-  Live-Host schickt, auch nicht auf Bitte.
-- **Zwei Konten brauchen zwei Origins**, sonst überschreibt die zweite Sitzung die erste: der
-  Dev-Server mit `npm run dev -- --host`, dann `localhost:<port>` und `127.0.0.1:<port>`.
+| Datei | Konto | Haushalt |
+| --- | --- | --- |
+| `qc-login.env` | `qc-agent@putzplan.test` | `QC-Test-Haushalt` |
+| `qc-login-2.env` | `qc-agent-2@putzplan.test` | `QC-Test-Haushalt` |
+| `qc-login-3.env` | `qc-agent-3@putzplan.test` | keiner (für Einrichten, Beitreten, Gastlink) |
+
+Im `QC-Test-Haushalt` darf der QC alles: erledigen, ausgleichen, den Kurs ändern. Der Haushalt
+des Paars bleibt unberührt. Die Zugangsdaten liegen in mastermind unter
+`Private/secrets/HouseholdPlanner/`, nie in diesem (öffentlichen) Repo.
+
+- **Ein Agent tippt kein Passwort** in ein Formular, das an den Live-Host schickt, auch nicht auf
+  Bitte. Die Knöpfe unten sind der Weg: sie melden ohne Tippen an (Kilians Wunsch, 20.11.2026).
 - **Unbewertete Aufgaben entstehen über die Oberfläche nicht.** Für einen Test die Standardpunkte
   der Testaufgabe per `db query --linked` auf `NULL` setzen, nur in `QC-Test-Haushalt`.
+
+### Ein-Tipp-Anmeldung auf dem Dev-Server
+
+Auf `npm run dev` zeigt die Anmeldung unter dem Formular „Als QC 1 anmelden“ usw., und angemeldet
+sitzt unten links ein Chip „Dev: <Konto>“: antippen, anderes Konto wählen, die App wechselt ohne
+Abmelden und lädt dessen Haushalt. Kein Passwort wird getippt.
+
+- **Woher die Konten kommen:** Das Vite-Plugin `devLogins` (`vite.config.ts`, nur `apply: 'serve'`)
+  liest alle `qc-login*.env` (Schlüssel `QC_EMAIL`, `QC_PASSWORD`, optional `QC_LABEL` für den
+  Knopftext) und liefert sie als virtuelles Modul `virtual:dev-logins`. Gesucht wird der erste
+  Ordner `Private/secrets/HouseholdPlanner` oberhalb von `putzplan_vue/`, also der von mastermind;
+  ein anderer Ordner geht über die Umgebungsvariable `HP_DEV_LOGINS_DIR`. Fehlt der Ordner, startet
+  der Dev-Server normal, nur ohne Knöpfe. Geänderte Dateien übernimmt er ohne Neustart.
+- **Nur auf diesem Rechner:** Mit `--host` ist der Dev-Server im LAN erreichbar; das Modul
+  bekommt aber nur ein Aufruf von `localhost`/`127.0.0.1`/`::1`, alle anderen 403 (dort dann keine
+  Knöpfe).
+- **Nicht im Produktions-Build:** Plugin und Modul gibt es nur beim Serve, die Dev-Komponenten
+  (`src/components/dev/`) laden hinter `import.meta.env.DEV` und fallen im Build heraus. Prüfen,
+  nach jeder Änderung daran: `npm run build`, dann `dist/` nach den E-Mails, Passwörtern und
+  „Testkonten“ durchsuchen — null Treffer. Negativkontrolle: dieselbe Suche über die vom
+  Dev-Server ausgelieferten Dateien (`@id/__x00__virtual:dev-logins`,
+  `src/components/dev/DevLoginButtons.vue`) muss treffen.
+- **Zwei Konten brauchen zwei Origins:** Die Sitzung liegt im `localStorage` der Origin, ein
+  Wechsel ersetzt sie. Für zwei gleichzeitige Konten `npm run dev -- --host` und das eine Konto auf
+  `localhost:<port>`, das andere auf `127.0.0.1:<port>`. Ein Gastlink braucht eine dritte, noch nie
+  angemeldete Origin (z. B. `[::1]:<port>` oder ein frisches Chrome-Profil); er ersetzt sonst die
+  Sitzung der Origin.
+- Ohne `.env` braucht der Dev-Server `VITE_SUPABASE_URL` und `VITE_SUPABASE_ANON_KEY` aus der
+  Prozessumgebung. Der Anon-Key ist öffentlich (er steht im ausgelieferten Bundle).
+
+### Testkonten wiederherstellen
+
+Die Bestätigung per E-Mail ist im Live-Projekt aus (`mailer_autoconfirm`), ein neues Konto ist
+also sofort anmeldbar.
+
+1. Ist ein Konto weg (Dashboard → Auth → Users), neu registrieren: in der App über „Registrieren“
+   oder per `supabase.auth.signUp({ email, password })` mit dem Anon-Key, gleiche E-Mail wie oben,
+   neues zufälliges Passwort.
+2. Die Datei in `Private/secrets/HouseholdPlanner/` neu schreiben: `QC_EMAIL`, `QC_PASSWORD`,
+   `QC_USER_ID` (die neue `auth.users.id`), bei Bedarf `QC_LABEL`.
+3. Haushalt: QC 1 legt `QC-Test-Haushalt` an (oder er besteht noch), QC 2 tritt mit dessen
+   Einladungscode bei. QC 3 bleibt ohne Haushalt; ist es versehentlich beigetreten, gibt es in der
+   App kein Austreten: die Zeile in `household_members` löscht Kilian (Dashboard oder SQL).
+4. Prüfen (nur lesen): `npx supabase db query --linked "select h.name, count(*) from
+   household_members m join households h using (household_id) where h.name = 'QC-Test-Haushalt'
+   group by h.name"` → 2 Mitglieder.
