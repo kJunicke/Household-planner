@@ -28,8 +28,8 @@ export interface PotParticipant {
 /**
  * Ausgabe (→ CONTEXT.md § Ausgabe) mit den Rohwerten ihrer Aufteilung:
  * `split_values` bildet Teilnehmer-Kennungen auf Rohwerte ab. Die Datenbank
- * kennt weitere Arten (ganze Gruppe, Verhältnis, Prozent, Beträge); der Client
- * führt hier nur die, die er rechnen kann.
+ * kennt zusätzlich die ganze Gruppe; der Client führt hier nur die Arten, die
+ * er rechnen kann.
  */
 export interface PotExpense {
   expense_id: string
@@ -40,8 +40,11 @@ export interface PotExpense {
   /** 'YYYY-MM-DD' */
   spent_on: string
   description: string
-  /** `equal`: gleich auf die Teilnehmer in `split_values` (Wert 1). */
-  split_kind: 'equal'
+  /**
+   * `equal`: gleich auf die Teilnehmer in `split_values` (Wert 1);
+   * `ratio`: Gewicht, `percent`: Prozent, `exact`: Cent je Teilnehmer.
+   */
+  split_kind: 'equal' | 'ratio' | 'percent' | 'exact'
   split_values: Record<string, number>
   updated_by_participant_id: string | null
   created_at: string
