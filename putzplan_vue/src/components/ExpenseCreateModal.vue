@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { usePotStore } from '@/stores/potStore'
-import { expenseShares, formatCents } from '@/lib/potLedger'
-import { parseEuroInput } from '@/lib/settlementAmount'
+import { expenseShares, formatCents, splitValidity, type ExpenseSplit } from '@/lib/potLedger'
+import { formatEuroInput, parseEuroInput } from '@/lib/settlementAmount'
 import { POT_AMOUNT_MAX_CENTS, POT_EXPENSE_DESCRIPTION_MAX_LENGTH } from '@/lib/limits'
 import { toIsoDate } from '@/lib/taskSchedule'
 
@@ -16,7 +16,7 @@ const emit = defineEmits<{
       amountCents: number
       spentOn: string
       description: string
-      participantIds: string[]
+      split: ExpenseSplit
     },
   ]
   close: []
@@ -24,8 +24,11 @@ const emit = defineEmits<{
 
 const potStore = usePotStore()
 
-// Wer heute dabei ist: im Haushaltstopf ohne ehemalige Mitglieder.
+// Wer heute dabei ist: im Haushaltstopf ohne ehemalige Mitglieder. Ihre
+// Reihenfolge ist die des Topfs, nur ohne Ehemalige — Cent-Reste fallen
+// darum gleich wie in der Topf-Rechnung des Stores.
 const participants = computed(() => potStore.currentParticipantsOf(props.potId))
+const participantOrder = computed(() => participants.value.map((p) => p.participant_id))
 
 // Wer einträgt, hat meist selbst bezahlt.
 const payerId = ref(
@@ -42,24 +45,115 @@ const amountCents = computed(() => {
   return cents > 0 && cents <= POT_AMOUNT_MAX_CENTS ? cents : null
 })
 
-// Gleich auf alle, die heute im Topf sind.
-const participantIds = computed(() => participants.value.map((p) => p.participant_id))
+// ---------------------------------------------------------------
+// Aufteilung (CONTEXT.md § Aufteilung)
+// ---------------------------------------------------------------
 
-const shares = computed(() => {
-  if (amountCents.value === null) return []
-  const byId = expenseShares(
-    {
-      payerId: payerId.value,
-      amountCents: amountCents.value,
-      split: { kind: 'equal', participantIds: participantIds.value },
-    },
-    participantIds.value,
+type SplitMode = ExpenseSplit['kind']
+type ValueMode = Exclude<SplitMode, 'equal'>
+
+const modes: { value: SplitMode; label: string }[] = [
+  { value: 'equal', label: 'Gleich' },
+  { value: 'ratio', label: 'Verhältnis' },
+  { value: 'percent', label: 'Prozent' },
+  { value: 'exact', label: 'Beträge' },
+]
+const unitOf: Record<ValueMode, string> = { ratio: 'Teile', percent: '%', exact: '€' }
+
+const mode = ref<SplitMode>('equal')
+const showAdvanced = ref(false)
+
+// Schnell: gleich auf alle, einzelne ab- und wieder anwählbar.
+const selectedIds = ref<string[]>([...participantOrder.value])
+const isSelected = (id: string) => selectedIds.value.includes(id)
+const toggleSelected = (id: string) => {
+  selectedIds.value = isSelected(id)
+    ? selectedIds.value.filter((x) => x !== id)
+    : [...selectedIds.value, id]
+}
+
+// Erweitert: Rohwerte je Art getrennt, damit ein Wechsel nichts verliert.
+// Verhältnis startet bei 1 : 1 : …, Prozent und Beträge leer.
+const valueTexts = ref<Record<ValueMode, Record<string, string>>>({
+  ratio: Object.fromEntries(participantOrder.value.map((id) => [id, '1'])),
+  percent: {},
+  exact: {},
+})
+
+/** Eingabe als Zahl; leer zählt als 0, Unlesbares als `null`. */
+const parseValue = (text: string | undefined): number | null =>
+  !text?.trim() ? 0 : parseEuroInput(text)
+
+const badInputIds = computed(() => {
+  if (mode.value === 'equal') return new Set<string>()
+  const texts = valueTexts.value[mode.value]
+  return new Set(participantOrder.value.filter((id) => parseValue(texts[id]) === null))
+})
+
+const split = computed((): ExpenseSplit => {
+  if (mode.value === 'equal') {
+    return { kind: 'equal', participantIds: participantOrder.value.filter(isSelected) }
+  }
+  const texts = valueTexts.value[mode.value]
+  const toRaw = (n: number) => (mode.value === 'exact' ? Math.round(n * 100) : n)
+  return {
+    kind: mode.value,
+    values: Object.fromEntries(
+      participantOrder.value.map((id) => [id, toRaw(parseValue(texts[id]) ?? 0)]),
+    ),
+  }
+})
+
+const validity = computed(() =>
+  splitValidity(
+    { amountCents: amountCents.value ?? 0, split: split.value },
+    participantOrder.value,
+  ),
+)
+
+const formatPercent = (hundredths: number) =>
+  `${formatEuroInput(hundredths / 100).replace(/,00$/, '')} %`
+
+/** Was fehlt oder zu viel ist, solange die Aufteilung nicht aufgeht. */
+const splitProblem = computed((): string | null => {
+  if (badInputIds.value.size > 0) return 'Bitte nur Zahlen mit höchstens zwei Nachkommastellen'
+  const v = validity.value
+  if (v.valid) return null
+  switch (v.reason) {
+    case 'nobody':
+      return 'Mindestens eine Person muss mittragen'
+    case 'negative':
+      return 'Werte dürfen nicht negativ sein'
+    case 'percent_off':
+      return v.missingHundredthPercent > 0
+        ? `Es fehlen noch ${formatPercent(v.missingHundredthPercent)}`
+        : `${formatPercent(-v.missingHundredthPercent)} zu viel`
+    case 'exact_off':
+      // Ohne Betrag gibt es noch keinen Fehlbetrag.
+      if (amountCents.value === null) return null
+      return v.missingCents > 0
+        ? `Es fehlen noch ${formatCents(v.missingCents)}`
+        : `${formatCents(-v.missingCents)} zu viel`
+  }
+  return null
+})
+
+const splitOk = computed(() => validity.value.valid && badInputIds.value.size === 0)
+
+// Euro je Person, sobald Betrag und Aufteilung stimmen.
+const sharesById = computed(() => {
+  if (amountCents.value === null || !splitOk.value) return new Map<string, number>()
+  return expenseShares(
+    { payerId: payerId.value, amountCents: amountCents.value, split: split.value },
+    participantOrder.value,
   )
-  return participants.value.map((p) => ({
-    id: p.participant_id,
-    name: potStore.participantName(p.participant_id),
-    cents: byId.get(p.participant_id) ?? 0,
-  }))
+})
+
+const splitTitle = computed(() => {
+  if (mode.value !== 'equal') return modes.find((m) => m.value === mode.value)?.label
+  return selectedIds.value.length === participantOrder.value.length
+    ? 'Gleich auf alle'
+    : 'Gleich auf Auswahl'
 })
 
 const isValid = computed(
@@ -68,7 +162,7 @@ const isValid = computed(
     amountCents.value !== null &&
     description.value.trim().length > 0 &&
     /^\d{4}-\d{2}-\d{2}$/.test(spentOn.value) &&
-    participantIds.value.length > 0,
+    splitOk.value,
 )
 
 const handleSubmit = () => {
@@ -79,7 +173,7 @@ const handleSubmit = () => {
     amountCents: amountCents.value,
     spentOn: spentOn.value,
     description: description.value.trim(),
-    participantIds: participantIds.value,
+    split: split.value,
   })
 }
 </script>
@@ -136,12 +230,82 @@ const handleSubmit = () => {
           </div>
 
           <div class="form-group">
-            <label class="form-label">Aufteilung</label>
+            <div class="split-header">
+              <label class="form-label mb-0">Aufteilung</label>
+              <button
+                type="button"
+                class="advanced-toggle"
+                :aria-expanded="showAdvanced"
+                @click="showAdvanced = !showAdvanced"
+              >
+                Erweitert
+                <i :class="['bi', showAdvanced ? 'bi-chevron-up' : 'bi-chevron-down']"></i>
+              </button>
+            </div>
+
+            <div
+              v-if="showAdvanced"
+              class="mode-grid"
+              role="radiogroup"
+              aria-label="Art der Aufteilung"
+            >
+              <button
+                v-for="m in modes"
+                :key="m.value"
+                type="button"
+                role="radio"
+                :aria-checked="mode === m.value"
+                :class="['mode-btn', mode === m.value && 'active']"
+                @click="mode = m.value"
+              >
+                {{ m.label }}
+              </button>
+            </div>
+
             <div class="split-box">
-              <div class="split-kind"><i class="bi bi-people me-1"></i> Gleich auf alle</div>
-              <div v-for="s in shares" :key="s.id" class="share-row">
-                <span>{{ s.name }}</span>
-                <span>{{ formatCents(s.cents) }}</span>
+              <div class="split-kind"><i class="bi bi-people me-1"></i> {{ splitTitle }}</div>
+              <div v-for="p in participants" :key="p.participant_id" class="share-row">
+                <button
+                  v-if="mode === 'equal'"
+                  type="button"
+                  :class="['share-toggle', isSelected(p.participant_id) && 'on']"
+                  :aria-pressed="isSelected(p.participant_id)"
+                  @click="toggleSelected(p.participant_id)"
+                >
+                  <i
+                    :class="[
+                      'bi',
+                      isSelected(p.participant_id) ? 'bi-check-square-fill' : 'bi-square',
+                    ]"
+                  ></i>
+                  <span class="share-name">{{ potStore.participantName(p.participant_id) }}</span>
+                </button>
+                <template v-else>
+                  <span class="share-name">{{ potStore.participantName(p.participant_id) }}</span>
+                  <span class="share-input">
+                    <input
+                      v-model="valueTexts[mode][p.participant_id]"
+                      type="text"
+                      inputmode="decimal"
+                      class="form-control form-control-sm"
+                      :class="{ 'is-invalid': badInputIds.has(p.participant_id) }"
+                      :aria-label="`${potStore.participantName(p.participant_id)} (${unitOf[mode]})`"
+                      placeholder="0"
+                      autocomplete="off"
+                    />
+                    <span class="unit">{{ unitOf[mode] }}</span>
+                  </span>
+                </template>
+                <span class="share-euros">
+                  {{
+                    sharesById.has(p.participant_id)
+                      ? formatCents(sharesById.get(p.participant_id) ?? 0)
+                      : '–'
+                  }}
+                </span>
+              </div>
+              <div v-if="splitProblem" class="split-problem" role="status">
+                <i class="bi bi-exclamation-circle me-1"></i>{{ splitProblem }}
               </div>
             </div>
           </div>
@@ -182,6 +346,43 @@ const handleSubmit = () => {
   font-size: 0.9rem;
 }
 
+.split-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.5rem;
+}
+
+.advanced-toggle {
+  background: none;
+  border: none;
+  padding: 4px 0;
+  font-size: 0.85rem;
+  color: var(--color-primary);
+}
+
+.mode-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.mode-btn {
+  padding: 6px 2px;
+  background: var(--color-background);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  color: var(--color-text-secondary);
+  font-size: 0.75rem;
+}
+
+.mode-btn.active {
+  background: var(--color-primary);
+  border-color: var(--color-primary);
+  color: white;
+}
+
 .split-kind {
   font-weight: 600;
   margin-bottom: 4px;
@@ -189,7 +390,65 @@ const handleSubmit = () => {
 
 .share-row {
   display: flex;
-  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  min-height: 36px;
   color: var(--color-text-secondary);
+}
+
+.share-name {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.share-toggle {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: none;
+  border: none;
+  padding: 4px 0;
+  text-align: left;
+  color: var(--color-text-secondary);
+}
+
+.share-toggle.on {
+  color: var(--color-text-primary);
+}
+
+.share-toggle.on i {
+  color: var(--color-primary);
+}
+
+.share-input {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.share-input input {
+  width: 4.5rem;
+  text-align: right;
+}
+
+.unit {
+  width: 2.2rem;
+  font-size: 0.8rem;
+}
+
+.share-euros {
+  flex-shrink: 0;
+  min-width: 4.5rem;
+  text-align: right;
+}
+
+.split-problem {
+  margin-top: 6px;
+  font-weight: 600;
+  color: var(--color-danger, #dc3545);
 }
 </style>

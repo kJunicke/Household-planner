@@ -126,6 +126,21 @@ const entries = computed<Entry[]>(() => {
   )
 })
 
+const splitLabel: Record<PotExpense['split_kind'], string> = {
+  equal: 'gleich',
+  ratio: 'nach Verhältnis',
+  percent: 'nach Prozent',
+  exact: 'nach Beträgen',
+}
+
+/** Euro je Person einer Ausgabe, in Topf-Reihenfolge. */
+const shareRows = (e: PotExpense) =>
+  [...potStore.sharesOf(e)].map(([id, cents]) => ({
+    id,
+    name: potStore.participantName(id),
+    cents,
+  }))
+
 const formatDay = (isoDate: string) => isoDate.split('-').reverse().join('.')
 
 const back = () => {
@@ -211,6 +226,12 @@ const handleSubmit = (payload: Parameters<typeof potStore.createExpense>[0]) => 
               <div class="expense-meta">
                 {{ potStore.participantName(entry.expense.payer_participant_id) }} hat bezahlt ·
                 {{ formatDay(entry.day) }}
+              </div>
+              <div class="expense-split">
+                <span class="split-label">{{ splitLabel[entry.expense.split_kind] }}:</span>
+                <span v-for="s in shareRows(entry.expense)" :key="s.id" class="split-share">
+                  {{ s.name }} {{ formatCents(s.cents) }}
+                </span>
               </div>
             </div>
             <div class="expense-amount">{{ formatCents(entry.expense.amount_cents) }}</div>
@@ -427,6 +448,18 @@ const handleSubmit = (payload: Parameters<typeof potStore.createExpense>[0]) => 
   background: var(--color-background-elevated);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
+}
+
+.expense-split {
+  display: flex;
+  flex-wrap: wrap;
+  column-gap: 10px;
+  font-size: 0.8rem;
+  color: var(--color-text-secondary);
+}
+
+.split-share {
+  white-space: nowrap;
 }
 
 .expense-amount {

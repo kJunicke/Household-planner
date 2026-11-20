@@ -5,7 +5,7 @@ import type { Pot, PotExpense, PotParticipant, PotRepayment } from '@/types/Pot'
 import { supabase } from '@/lib/supabase'
 import { onSessionEnd } from '@/lib/sessionEnd'
 import { isInFlight, runOptimistic } from '@/lib/optimistic'
-import { potBalances, type LedgerExpense } from '@/lib/potLedger'
+import { expenseShares, potBalances, type ExpenseSplit, type LedgerExpense } from '@/lib/potLedger'
 import { currentParticipants } from '@/lib/potRules'
 import { useAuthStore } from './authStore'
 import { useHouseholdStore } from './householdStore'
@@ -87,8 +87,24 @@ export const usePotStore = defineStore('pot', () => {
   const toLedgerExpense = (e: PotExpense): LedgerExpense => ({
     payerId: e.payer_participant_id,
     amountCents: e.amount_cents,
-    split: { kind: 'equal', participantIds: Object.keys(e.split_values) },
+    split:
+      e.split_kind === 'equal'
+        ? { kind: 'equal', participantIds: Object.keys(e.split_values) }
+        : { kind: e.split_kind, values: e.split_values },
   })
+
+  /** Rohwerte fürs Speichern: wer nichts trägt, steht nicht drin. */
+  const toSplitValues = (split: ExpenseSplit): Record<string, number> =>
+    split.kind === 'equal'
+      ? Object.fromEntries(split.participantIds.map((id) => [id, 1]))
+      : Object.fromEntries(Object.entries(split.values).filter(([, v]) => v > 0))
+
+  /** Euro je Person einer Ausgabe in Cent, in Topf-Reihenfolge. */
+  const sharesOf = (e: PotExpense): Map<string, number> =>
+    expenseShares(
+      toLedgerExpense(e),
+      participantsOf(e.pot_id).map((p) => p.participant_id),
+    )
 
   /** Saldo je Teilnehmer in Cent (> 0 hat gut, < 0 schuldet). */
   const balancesOf = (potId: string): Map<string, number> =>
@@ -238,7 +254,7 @@ export const usePotStore = defineStore('pot', () => {
   // ---------------------------------------------------------------
 
   /**
-   * Ausgabe eintragen, gleich aufgeteilt auf `participantIds`. Gespeichert
+   * Ausgabe eintragen mit ihrer Aufteilung. Gespeichert
    * werden die Rohwerte der Aufteilung, nicht die Euro je Person. Die ID
    * vergibt der Client, damit das Realtime-Echo die optimistische Zeile trifft.
    */
@@ -248,7 +264,7 @@ export const usePotStore = defineStore('pot', () => {
     amountCents: number
     spentOn: string
     description: string
-    participantIds: readonly string[]
+    split: ExpenseSplit
   }): boolean => {
     const householdId = activeHouseholdId
     if (!householdId) return false
@@ -262,8 +278,8 @@ export const usePotStore = defineStore('pot', () => {
       amount_cents: input.amountCents,
       spent_on: input.spentOn,
       description: input.description,
-      split_kind: 'equal',
-      split_values: Object.fromEntries(input.participantIds.map((id) => [id, 1])),
+      split_kind: input.split.kind,
+      split_values: toSplitValues(input.split),
       updated_by_participant_id: myParticipantId(input.potId),
       created_at: now,
       updated_at: now,
@@ -561,6 +577,7 @@ export const usePotStore = defineStore('pot', () => {
     expensesOf,
     repaymentsOf,
     balancesOf,
+    sharesOf,
     participantName,
     myParticipantId,
     createExpense,
