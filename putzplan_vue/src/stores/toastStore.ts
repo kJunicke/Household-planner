@@ -3,11 +3,21 @@ import { defineStore } from 'pinia'
 
 export type ToastType = 'success' | 'error' | 'info'
 
+/**
+ * Knopf in einem Toast, etwa „Rückgängig“ nach dem Löschen. Antippen führt
+ * `run` aus und blendet den Toast aus.
+ */
+export interface ToastAction {
+  label: string
+  run: () => void
+}
+
 export interface Toast {
   id: string
   message: string
   type: ToastType
   timestamp: number
+  action?: ToastAction
 }
 
 export const useToastStore = defineStore('toast', () => {
@@ -19,13 +29,19 @@ export const useToastStore = defineStore('toast', () => {
   const timers = new Map<string, ReturnType<typeof setTimeout>>()
 
   // Actions
-  const showToast = (message: string, type: ToastType = 'info', duration: number = 5000) => {
+  const showToast = (
+    message: string,
+    type: ToastType = 'info',
+    duration: number = 5000,
+    action?: ToastAction,
+  ) => {
     const id = `toast-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`
     const toast: Toast = {
       id,
       message,
       type,
       timestamp: Date.now(),
+      ...(action ? { action } : {}),
     }
 
     toasts.value.push(toast)
@@ -50,10 +66,18 @@ export const useToastStore = defineStore('toast', () => {
     toasts.value = toasts.value.filter((t) => t.id !== id)
   }
 
+  /** Knopf eines Toasts antippen: erst ausblenden, dann ausführen — genau einmal. */
+  const runAction = (id: string) => {
+    const action = toasts.value.find((t) => t.id === id)?.action
+    removeToast(id)
+    action?.run()
+  }
+
   // Return - Public API
   return {
     toasts,
     showToast,
     removeToast,
+    runAction,
   }
 })

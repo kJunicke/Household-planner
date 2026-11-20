@@ -17,19 +17,33 @@ const icons: Record<ToastType, string> = {
 <template>
   <div class="toast-stack" aria-live="polite" aria-atomic="true">
     <TransitionGroup name="toast">
-      <button
+      <div
         v-for="toast in toastStore.toasts"
         :key="toast.id"
-        type="button"
         class="toast-line"
         :class="`toast-${toast.type}`"
         role="alert"
-        aria-label="Meldung ausblenden"
-        @click="toastStore.removeToast(toast.id)"
       >
-        <i class="bi" :class="icons[toast.type]"></i>
-        <span class="toast-text">{{ toast.message }}</span>
-      </button>
+        <!-- Zwei Knöpfe nebeneinander statt einer im anderen: Meldung antippen
+             blendet aus, der Aktionsknopf (etwa „Rückgängig“) führt aus. -->
+        <button
+          type="button"
+          class="toast-dismiss"
+          aria-label="Meldung ausblenden"
+          @click="toastStore.removeToast(toast.id)"
+        >
+          <i class="bi" :class="icons[toast.type]"></i>
+          <span class="toast-text">{{ toast.message }}</span>
+        </button>
+        <button
+          v-if="toast.action"
+          type="button"
+          class="toast-action"
+          @click="toastStore.runAction(toast.id)"
+        >
+          {{ toast.action.label }}
+        </button>
+      </div>
     </TransitionGroup>
   </div>
 </template>
@@ -64,7 +78,33 @@ const icons: Record<ToastType, string> = {
   box-shadow: var(--shadow-lg);
   color: var(--color-text-primary);
   font-size: var(--font-md);
+}
+
+.toast-dismiss {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  min-width: 0;
+  padding: 0;
+  border: none;
+  background: none;
+  color: inherit;
+  font: inherit;
   text-align: left;
+  cursor: pointer;
+}
+
+.toast-action {
+  flex-shrink: 0;
+  align-self: center;
+  margin-left: 0.25rem;
+  padding: 0.125rem 0.5rem;
+  border: 1px solid var(--color-primary);
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--color-primary);
+  font-weight: 600;
+  font-size: var(--font-md);
   cursor: pointer;
 }
 
