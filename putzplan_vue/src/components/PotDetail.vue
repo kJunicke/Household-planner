@@ -191,7 +191,8 @@ const changeLine = (entry: PotExpense | PotRepayment) =>
 const openEdit = (entry: Entry) => {
   if (!isOpen.value) return
   if (entry.kind === 'expense') editingExpense.value = entry.expense
-  else repaymentModal.value = { repayment: entry.repayment }
+  // Verrechnet mit einem Ausgleich: ändert und löscht nur der Ausgleich.
+  else if (!entry.repayment.settlement_id) repaymentModal.value = { repayment: entry.repayment }
 }
 
 const closeExpenseModal = () => {
@@ -318,7 +319,7 @@ const handleDelete = () => {
             v-else
             type="button"
             class="expense-item repayment-item"
-            :disabled="!isOpen"
+            :disabled="!isOpen || !!entry.repayment.settlement_id"
             @click="openEdit(entry)"
           >
             <i class="bi bi-arrow-left-right repayment-icon"></i>
@@ -327,7 +328,10 @@ const handleDelete = () => {
                 {{ potStore.participantName(entry.repayment.from_participant_id) }} an
                 {{ potStore.participantName(entry.repayment.to_participant_id) }}
               </div>
-              <div class="expense-meta">Rückzahlung · {{ formatDay(entry.day) }}</div>
+              <div class="expense-meta">
+                {{ entry.repayment.settlement_id ? 'Mit Ausgleich verrechnet' : 'Rückzahlung' }}
+                · {{ formatDay(entry.day) }}
+              </div>
               <div v-if="changeLine(entry.repayment)" class="expense-change">
                 {{ changeLine(entry.repayment) }}
               </div>

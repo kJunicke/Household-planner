@@ -33,6 +33,7 @@ const methodLabel: Record<SettlementMethod, string> = {
   money: 'Geld',
   surprise: 'Überraschung',
   other: 'Sonstiges',
+  pot: 'Haushaltstopf',
 }
 
 const methodIcon: Record<SettlementMethod, string> = {
@@ -40,6 +41,7 @@ const methodIcon: Record<SettlementMethod, string> = {
   money: 'bi-cash-coin',
   surprise: 'bi-gift',
   other: 'bi-three-dots',
+  pot: 'bi-house-heart',
 }
 
 // Kurs: steht hier, wo er verwendet wird, und ist hier änderbar. Eine
@@ -270,7 +272,10 @@ onUnmounted(() => {
                       →
                       <strong>{{ getMemberName(s.to_user_id) }}</strong>
                       <span class="badge bg-secondary ms-1">{{ s.points_settled }} Pkt.</span>
-                      <span v-if="s.method === 'money' && s.paid_euros != null" class="paid-euros">
+                      <span
+                        v-if="(s.method === 'money' || s.method === 'pot') && s.paid_euros != null"
+                        class="paid-euros"
+                      >
                         {{ formatEuros(s.paid_euros) }}
                       </span>
                     </div>

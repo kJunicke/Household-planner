@@ -1626,4 +1626,166 @@ END $$;
 
 RESET ROLE;
 
+-- =================================================================
+-- Verrechnen mit dem Haushaltstopf (CONTEXT.md § Ausgleich)
+-- =================================================================
+-- Eine Datenbank-Funktion legt den Ausgleich (Punkte, Art 'pot') und die
+-- Rückzahlung im Haushaltstopf (Euro) an — beides oder nichts. Wer in der
+-- Bilanz hinten liegt (from) und im Topf gut hat, bekommt die Rückzahlung:
+-- sie läuft vom Ausgleichs-Empfänger (to) an ihn.
+SELECT set_config('role', 'authenticated', true),
+       set_config('request.jwt.claims', '{"sub":"a0000000-0000-0000-0000-00000000000a","role":"authenticated"}', true);
+
+DO $$
+DECLARE
+  s settlements;
+  r pot_repayments;
+  n integer;
+BEGIN
+  s := settle_with_household_pot('a0000000-0000-0000-0000-00000000000a', 'a2000000-0000-0000-0000-0000000000a2',
+                                 4, 250, 'Kino', '2026-11-20 10:00+01');
+  IF s.method <> 'pot' OR s.points_settled <> 4 OR s.paid_euros <> 2.50
+     OR s.created_by <> 'a0000000-0000-0000-0000-00000000000a'
+     OR s.household_id <> 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa' THEN
+    RAISE EXCEPTION 'FAILED 60: Ausgleich falsch angelegt: %', s;
+  END IF;
+  SELECT count(*) INTO n FROM pot_repayments WHERE settlement_id = s.settlement_id;
+  IF n <> 1 THEN RAISE EXCEPTION 'FAILED 60: % Rückzahlungen zum Ausgleich (erwartet 1)', n; END IF;
+  SELECT * INTO r FROM pot_repayments WHERE settlement_id = s.settlement_id;
+  IF r.amount_cents <> 250 OR r.paid_on <> '2026-11-20' THEN
+    RAISE EXCEPTION 'FAILED 60: Rückzahlung falsch: %', r;
+  END IF;
+  IF (SELECT kind FROM pots WHERE pot_id = r.pot_id) <> 'household'
+     OR r.household_id <> 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa' THEN
+    RAISE EXCEPTION 'FAILED 60: Rückzahlung nicht im Haushaltstopf';
+  END IF;
+  IF (SELECT user_id FROM pot_participants WHERE participant_id = r.from_participant_id)
+       <> 'a2000000-0000-0000-0000-0000000000a2'
+     OR (SELECT user_id FROM pot_participants WHERE participant_id = r.to_participant_id)
+       <> 'a0000000-0000-0000-0000-00000000000a'
+     OR (SELECT user_id FROM pot_participants WHERE participant_id = r.updated_by_participant_id)
+       <> 'a0000000-0000-0000-0000-00000000000a' THEN
+    RAISE EXCEPTION 'FAILED 60: Rückzahlung in falscher Richtung oder falscher Bearbeiter';
+  END IF;
+  SELECT count(*) INTO n FROM pot_repayments WHERE pot_id = '99999999-0000-0000-0000-00000000000a';
+  IF n <> 0 THEN RAISE EXCEPTION 'FAILED 60: Ereignistopf verrechnet'; END IF;
+  RAISE NOTICE 'ok 60: verrechnen legt Ausgleich und Rückzahlung im Haushaltstopf zusammen an';
+END $$;
+
+-- Beides oder nichts: die Rückzahlung scheitert (Betrag über ihrem Limit,
+-- für den Ausgleich noch gültig) → auch kein Ausgleich.
+DO $$
+DECLARE n integer;
+BEGIN
+  BEGIN
+    PERFORM settle_with_household_pot('a0000000-0000-0000-0000-00000000000a', 'a2000000-0000-0000-0000-0000000000a2',
+                                      3, 100000000, 'Atomar', now());
+    RAISE EXCEPTION 'FAILED 61: zu große Rückzahlung angenommen';
+  EXCEPTION WHEN check_violation THEN NULL;
+  END;
+  SELECT count(*) INTO n FROM settlements WHERE description = 'Atomar';
+  IF n <> 0 THEN RAISE EXCEPTION 'FAILED 61: Ausgleich ohne Rückzahlung angelegt'; END IF;
+  SELECT count(*) INTO n FROM pot_repayments WHERE amount_cents = 100000000;
+  IF n <> 0 THEN RAISE EXCEPTION 'FAILED 61: Rückzahlung ohne Ausgleich angelegt'; END IF;
+  RAISE NOTICE 'ok 61: Ausgleich und Rückzahlung entstehen gemeinsam oder gar nicht';
+END $$;
+
+-- An der Funktion vorbei geht es nicht: kein Ausgleich der Art 'pot'
+-- direkt, keine Rückzahlung, die sich an einen Ausgleich hängt, und eine
+-- verknüpfte Rückzahlung lässt sich weder ändern noch allein löschen.
+DO $$
+DECLARE
+  v_settlement uuid;
+  v_repayment uuid;
+  n integer;
+BEGIN
+  SELECT settlement_id INTO v_settlement FROM settlements WHERE description = 'Kino';
+  SELECT repayment_id INTO v_repayment FROM pot_repayments WHERE settlement_id = v_settlement;
+  BEGIN
+    INSERT INTO settlements (household_id, from_user_id, to_user_id, points_settled, method, paid_euros, created_by)
+    VALUES ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'a0000000-0000-0000-0000-00000000000a',
+            'a2000000-0000-0000-0000-0000000000a2', 2, 'pot', 1, 'a0000000-0000-0000-0000-00000000000a');
+    RAISE EXCEPTION 'FAILED 62: Ausgleich der Art pot ohne Rückzahlung angelegt';
+  EXCEPTION WHEN insufficient_privilege THEN NULL;
+  END;
+  BEGIN
+    INSERT INTO pot_repayments (pot_id, household_id, from_participant_id, to_participant_id, amount_cents, settlement_id)
+    SELECT pot_id, household_id, to_participant_id, from_participant_id, 100,
+           (SELECT settlement_id FROM settlements WHERE method = 'money' LIMIT 1)
+    FROM pot_repayments WHERE repayment_id = v_repayment;
+    RAISE EXCEPTION 'FAILED 62: Rückzahlung an einen Ausgleich gehängt';
+  EXCEPTION WHEN check_violation THEN
+    IF SQLERRM <> 'repayment_settlement_mismatch' THEN RAISE EXCEPTION 'FAILED 62: Meldung %', SQLERRM; END IF;
+  END;
+  -- Eine ganze Zeile mit settlement_id = null (Rückgängig legt sie so neu an) geht.
+  INSERT INTO pot_repayments (pot_id, household_id, from_participant_id, to_participant_id, amount_cents, settlement_id)
+  SELECT pot_id, household_id, to_participant_id, from_participant_id, 100, NULL
+  FROM pot_repayments WHERE repayment_id = v_repayment;
+  BEGIN
+    UPDATE pot_repayments SET amount_cents = 1 WHERE repayment_id = v_repayment;
+    RAISE EXCEPTION 'FAILED 62: verknüpfte Rückzahlung geändert';
+  EXCEPTION WHEN check_violation THEN NULL;
+  END;
+  BEGIN
+    DELETE FROM pot_repayments WHERE repayment_id = v_repayment;
+    RAISE EXCEPTION 'FAILED 62: verknüpfte Rückzahlung allein gelöscht';
+  EXCEPTION WHEN check_violation THEN NULL;
+  END;
+  -- Löscht die Anlegerin den Ausgleich (5-Minuten-Fenster), geht die
+  -- Rückzahlung mit.
+  DELETE FROM settlements WHERE settlement_id = v_settlement;
+  GET DIAGNOSTICS n = ROW_COUNT;
+  IF n <> 1 THEN RAISE EXCEPTION 'FAILED 62: eigener Ausgleich nicht löschbar'; END IF;
+  SELECT count(*) INTO n FROM pot_repayments WHERE repayment_id = v_repayment;
+  IF n <> 0 THEN RAISE EXCEPTION 'FAILED 62: Rückzahlung überlebt den gelöschten Ausgleich'; END IF;
+  RAISE NOTICE 'ok 62: verrechnen nur über die Funktion, gelöschter Ausgleich nimmt die Rückzahlung mit';
+END $$;
+
+-- Nur Mitglieder, nur im eigenen Haushalt: B (HB) nicht für HA, kein Gast.
+SELECT set_config('role', 'authenticated', true),
+       set_config('request.jwt.claims', '{"sub":"b0000000-0000-0000-0000-00000000000b","role":"authenticated"}', true);
+
+DO $$
+BEGIN
+  BEGIN
+    PERFORM settle_with_household_pot('a0000000-0000-0000-0000-00000000000a', 'a2000000-0000-0000-0000-0000000000a2',
+                                      1, 100, 'Fremd', now());
+    RAISE EXCEPTION 'FAILED 63: B verrechnet in HA';
+  EXCEPTION WHEN check_violation THEN
+    IF SQLERRM <> 'settlement_party_not_in_household' THEN RAISE EXCEPTION 'FAILED 63: Meldung %', SQLERRM; END IF;
+  END;
+  RAISE NOTICE 'ok 63: kein Verrechnen in einem fremden Haushalt';
+END $$;
+
+SELECT set_config('role', 'authenticated', true),
+       set_config('request.jwt.claims', '{"sub":"e0000000-0000-0000-0000-00000000000e","role":"authenticated","is_anonymous":true}', true);
+
+DO $$
+BEGIN
+  BEGIN
+    PERFORM settle_with_household_pot('a0000000-0000-0000-0000-00000000000a', 'a2000000-0000-0000-0000-0000000000a2',
+                                      1, 100, 'Gast', now());
+    RAISE EXCEPTION 'FAILED 64: Gast verrechnet';
+  EXCEPTION WHEN insufficient_privilege THEN
+    IF SQLERRM <> 'anonymous_not_allowed' THEN RAISE EXCEPTION 'FAILED 64: Meldung %', SQLERRM; END IF;
+  END;
+  RAISE NOTICE 'ok 64: Gast verrechnet nicht';
+END $$;
+
+SELECT set_config('role', 'anon', true),
+       set_config('request.jwt.claims', '{"role":"anon"}', true);
+
+DO $$
+BEGIN
+  BEGIN
+    PERFORM settle_with_household_pot('a0000000-0000-0000-0000-00000000000a', 'a2000000-0000-0000-0000-0000000000a2',
+                                      1, 100, 'anon', now());
+    RAISE EXCEPTION 'FAILED 65: anon verrechnet';
+  EXCEPTION WHEN insufficient_privilege THEN NULL;
+  END;
+  RAISE NOTICE 'ok 65: anon erreicht das Verrechnen nicht';
+END $$;
+
+RESET ROLE;
+
 ROLLBACK;
