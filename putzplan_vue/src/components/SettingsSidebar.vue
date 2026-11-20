@@ -9,6 +9,7 @@ import { WEEK_DAY_LABELS } from '../lib/weekWindow'
 import WeeklyGoalConfirmModal from './WeeklyGoalConfirmModal.vue'
 import LogoutConfirmModal from './LogoutConfirmModal.vue'
 import PointBenchmarkSettings from './PointBenchmarkSettings.vue'
+import GuestShareOverview from './GuestShareOverview.vue'
 import { useShoppingStore } from '../stores/shoppingStore'
 import { usePackingStore } from '../stores/packingStore'
 import { useTodoStore } from '../stores/todoStore'
@@ -474,6 +475,11 @@ const buildDate = __BUILD_DATE__
           </section>
 
           <!-- Richtwerte: die Eichung der Punkte, beim Wochenziel -->
+          <section v-if="householdStore.currentHousehold" class="sidebar-section">
+            <h3>Gastlinks</h3>
+            <GuestShareOverview v-if="open" />
+          </section>
+
           <section v-if="householdStore.currentHousehold" class="sidebar-section">
             <h3>Richtwerte</h3>
             <PointBenchmarkSettings />

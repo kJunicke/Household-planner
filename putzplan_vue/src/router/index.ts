@@ -54,6 +54,14 @@ const router = createRouter({
       component: () => import('../views/RegisterView.vue'),
     },
     {
+      // Gastansicht (CONTEXT.md § Gast). Das Geheimnis steht im Anker
+      // (`/gast/#…`, siehe lib/guestLink.ts); `gast/index.html` liegt als
+      // echte Datei im Build, damit Pages den Pfad ohne SPA-Rückfall ausliefert.
+      path: '/gast',
+      name: 'guest',
+      component: () => import('../views/GuestView.vue'),
+    },
+    {
       path: '/household-setup',
       name: 'household-setup',
       component: () => import('../views/HouseholdSetupView.vue'),
@@ -65,6 +73,14 @@ const router = createRouter({
 router.beforeEach((to) => {
   const authStore = useAuthStore()
   const householdStore = useHouseholdStore()
+
+  // 0. Gäste (Anonymanmeldung) sind keine Mitglieder: nur die Gastansicht,
+  //    nie Login, Einrichtung oder eine Haushaltsseite. Die Gastansicht selbst
+  //    steht jedem offen — sie meldet anonym an oder weist Mitglieder hin.
+  if (authStore.isGuest) {
+    return to.name === 'guest' ? true : { name: 'guest' }
+  }
+  if (to.name === 'guest') return true
 
   // 1. Wenn nicht eingeloggt → zu /login
   if (!authStore.user && to.name !== 'login' && to.name !== 'register') {
