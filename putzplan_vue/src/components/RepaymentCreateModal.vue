@@ -5,20 +5,24 @@ import { formatCents } from '@/lib/potLedger'
 import { formatEuroInput, parseEuroInput } from '@/lib/settlementAmount'
 import { POT_AMOUNT_MAX_CENTS } from '@/lib/limits'
 import { toIsoDate } from '@/lib/taskSchedule'
+import type { PotRepayment } from '@/types/Pot'
 
 /**
  * Rückzahlung eintragen (CONTEXT.md § Rückzahlung): frei, oder vorausgefüllt
- * aus einem Überweisungsvorschlag (`prefill`).
+ * aus einem Überweisungsvorschlag (`prefill`). Mit `repayment` bearbeitet der
+ * Dialog eine bestehende Rückzahlung.
  */
 const props = defineProps<{
   potId: string
   prefill?: { fromId: string; toId: string; amountCents: number }
+  repayment?: PotRepayment
 }>()
 
 const emit = defineEmits<{
   submit: [
     payload: { potId: string; fromId: string; toId: string; amountCents: number; paidOn: string },
   ]
+  delete: []
   close: []
 }>()
 
@@ -26,20 +30,25 @@ const potStore = usePotStore()
 
 const participants = computed(() => potStore.participantsOf(props.potId))
 
+const isEdit = !!props.repayment
+
 // Wer einträgt, hat meist selbst überwiesen.
 const fromId = ref(
-  props.prefill?.fromId ??
+  props.repayment?.from_participant_id ??
+    props.prefill?.fromId ??
     potStore.myParticipantId(props.potId) ??
     participants.value[0]?.participant_id ??
     '',
 )
 const toId = ref(
-  props.prefill?.toId ??
+  props.repayment?.to_participant_id ??
+    props.prefill?.toId ??
     participants.value.find((p) => p.participant_id !== fromId.value)?.participant_id ??
     '',
 )
-const amountText = ref(props.prefill ? formatEuroInput(props.prefill.amountCents / 100) : '')
-const paidOn = ref(toIsoDate(new Date()))
+const startCents = props.repayment?.amount_cents ?? props.prefill?.amountCents
+const amountText = ref(startCents ? formatEuroInput(startCents / 100) : '')
+const paidOn = ref(props.repayment?.paid_on ?? toIsoDate(new Date()))
 
 // Von und an dürfen nicht dieselbe Person sein: wer „von“ auf den Empfänger
 // stellt, tauscht beide.
@@ -80,7 +89,7 @@ const handleSubmit = () => {
     <div class="modal-overlay" @click.self="emit('close')">
       <div class="modal-content repayment-modal" @click.stop>
         <div class="modal-header">
-          <h5 class="modal-title">Rückzahlung</h5>
+          <h5 class="modal-title">{{ isEdit ? 'Rückzahlung bearbeiten' : 'Rückzahlung' }}</h5>
           <button class="btn-close" @click="emit('close')" aria-label="Schließen"></button>
         </div>
 
@@ -137,9 +146,13 @@ const handleSubmit = () => {
         </div>
 
         <div class="modal-footer">
+          <!-- Ohne Rückfrage: das Löschen lässt sich über den Hinweis zurücknehmen. -->
+          <button v-if="isEdit" class="btn btn-outline-danger me-auto" @click="emit('delete')">
+            <i class="bi bi-trash me-1"></i> Löschen
+          </button>
           <button class="btn btn-secondary" @click="emit('close')">Abbrechen</button>
           <button class="btn btn-primary" @click="handleSubmit" :disabled="!isValid">
-            <i class="bi bi-check-lg me-1"></i> Eintragen
+            <i class="bi bi-check-lg me-1"></i> {{ isEdit ? 'Speichern' : 'Eintragen' }}
           </button>
         </div>
       </div>

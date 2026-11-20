@@ -5,6 +5,7 @@ import { usePotStore } from '@/stores/potStore'
 import { participantNameProblem } from '@/lib/potRules'
 import { POT_PARTICIPANT_NAME_MAX_LENGTH } from '@/lib/limits'
 import { formatCents, suggestTransfers } from '@/lib/potLedger'
+import { entryChangeLine } from '@/lib/potEntryChange'
 import ExpenseCreateModal from './ExpenseCreateModal.vue'
 import RepaymentCreateModal from './RepaymentCreateModal.vue'
 import type { Pot, PotExpense, PotRepayment } from '@/types/Pot'
@@ -15,6 +16,7 @@ const potStore = usePotStore()
 const router = useRouter()
 
 const showCreateModal = ref(false)
+const editingExpense = ref<PotExpense | null>(null)
 
 const title = computed(() => (props.pot.kind === 'household' ? 'Haushaltstopf' : props.pot.name))
 
@@ -89,12 +91,26 @@ const formatClosedAt = (iso: string) =>
 // Überweisungsvorschläge: wer wem wie viel, damit alle Salden aufgehen.
 const transfers = computed(() => suggestTransfers(potStore.balancesOf(props.pot.pot_id)))
 
-// Offenes Rückzahlungs-Formular: frei (ohne `prefill`) oder aus einem Vorschlag.
+// Offenes Rückzahlungs-Formular: frei (ohne `prefill`), aus einem Vorschlag
+// oder zum Bearbeiten einer bestehenden Rückzahlung (`repayment`).
 type RepaymentPrefill = { fromId: string; toId: string; amountCents: number }
-const repaymentModal = ref<{ prefill?: RepaymentPrefill } | null>(null)
+const repaymentModal = ref<{ prefill?: RepaymentPrefill; repayment?: PotRepayment } | null>(null)
 
 const handleRepaymentSubmit = (payload: Parameters<typeof potStore.createRepayment>[0]) => {
-  if (potStore.createRepayment(payload)) repaymentModal.value = null
+  const editing = repaymentModal.value?.repayment
+  if (editing) {
+    // Schlägt nur fehl, wenn die Rückzahlung inzwischen gelöscht ist; der Store meldet das.
+    potStore.updateRepayment(editing.repayment_id, payload)
+    repaymentModal.value = null
+  } else if (potStore.createRepayment(payload)) {
+    repaymentModal.value = null
+  }
+}
+
+const handleRepaymentDelete = () => {
+  const editing = repaymentModal.value?.repayment
+  if (editing) potStore.deleteRepayment(editing.repayment_id)
+  repaymentModal.value = null
 }
 
 // Ausgaben und Rückzahlungen in einer Liste, neueste zuerst.
@@ -147,8 +163,41 @@ const back = () => {
   void router.push({ name: 'kasse', query: { tab: 'toepfe' } })
 }
 
+/** „eingetragen von …“ bzw. „zuletzt geändert von …“ unter jedem Eintrag. */
+const changeLine = (entry: PotExpense | PotRepayment) =>
+  entryChangeLine({
+    createdAt: entry.created_at,
+    updatedAt: entry.updated_at,
+    changedByName: potStore.participantExists(entry.updated_by_participant_id)
+      ? potStore.participantName(entry.updated_by_participant_id)
+      : null,
+  })
+
+/** Eintrag antippen: Ausgabe bzw. Rückzahlung zum Bearbeiten öffnen (nur in offenen Töpfen). */
+const openEdit = (entry: Entry) => {
+  if (!isOpen.value) return
+  if (entry.kind === 'expense') editingExpense.value = entry.expense
+  else repaymentModal.value = { repayment: entry.repayment }
+}
+
+const closeExpenseModal = () => {
+  showCreateModal.value = false
+  editingExpense.value = null
+}
+
 const handleSubmit = (payload: Parameters<typeof potStore.createExpense>[0]) => {
-  if (potStore.createExpense(payload)) showCreateModal.value = false
+  if (editingExpense.value) {
+    // Schlägt nur fehl, wenn die Ausgabe inzwischen gelöscht ist; der Store meldet das.
+    potStore.updateExpense(editingExpense.value.expense_id, payload)
+    closeExpenseModal()
+  } else if (potStore.createExpense(payload)) {
+    closeExpenseModal()
+  }
+}
+
+const handleDelete = () => {
+  if (editingExpense.value) potStore.deleteExpense(editingExpense.value.expense_id)
+  closeExpenseModal()
 }
 </script>
 
@@ -220,7 +269,13 @@ const handleSubmit = (payload: Parameters<typeof potStore.createExpense>[0]) => 
       </div>
       <div v-else class="expense-list">
         <template v-for="entry in entries" :key="entry.id">
-          <div v-if="entry.kind === 'expense'" class="expense-item">
+          <button
+            v-if="entry.kind === 'expense'"
+            type="button"
+            class="expense-item"
+            :disabled="!isOpen"
+            @click="openEdit(entry)"
+          >
             <div class="expense-info">
               <div class="expense-title">{{ entry.expense.description }}</div>
               <div class="expense-meta">
@@ -233,10 +288,19 @@ const handleSubmit = (payload: Parameters<typeof potStore.createExpense>[0]) => 
                   {{ s.name }} {{ formatCents(s.cents) }}
                 </span>
               </div>
+              <div v-if="changeLine(entry.expense)" class="expense-change">
+                {{ changeLine(entry.expense) }}
+              </div>
             </div>
             <div class="expense-amount">{{ formatCents(entry.expense.amount_cents) }}</div>
-          </div>
-          <div v-else class="expense-item repayment-item">
+          </button>
+          <button
+            v-else
+            type="button"
+            class="expense-item repayment-item"
+            :disabled="!isOpen"
+            @click="openEdit(entry)"
+          >
             <i class="bi bi-arrow-left-right repayment-icon"></i>
             <div class="expense-info">
               <div class="expense-title">
@@ -244,11 +308,14 @@ const handleSubmit = (payload: Parameters<typeof potStore.createExpense>[0]) => 
                 {{ potStore.participantName(entry.repayment.to_participant_id) }}
               </div>
               <div class="expense-meta">Rückzahlung · {{ formatDay(entry.day) }}</div>
+              <div v-if="changeLine(entry.repayment)" class="expense-change">
+                {{ changeLine(entry.repayment) }}
+              </div>
             </div>
             <div class="expense-amount repayment-amount">
               {{ formatCents(entry.repayment.amount_cents) }}
             </div>
-          </div>
+          </button>
         </template>
       </div>
     </section>
@@ -316,17 +383,21 @@ const handleSubmit = (payload: Parameters<typeof potStore.createExpense>[0]) => 
     </section>
 
     <ExpenseCreateModal
-      v-if="showCreateModal"
+      v-if="showCreateModal || editingExpense"
       :pot-id="pot.pot_id"
+      :expense="editingExpense ?? undefined"
       @submit="handleSubmit"
-      @close="showCreateModal = false"
+      @delete="handleDelete"
+      @close="closeExpenseModal"
     />
 
     <RepaymentCreateModal
       v-if="repaymentModal"
       :pot-id="pot.pot_id"
       :prefill="repaymentModal.prefill"
+      :repayment="repaymentModal.repayment"
       @submit="handleRepaymentSubmit"
+      @delete="handleRepaymentDelete"
       @close="repaymentModal = null"
     />
   </div>
@@ -413,9 +484,35 @@ const handleSubmit = (payload: Parameters<typeof potStore.createExpense>[0]) => 
   overflow-wrap: anywhere;
 }
 
-.expense-meta {
+.expense-meta,
+.expense-change {
   font-size: 0.8rem;
   color: var(--color-text-secondary);
+}
+
+.expense-change {
+  font-style: italic;
+}
+
+/* Ganze Zeile antippbar: öffnet den Eintrag zum Bearbeiten. */
+button.expense-item {
+  width: 100%;
+  background: none;
+  border: none;
+  border-bottom: 1px solid var(--color-border);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  -webkit-tap-highlight-color: transparent;
+}
+
+button.expense-item:last-child {
+  border-bottom: none;
+}
+
+button.expense-item:disabled {
+  opacity: 1;
+  cursor: default;
 }
 
 .closed-banner {

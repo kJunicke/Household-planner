@@ -5,8 +5,10 @@ import { expenseShares, formatCents, splitValidity, type ExpenseSplit } from '@/
 import { formatEuroInput, parseEuroInput } from '@/lib/settlementAmount'
 import { POT_AMOUNT_MAX_CENTS, POT_EXPENSE_DESCRIPTION_MAX_LENGTH } from '@/lib/limits'
 import { toIsoDate } from '@/lib/taskSchedule'
+import type { PotExpense } from '@/types/Pot'
 
-const props = defineProps<{ potId: string }>()
+// Mit `expense` bearbeitet der Dialog eine bestehende Ausgabe, sonst legt er eine an.
+const props = defineProps<{ potId: string; expense?: PotExpense }>()
 
 const emit = defineEmits<{
   submit: [
@@ -19,6 +21,7 @@ const emit = defineEmits<{
       split: ExpenseSplit
     },
   ]
+  delete: []
   close: []
 }>()
 
@@ -30,13 +33,19 @@ const potStore = usePotStore()
 const participants = computed(() => potStore.currentParticipantsOf(props.potId))
 const participantOrder = computed(() => participants.value.map((p) => p.participant_id))
 
+const editing = props.expense
+const isEdit = !!editing
+
 // Wer einträgt, hat meist selbst bezahlt.
 const payerId = ref(
-  potStore.myParticipantId(props.potId) ?? participants.value[0]?.participant_id ?? '',
+  editing?.payer_participant_id ??
+    potStore.myParticipantId(props.potId) ??
+    participants.value[0]?.participant_id ??
+    '',
 )
-const description = ref('')
-const amountText = ref('')
-const spentOn = ref(toIsoDate(new Date()))
+const description = ref(editing?.description ?? '')
+const amountText = ref(editing ? formatEuroInput(editing.amount_cents / 100) : '')
+const spentOn = ref(editing?.spent_on ?? toIsoDate(new Date()))
 
 const amountCents = computed(() => {
   const euros = parseEuroInput(amountText.value)
@@ -60,11 +69,16 @@ const modes: { value: SplitMode; label: string }[] = [
 ]
 const unitOf: Record<ValueMode, string> = { ratio: 'Teile', percent: '%', exact: '€' }
 
-const mode = ref<SplitMode>('equal')
-const showAdvanced = ref(false)
+const mode = ref<SplitMode>(editing?.split_kind ?? 'equal')
+const showAdvanced = ref(mode.value !== 'equal')
 
-// Schnell: gleich auf alle, einzelne ab- und wieder anwählbar.
-const selectedIds = ref<string[]>([...participantOrder.value])
+// Schnell: gleich auf alle, einzelne ab- und wieder anwählbar. Beim Bearbeiten
+// die gespeicherte Auswahl, soweit es die Teilnehmer noch gibt.
+const selectedIds = ref<string[]>(
+  editing?.split_kind === 'equal'
+    ? participantOrder.value.filter((id) => id in editing.split_values)
+    : [...participantOrder.value],
+)
 const isSelected = (id: string) => selectedIds.value.includes(id)
 const toggleSelected = (id: string) => {
   selectedIds.value = isSelected(id)
@@ -79,6 +93,18 @@ const valueTexts = ref<Record<ValueMode, Record<string, string>>>({
   percent: {},
   exact: {},
 })
+
+// Beim Bearbeiten die gespeicherten Rohwerte als Eingabe zurückschreiben
+// (Beträge sind Cent, Verhältnis und Prozent die Zahl selbst).
+if (editing && editing.split_kind !== 'equal') {
+  const kind = editing.split_kind
+  valueTexts.value[kind] = Object.fromEntries(
+    Object.entries(editing.split_values).map(([id, raw]) => [
+      id,
+      kind === 'exact' ? formatEuroInput(raw / 100) : String(raw).replace('.', ','),
+    ]),
+  )
+}
 
 /** Eingabe als Zahl; leer zählt als 0, Unlesbares als `null`. */
 const parseValue = (text: string | undefined): number | null =>
@@ -183,7 +209,7 @@ const handleSubmit = () => {
     <div class="modal-overlay" @click.self="emit('close')">
       <div class="modal-content expense-modal" @click.stop>
         <div class="modal-header">
-          <h5 class="modal-title">Neue Ausgabe</h5>
+          <h5 class="modal-title">{{ isEdit ? 'Ausgabe bearbeiten' : 'Neue Ausgabe' }}</h5>
           <button class="btn-close" @click="emit('close')" aria-label="Schließen"></button>
         </div>
 
@@ -312,9 +338,13 @@ const handleSubmit = () => {
         </div>
 
         <div class="modal-footer">
+          <!-- Ohne Rückfrage: das Löschen lässt sich über den Hinweis zurücknehmen. -->
+          <button v-if="isEdit" class="btn btn-outline-danger me-auto" @click="emit('delete')">
+            <i class="bi bi-trash me-1"></i> Löschen
+          </button>
           <button class="btn btn-secondary" @click="emit('close')">Abbrechen</button>
           <button class="btn btn-primary" @click="handleSubmit" :disabled="!isValid">
-            <i class="bi bi-check-lg me-1"></i> Eintragen
+            <i class="bi bi-check-lg me-1"></i> {{ isEdit ? 'Speichern' : 'Eintragen' }}
           </button>
         </div>
       </div>
