@@ -3,6 +3,7 @@ import { defineStore } from 'pinia'
 import type { RealtimeChannel } from '@supabase/supabase-js'
 import type { Pot, PotExpense, PotParticipant, PotRepayment } from '@/types/Pot'
 import { supabase } from '@/lib/supabase'
+import { newId } from '@/lib/newId'
 import { onSessionEnd } from '@/lib/sessionEnd'
 import { isInFlight, runOptimistic } from '@/lib/optimistic'
 import {
@@ -384,8 +385,19 @@ export const usePotStore = defineStore('pot', () => {
      * Neuen Eintrag optimistisch anlegen. Die ID vergibt der Client, damit das
      * Realtime-Echo die optimistische Zeile trifft; die Zeitstempel setzt die Datenbank.
      */
-    const create = (row: T): boolean => {
+    const create = (build: (householdId: string) => T): boolean => {
       const toastStore = useToastStore()
+      // Nie still scheitern: ohne Haushaltsrahmen oder wenn schon das Bauen der
+      // Zeile wirft, sagt eine Meldung, dass nichts eingetragen wurde.
+      let row: T
+      try {
+        if (!activeHouseholdId) throw new Error('no_household')
+        row = build(activeHouseholdId)
+      } catch (error) {
+        console.error(`Error preparing ${table} row:`, error)
+        toastStore.showToast(`${label} konnte nicht eingetragen werden`, 'error')
+        return false
+      }
       const { applied } = runOptimistic<T>({
         entityId: idOf(row),
         apply: () => {
@@ -527,21 +539,22 @@ export const usePotStore = defineStore('pot', () => {
     description: string
     split: ExpenseSplit
   }): boolean => {
-    if (!activeHouseholdId) return false
-    const now = new Date().toISOString()
-    return expenseWriter.create({
-      expense_id: crypto.randomUUID(),
-      pot_id: input.potId,
-      household_id: activeHouseholdId,
-      payer_participant_id: input.payerId,
-      amount_cents: input.amountCents,
-      spent_on: input.spentOn,
-      description: input.description,
-      split_kind: input.split.kind,
-      split_values: toSplitValues(input.split),
-      updated_by_participant_id: myParticipantId(input.potId),
-      created_at: now,
-      updated_at: now,
+    return expenseWriter.create((householdId) => {
+      const now = new Date().toISOString()
+      return {
+        expense_id: newId(),
+        pot_id: input.potId,
+        household_id: householdId,
+        payer_participant_id: input.payerId,
+        amount_cents: input.amountCents,
+        spent_on: input.spentOn,
+        description: input.description,
+        split_kind: input.split.kind,
+        split_values: toSplitValues(input.split),
+        updated_by_participant_id: myParticipantId(input.potId),
+        created_at: now,
+        updated_at: now,
+      }
     })
   }
 
@@ -578,19 +591,20 @@ export const usePotStore = defineStore('pot', () => {
     amountCents: number
     paidOn: string
   }): boolean => {
-    if (!activeHouseholdId) return false
-    const now = new Date().toISOString()
-    return repaymentWriter.create({
-      repayment_id: crypto.randomUUID(),
-      pot_id: input.potId,
-      household_id: activeHouseholdId,
-      from_participant_id: input.fromId,
-      to_participant_id: input.toId,
-      amount_cents: input.amountCents,
-      paid_on: input.paidOn,
-      updated_by_participant_id: myParticipantId(input.potId),
-      created_at: now,
-      updated_at: now,
+    return repaymentWriter.create((householdId) => {
+      const now = new Date().toISOString()
+      return {
+        repayment_id: newId(),
+        pot_id: input.potId,
+        household_id: householdId,
+        from_participant_id: input.fromId,
+        to_participant_id: input.toId,
+        amount_cents: input.amountCents,
+        paid_on: input.paidOn,
+        updated_by_participant_id: myParticipantId(input.potId),
+        created_at: now,
+        updated_at: now,
+      }
     })
   }
 
@@ -625,7 +639,7 @@ export const usePotStore = defineStore('pot', () => {
     const householdId = activeHouseholdId
     if (!householdId) return null
     const { data, error } = await supabase.rpc('create_event_pot', {
-      p_pot_id: crypto.randomUUID(),
+      p_pot_id: newId(),
       p_name: input.name.trim(),
       p_member_ids: input.memberIds,
       p_guest_names: input.guestNames.map((n) => n.trim()),
@@ -681,7 +695,7 @@ export const usePotStore = defineStore('pot', () => {
     if (!householdId) return false
     const toastStore = useToastStore()
     const row: PotParticipant = {
-      participant_id: crypto.randomUUID(),
+      participant_id: newId(),
       pot_id: potId,
       household_id: householdId,
       name: name.trim(),
