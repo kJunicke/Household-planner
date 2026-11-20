@@ -48,11 +48,11 @@ function buildStamp(): { commit: string; time: string } {
 const stamp = buildStamp()
 
 /**
- * Legt die App zusaetzlich als `gast/index.html` ab. GitHub Pages hat keinen
- * SPA-Rueckfall: ein Gastlink auf einen erfundenen Pfad waere in einem
+ * Legt die App zusätzlich als `gast/index.html` ab. GitHub Pages hat keinen
+ * SPA-Rückfall: ein Gastlink auf einen erfundenen Pfad wäre in einem
  * frischen Browser (noch kein Service Worker) eine 404. Unter `gast/` liegt so
  * eine echte Datei; den Rest erledigt der Router (`/gast` → Gastansicht).
- * Die Asset-Pfade sind absolut (`base`), dieselbe Datei laeuft auch dort.
+ * Die Asset-Pfade sind absolut (`base`), dieselbe Datei läuft auch dort.
  */
 function guestPage(): Plugin {
   return {
