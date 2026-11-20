@@ -50,6 +50,31 @@ export function openBalance(pairs: readonly PairBalance[], fromId: string, toId:
 }
 
 /**
+ * Guthaben, das `fromId` beim Verrechnen mit dem Haushaltstopf einsetzen
+ * kann (CONTEXT.md § Ausgleich): was `fromId` im Topf gut hat, aber nur so
+ * viel, wie `toId` dort schuldet — die Rückzahlung läuft von `toId` an
+ * `fromId`. Salden in Cent wie aus der Topf-Rechnung; 0, wenn nichts da ist.
+ */
+export function householdPotCredit(
+  balances: ReadonlyMap<string, number>,
+  fromId: string,
+  toId: string,
+): number {
+  return Math.max(0, Math.min(balances.get(fromId) ?? 0, -(balances.get(toId) ?? 0)))
+}
+
+/**
+ * Vorbelegte Punkte beim Verrechnen mit dem Haushaltstopf: höchstens die
+ * offene Bilanz und höchstens so viele ganze Punkte, wie das Guthaben nach
+ * Kurs deckt (CONTEXT.md § Umrechnung). 0 heißt: nichts zu verrechnen.
+ */
+export function potOffsetPoints(openPoints: number, creditCents: number, rate: number): number {
+  const rateCents = Math.round(rate * 100)
+  if (rateCents <= 0) return 0
+  return Math.max(0, Math.min(openPoints, Math.floor(creditCents / rateCents)))
+}
+
+/**
  * Euro-Betrag aus einer NUMERIC-Spalte (`households.euros_per_point`,
  * `settlements.paid_euros`) als Zahl: PostgREST liefert eine Zahl, Realtime
  * womöglich Text. Gelesen wird damit, wo die Zeile ankommt, damit die Typen
