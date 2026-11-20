@@ -571,6 +571,75 @@ BEGIN
   RAISE NOTICE 'ok 27: abgeschlossener Topf lesbar, aber schreibgeschützt';
 END $$;
 
+-- Fremde Einträge: A legt an, A2 ändert und löscht sie. Rückgängig legt die
+-- gelöschte Zeile mit derselben Kennung und denselben Zeitstempeln wieder an.
+DO $$
+DECLARE
+  my_pot uuid := (SELECT pot_id FROM pots WHERE kind = 'household');
+  pa uuid := (SELECT participant_id FROM pot_participants WHERE pot_id = my_pot AND user_id = 'a0000000-0000-0000-0000-00000000000a');
+  pa2 uuid := (SELECT participant_id FROM pot_participants WHERE pot_id = my_pot AND user_id = 'a2000000-0000-0000-0000-0000000000a2');
+BEGIN
+  INSERT INTO pot_expenses (expense_id, pot_id, household_id, payer_participant_id, amount_cents, description,
+                            split_kind, split_values, updated_by_participant_id)
+  VALUES ('eeeeeeee-0000-0000-0000-0000000000a8', my_pot, 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', pa, 900, 'Strom',
+          'equal', jsonb_build_object(pa::text, 1, pa2::text, 1), pa);
+  INSERT INTO pot_repayments (repayment_id, pot_id, household_id, from_participant_id, to_participant_id, amount_cents,
+                              updated_by_participant_id)
+  VALUES ('ffffffff-0000-0000-0000-0000000000a8', my_pot, 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', pa2, pa, 450, pa);
+END $$;
+
+SELECT set_config('role', 'authenticated', true),
+       set_config('request.jwt.claims', '{"sub":"a2000000-0000-0000-0000-0000000000a2","role":"authenticated"}', true);
+
+DO $$
+DECLARE
+  n integer;
+  pa2 uuid := (SELECT participant_id FROM pot_participants p JOIN pots USING (pot_id)
+               WHERE pots.kind = 'household' AND p.user_id = 'a2000000-0000-0000-0000-0000000000a2');
+  e pot_expenses;
+  r pot_repayments;
+BEGIN
+  UPDATE pot_expenses SET amount_cents = 1000, description = 'Strom Oktober', updated_by_participant_id = pa2
+  WHERE expense_id = 'eeeeeeee-0000-0000-0000-0000000000a8';
+  GET DIAGNOSTICS n = ROW_COUNT;
+  IF n <> 1 THEN RAISE EXCEPTION 'FAILED 28: A2 kann die Ausgabe von A nicht ändern'; END IF;
+  UPDATE pot_repayments SET amount_cents = 500, updated_by_participant_id = pa2
+  WHERE repayment_id = 'ffffffff-0000-0000-0000-0000000000a8';
+  GET DIAGNOSTICS n = ROW_COUNT;
+  IF n <> 1 THEN RAISE EXCEPTION 'FAILED 28: A2 kann die Rückzahlung von A nicht ändern'; END IF;
+
+  SELECT * INTO e FROM pot_expenses WHERE expense_id = 'eeeeeeee-0000-0000-0000-0000000000a8';
+  IF e.updated_by_participant_id IS DISTINCT FROM pa2 THEN
+    RAISE EXCEPTION 'FAILED 28: „zuletzt geändert von“ nicht A2';
+  END IF;
+  SELECT * INTO r FROM pot_repayments WHERE repayment_id = 'ffffffff-0000-0000-0000-0000000000a8';
+
+  DELETE FROM pot_expenses WHERE expense_id = 'eeeeeeee-0000-0000-0000-0000000000a8';
+  GET DIAGNOSTICS n = ROW_COUNT;
+  IF n <> 1 THEN RAISE EXCEPTION 'FAILED 28: A2 kann die Ausgabe von A nicht löschen'; END IF;
+  DELETE FROM pot_repayments WHERE repayment_id = 'ffffffff-0000-0000-0000-0000000000a8';
+  GET DIAGNOSTICS n = ROW_COUNT;
+  IF n <> 1 THEN RAISE EXCEPTION 'FAILED 28: A2 kann die Rückzahlung von A nicht löschen'; END IF;
+
+  -- Rückgängig: dieselbe Zeile wieder einfügen, wie der Client sie vorher hatte.
+  INSERT INTO pot_expenses (expense_id, pot_id, household_id, payer_participant_id, amount_cents, spent_on, description,
+                            split_kind, split_values, updated_by_participant_id, created_at, updated_at)
+  VALUES (e.expense_id, e.pot_id, e.household_id, e.payer_participant_id, e.amount_cents, e.spent_on, e.description,
+          e.split_kind, e.split_values, e.updated_by_participant_id, e.created_at, e.updated_at);
+  INSERT INTO pot_repayments (repayment_id, pot_id, household_id, from_participant_id, to_participant_id, amount_cents,
+                              paid_on, updated_by_participant_id, created_at, updated_at)
+  VALUES (r.repayment_id, r.pot_id, r.household_id, r.from_participant_id, r.to_participant_id, r.amount_cents,
+          r.paid_on, r.updated_by_participant_id, r.created_at, r.updated_at);
+  SELECT count(*) INTO n FROM pot_expenses
+  WHERE expense_id = e.expense_id AND created_at = e.created_at AND updated_at = e.updated_at
+    AND amount_cents = 1000 AND updated_by_participant_id = pa2;
+  IF n <> 1 THEN RAISE EXCEPTION 'FAILED 28: gelöschte Ausgabe nicht unverändert wiederhergestellt'; END IF;
+  SELECT count(*) INTO n FROM pot_repayments
+  WHERE repayment_id = r.repayment_id AND created_at = r.created_at AND amount_cents = 500;
+  IF n <> 1 THEN RAISE EXCEPTION 'FAILED 28: gelöschte Rückzahlung nicht wiederhergestellt'; END IF;
+  RAISE NOTICE 'ok 28: Mitglied ändert und löscht fremde Einträge, Rückgängig stellt sie wieder her';
+END $$;
+
 -- =================================================================
 -- Als anon (nicht angemeldet)
 -- =================================================================
