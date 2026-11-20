@@ -33,6 +33,9 @@ const potStore = usePotStore()
 // darum gleich wie in der Topf-Rechnung des Stores.
 const participants = computed(() => potStore.currentParticipantsOf(props.potId))
 const participantOrder = computed(() => participants.value.map((p) => p.participant_id))
+// Gerechnet wird in der Reihenfolge aller Teilnehmer des Topfs: eine ältere
+// Ausgabe „ganze Gruppe“ tragen auch Ehemalige mit, die oben nicht stehen.
+const potOrder = computed(() => potStore.participantsOf(props.potId).map((p) => p.participant_id))
 
 const editing = props.expense
 const isEdit = !!editing
@@ -144,7 +147,7 @@ const split = computed((): ExpenseSplit => {
 const validity = computed(() =>
   splitValidity(
     { amountCents: amountCents.value ?? 0, split: split.value },
-    participantOrder.value,
+    potOrder.value,
   ),
 )
 
@@ -182,7 +185,7 @@ const sharesById = computed(() => {
   if (amountCents.value === null || !splitOk.value) return new Map<string, number>()
   return expenseShares(
     { payerId: payerId.value, amountCents: amountCents.value, split: split.value },
-    participantOrder.value,
+    potOrder.value,
   )
 })
 

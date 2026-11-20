@@ -1976,4 +1976,84 @@ BEGIN
   RAISE NOTICE 'ok 87: guest_shares live, DELETE-Ereignisse nur mit Kennung';
 END $$;
 
+-- -----------------------------------------------------------------
+-- Austritt aus dem Haushalt: der Haushaltstopf merkt sich den Zeitpunkt
+-- (`pot_participants.left_at`), damit frühere Ausgaben „ganze Gruppe“
+-- bleiben, wie sie sind, und spätere den Ehemaligen nicht mehr treffen.
+-- -----------------------------------------------------------------
+SELECT set_config('role', 'authenticated', true),
+       set_config('request.jwt.claims', '{"sub":"a2000000-0000-0000-0000-0000000000a2","role":"authenticated"}', true);
+
+DELETE FROM household_members WHERE user_id = 'a2000000-0000-0000-0000-0000000000a2';
+
+RESET ROLE;
+
+DO $$
+DECLARE n integer;
+BEGIN
+  SELECT count(*) INTO n FROM pot_participants pp JOIN pots p USING (pot_id)
+  WHERE p.kind = 'household' AND pp.user_id = 'a2000000-0000-0000-0000-0000000000a2'
+    AND pp.left_at IS NOT NULL;
+  IF n <> 1 THEN RAISE EXCEPTION 'FAILED 88: Austritt nicht vermerkt (% Zeilen)', n; END IF;
+  SELECT count(*) INTO n FROM pot_participants pp JOIN pots p USING (pot_id)
+  WHERE p.kind = 'household' AND pp.user_id = 'a0000000-0000-0000-0000-00000000000a'
+    AND pp.left_at IS NOT NULL;
+  IF n <> 0 THEN RAISE EXCEPTION 'FAILED 88: Bleibender als ausgetreten vermerkt'; END IF;
+  SELECT count(*) INTO n FROM pot_participants pp JOIN pots p USING (pot_id)
+  WHERE p.kind = 'event' AND pp.left_at IS NOT NULL;
+  IF n <> 0 THEN RAISE EXCEPTION 'FAILED 88: Austritt in einem Topf für einen Anlass vermerkt'; END IF;
+  RAISE NOTICE 'ok 88: Austritt aus dem Haushalt steht am Teilnehmer des Haushaltstopfs';
+END $$;
+
+-- Rückkehr: derselbe Teilnehmer, wieder ohne Austritt.
+INSERT INTO household_members (user_id, household_id, display_name, user_color)
+VALUES ('a2000000-0000-0000-0000-0000000000a2', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'A2', '#E74C3C');
+
+DO $$
+DECLARE n integer;
+BEGIN
+  SELECT count(*) INTO n FROM pot_participants pp JOIN pots p USING (pot_id)
+  WHERE p.kind = 'household' AND pp.user_id = 'a2000000-0000-0000-0000-0000000000a2'
+    AND pp.left_at IS NULL;
+  IF n <> 1 THEN RAISE EXCEPTION 'FAILED 89: Rückkehrer hat % Teilnehmer ohne Austritt', n; END IF;
+  RAISE NOTICE 'ok 89: Rückkehr in den Haushalt leert den Austritt';
+END $$;
+
+-- Konto gelöscht: die Mitgliedschaft fällt weg, der Teilnehmer bleibt
+-- ohne Konto, mit Austritt.
+INSERT INTO auth.users (id, email) VALUES ('e1000000-0000-0000-0000-0000000000e1', 'e1@test.invalid');
+INSERT INTO household_members (user_id, household_id, display_name, user_color)
+VALUES ('e1000000-0000-0000-0000-0000000000e1', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'Ella', '#4A90E2');
+DELETE FROM auth.users WHERE id = 'e1000000-0000-0000-0000-0000000000e1';
+
+DO $$
+DECLARE n integer;
+BEGIN
+  SELECT count(*) INTO n FROM pot_participants pp JOIN pots p USING (pot_id)
+  WHERE p.kind = 'household' AND p.household_id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'
+    AND pp.name = 'Ella' AND pp.user_id IS NULL AND pp.left_at IS NOT NULL;
+  IF n <> 1 THEN RAISE EXCEPTION 'FAILED 90: gelöschtes Konto ohne Austritt (% Zeilen)', n; END IF;
+  RAISE NOTICE 'ok 90: gelöschtes Konto gilt im Haushaltstopf als ausgetreten';
+END $$;
+
+-- Den Austritt setzt nur die Datenbank: ein Client kann ihn beim Anlegen
+-- nicht mitschicken.
+SELECT set_config('role', 'authenticated', true),
+       set_config('request.jwt.claims', '{"sub":"a0000000-0000-0000-0000-00000000000a","role":"authenticated"}', true);
+
+DO $$
+DECLARE p pot_participants;
+BEGIN
+  INSERT INTO pot_participants (pot_id, household_id, name, left_at)
+  SELECT pot_id, household_id, 'Schon weg', now() FROM pots
+  WHERE household_id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa' AND kind = 'event' AND closed_at IS NULL
+  LIMIT 1
+  RETURNING * INTO p;
+  IF p.participant_id IS NULL THEN RAISE EXCEPTION 'FAILED 91: kein offener Topf für den Test'; END IF;
+  IF p.left_at IS NOT NULL THEN RAISE EXCEPTION 'FAILED 91: Client setzt den Austritt'; END IF;
+  RAISE NOTICE 'ok 91: neue Teilnehmer beginnen ohne Austritt';
+END $$;
+
+RESET ROLE;
+
 ROLLBACK;
