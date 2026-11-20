@@ -7,11 +7,12 @@ import { guestLinkUrl } from '@/lib/guestLink'
 import { useHouseholdStore } from './householdStore'
 import { useToastStore } from './toastStore'
 
-/** Tabelle des Ziels je Art — für die Namen in der Übersicht. */
-const TARGET_TABLES: Record<GuestShareKind, string> = {
-  shopping_list: 'shopping_lists',
-  packing_list: 'packing_lists',
-  todo_list: 'todo_lists',
+/** Tabelle und Schlüsselspalte des Ziels je Art — für die Namen in der Übersicht. */
+const TARGET_TABLES: Record<GuestShareKind, { table: string; idColumn: string }> = {
+  shopping_list: { table: 'shopping_lists', idColumn: 'list_id' },
+  packing_list: { table: 'packing_lists', idColumn: 'list_id' },
+  todo_list: { table: 'todo_lists', idColumn: 'list_id' },
+  pot: { table: 'pots', idColumn: 'pot_id' },
 }
 
 /**
@@ -58,12 +59,10 @@ export const useGuestShareStore = defineStore('guestShare', () => {
     for (const kind of Object.keys(TARGET_TABLES) as GuestShareKind[]) {
       const ids = shares.value.filter((s) => s.target_kind === kind).map((s) => s.target_id)
       if (ids.length === 0) continue
-      const { data } = await supabase
-        .from(TARGET_TABLES[kind])
-        .select('list_id, name')
-        .in('list_id', ids)
-      for (const row of (data ?? []) as { list_id: string; name: string }[]) {
-        names[row.list_id] = row.name
+      const { table, idColumn } = TARGET_TABLES[kind]
+      const { data } = await supabase.from(table).select(`${idColumn}, name`).in(idColumn, ids)
+      for (const row of (data ?? []) as unknown as Record<string, string>[]) {
+        names[row[idColumn]!] = row.name!
       }
     }
     if (loadedFor === householdId) targetNames.value = names

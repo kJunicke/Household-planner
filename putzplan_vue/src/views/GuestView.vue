@@ -1,14 +1,14 @@
 <script setup lang="ts">
 /**
  * Gastansicht (CONTEXT.md § Gast, § Gastlink; ADR-0006): öffnet genau die
- * Liste, die der Gastlink teilt — ohne Konto, ohne Navigation, mit der
- * Kopfzeile „geteilt von <Haushaltsname>“.
+ * Liste oder den Topf, den der Gastlink teilt — ohne Konto, ohne Navigation,
+ * mit der Kopfzeile „geteilt von <Haushaltsname>“.
  *
  * Ablauf: Geheimnis aus dem Anker lesen → anonym anmelden (falls noch keine
  * Sitzung) → in der Datenbank einlösen → den Haushalt der Liste als Rahmen
- * setzen, damit die Listen-Stores wie für Mitglieder laden; RLS liefert dem
- * Gast nur die geteilte Liste. Ohne Netz ist die Liste gesperrt: Gäste haben
- * keine Offline-Warteschlange.
+ * setzen, damit die Listen- und Topf-Stores wie für Mitglieder laden; RLS
+ * liefert dem Gast nur das Geteilte. Ohne Netz ist die Ansicht gesperrt: Gäste
+ * haben keine Offline-Warteschlange.
  */
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
@@ -24,6 +24,7 @@ import { useTodoStore } from '@/stores/todoStore'
 import ShoppingView from './ShoppingView.vue'
 import PackingView from './PackingView.vue'
 import TodoView from './TodoView.vue'
+import GuestPot from '@/components/GuestPot.vue'
 
 type GuestState = 'opening' | 'ready' | 'no-link' | 'member' | GuestFailure
 
@@ -35,6 +36,7 @@ const { isOnline } = useNetworkStatus()
 
 const state = ref<GuestState>('opening')
 const kind = ref<GuestShareKind | null>(null)
+const targetId = ref('')
 const householdName = ref('')
 
 const MESSAGES: Record<Exclude<GuestState, 'opening' | 'ready'>, { icon: string; text: string }> = {
@@ -48,7 +50,7 @@ const MESSAGES: Record<Exclude<GuestState, 'opening' | 'ready'>, { icon: string;
   },
   member: {
     icon: 'bi-person-check',
-    text: 'Du bist mit deinem Konto angemeldet. Gastlinks sind für Leute ohne Konto — deine Listen findest du in der App.',
+    text: 'Du bist mit deinem Konto angemeldet. Gastlinks sind für Leute ohne Konto — deine Listen und Töpfe findest du in der App.',
   },
   unavailable: {
     icon: 'bi-slash-circle',
@@ -74,7 +76,7 @@ const message = computed(() =>
 
 const canRetry = (s: GuestState) => s === 'offline' || s === 'error' || s === 'busy'
 
-const listStore = (k: GuestShareKind) =>
+const listStore = (k: Exclude<GuestShareKind, 'pot'>) =>
   k === 'shopping_list'
     ? useShoppingStore()
     : k === 'packing_list'
@@ -116,7 +118,8 @@ const open = async () => {
   if (!row) return
 
   householdStore.enterGuestHousehold(row.household_id, row.household_name)
-  listStore(row.target_kind).currentListId = row.target_id
+  if (row.target_kind !== 'pot') listStore(row.target_kind).currentListId = row.target_id
+  targetId.value = row.target_id
   householdName.value = row.household_name
   kind.value = row.target_kind
   state.value = 'ready'
@@ -158,7 +161,7 @@ onUnmounted(() => {
       <span v-if="householdName">
         geteilt von <strong>{{ householdName }}</strong>
       </span>
-      <span v-else>Geteilte Liste</span>
+      <span v-else>Gastlink</span>
     </header>
 
     <template v-if="state === 'ready' && kind">
@@ -170,13 +173,15 @@ onUnmounted(() => {
       <div :inert="!isOnline" :class="{ 'guest-locked': !isOnline }">
         <ShoppingView v-if="kind === 'shopping_list'" guest />
         <PackingView v-else-if="kind === 'packing_list'" guest />
-        <TodoView v-else guest />
+        <TodoView v-else-if="kind === 'todo_list'" guest />
+        <GuestPot v-else :pot-id="targetId" />
       </div>
       <Teleport to="body">
         <div v-if="!isOnline" class="guest-offline-blocker">
           <div class="guest-offline">
             <i class="bi bi-wifi-off me-1"></i>
-            Kein Netz — die Liste ist gesperrt, bis die Verbindung zurück ist.
+            Kein Netz — {{ kind === 'pot' ? 'der Topf ist' : 'die Liste ist' }} gesperrt, bis die
+            Verbindung zurück ist.
           </div>
         </div>
       </Teleport>
@@ -184,7 +189,7 @@ onUnmounted(() => {
 
     <div v-else-if="state === 'opening'" class="guest-message">
       <div class="spinner-border spinner-border-sm me-2" role="status"></div>
-      Öffne geteilte Liste…
+      Öffne Gastlink…
     </div>
 
     <div v-else-if="message" class="guest-message">
@@ -193,8 +198,8 @@ onUnmounted(() => {
       <button v-if="canRetry(state)" class="btn btn-primary" @click="open">
         <i class="bi bi-arrow-clockwise me-1"></i> Erneut versuchen
       </button>
-      <button v-if="state === 'member'" class="btn btn-primary" @click="router.push('/listen')">
-        Zu den Listen
+      <button v-if="state === 'member'" class="btn btn-primary" @click="router.push('/')">
+        Zur App
       </button>
       <button v-if="state === 'no-link'" class="btn btn-link" @click="toLogin">
         Mit Konto anmelden

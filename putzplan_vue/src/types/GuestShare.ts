@@ -1,8 +1,8 @@
 /**
- * Was ein **Gastlink** öffnet (→ CONTEXT.md § Gastlink). Heute die drei
- * Listenarten; die Datenbank hält die Art offen für weitere Ziele.
+ * Was ein **Gastlink** öffnet (→ CONTEXT.md § Gastlink): eine der drei
+ * Listenarten oder einen Topf für einen Anlass (nie den Haushaltstopf).
  */
-export type GuestShareKind = 'shopping_list' | 'packing_list' | 'todo_list'
+export type GuestShareKind = 'shopping_list' | 'packing_list' | 'todo_list' | 'pot'
 
 /**
  * Freigabe eines Ziels per Gastlink. Tabelle `guest_shares`, Migration
