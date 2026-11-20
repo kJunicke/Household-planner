@@ -7,6 +7,7 @@
 import { onMounted, ref } from 'vue'
 import type { GuestShare, GuestShareKind } from '@/types/GuestShare'
 import { useGuestShareStore } from '@/stores/guestShareStore'
+import { useToastStore } from '@/stores/toastStore'
 import { useNetworkStatus } from '@/composables/useNetworkStatus'
 
 const KIND_LABELS: Record<GuestShareKind, { icon: string; label: string }> = {
@@ -29,11 +30,16 @@ const copy = async (share: GuestShare) => {
   try {
     await navigator.clipboard.writeText(guestShareStore.linkFor(share))
     copiedId.value = share.share_id
+    useToastStore().showToast('Gastlink kopiert', 'success', 2000)
     setTimeout(() => {
       if (copiedId.value === share.share_id) copiedId.value = null
     }, 2000)
   } catch {
-    // Zwischenablage gesperrt — kopieren geht dann im Bearbeiten-Dialog der Liste.
+    // Zwischenablage gesperrt — am Ziel steht der Link in einem markierbaren Feld.
+    useToastStore().showToast(
+      'Kopieren ging nicht — der Link steht auch im Bearbeiten-Dialog der Liste bzw. im Topf',
+      'error',
+    )
   }
 }
 

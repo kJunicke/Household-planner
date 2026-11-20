@@ -7,6 +7,7 @@
 import { computed, onMounted, ref } from 'vue'
 import type { GuestShareKind } from '@/types/GuestShare'
 import { useGuestShareStore } from '@/stores/guestShareStore'
+import { useToastStore } from '@/stores/toastStore'
 import { useNetworkStatus } from '@/composables/useNetworkStatus'
 
 const props = defineProps<{
@@ -49,11 +50,13 @@ const copy = async () => {
   try {
     await navigator.clipboard.writeText(link.value)
     copied.value = true
+    useToastStore().showToast('Gastlink kopiert', 'success', 2000)
     setTimeout(() => {
       copied.value = false
     }, 2000)
   } catch {
     // Zwischenablage gesperrt (unsicherer Kontext) — das Feld lässt sich markieren.
+    useToastStore().showToast('Kopieren ging nicht — Link im Feld markieren', 'error')
   }
 }
 
