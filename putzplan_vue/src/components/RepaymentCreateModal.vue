@@ -2,8 +2,8 @@
 import { computed, ref, watch } from 'vue'
 import { usePotStore } from '@/stores/potStore'
 import { formatCents } from '@/lib/potLedger'
-import { formatEuroInput, parseEuroInput } from '@/lib/settlementAmount'
-import { POT_AMOUNT_MAX_CENTS } from '@/lib/limits'
+import { formatEuroInput } from '@/lib/settlementAmount'
+import { parsePotAmount } from '@/lib/potRules'
 import { toIsoDate } from '@/lib/taskSchedule'
 import type { PotRepayment } from '@/types/Pot'
 
@@ -56,12 +56,7 @@ watch(fromId, (next, prev) => {
   if (next === toId.value) toId.value = prev
 })
 
-const amountCents = computed(() => {
-  const euros = parseEuroInput(amountText.value)
-  if (euros === null) return null
-  const cents = Math.round(euros * 100)
-  return cents > 0 && cents <= POT_AMOUNT_MAX_CENTS ? cents : null
-})
+const amountCents = computed(() => parsePotAmount(amountText.value))
 
 const isValid = computed(
   () =>
