@@ -4,7 +4,7 @@ import { useRouter } from 'vue-router'
 import { usePotStore } from '@/stores/potStore'
 import { formatCents } from '@/lib/potLedger'
 import ExpenseCreateModal from './ExpenseCreateModal.vue'
-import type { Pot } from '@/types/Pot'
+import type { Pot, PotExpense } from '@/types/Pot'
 
 const props = defineProps<{ pot: Pot }>()
 
@@ -25,6 +25,21 @@ const balanceRows = computed(() => {
 })
 
 const expenses = computed(() => potStore.expensesOf(props.pot.pot_id))
+
+const splitLabel: Record<PotExpense['split_kind'], string> = {
+  equal: 'gleich',
+  ratio: 'nach Verhältnis',
+  percent: 'nach Prozent',
+  exact: 'nach Beträgen',
+}
+
+/** Euro je Person einer Ausgabe, in Topf-Reihenfolge. */
+const shareRows = (e: PotExpense) =>
+  [...potStore.sharesOf(e)].map(([id, cents]) => ({
+    id,
+    name: potStore.participantName(id),
+    cents,
+  }))
 
 const formatDay = (isoDate: string) => isoDate.split('-').reverse().join('.')
 
@@ -79,6 +94,12 @@ const handleSubmit = (payload: Parameters<typeof potStore.createExpense>[0]) => 
             <div class="expense-meta">
               {{ potStore.participantName(e.payer_participant_id) }} hat bezahlt ·
               {{ formatDay(e.spent_on) }}
+            </div>
+            <div class="expense-split">
+              <span class="split-label">{{ splitLabel[e.split_kind] }}:</span>
+              <span v-for="s in shareRows(e)" :key="s.id" class="split-share">
+                {{ s.name }} {{ formatCents(s.cents) }}
+              </span>
             </div>
           </div>
           <div class="expense-amount">{{ formatCents(e.amount_cents) }}</div>
@@ -174,6 +195,18 @@ const handleSubmit = (payload: Parameters<typeof potStore.createExpense>[0]) => 
 .expense-meta {
   font-size: 0.8rem;
   color: var(--color-text-secondary);
+}
+
+.expense-split {
+  display: flex;
+  flex-wrap: wrap;
+  column-gap: 10px;
+  font-size: 0.8rem;
+  color: var(--color-text-secondary);
+}
+
+.split-share {
+  white-space: nowrap;
 }
 
 .expense-amount {
