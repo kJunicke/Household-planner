@@ -1471,6 +1471,16 @@ BEGIN
   DELETE FROM pot_expenses WHERE expense_id = '7e000000-0000-0000-0000-0000000000a2';
   GET DIAGNOSTICS n = ROW_COUNT;
   IF n <> 0 THEN RAISE EXCEPTION 'FAILED 73: Gast löscht Ausgabe eines nicht geteilten Topfs'; END IF;
+  -- Verrechnete Rückzahlungen gibt es nur im Haushaltstopf; eine Verknüpfung
+  -- mit einem Ausgleich kann der Gast auch nicht selbst herstellen.
+  BEGIN
+    INSERT INTO pot_repayments (pot_id, household_id, from_participant_id, to_participant_id, amount_cents,
+                                settlement_id)
+    VALUES ('70000000-0000-0000-0000-0000000000a1', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', lena, kim, 100,
+            gen_random_uuid());
+    RAISE EXCEPTION 'FAILED 73: Gast verknüpft Rückzahlung mit einem Ausgleich';
+  EXCEPTION WHEN check_violation OR foreign_key_violation OR insufficient_privilege THEN NULL;
+  END;
   RAISE NOTICE 'ok 73: Gast trägt Ausgaben und Rückzahlungen ein, ändert und löscht sie, nur im Topf';
 END $$;
 
