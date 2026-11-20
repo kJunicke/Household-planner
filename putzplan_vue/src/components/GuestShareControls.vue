@@ -10,11 +10,16 @@ import { useGuestShareStore } from '@/stores/guestShareStore'
 import { useToastStore } from '@/stores/toastStore'
 import { useNetworkStatus } from '@/composables/useNetworkStatus'
 
-const props = defineProps<{
-  kind: GuestShareKind
-  targetId: string
-  targetName: string
-}>()
+const props = withDefaults(
+  defineProps<{
+    kind: GuestShareKind
+    targetId: string
+    targetName: string
+    /** Neu erzeugen erlaubt? Ein abgeschlossener Topf bekommt keinen neuen Link. */
+    creatable?: boolean
+  }>(),
+  { creatable: true },
+)
 
 const guestShareStore = useGuestShareStore()
 const { isOnline } = useNetworkStatus()
@@ -70,7 +75,7 @@ const shareLink = async () => {
 </script>
 
 <template>
-  <div class="guest-share">
+  <div v-if="share || creatable" class="guest-share">
     <label class="form-label"><i class="bi bi-link-45deg me-1"></i>Gastlink</label>
 
     <template v-if="!share">

@@ -432,7 +432,12 @@ const handleDelete = () => {
 
     <!-- Abschließen, wieder öffnen, löschen -->
     <section v-if="canManage" class="mt-4">
-      <GuestShareControls kind="pot" :target-id="pot.pot_id" :target-name="pot.name" />
+      <GuestShareControls
+        kind="pot"
+        :target-id="pot.pot_id"
+        :target-name="pot.name"
+        :creatable="isOpen"
+      />
     </section>
 
     <section v-if="canManage" class="pot-actions mt-4">
