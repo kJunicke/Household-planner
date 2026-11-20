@@ -127,7 +127,11 @@ export function serializeMutation<T>(entityId: string, run: () => Promise<T>): P
 // Apply / Commit / Revert
 // ---------------------------------------------------------------------------
 
-export interface OptimisticMutation<S> {
+/**
+ * Der Schnappschuss ist immer ein Objekt: `null` aus `apply` heißt „abbrechen“.
+ * Ein Vorher-Wert, der selbst `null` sein kann, gehört eingepackt (`{ before }`).
+ */
+export interface OptimisticMutation<S extends object> {
   /** Entity-ID, an der serialisiert und „in Flug" gebucht wird. */
   entityId: string
   /**
@@ -157,7 +161,9 @@ export interface OptimisticMutation<S> {
  * Das Versprechen auf den Serverabschluss steckt in `settled` — nur nutzen, wenn
  * wirklich auf die Bestätigung gewartet werden muss.
  */
-export function runOptimistic<S>(mutation: OptimisticMutation<S>): {
+export function runOptimistic<S extends object>(
+  mutation: OptimisticMutation<S>,
+): {
   applied: boolean
   settled: Promise<boolean>
 } {

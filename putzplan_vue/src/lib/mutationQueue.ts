@@ -18,6 +18,7 @@ import { useToastStore } from '@/stores/toastStore'
 import { runQueuePass, type QueuePassResult } from './queueRetry'
 import {
   adoptLegacyQueue,
+  isGuestOwner,
   readOwnedQueue,
   removeFromOwnedQueue,
   writeOwnedQueue,
@@ -137,6 +138,9 @@ export function createMutationQueue(opts: MutationQueueOptions): MutationQueue {
     }
     queue.value.push(queueItem)
     console.log('📝 Added to queue:', queueItem)
+    // Gast: sofort schreiben, auch ohne Netz — scheitert es, wird verworfen
+    // statt gewartet. Was jetzt schon läuft, nimmt die Mutation mit.
+    if (isGuestOwner(owner.value)) void sync()
     return queueItem
   }
 
@@ -159,8 +163,9 @@ export function createMutationQueue(opts: MutationQueueOptions): MutationQueue {
     new Set(queue.value.map((m) => m.payload.itemId).filter(Boolean) as string[])
 
   const sync = async () => {
-    if (!navigator.onLine) return
     const key = owner.value
+    const direct = isGuestOwner(key)
+    if (!navigator.onLine && !direct) return
     if (!key || isSyncing.value || queue.value.length === 0) return
 
     console.log('🔄 Starting sync of', queue.value.length, 'mutations...')
@@ -188,6 +193,7 @@ export function createMutationQueue(opts: MutationQueueOptions): MutationQueue {
         },
         maxRetries,
         shouldStop: () => owner.value !== key,
+        direct,
       })
     } finally {
       isSyncing.value = false

@@ -82,4 +82,29 @@ describe('runOptimistic', () => {
     await expect(settled).resolves.toBe(false)
     expect(commit).not.toHaveBeenCalled()
   })
+
+  it('nimmt keinen Schnappschuss an, der selbst null sein kann', async () => {
+    // `null` aus `apply` heißt „abbrechen“. Ein Schnappschuss wie ein offenes
+    // `closed_at` (null) bräche sonst still ab, obwohl lokal schon geändert ist.
+    const commit = vi.fn(async () => {})
+    // @ts-expect-error — Schnappschüsse müssen Objekte sein; `{ before }` einpacken.
+    const { applied, settled } = runOptimistic<string | null>({
+      entityId: 'opt-nullable',
+      apply: () => null,
+      commit,
+      revert: () => {},
+    })
+    expect(applied).toBe(false)
+    await settled
+
+    const wrapped = runOptimistic<{ before: string | null }>({
+      entityId: 'opt-wrapped-null',
+      apply: () => ({ before: null }),
+      commit,
+      revert: () => {},
+    })
+    expect(wrapped.applied).toBe(true)
+    await expect(wrapped.settled).resolves.toBe(true)
+    expect(commit).toHaveBeenCalledOnce()
+  })
 })

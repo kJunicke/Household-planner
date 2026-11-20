@@ -20,6 +20,14 @@ interface EnvFile {
 
 const FILE_NAME = /^qc-login(?:-(\d+))?\.env$/
 
+/**
+ * Gehört die Datei zu den Testkonten? Das Plugin liest nur diese — im Ordner
+ * liegen auch andere Geheimnisse, die nicht einmal gelesen werden sollen.
+ */
+export function isDevLoginFile(name: string): boolean {
+  return FILE_NAME.test(name)
+}
+
 function parseEnv(text: string): Map<string, string> {
   const values = new Map<string, string>()
   for (const rawLine of text.split(/\r?\n/)) {

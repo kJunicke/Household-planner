@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest'
 
-import { currentParticipants, participantNameProblem, sortPots } from './potRules'
+import {
+  currentParticipants,
+  participantNameProblem,
+  participantNameProblemText,
+  parsePotAmount,
+  potTitle,
+  sortPots,
+} from './potRules'
 
 type P = {
   pot_id: string
@@ -75,5 +82,52 @@ describe('currentParticipants', () => {
   it('lässt im Ereignistopf alle Teilnehmer mittragen, auch ehemalige Mitglieder und Gäste', () => {
     const current = currentParticipants('event', people, ['u-anna'])
     expect(current.map((p) => p.participant_id)).toEqual(['p-anna', 'p-ex', 'p-kim'])
+  })
+})
+
+describe('parsePotAmount', () => {
+  it('liest Euro mit Komma oder Punkt als ganze Cent', () => {
+    expect(parsePotAmount('12,34')).toBe(1234)
+    expect(parsePotAmount(' 7.5 ')).toBe(750)
+    expect(parsePotAmount('3')).toBe(300)
+  })
+
+  it('rundet nicht über Fließkomma daneben', () => {
+    expect(parsePotAmount('0,29')).toBe(29)
+    expect(parsePotAmount('1,15')).toBe(115)
+  })
+
+  it('weist leer, null, Unsinn und zu viele Nachkommastellen ab', () => {
+    expect(parsePotAmount('')).toBeNull()
+    expect(parsePotAmount('0')).toBeNull()
+    expect(parsePotAmount('0,00')).toBeNull()
+    expect(parsePotAmount('-5')).toBeNull()
+    expect(parsePotAmount('abc')).toBeNull()
+    expect(parsePotAmount('1,234')).toBeNull()
+  })
+
+  it('nimmt höchstens den größten Betrag, den die Datenbank speichert', () => {
+    expect(parsePotAmount('999999,99')).toBe(99999999)
+    expect(parsePotAmount('1000000')).toBeNull()
+  })
+})
+
+describe('potTitle', () => {
+  it('nennt den Haushaltstopf so, Töpfe für einen Anlass bei ihrem Namen', () => {
+    expect(potTitle({ kind: 'household', name: 'egal' })).toBe('Haushaltstopf')
+    expect(potTitle({ kind: 'event', name: 'Skiurlaub' })).toBe('Skiurlaub')
+  })
+})
+
+describe('participantNameProblemText', () => {
+  it('sagt nichts zu einem leeren Namen und dasselbe zu einem zu langen', () => {
+    expect(participantNameProblemText('empty', 'doppelt')).toBe('')
+    expect(participantNameProblemText('too_long', 'doppelt')).toBe('Der Name ist zu lang')
+  })
+
+  it('nimmt für einen doppelten Namen den Text der Stelle', () => {
+    expect(participantNameProblemText('duplicate', 'Den Namen gibt es schon')).toBe(
+      'Den Namen gibt es schon',
+    )
   })
 })

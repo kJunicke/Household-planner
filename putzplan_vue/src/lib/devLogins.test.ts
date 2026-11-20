@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { devLoginsFromFiles } from './devLogins'
+import { devLoginsFromFiles, isDevLoginFile } from './devLogins'
 
 const qcFile = (email: string, extra = '') =>
   `# Kommentar\n\nQC_EMAIL=${email}\nQC_PASSWORD=geheim=mit=gleich\nQC_USER_ID=u-1\n${extra}`
@@ -49,5 +49,15 @@ describe('devLoginsFromFiles', () => {
     expect(devLoginsFromFiles([{ name: 'qc-login.env', text }])).toEqual([
       { label: 'QC 1', email: 'a@x.test', password: 'pw' },
     ])
+  })
+})
+
+describe('isDevLoginFile', () => {
+  it('erkennt nur die Testkonto-Dateien, keine anderen Geheimnisse daneben', () => {
+    expect(isDevLoginFile('qc-login.env')).toBe(true)
+    expect(isDevLoginFile('qc-login-3.env')).toBe(true)
+    expect(isDevLoginFile('supabase-personal.env')).toBe(false)
+    expect(isDevLoginFile('qc-login.env.bak')).toBe(false)
+    expect(isDevLoginFile('notes.txt')).toBe(false)
   })
 })

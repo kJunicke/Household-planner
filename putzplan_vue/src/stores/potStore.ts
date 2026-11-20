@@ -337,140 +337,11 @@ export const usePotStore = defineStore('pot', () => {
   }
 
   // ---------------------------------------------------------------
-  // Ausgaben
+  // Einträge eintragen, ändern, löschen, wiederherstellen (Ausgaben und Rückzahlungen)
   // ---------------------------------------------------------------
 
   /**
-   * Ausgabe eintragen mit ihrer Aufteilung. Gespeichert
-   * werden die Rohwerte der Aufteilung, nicht die Euro je Person. Die ID
-   * vergibt der Client, damit das Realtime-Echo die optimistische Zeile trifft.
-   */
-  const createExpense = (input: {
-    potId: string
-    payerId: string
-    amountCents: number
-    spentOn: string
-    description: string
-    split: ExpenseSplit
-  }): boolean => {
-    const householdId = activeHouseholdId
-    if (!householdId) return false
-    const toastStore = useToastStore()
-    const now = new Date().toISOString()
-    const row: PotExpense = {
-      expense_id: crypto.randomUUID(),
-      pot_id: input.potId,
-      household_id: householdId,
-      payer_participant_id: input.payerId,
-      amount_cents: input.amountCents,
-      spent_on: input.spentOn,
-      description: input.description,
-      split_kind: input.split.kind,
-      split_values: toSplitValues(input.split),
-      updated_by_participant_id: myParticipantId(input.potId),
-      created_at: now,
-      updated_at: now,
-    }
-
-    const { applied } = runOptimistic<PotExpense>({
-      entityId: row.expense_id,
-      apply: () => {
-        expenses.value.push(row)
-        return row
-      },
-      commit: async () => {
-        const { error } = await supabase.from('pot_expenses').insert({
-          expense_id: row.expense_id,
-          pot_id: row.pot_id,
-          household_id: row.household_id,
-          payer_participant_id: row.payer_participant_id,
-          amount_cents: row.amount_cents,
-          spent_on: row.spent_on,
-          description: row.description,
-          split_kind: row.split_kind,
-          split_values: row.split_values,
-          updated_by_participant_id: row.updated_by_participant_id,
-        })
-        if (error) throw error
-      },
-      revert: (snapshot) => {
-        expenses.value = expenses.value.filter((x) => x.expense_id !== snapshot.expense_id)
-      },
-      onError: () => {
-        toastStore.showToast('Ausgabe konnte nicht eingetragen werden', 'error')
-      },
-    })
-    return applied
-  }
-
-  // ---------------------------------------------------------------
-  // Rückzahlungen
-  // ---------------------------------------------------------------
-
-  /**
-   * Rückzahlung eintragen: `fromId` hat `toId` im Topf `potId` Geld überwiesen.
-   * Frei eingetragen oder aus einem Überweisungsvorschlag; optimistisch mit
-   * Client-ID wie bei Ausgaben.
-   */
-  const createRepayment = (input: {
-    potId: string
-    fromId: string
-    toId: string
-    amountCents: number
-    paidOn: string
-  }): boolean => {
-    const householdId = activeHouseholdId
-    if (!householdId) return false
-    const toastStore = useToastStore()
-    const now = new Date().toISOString()
-    const row: PotRepayment = {
-      repayment_id: crypto.randomUUID(),
-      pot_id: input.potId,
-      household_id: householdId,
-      from_participant_id: input.fromId,
-      to_participant_id: input.toId,
-      amount_cents: input.amountCents,
-      paid_on: input.paidOn,
-      updated_by_participant_id: myParticipantId(input.potId),
-      created_at: now,
-      updated_at: now,
-    }
-
-    const { applied } = runOptimistic<PotRepayment>({
-      entityId: row.repayment_id,
-      apply: () => {
-        repayments.value.push(row)
-        return row
-      },
-      commit: async () => {
-        const { error } = await supabase.from('pot_repayments').insert({
-          repayment_id: row.repayment_id,
-          pot_id: row.pot_id,
-          household_id: row.household_id,
-          from_participant_id: row.from_participant_id,
-          to_participant_id: row.to_participant_id,
-          amount_cents: row.amount_cents,
-          paid_on: row.paid_on,
-          updated_by_participant_id: row.updated_by_participant_id,
-        })
-        if (error) throw error
-      },
-      revert: (snapshot) => {
-        repayments.value = repayments.value.filter((x) => x.repayment_id !== snapshot.repayment_id)
-      },
-      onError: () => {
-        toastStore.showToast('Rückzahlung konnte nicht eingetragen werden', 'error')
-      },
-    })
-    return applied
-  }
-
-  // ---------------------------------------------------------------
-  // Einträge ändern, löschen, wiederherstellen (Ausgaben und Rückzahlungen)
-  // ---------------------------------------------------------------
-
-  /**
-   * Ändern, Löschen und Rückgängig für eine Eintragstabelle. Jeder darf jeden
+   * Eintragen, Ändern, Löschen und Rückgängig für eine Eintragstabelle. Jeder darf jeden
    * Eintrag ändern und löschen, auch fremde (CONTEXT.md § Topf); die Datenbank
    * setzt `updated_at`, der Client `updated_by_participant_id`.
    */
@@ -507,6 +378,31 @@ export const usePotStore = defineStore('pot', () => {
       }
       if (data) putLocal(data as T)
       else dropLocal(id)
+    }
+
+    /**
+     * Neuen Eintrag optimistisch anlegen. Die ID vergibt der Client, damit das
+     * Realtime-Echo die optimistische Zeile trifft; die Zeitstempel setzt die Datenbank.
+     */
+    const create = (row: T): boolean => {
+      const toastStore = useToastStore()
+      const { applied } = runOptimistic<T>({
+        entityId: idOf(row),
+        apply: () => {
+          putLocal(row)
+          return row
+        },
+        commit: async () => {
+          const insert: Record<string, unknown> = { ...row }
+          delete insert.created_at
+          delete insert.updated_at
+          const { error } = await supabase.from(table).insert(insert)
+          if (error) throw error
+        },
+        revert: () => dropLocal(idOf(row)),
+        onError: () => toastStore.showToast(`${label} konnte nicht eingetragen werden`, 'error'),
+      })
+      return applied
     }
 
     const update = (id: string, patch: Partial<T>): boolean => {
@@ -600,7 +496,7 @@ export const usePotStore = defineStore('pot', () => {
       return true
     }
 
-    return { update, remove }
+    return { create, update, remove }
   }
 
   const expenseWriter = entryWriter<PotExpense>({
@@ -618,6 +514,36 @@ export const usePotStore = defineStore('pot', () => {
     pkColumn: 'repayment_id',
     label: 'Rückzahlung',
   })
+
+  /**
+   * Ausgabe eintragen mit ihrer Aufteilung. Gespeichert werden die Rohwerte
+   * der Aufteilung, nicht die Euro je Person.
+   */
+  const createExpense = (input: {
+    potId: string
+    payerId: string
+    amountCents: number
+    spentOn: string
+    description: string
+    split: ExpenseSplit
+  }): boolean => {
+    if (!activeHouseholdId) return false
+    const now = new Date().toISOString()
+    return expenseWriter.create({
+      expense_id: crypto.randomUUID(),
+      pot_id: input.potId,
+      household_id: activeHouseholdId,
+      payer_participant_id: input.payerId,
+      amount_cents: input.amountCents,
+      spent_on: input.spentOn,
+      description: input.description,
+      split_kind: input.split.kind,
+      split_values: toSplitValues(input.split),
+      updated_by_participant_id: myParticipantId(input.potId),
+      created_at: now,
+      updated_at: now,
+    })
+  }
 
   /** Ausgabe ändern; die Aufteilung wird wie beim Eintragen als Rohwerte gespeichert. */
   const updateExpense = (
@@ -640,6 +566,33 @@ export const usePotStore = defineStore('pot', () => {
     })
 
   const deleteExpense = (expenseId: string): boolean => expenseWriter.remove(expenseId)
+
+  /**
+   * Rückzahlung eintragen: `fromId` hat `toId` im Topf `potId` Geld überwiesen.
+   * Frei eingetragen oder aus einem Überweisungsvorschlag.
+   */
+  const createRepayment = (input: {
+    potId: string
+    fromId: string
+    toId: string
+    amountCents: number
+    paidOn: string
+  }): boolean => {
+    if (!activeHouseholdId) return false
+    const now = new Date().toISOString()
+    return repaymentWriter.create({
+      repayment_id: crypto.randomUUID(),
+      pot_id: input.potId,
+      household_id: activeHouseholdId,
+      from_participant_id: input.fromId,
+      to_participant_id: input.toId,
+      amount_cents: input.amountCents,
+      paid_on: input.paidOn,
+      updated_by_participant_id: myParticipantId(input.potId),
+      created_at: now,
+      updated_at: now,
+    })
+  }
 
   const updateRepayment = (
     repaymentId: string,
@@ -826,12 +779,13 @@ export const usePotStore = defineStore('pot', () => {
     const pot = pots.value.find((p) => p.pot_id === potId)
     if (!pot || pot.kind !== 'event') return false
     const closedAt = closed ? new Date().toISOString() : null
-    const { applied } = runOptimistic<string | null>({
+    const { applied } = runOptimistic<{ before: string | null }>({
       entityId: potId,
       apply: () => {
+        // Eingepackt: ein offener Topf hat `closed_at = null`, und `null` hieße „abbrechen“.
         const before = pot.closed_at
         pot.closed_at = closedAt
-        return before
+        return { before }
       },
       commit: async () => {
         // RLS lässt einen verbotenen Schreibzugriff still ins Leere laufen:
@@ -844,7 +798,7 @@ export const usePotStore = defineStore('pot', () => {
         if (error) throw error
         if (!data?.length) throw new Error('pot_not_updated')
       },
-      revert: (before) => {
+      revert: ({ before }) => {
         const current = pots.value.find((p) => p.pot_id === potId)
         if (current) current.closed_at = before
       },

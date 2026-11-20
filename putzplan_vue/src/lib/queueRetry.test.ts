@@ -345,3 +345,42 @@ describe('pendingCategoryIds', () => {
     expect([...pendingCategoryIds(queue)].sort()).toEqual(['c1', 'c2'])
   })
 })
+
+describe('runQueuePass: direkt (Gäste ohne Offline-Warteschlange)', () => {
+  it('verwirft bei einem Netzfehler sofort, statt auf das Netz zu warten', async () => {
+    const create = mutation({ operation: 'create', payload: { tempId: 'temp_a' } })
+    const follow = mutation({ payload: { itemId: 'temp_a' } })
+    const later = mutation({ payload: { itemId: 'real_b' } })
+    const processed: string[] = []
+    const h = harness([create, follow, later], async (m) => {
+      processed.push(m.queueId)
+      throw fetchFailed
+    })
+    const result = await runQueuePass({ ...h.io, direct: true })
+    expect(result.interrupted).toBe(false)
+    expect(result.discarded).toEqual([create, follow, later])
+    expect(processed).toEqual([create.queueId, later.queueId])
+    expect(h.queue()).toEqual([])
+  })
+
+  it('verwirft einen Serverfehler beim ersten Mal, ohne Wiederholung', async () => {
+    const m = mutation()
+    const h = harness([m], async () => {
+      throw serverError
+    })
+    const result = await runQueuePass({ ...h.io, direct: true })
+    expect(result.discarded).toEqual([m])
+    expect(result.failed).toBe(0)
+    expect(h.queue()).toEqual([])
+  })
+
+  it('verwirft auch einen 5xx sofort', async () => {
+    const m = mutation()
+    const h = harness([m], async () => {
+      throw { message: 'x', code: '', status: 503 }
+    })
+    const result = await runQueuePass({ ...h.io, direct: true })
+    expect(result.discarded).toEqual([m])
+    expect(result.serverNotice).toBe(false)
+  })
+})

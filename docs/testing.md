@@ -131,11 +131,14 @@ Abmelden und lädt dessen Haushalt. Kein Passwort wird getippt.
   bekommt aber nur ein Aufruf von `localhost`/`127.0.0.1`/`::1`, alle anderen 403 (dort dann keine
   Knöpfe).
 - **Nicht im Produktions-Build:** Plugin und Modul gibt es nur beim Serve, die Dev-Komponenten
-  (`src/components/dev/`) laden hinter `import.meta.env.DEV` und fallen im Build heraus. Prüfen,
-  nach jeder Änderung daran: `npm run build`, dann `dist/` nach den E-Mails, Passwörtern und
-  „Testkonten“ durchsuchen — null Treffer. Negativkontrolle: dieselbe Suche über die vom
-  Dev-Server ausgelieferten Dateien (`@id/__x00__virtual:dev-logins`,
-  `src/components/dev/DevLoginButtons.vue`) muss treffen.
+  (`src/components/dev/`) laden hinter `import.meta.env.DEV` und fallen im Build heraus. Das prüft
+  jeder `npm run build` selbst (Skript `postbuild` → `scripts/check-no-test-credentials.mjs`) und
+  scheitert bei einem Treffer, damit auch der Deploy: immer auf Merkmale der Dev-Anmeldung
+  (virtuelles Modul, Komponentennamen, Knopftexte, `@putzplan.test`), und wo der Ordner mit den
+  `qc-login*.env` da ist, auch auf E-Mails und Passwörter (auf CI fehlt er). Ausgegeben werden nur
+  Datei und Art des Treffers, nie ein Wert. Negativkontrolle: `node
+  scripts/check-no-test-credentials.mjs <Kopie von dist>`, nachdem man ein Merkmal oder ein
+  Passwort in eine Datei der Kopie geschrieben hat — muss mit Exit 1 scheitern.
 - **Zwei Konten brauchen zwei Origins:** Die Sitzung liegt im `localStorage` der Origin, ein
   Wechsel ersetzt sie. Für zwei gleichzeitige Konten `npm run dev -- --host` und das eine Konto auf
   `localhost:<port>`, das andere auf `127.0.0.1:<port>`. Ein Gastlink braucht eine dritte, noch nie

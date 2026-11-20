@@ -3,7 +3,7 @@ import { computed, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { usePotStore } from '@/stores/potStore'
 import { formatCents } from '@/lib/potLedger'
-import { sortPots } from '@/lib/potRules'
+import { potTitle, sortPots } from '@/lib/potRules'
 import PotDetail from '@/components/PotDetail.vue'
 import PotCreateModal from '@/components/PotCreateModal.vue'
 import type { Pot } from '@/types/Pot'
@@ -40,8 +40,6 @@ const handleCreate = async (payload: {
     creating.value = false
   }
 }
-
-const potTitle = (p: Pot) => (p.kind === 'household' ? 'Haushaltstopf' : p.name)
 
 /** Kurzstand: wer am meisten gut hat, oder „ausgeglichen“. */
 const potSummary = (p: Pot) => {

@@ -1,9 +1,11 @@
-import { ref } from 'vue'
+import { ref, watch } from 'vue'
 import { defineStore } from 'pinia'
+import type { RealtimeChannel } from '@supabase/supabase-js'
 import type { GuestShare, GuestShareKind } from '@/types/GuestShare'
 import { supabase } from '@/lib/supabase'
 import { onSessionEnd } from '@/lib/sessionEnd'
 import { guestLinkUrl } from '@/lib/guestLink'
+import { useAuthStore } from './authStore'
 import { useHouseholdStore } from './householdStore'
 import { useToastStore } from './toastStore'
 
@@ -19,16 +21,19 @@ const TARGET_TABLES: Record<GuestShareKind, { table: string; idColumn: string }>
  * **Gastlinks** des Haushalts aus Sicht eines Mitglieds: welche Ziele geteilt
  * sind, Link erzeugen, erneuern, beenden (→ CONTEXT.md § Gastlink).
  *
- * Kein Realtime: geladen wird, wenn eine Ansicht die Freigaben zeigt (Listen,
- * Bearbeiten-Dialog, Einstellungen). Erneuert das andere Mitglied gerade einen
- * Link, holt das nächste Öffnen den neuen. Verwaltet wird nur online über die
- * RPCs der Datenbank; die prüft auch, dass nur Mitglieder mit Konto das dürfen.
+ * Live wie die anderen Stores: sobald ein Haushalt da ist, lädt er und
+ * abonniert die Änderungen; erzeugt, erneuert oder beendet ein anderes Mitglied
+ * einen Link, sehen offene Ansichten das sofort. Verwaltet wird nur online über
+ * die RPCs der Datenbank; die prüft auch, dass nur Mitglieder mit Konto das dürfen.
  */
 export const useGuestShareStore = defineStore('guestShare', () => {
   const shares = ref<GuestShare[]>([])
   /** Name des Ziels je `target_id`, für die Übersicht. */
   const targetNames = ref<Record<string, string>>({})
   let loadedFor: string | null = null
+  let channel: RealtimeChannel | null = null
+  let visibilityHandler: (() => void) | null = null
+  let activeHouseholdId: string | null = null
 
   const upsertLocal = (row: GuestShare) => {
     const idx = shares.value.findIndex((s) => s.share_id === row.share_id)
@@ -113,11 +118,84 @@ export const useGuestShareStore = defineStore('guestShare', () => {
     return true
   }
 
-  onSessionEnd(() => {
+  const unsubscribe = () => {
+    if (channel) {
+      supabase.removeChannel(channel)
+      channel = null
+    }
+    if (visibilityHandler) {
+      document.removeEventListener('visibilitychange', visibilityHandler)
+      visibilityHandler = null
+    }
+  }
+
+  const subscribe = (householdId: string) => {
+    unsubscribe()
+    // Neue und erneuerte Links: neu laden, damit auch der Name des Ziels da ist.
+    // DELETE ungefiltert: ohne REPLICA IDENTITY FULL trägt es nur `share_id`.
+    channel = supabase
+      .channel(`guest-shares-${householdId}-${Date.now()}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'guest_shares',
+          filter: `household_id=eq.${householdId}`,
+        },
+        () => void load(),
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'guest_shares',
+          filter: `household_id=eq.${householdId}`,
+        },
+        (payload) => upsertLocal(payload.new as GuestShare),
+      )
+      .on(
+        'postgres_changes',
+        { event: 'DELETE', schema: 'public', table: 'guest_shares' },
+        (payload) => {
+          const id = (payload.old as Partial<GuestShare>).share_id
+          if (id) shares.value = shares.value.filter((s) => s.share_id !== id)
+        },
+      )
+      .subscribe((status) => {
+        if (status === 'SUBSCRIBED') void load()
+      })
+
+    visibilityHandler = () => {
+      if (document.visibilityState === 'visible') void load()
+    }
+    document.addEventListener('visibilitychange', visibilityHandler)
+  }
+
+  const reset = () => {
+    unsubscribe()
+    activeHouseholdId = null
     loadedFor = null
     shares.value = []
     targetNames.value = {}
-  })
+  }
+
+  // Gäste verwalten keine Links; ihr Haushaltsrahmen (Gastansicht) abonniert nichts.
+  watch(
+    () =>
+      useAuthStore().isGuest ? null : (useHouseholdStore().currentHousehold?.household_id ?? null),
+    (householdId) => {
+      if (householdId === activeHouseholdId) return
+      reset()
+      if (!householdId) return
+      activeHouseholdId = householdId
+      subscribe(householdId)
+    },
+    { immediate: true },
+  )
+
+  onSessionEnd(reset)
 
   return { shares, targetNames, load, shareFor, linkFor, create, renew, end }
 })

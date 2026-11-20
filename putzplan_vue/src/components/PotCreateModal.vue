@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { useHouseholdStore } from '@/stores/householdStore'
-import { participantNameProblem } from '@/lib/potRules'
+import { participantNameProblem, participantNameProblemText } from '@/lib/potRules'
 import { POT_NAME_MAX_LENGTH, POT_PARTICIPANT_NAME_MAX_LENGTH } from '@/lib/limits'
 
 const emit = defineEmits<{
@@ -30,11 +30,8 @@ const guestProblem = computed(() =>
   newGuest.value.trim() === '' ? null : participantNameProblem(newGuest.value, takenNames.value),
 )
 
-const problemText = {
-  empty: '',
-  too_long: 'Der Name ist zu lang',
-  duplicate: 'Den Namen gibt es schon',
-} as const
+/** Wie der doppelte Name hier erklärt wird; leer und zu lang klingen überall gleich. */
+const DUPLICATE_NAME_TEXT = 'Den Namen gibt es schon'
 
 const addGuest = () => {
   if (newGuest.value.trim() === '' || guestProblem.value) return
@@ -138,7 +135,9 @@ const handleSubmit = () => {
                 <i class="bi bi-plus-lg"></i>
               </button>
             </div>
-            <div v-if="guestProblem" class="invalid-hint">{{ problemText[guestProblem] }}</div>
+            <div v-if="guestProblem" class="invalid-hint">
+              {{ participantNameProblemText(guestProblem, DUPLICATE_NAME_TEXT) }}
+            </div>
             <div v-else-if="hasDuplicate" class="invalid-hint">
               Ein Name steht doppelt in der Liste
             </div>

@@ -3,7 +3,8 @@ import { computed, ref } from 'vue'
 import { usePotStore } from '@/stores/potStore'
 import { expenseShares, formatCents, splitValidity, type ExpenseSplit } from '@/lib/potLedger'
 import { formatEuroInput, parseEuroInput } from '@/lib/settlementAmount'
-import { POT_AMOUNT_MAX_CENTS, POT_EXPENSE_DESCRIPTION_MAX_LENGTH } from '@/lib/limits'
+import { POT_EXPENSE_DESCRIPTION_MAX_LENGTH } from '@/lib/limits'
+import { parsePotAmount } from '@/lib/potRules'
 import { toIsoDate } from '@/lib/taskSchedule'
 import type { PotExpense } from '@/types/Pot'
 
@@ -47,12 +48,7 @@ const description = ref(editing?.description ?? '')
 const amountText = ref(editing ? formatEuroInput(editing.amount_cents / 100) : '')
 const spentOn = ref(editing?.spent_on ?? toIsoDate(new Date()))
 
-const amountCents = computed(() => {
-  const euros = parseEuroInput(amountText.value)
-  if (euros === null) return null
-  const cents = Math.round(euros * 100)
-  return cents > 0 && cents <= POT_AMOUNT_MAX_CENTS ? cents : null
-})
+const amountCents = computed(() => parsePotAmount(amountText.value))
 
 // ---------------------------------------------------------------
 // Aufteilung (CONTEXT.md § Aufteilung)

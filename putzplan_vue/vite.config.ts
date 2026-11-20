@@ -7,7 +7,7 @@ import { defineConfig, type Plugin } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import vueDevTools from 'vite-plugin-vue-devtools'
 import { VitePWA } from 'vite-plugin-pwa'
-import { devLoginsFromFiles } from './src/lib/devLogins'
+import { devLoginsFromFiles, isDevLoginFile } from './src/lib/devLogins'
 
 /**
  * Die Kennung des ausgelieferten Standes — zur Anzeige in den Einstellungen.
@@ -48,11 +48,11 @@ function buildStamp(): { commit: string; time: string } {
 const stamp = buildStamp()
 
 /**
- * Legt die App zusaetzlich als `gast/index.html` ab. GitHub Pages hat keinen
- * SPA-Rueckfall: ein Gastlink auf einen erfundenen Pfad waere in einem
+ * Legt die App zusätzlich als `gast/index.html` ab. GitHub Pages hat keinen
+ * SPA-Rückfall: ein Gastlink auf einen erfundenen Pfad wäre in einem
  * frischen Browser (noch kein Service Worker) eine 404. Unter `gast/` liegt so
  * eine echte Datei; den Rest erledigt der Router (`/gast` → Gastansicht).
- * Die Asset-Pfade sind absolut (`base`), dieselbe Datei laeuft auch dort.
+ * Die Asset-Pfade sind absolut (`base`), dieselbe Datei läuft auch dort.
  */
 function guestPage(): Plugin {
   return {
@@ -104,10 +104,13 @@ function devLogins(): Plugin {
   function readFiles() {
     if (!dir) return []
     try {
-      return readdirSync(dir).map((name) => {
-        const path = join(dir, name)
-        return { name, path, text: readFileSync(path, 'utf-8') }
-      })
+      // Nur `qc-login*.env`: die übrigen Geheimnisse im Ordner bleiben ungelesen.
+      return readdirSync(dir)
+        .filter(isDevLoginFile)
+        .map((name) => {
+          const path = join(dir, name)
+          return { name, path, text: readFileSync(path, 'utf-8') }
+        })
     } catch {
       return []
     }

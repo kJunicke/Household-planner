@@ -17,6 +17,7 @@ import { keepPendingLocal } from '@/lib/rowMerge'
 import { withStatus } from '@/lib/networkError'
 import {
   legacyListsBelong,
+  isGuestOwner,
   ownedKey,
   queueOwner,
   readOwnedQueue,
@@ -72,13 +73,19 @@ export const useShoppingStore = defineStore('shopping', () => {
   // ============================================================================
 
   // Cache und Warteschlange hängen an Nutzer + Haushalt (siehe lib/queueStorage).
+  // Gäste bekommen einen Gast-Besitzer: direkt schreiben, nichts speichern
+  // (keine Offline-Warteschlange, kein Artikel-Cache).
   const storageOwner = computed(() =>
-    queueOwner(useAuthStore().user?.id, useHouseholdStore().currentHousehold?.household_id),
+    queueOwner(
+      useAuthStore().user?.id,
+      useHouseholdStore().currentHousehold?.household_id,
+      useAuthStore().isGuest,
+    ),
   )
 
   const saveItemsToCache = () => {
     const owner = storageOwner.value
-    if (!owner) return
+    if (!owner || isGuestOwner(owner)) return
     try {
       const key = ownedKey(STORAGE_KEY_ITEMS, owner)
       if (items.value.length === 0) localStorage.removeItem(key)
@@ -90,7 +97,7 @@ export const useShoppingStore = defineStore('shopping', () => {
 
   const loadItemsFromCache = () => {
     const owner = storageOwner.value
-    if (!owner) return
+    if (!owner || isGuestOwner(owner)) return
     try {
       const cached = localStorage.getItem(ownedKey(STORAGE_KEY_ITEMS, owner))
       if (cached) {
@@ -270,6 +277,9 @@ export const useShoppingStore = defineStore('shopping', () => {
     }
     mutationQueue.value.push(queueItem)
     console.log('📝 Added to queue:', queueItem)
+    // Gast: sofort schreiben, auch ohne Netz — scheitert es, wird verworfen
+    // statt gewartet. Was jetzt schon läuft, nimmt die Mutation mit.
+    if (isGuestOwner(storageOwner.value)) void syncMutations()
   }
 
   // ============================================================================
@@ -551,6 +561,7 @@ export const useShoppingStore = defineStore('shopping', () => {
         },
         maxRetries: MAX_RETRIES,
         shouldStop: () => storageOwner.value !== owner,
+        direct: isGuestOwner(owner),
       })
     } finally {
       isSyncing.value = false

@@ -2,7 +2,7 @@
 import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { usePotStore } from '@/stores/potStore'
-import { participantNameProblem } from '@/lib/potRules'
+import { participantNameProblem, participantNameProblemText, potTitle } from '@/lib/potRules'
 import { POT_PARTICIPANT_NAME_MAX_LENGTH } from '@/lib/limits'
 import { formatCents, suggestTransfers } from '@/lib/potLedger'
 import { entryChangeLine } from '@/lib/potEntryChange'
@@ -26,7 +26,7 @@ const router = useRouter()
 const showCreateModal = ref(false)
 const editingExpense = ref<PotExpense | null>(null)
 
-const title = computed(() => (props.pot.kind === 'household' ? 'Haushaltstopf' : props.pot.name))
+const title = computed(() => potTitle(props.pot))
 
 const balanceRows = computed(() => {
   const balances = potStore.balancesOf(props.pot.pot_id)
@@ -66,11 +66,8 @@ const participantProblem = computed(() =>
         potStore.participantsOf(props.pot.pot_id).map((p) => p.name),
       ),
 )
-const problemText = {
-  empty: '',
-  too_long: 'Der Name ist zu lang',
-  duplicate: 'Den Namen gibt es in diesem Topf schon',
-} as const
+/** Wie der doppelte Name hier erklärt wird; leer und zu lang klingen überall gleich. */
+const DUPLICATE_NAME_TEXT = 'Den Namen gibt es in diesem Topf schon'
 
 const addParticipant = () => {
   if (newParticipant.value.trim() === '' || participantProblem.value) return
@@ -426,13 +423,18 @@ const handleDelete = () => {
         </button>
       </div>
       <div v-if="participantProblem" class="invalid-hint">
-        {{ problemText[participantProblem] }}
+        {{ participantNameProblemText(participantProblem, DUPLICATE_NAME_TEXT) }}
       </div>
     </section>
 
     <!-- Abschließen, wieder öffnen, löschen -->
     <section v-if="canManage" class="mt-4">
-      <GuestShareControls kind="pot" :target-id="pot.pot_id" :target-name="pot.name" />
+      <GuestShareControls
+        kind="pot"
+        :target-id="pot.pot_id"
+        :target-name="pot.name"
+        :creatable="isOpen"
+      />
     </section>
 
     <section v-if="canManage" class="pot-actions mt-4">
