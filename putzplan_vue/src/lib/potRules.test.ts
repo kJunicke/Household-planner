@@ -8,7 +8,9 @@ import {
   parsePotAmount,
   potTitle,
   sortPots,
+  wholeGroup,
 } from './potRules'
+import { potBalances, wholeGroupCarriers, type LedgerExpense } from './potLedger'
 
 type P = {
   pot_id: string
@@ -148,5 +150,49 @@ describe('defaultParticipant', () => {
   it('fällt ohne passende Vorgabe auf den ersten Teilnehmer zurück, ohne Teilnehmer auf leer', () => {
     expect(defaultParticipant(ids, null, undefined)).toBe('p-agent')
     expect(defaultParticipant([], 'p-gast')).toBe('')
+  })
+})
+
+describe('wholeGroup — Austritt aus dem Haushalt', () => {
+  // Anna, Ben und Cleo sind seit dem 1. im Haushaltstopf.
+  const row = (participant_id: string, left_at: string | null = null) => ({
+    participant_id,
+    created_at: '2026-11-01T10:00:00Z',
+    confirmed: false,
+    rejected: false,
+    left_at,
+  })
+  const ids = ['anna', 'ben', 'cleo']
+  const wholeGroupExpense = (createdAt: string, rows: ReturnType<typeof row>[]): LedgerExpense => ({
+    payerId: 'anna',
+    amountCents: 9000,
+    split: { kind: 'whole_group', participantIds: wholeGroupCarriers(createdAt, wholeGroup(rows)) },
+  })
+
+  it('lässt frühere Ausgaben „ganze Gruppe“ unverändert, wenn jemand austritt', () => {
+    const before = [row('anna'), row('ben'), row('cleo')]
+    const after = [row('anna'), row('ben'), row('cleo', '2026-11-15T10:00:00Z')]
+    const expected = new Map([
+      ['anna', 6000],
+      ['ben', -3000],
+      ['cleo', -3000],
+    ])
+    expect(potBalances(ids, [wholeGroupExpense('2026-11-05T12:00:00Z', before)], [])).toEqual(
+      expected,
+    )
+    expect(potBalances(ids, [wholeGroupExpense('2026-11-05T12:00:00Z', after)], [])).toEqual(
+      expected,
+    )
+  })
+
+  it('lässt einen Ehemaligen an Ausgaben „ganze Gruppe“ nach seinem Austritt nicht mittragen', () => {
+    const rows = [row('anna'), row('ben'), row('cleo', '2026-11-15T10:00:00Z')]
+    expect(potBalances(ids, [wholeGroupExpense('2026-11-20T12:00:00Z', rows)], [])).toEqual(
+      new Map([
+        ['anna', 4500],
+        ['ben', -4500],
+        ['cleo', 0],
+      ]),
+    )
   })
 })

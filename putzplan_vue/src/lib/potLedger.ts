@@ -47,14 +47,17 @@ export interface GroupParticipant {
   id: string
   joinedAt: string
   decision: 'confirmed' | 'rejected' | null
+  /** Austritt aus dem Haushalt (nur im Haushaltstopf), sonst `null`. */
+  leftAt: string | null
 }
 
 /**
  * Wer eine Ausgabe „ganze Gruppe“ trägt, in der Reihenfolge von `group`: wer
  * beim Anlegen der Ausgabe schon dabei war, und wer später dazukam, sobald
  * seine Aufnahme bestätigt ist. Offen oder abgelehnt trägt der Neue nur, was
- * nach seinem Beitritt angelegt wurde. `group` enthält nur, wer heute
- * teilnimmt (im Haushaltstopf: die heutigen Mitglieder).
+ * nach seinem Beitritt angelegt wurde. Wer ausgetreten ist, trägt weiter, was
+ * vor seinem Austritt angelegt wurde, aber nichts danach. `group` enthält
+ * jeden Teilnehmer des Topfs, auch Ehemalige.
  */
 export function wholeGroupCarriers(
   expenseCreatedAt: string,
@@ -62,6 +65,7 @@ export function wholeGroupCarriers(
 ): string[] {
   const created = Date.parse(expenseCreatedAt)
   return group
+    .filter((p) => !p.leftAt || Date.parse(p.leftAt) > created)
     .filter((p) => p.decision === 'confirmed' || Date.parse(p.joinedAt) <= created)
     .map((p) => p.id)
 }
@@ -84,8 +88,8 @@ export interface PendingJoin {
 
 /**
  * Die Meldung zur ganzen Gruppe: jeder Neue ohne Entscheidung, für den es
- * Ausgaben „ganze Gruppe“ von vor seinem Beitritt gibt, mit seinem Anteil an
- * jeder — so viel, wie er nach einer Bestätigung trüge. Reihenfolge wie `group`.
+ * Ausgaben „ganze Gruppe“ von vor seinem Beitritt gibt (Ehemalige nicht mehr),
+ * mit seinem Anteil an jeder — so viel, wie er nach einer Bestätigung trüge. Reihenfolge wie `group`.
  */
 export function pendingWholeGroupJoins(
   group: readonly GroupParticipant[],
@@ -93,7 +97,7 @@ export function pendingWholeGroupJoins(
   participantOrder: readonly string[],
 ): PendingJoin[] {
   return group
-    .filter((p) => p.decision === null)
+    .filter((p) => p.decision === null && !p.leftAt)
     .map((p): PendingJoin => {
       const shares = wholeGroupExpenses
         .filter((e) => Date.parse(e.createdAt) < Date.parse(p.joinedAt))

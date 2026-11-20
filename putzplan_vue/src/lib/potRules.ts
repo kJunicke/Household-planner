@@ -5,6 +5,7 @@
  */
 import { POT_AMOUNT_MAX_CENTS, POT_PARTICIPANT_NAME_MAX_LENGTH } from './limits'
 import { parseEuroInput } from './settlementAmount'
+import type { GroupParticipant } from './potLedger'
 
 interface SortablePot {
   kind: 'household' | 'event'
@@ -52,6 +53,30 @@ export function currentParticipants<T extends { user_id: string | null }>(
 ): T[] {
   if (potKind === 'event') return [...participants]
   return participants.filter((p) => p.user_id !== null && memberUserIds.includes(p.user_id))
+}
+
+/**
+ * Die ganze Gruppe eines Topfs (CONTEXT.md § ganze Gruppe) für die
+ * Topf-Rechnung: jeder Teilnehmer, auch Ehemalige, mit Beitritt, Austritt und
+ * Entscheidung über frühere Ausgaben. Wer eine Ausgabe trägt, hängt an ihrem
+ * Zeitpunkt, nicht an den heutigen Mitgliedern: ein Austritt ändert nichts
+ * an dem, was vorher angelegt wurde.
+ */
+export function wholeGroup(
+  participants: readonly {
+    participant_id: string
+    created_at: string
+    confirmed: boolean
+    rejected: boolean
+    left_at: string | null
+  }[],
+): GroupParticipant[] {
+  return participants.map((p) => ({
+    id: p.participant_id,
+    joinedAt: p.created_at,
+    decision: p.confirmed ? 'confirmed' : p.rejected ? 'rejected' : null,
+    leftAt: p.left_at,
+  }))
 }
 
 /** Überschrift eines Topfs: der Haushaltstopf heißt immer so, sonst sein Name. */

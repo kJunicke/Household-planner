@@ -480,9 +480,9 @@ describe('formatCents', () => {
 
 // Ganze Gruppe: Anna und Ben sind seit Anfang dabei, Cleo kommt am 10. dazu.
 const group = (cleo: Partial<GroupParticipant> = {}): GroupParticipant[] => [
-  { id: 'anna', joinedAt: '2026-11-01T10:00:00Z', decision: null },
-  { id: 'ben', joinedAt: '2026-11-01T10:00:00Z', decision: null },
-  { id: 'cleo', joinedAt: '2026-11-10T10:00:00Z', decision: null, ...cleo },
+  { id: 'anna', joinedAt: '2026-11-01T10:00:00Z', decision: null, leftAt: null },
+  { id: 'ben', joinedAt: '2026-11-01T10:00:00Z', decision: null, leftAt: null },
+  { id: 'cleo', joinedAt: '2026-11-10T10:00:00Z', decision: null, leftAt: null, ...cleo },
 ]
 
 describe('wholeGroupCarriers', () => {
@@ -584,6 +584,12 @@ describe('pendingWholeGroupJoins', () => {
     expect(pendingWholeGroupJoins(group({ decision: 'rejected' }), expenses, participants)).toEqual(
       [],
     )
+  })
+
+  it('meldet keinen, der schon wieder ausgetreten ist', () => {
+    expect(
+      pendingWholeGroupJoins(group({ leftAt: '2026-11-15T10:00:00Z' }), expenses, participants),
+    ).toEqual([])
   })
 
   it('meldet nichts, wenn es vor dem Beitritt keine Ausgabe „ganze Gruppe“ gab', () => {

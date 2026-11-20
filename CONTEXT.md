@@ -192,6 +192,7 @@ Architekturentscheidungen: [docs/adr/](docs/adr/).
 - Das geschieht nicht still — ein Haushaltsmitglied bestätigt es erst (Gäste können das nicht, → *Topf*).
 - Bestätigt wird nur für die Ausgaben von vor dem Beitritt; was danach auf die ganze Gruppe eingetragen wird, trägt der Neue sofort mit.
 - Eine Ablehnung ist endgültig: der Neue trägt die früheren Ausgaben nie, die Meldung kommt nicht wieder.
+- Wer den Haushalt verlässt, trägt im **Haushaltstopf** weiter, was vor seinem Austritt auf die ganze Gruppe eingetragen wurde, aber nichts danach.
 
 ### Rückzahlung
 - Geld, das ein Teilnehmer einem anderen im selben **Topf** überwiesen hat; senkt den Saldo zwischen beiden. Keine **Ausgabe**, steht aber in derselben Liste.

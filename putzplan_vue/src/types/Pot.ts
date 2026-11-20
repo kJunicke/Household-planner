@@ -28,6 +28,13 @@ export interface PotParticipant {
    */
   confirmed: boolean
   rejected: boolean
+  /**
+   * Austritt aus dem Haushalt, nur im Haushaltstopf: setzt die Datenbank, wenn
+   * das Mitglied geht, und leert ihn bei der Rückkehr. Bis dahin angelegte
+   * Ausgaben „ganze Gruppe“ trägt der Ehemalige weiter, spätere nicht.
+   * Migration 20261120135616.
+   */
+  left_at: string | null
   created_at: string
 }
 

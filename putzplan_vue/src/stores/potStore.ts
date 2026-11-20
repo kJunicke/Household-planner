@@ -12,11 +12,10 @@ import {
   potBalances,
   wholeGroupCarriers,
   type ExpenseSplit,
-  type GroupParticipant,
   type LedgerExpense,
   type PendingJoin,
 } from '@/lib/potLedger'
-import { currentParticipants } from '@/lib/potRules'
+import { currentParticipants, wholeGroup } from '@/lib/potRules'
 import { rememberGuestParticipant, rememberedGuestParticipant } from '@/lib/guestIdentity'
 import { useAuthStore } from './authStore'
 import { useHouseholdStore } from './householdStore'
@@ -99,22 +98,13 @@ export const usePotStore = defineStore('pot', () => {
       )
 
   /**
-   * Die ganze Gruppe eines Topfs (CONTEXT.md § ganze Gruppe): wer heute
-   * teilnimmt, mit Beitritt und Entscheidung über frühere Ausgaben.
-   */
-  const groupOf = (potId: string): GroupParticipant[] =>
-    currentParticipantsOf(potId).map((p) => ({
-      id: p.participant_id,
-      joinedAt: p.created_at,
-      decision: p.confirmed ? 'confirmed' : p.rejected ? 'rejected' : null,
-    }))
-
-  /**
    * Wer eine Ausgabe „ganze Gruppe“ trägt, die zu `createdAt` angelegt wurde
-   * bzw. wird: alle, die da schon dabei waren, und bestätigte Nachzügler.
+   * bzw. wird: alle, die da schon dabei und noch nicht ausgetreten waren, und
+   * bestätigte Nachzügler. Gerechnet über alle Teilnehmer des Topfs, nicht nur
+   * die heutigen: ein Austritt ändert frühere Ausgaben nicht.
    */
   const wholeGroupCarriersAt = (potId: string, createdAt: string): string[] =>
-    wholeGroupCarriers(createdAt, groupOf(potId))
+    wholeGroupCarriers(createdAt, wholeGroup(participantsOf(potId)))
 
   const toLedgerExpense = (e: PotExpense): LedgerExpense => ({
     payerId: e.payer_participant_id,
@@ -144,7 +134,7 @@ export const usePotStore = defineStore('pot', () => {
    */
   const pendingJoinsOf = (potId: string): PendingJoin[] =>
     pendingWholeGroupJoins(
-      groupOf(potId),
+      wholeGroup(participantsOf(potId)),
       expenses.value
         .filter((e) => e.pot_id === potId && e.split_kind === 'whole_group')
         .map((e) => ({
@@ -703,6 +693,7 @@ export const usePotStore = defineStore('pot', () => {
       // Neue Teilnehmer beginnen offen; die Datenbank erzwingt das ohnehin.
       confirmed: false,
       rejected: false,
+      left_at: null,
       created_at: new Date().toISOString(),
     }
     const { applied } = runOptimistic<PotParticipant>({
