@@ -21,6 +21,8 @@ import { useHouseholdStore } from '@/stores/householdStore'
 import { useShoppingStore } from '@/stores/shoppingStore'
 import { usePackingStore } from '@/stores/packingStore'
 import { useTodoStore } from '@/stores/todoStore'
+import { useToastStore } from '@/stores/toastStore'
+import { createRecheckLimiter } from '@/lib/recheckLimiter'
 import ShoppingView from './ShoppingView.vue'
 import PackingView from './PackingView.vue'
 import TodoView from './TodoView.vue'
@@ -94,8 +96,15 @@ const redeem = async (secret: string): Promise<RedeemedGuestLink | null> => {
   return row
 }
 
+// Der Anker der Adresse, nicht `route.hash`: beim Öffnen eines neuen Links im
+// selben Tab ändert sich nur der Anker, und `hashchange` kommt vor dem Router.
+const currentSecret = () => secretFromHash(window.location.hash || route.hash)
+/** Das Geheimnis, das `open` zuletzt eingelöst hat bzw. gerade einlöst. */
+let openedSecret: string | null = null
+
 const open = async () => {
-  const secret = secretFromHash(route.hash)
+  const secret = currentSecret()
+  openedSecret = secret
   if (!secret) {
     state.value = 'no-link'
     return
@@ -126,13 +135,30 @@ const open = async () => {
 }
 
 // Erneuert oder beendet ein Mitglied die Freigabe, während die Seite offen
-// ist, schreibt RLS schon nichts mehr. Beim Zurückkehren auf den Tab und wenn
-// das Netz wiederkommt, fragt die Ansicht nach und zeigt dann die Meldung
-// statt einer Liste, die nichts mehr annimmt.
+// ist, schreibt RLS schon nichts mehr, und ein Neuladen liefert eine leere
+// Liste. Die Ansicht fragt deshalb nach — im Takt, solange der Tab vorn ist,
+// sofort nach einer Fehlermeldung (abgewiesener Schreibzugriff), beim
+// Zurückkehren auf den Tab und wenn das Netz wiederkommt — und zeigt dann
+// „gilt nicht mehr“ statt einer Liste, die nichts mehr annimmt.
+const RECHECK_EVERY_MS = 20_000
+const RECHECK_GAP_MS = 3_000
+const allowRecheck = createRecheckLimiter(RECHECK_GAP_MS)
+let trailingRecheck: ReturnType<typeof setTimeout> | null = null
+
 const recheck = async () => {
   if (state.value !== 'ready' || document.visibilityState !== 'visible') return
-  const secret = secretFromHash(route.hash)
-  if (!secret) return
+  if (!navigator.onLine) return
+  if (!allowRecheck(Date.now())) {
+    // Gerade erst gefragt: einmal nachfassen, damit ein Anlass kurz nach der
+    // letzten Nachfrage (etwa die Fehlermeldung) nicht bis zum Takt wartet.
+    trailingRecheck ??= setTimeout(() => {
+      trailingRecheck = null
+      void recheck()
+    }, RECHECK_GAP_MS)
+    return
+  }
+  const secret = currentSecret()
+  if (!secret || secret !== openedSecret) return
   const { error } = await supabase.rpc('redeem_guest_link', { p_secret: secret })
   if (error && guestFailure(error) === 'dead-link') state.value = 'dead-link'
 }
@@ -142,15 +168,34 @@ const toLogin = async () => {
   await router.push('/login')
 }
 
+// Neuer Link im selben Tab (`/gast/#<neu>` statt `#<alt>`): nur der Anker
+// wechselt, die Seite lädt nicht neu — also selbst neu einlösen.
+const onHashChange = () => {
+  if (currentSecret() !== openedSecret) void open()
+}
+
+let pollTimer: ReturnType<typeof setInterval> | null = null
+let stopToastWatch: (() => void) | null = null
+
 onMounted(() => {
   void open()
   document.addEventListener('visibilitychange', recheck)
   window.addEventListener('online', recheck)
+  window.addEventListener('hashchange', onHashChange)
+  pollTimer = setInterval(() => void recheck(), RECHECK_EVERY_MS)
+  // Jede Fehlermeldung kann ein abgewiesener Schreibzugriff sein.
+  stopToastWatch = useToastStore().$onAction(({ name, args }) => {
+    if (name === 'showToast' && args[1] === 'error') void recheck()
+  })
 })
 
 onUnmounted(() => {
   document.removeEventListener('visibilitychange', recheck)
   window.removeEventListener('online', recheck)
+  window.removeEventListener('hashchange', onHashChange)
+  if (pollTimer) clearInterval(pollTimer)
+  if (trailingRecheck) clearTimeout(trailingRecheck)
+  stopToastWatch?.()
 })
 </script>
 
