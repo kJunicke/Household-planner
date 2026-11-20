@@ -826,12 +826,13 @@ export const usePotStore = defineStore('pot', () => {
     const pot = pots.value.find((p) => p.pot_id === potId)
     if (!pot || pot.kind !== 'event') return false
     const closedAt = closed ? new Date().toISOString() : null
-    const { applied } = runOptimistic<string | null>({
+    const { applied } = runOptimistic<{ before: string | null }>({
       entityId: potId,
       apply: () => {
+        // Eingepackt: ein offener Topf hat `closed_at = null`, und `null` hieße „abbrechen“.
         const before = pot.closed_at
         pot.closed_at = closedAt
-        return before
+        return { before }
       },
       commit: async () => {
         // RLS lässt einen verbotenen Schreibzugriff still ins Leere laufen:
@@ -844,7 +845,7 @@ export const usePotStore = defineStore('pot', () => {
         if (error) throw error
         if (!data?.length) throw new Error('pot_not_updated')
       },
-      revert: (before) => {
+      revert: ({ before }) => {
         const current = pots.value.find((p) => p.pot_id === potId)
         if (current) current.closed_at = before
       },
