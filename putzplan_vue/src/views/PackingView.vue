@@ -21,12 +21,19 @@ const labels: ChecklistLabels = {
   notesPlaceholder: 'z.B. Wird warm (25°C), 5 Tage, Wanderschuhe nicht vergessen…',
   resetConfirmBody: 'Alle Gegenstände werden als ungepackt markiert (inkl. Zähler).',
 }
+
+defineProps<{
+  /** Gastansicht: nur die geteilte Liste (→ ChecklistView). */
+  guest?: boolean
+}>()
 </script>
 
 <template>
   <ChecklistView
     :store="packingStore"
     :labels="labels"
+    share-kind="packing_list"
+    :guest="guest"
     rail-storage-key="putzplan_packing_rail_collapsed"
   />
 </template>

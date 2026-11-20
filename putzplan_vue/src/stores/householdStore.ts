@@ -841,6 +841,19 @@ export const useHouseholdStore = defineStore('household', () => {
     return true
   }
 
+  /**
+   * Gast (CONTEXT.md § Gast): der Haushalt der geteilten Liste als Rahmen, in
+   * dem die Listen-Stores laden und abonnieren. Mehr als die geteilte Liste
+   * liefert RLS dem Gast nicht; Mitglieder, Wochenstand, Einstellungen und der
+   * Offline-Cache des Haushalts bleiben leer bzw. unberührt.
+   */
+  const enterGuestHousehold = (householdId: string, name: string) => {
+    cancelOnlineRetry()
+    unsubscribeFromHouseholdSettings()
+    currentHousehold.value = { household_id: householdId, name, invite_code: '' }
+    householdMembers.value = []
+  }
+
   // Session-Ende: alles, was an Konto und Haushalt hängt, weg — auch Kanal und
   // Sichtbarkeits-Listener. In-flight-Ladevorgänge verwerfen ihre Antwort
   // (Wächter oben), statt den alten Haushalt zurückzuschreiben.
@@ -863,6 +876,7 @@ export const useHouseholdStore = defineStore('household', () => {
     currentHousehold,
     householdMembers,
     loadUserHousehold,
+    enterGuestHousehold,
     updateMemberProfile,
     renameHousehold,
     getCurrentMemberDisplayName,
