@@ -3,7 +3,7 @@ import { computed, ref, watch } from 'vue'
 import { usePotStore } from '@/stores/potStore'
 import { formatCents } from '@/lib/potLedger'
 import { formatEuroInput } from '@/lib/settlementAmount'
-import { parsePotAmount } from '@/lib/potRules'
+import { defaultParticipant, parsePotAmount } from '@/lib/potRules'
 import { toIsoDate } from '@/lib/taskSchedule'
 import type { PotRepayment } from '@/types/Pot'
 
@@ -35,10 +35,11 @@ const isEdit = !!props.repayment
 // Wer einträgt, hat meist selbst überwiesen.
 const fromId = ref(
   props.repayment?.from_participant_id ??
-    props.prefill?.fromId ??
-    potStore.myParticipantId(props.potId) ??
-    participants.value[0]?.participant_id ??
-    '',
+    defaultParticipant(
+      participants.value.map((p) => p.participant_id),
+      props.prefill?.fromId,
+      potStore.myParticipantId(props.potId),
+    ),
 )
 const toId = ref(
   props.repayment?.to_participant_id ??

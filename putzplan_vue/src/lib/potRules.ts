@@ -83,3 +83,17 @@ export function participantNameProblemText(
   if (problem === 'too_long') return 'Der Name ist zu lang'
   return duplicate
 }
+
+/**
+ * Vorauswahl in einer Personen-Auswahl („Bezahlt von“, „Von“): die erste
+ * Vorgabe, die unter `participantIds` steht — etwa der bearbeitete Eintrag,
+ * dann man selbst (CONTEXT.md § Gast: der gewählte Teilnehmer) —, sonst der
+ * erste Teilnehmer. So zeigt die Auswahl nie still jemand anderen als den
+ * Wert dahinter.
+ */
+export function defaultParticipant(
+  participantIds: readonly string[],
+  ...preferred: (string | null | undefined)[]
+): string {
+  return preferred.find((id) => !!id && participantIds.includes(id)) ?? participantIds[0] ?? ''
+}

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import {
   currentParticipants,
+  defaultParticipant,
   participantNameProblem,
   participantNameProblemText,
   parsePotAmount,
@@ -129,5 +130,23 @@ describe('participantNameProblemText', () => {
     expect(participantNameProblemText('duplicate', 'Den Namen gibt es schon')).toBe(
       'Den Namen gibt es schon',
     )
+  })
+})
+
+describe('defaultParticipant', () => {
+  const ids = ['p-agent', 'p-gast', 'p-ben']
+
+  it('nimmt die erste Vorgabe, die im Topf zur Auswahl steht', () => {
+    expect(defaultParticipant(ids, undefined, 'p-gast')).toBe('p-gast')
+    expect(defaultParticipant(ids, 'p-ben', 'p-gast')).toBe('p-ben')
+  })
+
+  it('überspringt eine Vorgabe, die nicht zur Auswahl steht', () => {
+    expect(defaultParticipant(ids, 'p-weg', 'p-gast')).toBe('p-gast')
+  })
+
+  it('fällt ohne passende Vorgabe auf den ersten Teilnehmer zurück, ohne Teilnehmer auf leer', () => {
+    expect(defaultParticipant(ids, null, undefined)).toBe('p-agent')
+    expect(defaultParticipant([], 'p-gast')).toBe('')
   })
 })

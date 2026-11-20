@@ -4,7 +4,7 @@ import { usePotStore } from '@/stores/potStore'
 import { expenseShares, formatCents, splitValidity, type ExpenseSplit } from '@/lib/potLedger'
 import { formatEuroInput, parseEuroInput } from '@/lib/settlementAmount'
 import { POT_EXPENSE_DESCRIPTION_MAX_LENGTH } from '@/lib/limits'
-import { parsePotAmount } from '@/lib/potRules'
+import { defaultParticipant, parsePotAmount } from '@/lib/potRules'
 import { toIsoDate } from '@/lib/taskSchedule'
 import type { PotExpense } from '@/types/Pot'
 
@@ -38,11 +38,10 @@ const editing = props.expense
 const isEdit = !!editing
 
 // Wer einträgt, hat meist selbst bezahlt.
+// Beim Bearbeiten bleibt der gespeicherte Zahler, auch ein ehemaliges Mitglied.
 const payerId = ref(
   editing?.payer_participant_id ??
-    potStore.myParticipantId(props.potId) ??
-    participants.value[0]?.participant_id ??
-    '',
+    defaultParticipant(participantOrder.value, potStore.myParticipantId(props.potId)),
 )
 const description = ref(editing?.description ?? '')
 const amountText = ref(editing ? formatEuroInput(editing.amount_cents / 100) : '')
