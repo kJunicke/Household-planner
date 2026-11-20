@@ -36,8 +36,9 @@ await authStore.initializeAuth()
 
 const householdStore = useHouseholdStore()
 
-// Load household after auth is initialized
-if (authStore.user) {
+// Load household after auth is initialized. Ein Gast hat keinen; den Rahmen
+// seiner geteilten Liste setzt die Gastansicht nach dem Einlösen.
+if (authStore.user && !authStore.isGuest) {
   await householdStore.loadUserHousehold()
 }
 

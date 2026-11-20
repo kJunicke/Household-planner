@@ -21,12 +21,19 @@ const labels: ChecklistLabels = {
   notesPlaceholder: 'z.B. Schlüssel bei Nachbarn abholen, Putzmittel sind alle…',
   resetConfirmBody: 'Alle Einträge werden wieder als offen markiert (inkl. Zähler).',
 }
+
+defineProps<{
+  /** Gastansicht: nur die geteilte Liste (→ ChecklistView). */
+  guest?: boolean
+}>()
 </script>
 
 <template>
   <ChecklistView
     :store="todoStore"
     :labels="labels"
+    share-kind="todo_list"
+    :guest="guest"
     rail-storage-key="putzplan_todo_rail_collapsed"
   />
 </template>
