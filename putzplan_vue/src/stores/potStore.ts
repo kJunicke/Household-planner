@@ -10,6 +10,9 @@ import { useAuthStore } from './authStore'
 import { useHouseholdStore } from './householdStore'
 import { useToastStore } from './toastStore'
 
+/** So lange lässt sich ein Löschen über den Hinweis zurücknehmen. */
+const UNDO_TOAST_MS = 8000
+
 /**
  * **Töpfe** des Haushalts (CONTEXT.md § Topf): Töpfe, Teilnehmer, Ausgaben und
  * Rückzahlungen laden, live halten und Ausgaben eintragen. Gerechnet wird in
@@ -93,6 +96,9 @@ export const usePotStore = defineStore('pot', () => {
     return member?.display_name ?? p.name
   }
 
+  const participantExists = (participantId: string | null): boolean =>
+    participants.value.some((x) => x.participant_id === participantId)
+
   /** Der eigene Teilnehmer in einem Topf, falls man einer ist. */
   const myParticipantId = (potId: string): string | null =>
     participants.value.find((p) => p.pot_id === potId && p.user_id === authStore.user?.id)
@@ -120,13 +126,16 @@ export const usePotStore = defineStore('pot', () => {
     }
     pots.value = (p.data ?? []) as Pot[]
     participants.value = (t.data ?? []) as PotParticipant[]
-    // Echo-Schutz wie beim Richtwerte-Store: eigene, noch laufende Ausgaben
-    // gelten lokal ganz.
+    // Echo-Schutz wie beim Richtwerte-Store: eigene, noch laufende Einträge
+    // gelten lokal ganz — auch ein laufendes Löschen (dann fehlt die Zeile lokal).
     expenses.value = [
       ...((e.data ?? []) as PotExpense[]).filter((x) => !isInFlight(x.expense_id)),
       ...expenses.value.filter((x) => isInFlight(x.expense_id)),
     ]
-    repayments.value = (r.data ?? []) as PotRepayment[]
+    repayments.value = [
+      ...((r.data ?? []) as PotRepayment[]).filter((x) => !isInFlight(x.repayment_id)),
+      ...repayments.value.filter((x) => isInFlight(x.repayment_id)),
+    ]
     loaded.value = true
   }
 
@@ -273,6 +282,195 @@ export const usePotStore = defineStore('pot', () => {
     return applied
   }
 
+  // ---------------------------------------------------------------
+  // Einträge ändern, löschen, wiederherstellen (Ausgaben und Rückzahlungen)
+  // ---------------------------------------------------------------
+
+  /**
+   * Ändern, Löschen und Rückgängig für eine Eintragstabelle. Jeder darf jeden
+   * Eintrag ändern und löschen, auch fremde (CONTEXT.md § Topf); die Datenbank
+   * setzt `updated_at`, der Client `updated_by_participant_id`.
+   */
+  const entryWriter = <T extends PotExpense | PotRepayment>(config: {
+    table: 'pot_expenses' | 'pot_repayments'
+    list: { value: T[] }
+    idOf: (row: T) => string
+    pkColumn: string
+    /** „Ausgabe“, „Rückzahlung“ — für die Meldungen. */
+    label: string
+  }) => {
+    const { table, list, idOf, pkColumn, label } = config
+
+    const findLocal = (id: string) => list.value.find((x) => idOf(x) === id)
+    const putLocal = (row: T) => {
+      const idx = list.value.findIndex((x) => idOf(x) === idOf(row))
+      if (idx === -1) list.value.push(row)
+      else list.value[idx] = row
+    }
+    const dropLocal = (id: string) => {
+      list.value = list.value.filter((x) => idOf(x) !== id)
+    }
+
+    /**
+     * Nach einem Fehlschlag gilt der Stand der Datenbank: Zeile frisch lesen und
+     * übernehmen bzw. entfernen. Ist auch das Lesen nicht möglich (offline),
+     * greift `fallback`.
+     */
+    const reconcile = async (id: string, fallback: () => void) => {
+      const { data, error } = await supabase.from(table).select('*').eq(pkColumn, id).maybeSingle()
+      if (error) {
+        fallback()
+        return
+      }
+      if (data) putLocal(data as T)
+      else dropLocal(id)
+    }
+
+    const update = (id: string, patch: Partial<T>): boolean => {
+      const toastStore = useToastStore()
+      if (!findLocal(id)) {
+        // Inzwischen von jemand anderem gelöscht.
+        toastStore.showToast(`${label} gibt es nicht mehr`, 'info')
+        return false
+      }
+      let changedBy: string | null = null
+      const { applied } = runOptimistic<T>({
+        entityId: id,
+        apply: () => {
+          const before = findLocal(id)
+          if (!before) return null
+          changedBy = myParticipantId(before.pot_id)
+          putLocal({
+            ...before,
+            ...patch,
+            updated_by_participant_id: changedBy,
+            updated_at: new Date().toISOString(),
+          })
+          return before
+        },
+        commit: async () => {
+          const { error } = await supabase
+            .from(table)
+            .update({ ...patch, updated_by_participant_id: changedBy })
+            .eq(pkColumn, id)
+          if (error) throw error
+        },
+        revert: (before) => reconcile(id, () => putLocal(before)),
+        onError: () => toastStore.showToast(`${label} konnte nicht geändert werden`, 'error'),
+      })
+      return applied
+    }
+
+    /**
+     * Den gelöschten Eintrag unverändert wieder anlegen: dieselbe Kennung,
+     * dieselben Zeitstempel, derselbe „zuletzt geändert von“.
+     */
+    const restore = (row: T) => {
+      const toastStore = useToastStore()
+      runOptimistic<T>({
+        entityId: idOf(row),
+        apply: () => {
+          if (findLocal(idOf(row))) return null
+          putLocal(row)
+          return row
+        },
+        commit: async () => {
+          const { error } = await supabase.from(table).insert(row)
+          if (error) throw error
+        },
+        revert: () => reconcile(idOf(row), () => dropLocal(idOf(row))),
+        onError: () =>
+          toastStore.showToast(`${label} konnte nicht wiederhergestellt werden`, 'error'),
+      })
+    }
+
+    /** Löschen mit Rückgängig-Hinweis. */
+    const remove = (id: string): boolean => {
+      const toastStore = useToastStore()
+      const row = findLocal(id)
+      if (!row) return false
+      let undoToastId: string | null = null
+      const { applied } = runOptimistic<T>({
+        entityId: id,
+        apply: () => {
+          dropLocal(id)
+          return row
+        },
+        commit: async () => {
+          const { error } = await supabase.from(table).delete().eq(pkColumn, id)
+          if (error) throw error
+        },
+        revert: (before) => reconcile(id, () => putLocal(before)),
+        onError: () => {
+          // Nichts gelöscht, also nichts zurückzunehmen.
+          if (undoToastId) toastStore.removeToast(undoToastId)
+          toastStore.showToast(`${label} konnte nicht gelöscht werden`, 'error')
+        },
+      })
+      if (!applied) return false
+      // Rückgängig reiht sich hinter das noch laufende Löschen derselben
+      // Kennung ein (Serialisierung in der optimistischen Schicht).
+      undoToastId = toastStore.showToast(`${label} gelöscht`, 'info', UNDO_TOAST_MS, {
+        label: 'Rückgängig',
+        run: () => restore(row),
+      })
+      return true
+    }
+
+    return { update, remove }
+  }
+
+  const expenseWriter = entryWriter<PotExpense>({
+    table: 'pot_expenses',
+    list: expenses,
+    idOf: (e) => e.expense_id,
+    pkColumn: 'expense_id',
+    label: 'Ausgabe',
+  })
+
+  const repaymentWriter = entryWriter<PotRepayment>({
+    table: 'pot_repayments',
+    list: repayments,
+    idOf: (r) => r.repayment_id,
+    pkColumn: 'repayment_id',
+    label: 'Rückzahlung',
+  })
+
+  /** Ausgabe ändern, gleich aufgeteilt auf `participantIds` (Rohwerte wie beim Eintragen). */
+  const updateExpense = (
+    expenseId: string,
+    input: {
+      payerId: string
+      amountCents: number
+      spentOn: string
+      description: string
+      participantIds: readonly string[]
+    },
+  ): boolean =>
+    expenseWriter.update(expenseId, {
+      payer_participant_id: input.payerId,
+      amount_cents: input.amountCents,
+      spent_on: input.spentOn,
+      description: input.description,
+      split_kind: 'equal',
+      split_values: Object.fromEntries(input.participantIds.map((id) => [id, 1])),
+    })
+
+  const deleteExpense = (expenseId: string): boolean => expenseWriter.remove(expenseId)
+
+  const updateRepayment = (
+    repaymentId: string,
+    input: { fromId: string; toId: string; amountCents: number; paidOn: string },
+  ): boolean =>
+    repaymentWriter.update(repaymentId, {
+      from_participant_id: input.fromId,
+      to_participant_id: input.toId,
+      amount_cents: input.amountCents,
+      paid_on: input.paidOn,
+    })
+
+  const deleteRepayment = (repaymentId: string): boolean => repaymentWriter.remove(repaymentId)
+
   watch(
     () => householdStore.currentHousehold?.household_id ?? null,
     (householdId) => {
@@ -295,7 +493,12 @@ export const usePotStore = defineStore('pot', () => {
     expensesOf,
     balancesOf,
     participantName,
+    participantExists,
     myParticipantId,
     createExpense,
+    updateExpense,
+    deleteExpense,
+    updateRepayment,
+    deleteRepayment,
   }
 })

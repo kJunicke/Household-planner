@@ -2,11 +2,13 @@
 import { computed, ref } from 'vue'
 import { usePotStore } from '@/stores/potStore'
 import { expenseShares, formatCents } from '@/lib/potLedger'
-import { parseEuroInput } from '@/lib/settlementAmount'
+import { formatEuroInput, parseEuroInput } from '@/lib/settlementAmount'
 import { POT_AMOUNT_MAX_CENTS, POT_EXPENSE_DESCRIPTION_MAX_LENGTH } from '@/lib/limits'
 import { toIsoDate } from '@/lib/taskSchedule'
+import type { PotExpense } from '@/types/Pot'
 
-const props = defineProps<{ potId: string }>()
+// Mit `expense` bearbeitet der Dialog eine bestehende Ausgabe, sonst legt er eine an.
+const props = defineProps<{ potId: string; expense?: PotExpense }>()
 
 const emit = defineEmits<{
   submit: [
@@ -19,6 +21,7 @@ const emit = defineEmits<{
       participantIds: string[]
     },
   ]
+  delete: []
   close: []
 }>()
 
@@ -26,13 +29,18 @@ const potStore = usePotStore()
 
 const participants = computed(() => potStore.participantsOf(props.potId))
 
+const isEdit = !!props.expense
+
 // Wer einträgt, hat meist selbst bezahlt.
 const payerId = ref(
-  potStore.myParticipantId(props.potId) ?? participants.value[0]?.participant_id ?? '',
+  props.expense?.payer_participant_id ??
+    potStore.myParticipantId(props.potId) ??
+    participants.value[0]?.participant_id ??
+    '',
 )
-const description = ref('')
-const amountText = ref('')
-const spentOn = ref(toIsoDate(new Date()))
+const description = ref(props.expense?.description ?? '')
+const amountText = ref(props.expense ? formatEuroInput(props.expense.amount_cents / 100) : '')
+const spentOn = ref(props.expense?.spent_on ?? toIsoDate(new Date()))
 
 const amountCents = computed(() => {
   const euros = parseEuroInput(amountText.value)
@@ -41,8 +49,13 @@ const amountCents = computed(() => {
   return cents > 0 && cents <= POT_AMOUNT_MAX_CENTS ? cents : null
 })
 
-// Gleich auf alle, die heute im Topf sind.
-const participantIds = computed(() => participants.value.map((p) => p.participant_id))
+// Gleich auf alle, die heute im Topf sind. Beim Bearbeiten bleibt die
+// gespeicherte Auswahl, soweit es die Teilnehmer noch gibt.
+const participantIds = computed(() => {
+  const all = participants.value.map((p) => p.participant_id)
+  const saved = props.expense ? Object.keys(props.expense.split_values) : null
+  return saved ? all.filter((id) => saved.includes(id)) : all
+})
 
 const shares = computed(() => {
   if (amountCents.value === null) return []
@@ -88,7 +101,7 @@ const handleSubmit = () => {
     <div class="modal-overlay" @click.self="emit('close')">
       <div class="modal-content expense-modal" @click.stop>
         <div class="modal-header">
-          <h5 class="modal-title">Neue Ausgabe</h5>
+          <h5 class="modal-title">{{ isEdit ? 'Ausgabe bearbeiten' : 'Neue Ausgabe' }}</h5>
           <button class="btn-close" @click="emit('close')" aria-label="Schließen"></button>
         </div>
 
@@ -147,9 +160,13 @@ const handleSubmit = () => {
         </div>
 
         <div class="modal-footer">
+          <!-- Ohne Rückfrage: das Löschen lässt sich über den Hinweis zurücknehmen. -->
+          <button v-if="isEdit" class="btn btn-outline-danger me-auto" @click="emit('delete')">
+            <i class="bi bi-trash me-1"></i> Löschen
+          </button>
           <button class="btn btn-secondary" @click="emit('close')">Abbrechen</button>
           <button class="btn btn-primary" @click="handleSubmit" :disabled="!isValid">
-            <i class="bi bi-check-lg me-1"></i> Eintragen
+            <i class="bi bi-check-lg me-1"></i> {{ isEdit ? 'Speichern' : 'Eintragen' }}
           </button>
         </div>
       </div>

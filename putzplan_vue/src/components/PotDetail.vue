@@ -3,8 +3,9 @@ import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { usePotStore } from '@/stores/potStore'
 import { formatCents } from '@/lib/potLedger'
+import { entryChangeLine } from '@/lib/potEntryChange'
 import ExpenseCreateModal from './ExpenseCreateModal.vue'
-import type { Pot } from '@/types/Pot'
+import type { Pot, PotExpense, PotRepayment } from '@/types/Pot'
 
 const props = defineProps<{ pot: Pot }>()
 
@@ -12,6 +13,7 @@ const potStore = usePotStore()
 const router = useRouter()
 
 const showCreateModal = ref(false)
+const editingExpense = ref<PotExpense | null>(null)
 
 const title = computed(() => (props.pot.kind === 'household' ? 'Haushaltstopf' : props.pot.name))
 
@@ -32,8 +34,40 @@ const back = () => {
   void router.push({ name: 'kasse', query: { tab: 'toepfe' } })
 }
 
+const isOpen = computed(() => !props.pot.closed_at)
+
+/** „eingetragen von …“ bzw. „zuletzt geändert von …“ unter jedem Eintrag. */
+const changeLine = (entry: PotExpense | PotRepayment) =>
+  entryChangeLine({
+    createdAt: entry.created_at,
+    updatedAt: entry.updated_at,
+    changedByName: potStore.participantExists(entry.updated_by_participant_id)
+      ? potStore.participantName(entry.updated_by_participant_id)
+      : null,
+  })
+
+const openEdit = (expense: PotExpense) => {
+  if (isOpen.value) editingExpense.value = expense
+}
+
+const closeModal = () => {
+  showCreateModal.value = false
+  editingExpense.value = null
+}
+
 const handleSubmit = (payload: Parameters<typeof potStore.createExpense>[0]) => {
-  if (potStore.createExpense(payload)) showCreateModal.value = false
+  if (editingExpense.value) {
+    // Schlägt nur fehl, wenn die Ausgabe inzwischen gelöscht ist; der Store meldet das.
+    potStore.updateExpense(editingExpense.value.expense_id, payload)
+    closeModal()
+  } else if (potStore.createExpense(payload)) {
+    closeModal()
+  }
+}
+
+const handleDelete = () => {
+  if (editingExpense.value) potStore.deleteExpense(editingExpense.value.expense_id)
+  closeModal()
 }
 </script>
 
@@ -73,24 +107,34 @@ const handleSubmit = (payload: Parameters<typeof potStore.createExpense>[0]) => 
         <p>Noch keine Ausgaben eingetragen</p>
       </div>
       <div v-else class="expense-list">
-        <div v-for="e in expenses" :key="e.expense_id" class="expense-item">
+        <button
+          v-for="e in expenses"
+          :key="e.expense_id"
+          type="button"
+          class="expense-item"
+          :disabled="!isOpen"
+          @click="openEdit(e)"
+        >
           <div class="expense-info">
             <div class="expense-title">{{ e.description }}</div>
             <div class="expense-meta">
               {{ potStore.participantName(e.payer_participant_id) }} hat bezahlt ·
               {{ formatDay(e.spent_on) }}
             </div>
+            <div v-if="changeLine(e)" class="expense-change">{{ changeLine(e) }}</div>
           </div>
           <div class="expense-amount">{{ formatCents(e.amount_cents) }}</div>
-        </div>
+        </button>
       </div>
     </section>
 
     <ExpenseCreateModal
-      v-if="showCreateModal"
+      v-if="showCreateModal || editingExpense"
       :pot-id="pot.pot_id"
+      :expense="editingExpense ?? undefined"
       @submit="handleSubmit"
-      @close="showCreateModal = false"
+      @delete="handleDelete"
+      @close="closeModal"
     />
   </div>
 </template>
@@ -171,9 +215,35 @@ const handleSubmit = (payload: Parameters<typeof potStore.createExpense>[0]) => 
   overflow-wrap: anywhere;
 }
 
-.expense-meta {
+.expense-meta,
+.expense-change {
   font-size: 0.8rem;
   color: var(--color-text-secondary);
+}
+
+.expense-change {
+  font-style: italic;
+}
+
+/* Ganze Zeile antippbar: öffnet die Ausgabe zum Bearbeiten. */
+button.expense-item {
+  width: 100%;
+  background: none;
+  border: none;
+  border-bottom: 1px solid var(--color-border);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  -webkit-tap-highlight-color: transparent;
+}
+
+button.expense-item:last-child {
+  border-bottom: none;
+}
+
+button.expense-item:disabled {
+  opacity: 1;
+  cursor: default;
 }
 
 .expense-amount {
