@@ -13,12 +13,26 @@ import type { PendingMutation } from '@/types/PendingMutation'
 type KeyValueStorage = Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>
 type EnumerableStorage = KeyValueStorage & Pick<Storage, 'key' | 'length'>
 
-/** Besitzer-Schlüssel, oder null ohne angemeldeten Nutzer bzw. ohne Haushalt. */
+const GUEST_PREFIX = 'guest:'
+
+/**
+ * Besitzer-Schlüssel, oder null ohne angemeldeten Nutzer bzw. ohne Haushalt.
+ * Ein Gast (CONTEXT.md § Gast) bekommt einen eigenen, erkennbaren Besitzer:
+ * Gäste haben keine Offline-Warteschlange, ihre Mutationen werden nie
+ * gespeichert (`writeOwnedQueue`) und nie abgespielt, nachdem das Netz weg war.
+ */
 export function queueOwner(
   userId: string | null | undefined,
   householdId: string | null | undefined,
+  isGuest = false,
 ): string | null {
-  return userId && householdId ? `${userId}:${householdId}` : null
+  if (!userId || !householdId) return null
+  return `${isGuest ? GUEST_PREFIX : ''}${userId}:${householdId}`
+}
+
+/** Gehört die Warteschlange einem Gast? Dann direkt schreiben, nichts speichern. */
+export function isGuestOwner(owner: string | null | undefined): boolean {
+  return !!owner && owner.startsWith(GUEST_PREFIX)
 }
 
 export const ownedKey = (base: string, owner: string) => `${base}:${owner}`
@@ -49,6 +63,11 @@ export function readOwnedQueue(
   owner: string,
   ownsLegacy?: (legacy: PendingMutation[]) => boolean,
 ): PendingMutation[] {
+  if (isGuestOwner(owner)) {
+    // Ein Rest aus einer früheren Fassung darf nie abgespielt werden.
+    storage.removeItem(ownedKey(base, owner))
+    return []
+  }
   const raw = storage.getItem(ownedKey(base, owner))
   if (raw !== null) return parseQueue(raw)
   return ownsLegacy ? adoptLegacyQueue(storage, base, owner, ownsLegacy) : []
@@ -65,6 +84,7 @@ export function adoptLegacyQueue(
   owner: string,
   ownsLegacy: (legacy: PendingMutation[]) => boolean,
 ): PendingMutation[] {
+  if (isGuestOwner(owner)) return []
   const key = ownedKey(base, owner)
   if (storage.getItem(key) !== null) return []
   const legacyRaw = storage.getItem(base)
@@ -100,7 +120,7 @@ export function writeOwnedQueue(
   queue: PendingMutation[],
 ) {
   const key = ownedKey(base, owner)
-  if (queue.length === 0) storage.removeItem(key)
+  if (queue.length === 0 || isGuestOwner(owner)) storage.removeItem(key)
   else storage.setItem(key, JSON.stringify(queue))
 }
 
