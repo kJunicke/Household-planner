@@ -2,6 +2,7 @@ import { ref } from 'vue'
 import { defineStore } from 'pinia'
 import type { Task, TaskCompletion, EnrichedCompletion } from '@/types/Task'
 import { supabase } from '@/lib/supabase'
+import { newId } from '@/lib/newId'
 import { formatPostponeDate } from '@/lib/taskSchedule'
 import { drawProjectPhraseSlot, projectPhraseSlotOf } from '@/lib/projectPhrases'
 import { useHouseholdStore } from './householdStore'
@@ -292,10 +293,7 @@ export const useTaskStore = defineStore('tasks', () => {
       return false
     }
 
-    const clientMutationId =
-      typeof crypto !== 'undefined' && 'randomUUID' in crypto
-        ? crypto.randomUUID()
-        : `opt-${Date.now()}-${Math.random()}`
+    const clientMutationId = newId()
 
     // Vor dem Apply merken: der Apply räumt postponed_until lokal weg.
     const postponedBefore = Boolean(tasks.value.find((t) => t.task_id === taskId)?.postponed_until)

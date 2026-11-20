@@ -3,6 +3,7 @@ import { defineStore } from 'pinia'
 import type { RealtimeChannel } from '@supabase/supabase-js'
 import type { PointBenchmark } from '@/types/PointBenchmark'
 import { supabase } from '@/lib/supabase'
+import { newId } from '@/lib/newId'
 import { onSessionEnd } from '@/lib/sessionEnd'
 import { isInFlight, isNetworkError, revertRows, runOptimistic } from '@/lib/optimistic'
 import { duplicatePointsMessage } from '@/lib/pointBenchmarks'
@@ -158,7 +159,7 @@ export const usePointBenchmarkStore = defineStore('pointBenchmark', () => {
     if (!householdId) return false
     const toastStore = useToastStore()
     const row: PointBenchmark = {
-      benchmark_id: crypto.randomUUID(),
+      benchmark_id: newId(),
       household_id: householdId,
       points,
       is_quick_option: isQuickOption,
