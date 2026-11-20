@@ -2,7 +2,7 @@
 import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { usePotStore } from '@/stores/potStore'
-import { participantNameProblem, potTitle } from '@/lib/potRules'
+import { participantNameProblem, participantNameProblemText, potTitle } from '@/lib/potRules'
 import { POT_PARTICIPANT_NAME_MAX_LENGTH } from '@/lib/limits'
 import { formatCents, suggestTransfers } from '@/lib/potLedger'
 import { entryChangeLine } from '@/lib/potEntryChange'
@@ -66,11 +66,8 @@ const participantProblem = computed(() =>
         potStore.participantsOf(props.pot.pot_id).map((p) => p.name),
       ),
 )
-const problemText = {
-  empty: '',
-  too_long: 'Der Name ist zu lang',
-  duplicate: 'Den Namen gibt es in diesem Topf schon',
-} as const
+/** Wie der doppelte Name hier erklärt wird; leer und zu lang klingen überall gleich. */
+const DUPLICATE_NAME_TEXT = 'Den Namen gibt es in diesem Topf schon'
 
 const addParticipant = () => {
   if (newParticipant.value.trim() === '' || participantProblem.value) return
@@ -426,7 +423,7 @@ const handleDelete = () => {
         </button>
       </div>
       <div v-if="participantProblem" class="invalid-hint">
-        {{ problemText[participantProblem] }}
+        {{ participantNameProblemText(participantProblem, DUPLICATE_NAME_TEXT) }}
       </div>
     </section>
 

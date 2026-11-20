@@ -8,7 +8,7 @@
  */
 import { computed, ref } from 'vue'
 import { usePotStore } from '@/stores/potStore'
-import { participantNameProblem } from '@/lib/potRules'
+import { participantNameProblem, participantNameProblemText } from '@/lib/potRules'
 import { POT_PARTICIPANT_NAME_MAX_LENGTH } from '@/lib/limits'
 import PotDetail from './PotDetail.vue'
 
@@ -46,11 +46,9 @@ const nameProblem = computed(() =>
         participants.value.map((p) => p.name),
       ),
 )
-const problemText = {
-  empty: '',
-  too_long: 'Der Name ist zu lang',
-  duplicate: 'Den Namen gibt es in diesem Topf schon — wähl ihn oben aus, wenn du das bist',
-} as const
+/** Wie der doppelte Name hier erklärt wird; leer und zu lang klingen überall gleich. */
+const DUPLICATE_NAME_TEXT =
+  'Den Namen gibt es in diesem Topf schon — wähl ihn oben aus, wenn du das bist'
 
 const join = async () => {
   if (joining.value || newName.value.trim() === '' || nameProblem.value) return
@@ -64,7 +62,7 @@ const join = async () => {
     } else {
       joinError.value =
         result === 'duplicate'
-          ? problemText.duplicate
+          ? DUPLICATE_NAME_TEXT
           : result === 'closed'
             ? 'Der Topf ist inzwischen abgeschlossen'
             : 'Eintragen hat nicht geklappt. Versuch es noch einmal.'
@@ -124,7 +122,9 @@ const join = async () => {
           </button>
         </div>
         <div v-if="nameProblem || joinError" class="invalid-hint">
-          {{ nameProblem ? problemText[nameProblem] : joinError }}
+          {{
+            nameProblem ? participantNameProblemText(nameProblem, DUPLICATE_NAME_TEXT) : joinError
+          }}
         </div>
 
         <button
