@@ -1,8 +1,12 @@
 <script setup lang="ts">
 import { ref } from 'vue'
+import type { GuestShareKind } from '@/types/GuestShare'
+import GuestShareControls from '@/components/GuestShareControls.vue'
 
 const props = defineProps<{
   list: { list_id: string; name: string }
+  /** Listenart für den Gastlink. */
+  shareKind: GuestShareKind
 }>()
 
 const emit = defineEmits<{
@@ -44,6 +48,8 @@ const handleDelete = () => {
               @keyup.enter="handleRename"
             />
           </div>
+
+          <GuestShareControls :kind="shareKind" :target-id="list.list_id" :target-name="list.name" />
         </div>
 
         <div class="modal-footer">

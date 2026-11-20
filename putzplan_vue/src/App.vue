@@ -13,7 +13,7 @@ const householdStore = useHouseholdStore()
 
 // Header und BottomNav nur anzeigen wenn User eingeloggt und nicht auf Login/Register/Setup-Seiten
 const showNavigation = computed(() => {
-  const publicRoutes = ['login', 'register', 'household-setup']
+  const publicRoutes = ['login', 'register', 'household-setup', 'guest']
   return !publicRoutes.includes(route.name as string)
 })
 
