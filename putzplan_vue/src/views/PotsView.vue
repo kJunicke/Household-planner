@@ -1,9 +1,11 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { usePotStore } from '@/stores/potStore'
 import { formatCents } from '@/lib/potLedger'
+import { sortPots } from '@/lib/potRules'
 import PotDetail from '@/components/PotDetail.vue'
+import PotCreateModal from '@/components/PotCreateModal.vue'
 import type { Pot } from '@/types/Pot'
 
 const potStore = usePotStore()
@@ -15,13 +17,29 @@ const openPot = computed(() => {
   return typeof id === 'string' ? (potStore.pots.find((p) => p.pot_id === id) ?? null) : null
 })
 
-// Haushaltstopf oben, darunter die laufenden, zuletzt die abgeschlossenen.
-const rank = (p: Pot) => (p.kind === 'household' ? 0 : p.closed_at ? 2 : 1)
-const sortedPots = computed(() =>
-  [...potStore.pots].sort(
-    (a, b) => rank(a) - rank(b) || Date.parse(b.created_at) - Date.parse(a.created_at),
-  ),
-)
+const sortedPots = computed(() => sortPots(potStore.pots))
+const firstClosedId = computed(() => sortedPots.value.find((p) => p.closed_at)?.pot_id ?? null)
+
+const showCreateModal = ref(false)
+const creating = ref(false)
+
+const handleCreate = async (payload: {
+  name: string
+  memberIds: string[]
+  guestNames: string[]
+}) => {
+  if (creating.value) return
+  creating.value = true
+  try {
+    const potId = await potStore.createEventPot(payload)
+    if (potId) {
+      showCreateModal.value = false
+      void router.push({ name: 'kasse', query: { tab: 'toepfe', topf: potId } })
+    }
+  } finally {
+    creating.value = false
+  }
+}
 
 const potTitle = (p: Pot) => (p.kind === 'household' ? 'Haushaltstopf' : p.name)
 
@@ -53,17 +71,36 @@ const showPot = (p: Pot) => {
       </div>
 
       <div v-else class="pot-list">
-        <button v-for="p in sortedPots" :key="p.pot_id" class="pot-card" @click="showPot(p)">
-          <i
-            :class="['bi', p.kind === 'household' ? 'bi-house-heart' : 'bi-wallet2', 'pot-icon']"
-          ></i>
-          <span class="pot-text">
-            <span class="pot-name">{{ potTitle(p) }}</span>
-            <span class="pot-summary">{{ potSummary(p) }}</span>
-          </span>
-          <i class="bi bi-chevron-right text-muted"></i>
-        </button>
+        <div class="pot-list-header">
+          <button class="btn btn-primary btn-sm" @click="showCreateModal = true">
+            <i class="bi bi-plus-lg me-1"></i> Topf
+          </button>
+        </div>
+        <template v-for="p in sortedPots" :key="p.pot_id">
+          <h3 v-if="p.pot_id === firstClosedId" class="closed-heading">Abgeschlossen</h3>
+          <button :class="['pot-card', p.closed_at && 'closed']" @click="showPot(p)">
+            <i
+              :class="[
+                'bi',
+                p.kind === 'household' ? 'bi-house-heart' : p.closed_at ? 'bi-lock' : 'bi-wallet2',
+                'pot-icon',
+              ]"
+            ></i>
+            <span class="pot-text">
+              <span class="pot-name">{{ potTitle(p) }}</span>
+              <span class="pot-summary">{{ potSummary(p) }}</span>
+            </span>
+            <i class="bi bi-chevron-right text-muted"></i>
+          </button>
+        </template>
       </div>
+
+      <PotCreateModal
+        v-if="showCreateModal"
+        :saving="creating"
+        @submit="handleCreate"
+        @close="showCreateModal = false"
+      />
     </div>
   </div>
 </template>
@@ -89,6 +126,22 @@ const showPot = (p: Pot) => {
   text-align: left;
   color: inherit;
   -webkit-tap-highlight-color: transparent;
+}
+
+.pot-list-header {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.closed-heading {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+  margin: var(--spacing-md) 0 0;
+}
+
+.pot-card.closed {
+  opacity: 0.75;
 }
 
 .pot-icon {

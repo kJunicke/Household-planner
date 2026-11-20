@@ -27,7 +27,10 @@ const emit = defineEmits<{
 
 const potStore = usePotStore()
 
-const participants = computed(() => potStore.participantsOf(props.potId))
+// Wer heute dabei ist: im Haushaltstopf ohne ehemalige Mitglieder. Ihre
+// Reihenfolge ist die des Topfs, nur ohne Ehemalige — Cent-Reste fallen
+// darum gleich wie in der Topf-Rechnung des Stores.
+const participants = computed(() => potStore.currentParticipantsOf(props.potId))
 const participantOrder = computed(() => participants.value.map((p) => p.participant_id))
 
 const editing = props.expense

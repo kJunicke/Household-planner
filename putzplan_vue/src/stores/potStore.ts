@@ -6,6 +6,7 @@ import { supabase } from '@/lib/supabase'
 import { onSessionEnd } from '@/lib/sessionEnd'
 import { isInFlight, runOptimistic } from '@/lib/optimistic'
 import { expenseShares, potBalances, type ExpenseSplit, type LedgerExpense } from '@/lib/potLedger'
+import { currentParticipants } from '@/lib/potRules'
 import { useAuthStore } from './authStore'
 import { useHouseholdStore } from './householdStore'
 import { useToastStore } from './toastStore'
@@ -52,6 +53,20 @@ export const usePotStore = defineStore('pot', () => {
           Date.parse(a.created_at) - Date.parse(b.created_at) ||
           (a.participant_id < b.participant_id ? -1 : a.participant_id > b.participant_id ? 1 : 0),
       )
+
+  /**
+   * Wer heute an neuen Ausgaben teilnimmt (Zahler, „gleich auf alle“). Im
+   * Haushaltstopf ohne ehemalige Mitglieder; ihr Saldo bleibt sichtbar.
+   */
+  const currentParticipantsOf = (potId: string): PotParticipant[] => {
+    const pot = pots.value.find((p) => p.pot_id === potId)
+    if (!pot) return []
+    return currentParticipants(
+      pot.kind,
+      participantsOf(potId),
+      householdStore.householdMembers.map((m) => m.user_id),
+    )
+  }
 
   /** Neueste zuerst: nach Datum, bei gleichem Datum nach Anlage. */
   const expensesOf = (potId: string): PotExpense[] =>
@@ -558,6 +573,182 @@ export const usePotStore = defineStore('pot', () => {
 
   const deleteRepayment = (repaymentId: string): boolean => repaymentWriter.remove(repaymentId)
 
+  // ---------------------------------------------------------------
+  // Töpfe für einen Anlass
+  // ---------------------------------------------------------------
+
+  /**
+   * Topf für einen Anlass anlegen, mit Mitgliedern und weiteren Namen als
+   * Teilnehmern, in einem Zug (RPC `create_event_pot`). Wartet auf die
+   * Datenbank, statt optimistisch zu zeigen: ein doppelter Name soll den
+   * Topf gar nicht erst entstehen lassen. Gibt die Kennung des Topfs zurück.
+   */
+  const createEventPot = async (input: {
+    name: string
+    memberIds: readonly string[]
+    guestNames: readonly string[]
+  }): Promise<string | null> => {
+    const householdId = activeHouseholdId
+    if (!householdId) return null
+    const { data, error } = await supabase.rpc('create_event_pot', {
+      p_pot_id: crypto.randomUUID(),
+      p_name: input.name.trim(),
+      p_member_ids: input.memberIds,
+      p_guest_names: input.guestNames.map((n) => n.trim()),
+    })
+    if (error) {
+      console.error('Error creating pot:', error)
+      useToastStore().showToast(
+        error.code === '23505'
+          ? 'Ein Name steht doppelt in der Liste'
+          : 'Topf konnte nicht angelegt werden',
+        'error',
+      )
+      return null
+    }
+    if (householdId !== activeHouseholdId) return null
+    const pot = data as Pot
+    if (!pots.value.some((p) => p.pot_id === pot.pot_id)) pots.value.push(pot)
+    // Die Teilnehmer kommen per Realtime; nachladen, falls der Kanal hängt.
+    void load()
+    return pot.pot_id
+  }
+
+  /** Teilnehmer per Namen in einen offenen Topf für einen Anlass eintragen. */
+  const addParticipant = (potId: string, name: string): boolean => {
+    const householdId = activeHouseholdId
+    if (!householdId) return false
+    const toastStore = useToastStore()
+    const row: PotParticipant = {
+      participant_id: crypto.randomUUID(),
+      pot_id: potId,
+      household_id: householdId,
+      name: name.trim(),
+      user_id: null,
+      confirmed: true,
+      created_at: new Date().toISOString(),
+    }
+    const { applied } = runOptimistic<PotParticipant>({
+      entityId: row.participant_id,
+      apply: () => {
+        participants.value.push(row)
+        return row
+      },
+      commit: async () => {
+        const { error } = await supabase.from('pot_participants').insert({
+          participant_id: row.participant_id,
+          pot_id: row.pot_id,
+          household_id: row.household_id,
+          name: row.name,
+        })
+        if (error) throw error
+      },
+      revert: (snapshot) => {
+        participants.value = participants.value.filter(
+          (x) => x.participant_id !== snapshot.participant_id,
+        )
+      },
+      onError: (error) => {
+        const duplicate = (error as { code?: string } | null)?.code === '23505'
+        toastStore.showToast(
+          duplicate
+            ? `${row.name} gibt es in diesem Topf schon`
+            : 'Teilnehmer konnte nicht eingetragen werden',
+          'error',
+        )
+      },
+    })
+    return applied
+  }
+
+  /** Abschließen (`closed: true`) oder wieder öffnen. Nie den Haushaltstopf. */
+  const setPotClosed = (potId: string, closed: boolean): boolean => {
+    const toastStore = useToastStore()
+    const pot = pots.value.find((p) => p.pot_id === potId)
+    if (!pot || pot.kind !== 'event') return false
+    const closedAt = closed ? new Date().toISOString() : null
+    const { applied } = runOptimistic<string | null>({
+      entityId: potId,
+      apply: () => {
+        const before = pot.closed_at
+        pot.closed_at = closedAt
+        return before
+      },
+      commit: async () => {
+        // RLS lässt einen verbotenen Schreibzugriff still ins Leere laufen:
+        // ohne zurückgegebene Zeile ist nichts geschehen.
+        const { data, error } = await supabase
+          .from('pots')
+          .update({ closed_at: closedAt })
+          .eq('pot_id', potId)
+          .select('pot_id')
+        if (error) throw error
+        if (!data?.length) throw new Error('pot_not_updated')
+      },
+      revert: (before) => {
+        const current = pots.value.find((p) => p.pot_id === potId)
+        if (current) current.closed_at = before
+      },
+      onError: () => {
+        toastStore.showToast(
+          closed ? 'Topf konnte nicht abgeschlossen werden' : 'Topf konnte nicht geöffnet werden',
+          'error',
+        )
+      },
+    })
+    return applied
+  }
+
+  /** Topf für einen Anlass samt Teilnehmern, Ausgaben und Rückzahlungen löschen. */
+  const deletePot = (potId: string): boolean => {
+    const toastStore = useToastStore()
+    const pot = pots.value.find((p) => p.pot_id === potId)
+    if (!pot || pot.kind !== 'event') return false
+    type Snapshot = {
+      pot: Pot
+      participants: PotParticipant[]
+      expenses: PotExpense[]
+      repayments: PotRepayment[]
+    }
+    const { applied } = runOptimistic<Snapshot>({
+      entityId: potId,
+      apply: () => {
+        const inPot = <T extends { pot_id: string }>(x: T) => x.pot_id === potId
+        const notInPot = <T extends { pot_id: string }>(x: T) => x.pot_id !== potId
+        const snapshot: Snapshot = {
+          pot,
+          participants: participants.value.filter(inPot),
+          expenses: expenses.value.filter(inPot),
+          repayments: repayments.value.filter(inPot),
+        }
+        pots.value = pots.value.filter(notInPot)
+        participants.value = participants.value.filter(notInPot)
+        expenses.value = expenses.value.filter(notInPot)
+        repayments.value = repayments.value.filter(notInPot)
+        return snapshot
+      },
+      commit: async () => {
+        const { data, error } = await supabase
+          .from('pots')
+          .delete()
+          .eq('pot_id', potId)
+          .select('pot_id')
+        if (error) throw error
+        if (!data?.length) throw new Error('pot_not_deleted')
+      },
+      revert: (snapshot) => {
+        pots.value.push(snapshot.pot)
+        participants.value.push(...snapshot.participants)
+        expenses.value.push(...snapshot.expenses)
+        repayments.value.push(...snapshot.repayments)
+      },
+      onError: () => {
+        toastStore.showToast('Topf konnte nicht gelöscht werden', 'error')
+      },
+    })
+    return applied
+  }
+
   watch(
     () => householdStore.currentHousehold?.household_id ?? null,
     (householdId) => {
@@ -577,6 +768,7 @@ export const usePotStore = defineStore('pot', () => {
     loaded,
     householdPot,
     participantsOf,
+    currentParticipantsOf,
     expensesOf,
     repaymentsOf,
     balancesOf,
@@ -585,6 +777,10 @@ export const usePotStore = defineStore('pot', () => {
     participantExists,
     myParticipantId,
     createExpense,
+    createEventPot,
+    addParticipant,
+    setPotClosed,
+    deletePot,
     createRepayment,
     updateExpense,
     deleteExpense,
