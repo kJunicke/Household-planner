@@ -4,11 +4,15 @@ import type { SettlementMethod } from '@/types/Settlement'
 import { useHouseholdStore } from '@/stores/householdStore'
 import { useAuthStore } from '@/stores/authStore'
 import { useSettlementStore } from '@/stores/settlementStore'
+import { usePotStore } from '@/stores/potStore'
+import { formatCents } from '@/lib/potLedger'
 import {
   MAX_PAID_EUROS,
   formatEuroInput,
+  householdPotCredit,
   openBalance,
   parseEuroInput,
+  potOffsetPoints,
   suggestEuros,
 } from '@/lib/settlementAmount'
 
@@ -35,8 +39,11 @@ const emit = defineEmits<{
 const householdStore = useHouseholdStore()
 const authStore = useAuthStore()
 const settlementStore = useSettlementStore()
+const potStore = usePotStore()
 
 const MAX_SETTLEMENT_POINTS = 9999
+/** Grenze einer Rückzahlung (pot_repayments.amount_cents ≤ 99.999.999). */
+const MAX_POT_REPAYMENT_EUROS = 999999.99
 
 const fromUserId = ref(props.preselectedFromId ?? authStore.user?.id ?? '')
 const toUserId = ref(props.preselectedToId ?? '')
@@ -47,15 +54,46 @@ const eurosText = ref('')
 const description = ref('')
 const settledAt = ref(new Date().toISOString().slice(0, 16)) // datetime-local format
 
-// Vorbelegt ist die ganze offene Bilanz des Paars; verringern = Teilausgleich.
+const openPoints = computed(() =>
+  openBalance(settlementStore.pairBalances, fromUserId.value, toUserId.value),
+)
+
+// Verrechnen mit dem Haushaltstopf: angeboten, wenn wer hinten liegt (Von)
+// im Haushaltstopf bei An Geld gut hat. Ereignistöpfe zählen nie.
+const potCreditCents = computed(() => {
+  const pot = potStore.householdPot
+  if (!pot) return 0
+  const participantOf = (userId: string) =>
+    potStore.participantsOf(pot.pot_id).find((p) => p.user_id === userId)?.participant_id ?? ''
+  return householdPotCredit(
+    potStore.balancesOf(pot.pot_id),
+    participantOf(fromUserId.value),
+    participantOf(toUserId.value),
+  )
+})
+
+const potPoints = computed(() =>
+  potOffsetPoints(openPoints.value, potCreditCents.value, householdStore.eurosPerPoint),
+)
+
+const canOffsetWithPot = computed(() => potPoints.value > 0)
+
+watch(canOffsetWithPot, (available) => {
+  if (!available && method.value === 'pot') method.value = 'activity'
+})
+
+// Vorbelegt ist die ganze offene Bilanz des Paars, beim Verrechnen höchstens
+// so viel, wie das Guthaben im Topf deckt; verringern = Teilausgleich.
 watch(
-  [fromUserId, toUserId],
-  () => {
-    const open = openBalance(settlementStore.pairBalances, fromUserId.value, toUserId.value)
-    pointsSettled.value = open > 0 ? open : ''
+  [fromUserId, toUserId, () => method.value === 'pot'],
+  ([, , withPot]) => {
+    const points = withPot ? potPoints.value : openPoints.value
+    pointsSettled.value = points > 0 ? points : ''
   },
   { immediate: true },
 )
+
+const carriesEuros = computed(() => method.value === 'money' || method.value === 'pot')
 
 const validPoints = computed(() => {
   const p = pointsSettled.value
@@ -70,25 +108,33 @@ const validPoints = computed(() => {
 watch(
   [validPoints, method],
   ([points, m]) => {
-    if (m !== 'money' || points === null) return
+    if ((m !== 'money' && m !== 'pot') || points === null) return
     eurosText.value = formatEuroInput(suggestEuros(points, householdStore.eurosPerPoint))
   },
   { immediate: true },
 )
 
+// Beim Verrechnen wird der Betrag eine Rückzahlung: mindestens ein Cent.
 const paidEuros = computed(() => {
   const value = parseEuroInput(eurosText.value)
-  return value !== null && value <= MAX_PAID_EUROS ? value : null
+  if (value === null) return null
+  if (method.value === 'pot') return value > 0 && value <= MAX_POT_REPAYMENT_EUROS ? value : null
+  return value <= MAX_PAID_EUROS ? value : null
 })
 
 const rateLabel = computed(() => formatEuroInput(householdStore.eurosPerPoint))
 
-const methods: { value: SettlementMethod; label: string; icon: string }[] = [
+const allMethods: { value: SettlementMethod; label: string; icon: string }[] = [
   { value: 'activity', label: 'Aktivität', icon: 'bi-bullseye' },
   { value: 'money', label: 'Geld', icon: 'bi-cash-coin' },
+  { value: 'pot', label: 'Topf', icon: 'bi-house-heart' },
   { value: 'surprise', label: 'Überraschung', icon: 'bi-gift' },
   { value: 'other', label: 'Sonstiges', icon: 'bi-three-dots' },
 ]
+
+const methods = computed(() =>
+  allMethods.filter((m) => m.value !== 'pot' || canOffsetWithPot.value),
+)
 
 const members = computed(() => householdStore.householdMembers)
 
@@ -100,7 +146,8 @@ const isValid = computed(
     toUserId.value &&
     fromUserId.value !== toUserId.value &&
     validPoints.value !== null &&
-    (method.value !== 'money' || paidEuros.value !== null),
+    (!carriesEuros.value || paidEuros.value !== null) &&
+    (method.value !== 'pot' || canOffsetWithPot.value),
 )
 
 const handleFromChange = () => {
@@ -116,7 +163,7 @@ const handleSubmit = () => {
     toUserId: toUserId.value,
     pointsSettled: validPoints.value,
     method: method.value,
-    paidEuros: method.value === 'money' ? (paidEuros.value ?? undefined) : undefined,
+    paidEuros: carriesEuros.value ? (paidEuros.value ?? undefined) : undefined,
     description: description.value.trim() || undefined,
     settledAt: new Date(settledAt.value).toISOString(),
   })
@@ -179,7 +226,10 @@ const getMemberName = (userId: string) => {
           <!-- Methode -->
           <div class="form-group">
             <label class="form-label">Art des Ausgleichs</label>
-            <div class="method-grid">
+            <div
+              class="method-grid"
+              :style="{ gridTemplateColumns: `repeat(${methods.length}, 1fr)` }"
+            >
               <button
                 v-for="m in methods"
                 :key="m.value"
@@ -193,10 +243,18 @@ const getMemberName = (userId: string) => {
             </div>
           </div>
 
-          <!-- Betrag (nur Geld) -->
-          <div v-if="method === 'money'" class="form-group">
+          <!-- Verrechnen: woher das Geld kommt -->
+          <p v-if="method === 'pot'" class="pot-hint">
+            <i class="bi bi-house-heart me-1"></i>
+            Mit dem Haushaltstopf verrechnen: {{ getMemberName(fromUserId) }} hat dort bei
+            {{ getMemberName(toUserId) }} {{ formatCents(potCreditCents) }} gut. Der Betrag wird als
+            Rückzahlung im Haushaltstopf eingetragen.
+          </p>
+
+          <!-- Betrag (Geld und Verrechnen) -->
+          <div v-if="carriesEuros" class="form-group">
             <label class="form-label">
-              Betrag
+              {{ method === 'pot' ? 'Betrag im Haushaltstopf' : 'Betrag' }}
               <span class="text-muted">(Vorschlag: Punkte × {{ rateLabel }} €)</span>
             </label>
             <div class="euro-input">
@@ -241,6 +299,10 @@ const getMemberName = (userId: string) => {
               <template v-if="method === 'money'">
                 mit <strong>{{ formatEuroInput(paidEuros ?? 0) }} €</strong>
               </template>
+              <template v-if="method === 'pot'">
+                und verrechnet <strong>{{ formatEuroInput(paidEuros ?? 0) }} €</strong> im
+                Haushaltstopf
+              </template>
             </span>
           </div>
         </div>
@@ -280,10 +342,16 @@ const getMemberName = (userId: string) => {
   flex-shrink: 0;
 }
 
+/* Spaltenzahl im Template: „Topf“ kommt nur dazu, wenn Verrechnen geht. */
 .method-grid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
   gap: 8px;
+}
+
+.pot-hint {
+  font-size: 0.875rem;
+  color: var(--color-text-secondary);
+  margin-bottom: var(--spacing-md);
 }
 
 .method-btn {
