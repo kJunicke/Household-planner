@@ -8,9 +8,17 @@ import { formatCents, suggestTransfers } from '@/lib/potLedger'
 import { entryChangeLine } from '@/lib/potEntryChange'
 import ExpenseCreateModal from './ExpenseCreateModal.vue'
 import RepaymentCreateModal from './RepaymentCreateModal.vue'
+import GuestShareControls from './GuestShareControls.vue'
 import type { Pot, PotExpense, PotRepayment } from '@/types/Pot'
 
-const props = defineProps<{ pot: Pot }>()
+/**
+ * `guest`: Gastansicht (CONTEXT.md § Gast) — ohne Zurück zu den Töpfen, ohne
+ * Teilnehmer nachtragen, abschließen, löschen und Gastlink; stattdessen „Du
+ * bist …“ mit Wechseln. Eintragen, bearbeiten und löschen darf der Gast wie
+ * jeder Teilnehmer.
+ */
+const props = defineProps<{ pot: Pot; guest?: boolean }>()
+const emit = defineEmits<{ 'switch-identity': [] }>()
 
 const potStore = usePotStore()
 const router = useRouter()
@@ -39,6 +47,12 @@ const balanceRows = computed(() => {
 
 const isEvent = computed(() => props.pot.kind === 'event')
 const isOpen = computed(() => !props.pot.closed_at)
+/** Rechte, die etwas sichern (ADR-0006): nur Mitglieder. */
+const canManage = computed(() => isEvent.value && !props.guest)
+const myName = computed(() => {
+  const id = potStore.myParticipantId(props.pot.pot_id)
+  return id ? potStore.participantName(id) : null
+})
 
 // ---------------------------------------------------------------
 // Teilnehmer nachtragen (nur offener Topf für einen Anlass)
@@ -204,7 +218,13 @@ const handleDelete = () => {
 <template>
   <div class="pot-detail">
     <div class="page-header-row">
-      <button class="back-btn" type="button" @click="back">
+      <button v-if="guest" class="back-btn" type="button" @click="emit('switch-identity')">
+        <template v-if="myName">
+          <i class="bi bi-person me-1"></i>Du bist <strong>{{ myName }}</strong> · Wechseln
+        </template>
+        <template v-else><i class="bi bi-person me-1"></i>Wer bist du?</template>
+      </button>
+      <button v-else class="back-btn" type="button" @click="back">
         <i class="bi bi-chevron-left"></i> Töpfe
       </button>
       <div v-if="!pot.closed_at" class="header-actions">
@@ -321,7 +341,7 @@ const handleDelete = () => {
     </section>
 
     <!-- Teilnehmer (Topf für einen Anlass) -->
-    <section v-if="isEvent && isOpen" class="mt-4">
+    <section v-if="canManage && isOpen" class="mt-4">
       <h3 class="section-title">Teilnehmer eintragen</h3>
       <div class="add-participant">
         <input
@@ -348,7 +368,11 @@ const handleDelete = () => {
     </section>
 
     <!-- Abschließen, wieder öffnen, löschen -->
-    <section v-if="isEvent" class="pot-actions mt-4">
+    <section v-if="canManage" class="mt-4">
+      <GuestShareControls kind="pot" :target-id="pot.pot_id" :target-name="pot.name" />
+    </section>
+
+    <section v-if="canManage" class="pot-actions mt-4">
       <template v-if="confirming === 'close'">
         <div class="confirm-box">
           <p v-if="hasOpenBalance" class="text-danger mb-2">

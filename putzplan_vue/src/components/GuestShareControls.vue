@@ -23,6 +23,8 @@ const link = computed(() => (share.value ? guestShareStore.linkFor(share.value) 
 const busy = ref(false)
 const copied = ref(false)
 const confirming = ref<'renew' | 'end' | null>(null)
+/** „an dieser Liste“ bzw. „in diesem Topf“ — die Hinweise nennen das Ziel. */
+const isPot = computed(() => props.kind === 'pot')
 const canShare = typeof navigator !== 'undefined' && typeof navigator.share === 'function'
 
 onMounted(() => {
@@ -70,7 +72,13 @@ const shareLink = async () => {
 
     <template v-if="!share">
       <p class="guest-share-hint">
-        Wer den Link hat, arbeitet ohne Konto an dieser Liste mit — und sieht nichts sonst.
+        <template v-if="isPot">
+          Wer den Link hat, trägt ohne Konto Ausgaben und Rückzahlungen in diesen Topf ein — und
+          sieht nichts sonst. Abschließen und Links verwalten bleibt bei euch.
+        </template>
+        <template v-else>
+          Wer den Link hat, arbeitet ohne Konto an dieser Liste mit — und sieht nichts sonst.
+        </template>
       </p>
       <button class="btn btn-outline-primary btn-sm" :disabled="busy || !isOnline" @click="create">
         <i class="bi bi-link-45deg me-1"></i> Gastlink erzeugen
@@ -112,7 +120,9 @@ const shareLink = async () => {
         <span>{{
           confirming === 'renew'
             ? 'Der bisherige Link geht danach nicht mehr. Erneuern?'
-            : 'Gäste kommen danach nicht mehr an die Liste. Beenden?'
+            : isPot
+              ? 'Gäste kommen danach nicht mehr an den Topf. Beenden?'
+              : 'Gäste kommen danach nicht mehr an die Liste. Beenden?'
         }}</span>
         <button
           class="btn btn-sm"

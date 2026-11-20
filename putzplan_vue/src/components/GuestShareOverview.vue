@@ -2,7 +2,7 @@
 /**
  * Übersicht der **Gastlinks** des Haushalts (→ CONTEXT.md § Gastlink): was
  * gerade geteilt ist, mit Kopieren und Beenden. Erzeugen und Erneuern sitzen
- * am Ziel selbst (Liste bearbeiten).
+ * am Ziel selbst (Liste bearbeiten, Topf).
  */
 import { onMounted, ref } from 'vue'
 import type { GuestShare, GuestShareKind } from '@/types/GuestShare'
@@ -13,6 +13,7 @@ const KIND_LABELS: Record<GuestShareKind, { icon: string; label: string }> = {
   shopping_list: { icon: 'bi-cart3', label: 'Einkauf' },
   packing_list: { icon: 'bi-bag-check', label: 'Packliste' },
   todo_list: { icon: 'bi-check2-square', label: 'To-do' },
+  pot: { icon: 'bi-wallet2', label: 'Topf' },
 }
 
 const guestShareStore = useGuestShareStore()
@@ -45,7 +46,7 @@ const end = async (share: GuestShare) => {
 <template>
   <div>
     <p v-if="guestShareStore.shares.length === 0" class="text-muted mb-0">
-      Nichts geteilt. Einen Gastlink erzeugst du im Bearbeiten-Dialog einer Liste.
+      Nichts geteilt. Einen Gastlink erzeugst du im Bearbeiten-Dialog einer Liste oder im Topf.
     </p>
     <ul v-else class="share-list">
       <li v-for="share in guestShareStore.shares" :key="share.share_id" class="share-item">

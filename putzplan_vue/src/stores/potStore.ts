@@ -7,6 +7,7 @@ import { onSessionEnd } from '@/lib/sessionEnd'
 import { isInFlight, runOptimistic } from '@/lib/optimistic'
 import { expenseShares, potBalances, type ExpenseSplit, type LedgerExpense } from '@/lib/potLedger'
 import { currentParticipants } from '@/lib/potRules'
+import { rememberGuestParticipant, rememberedGuestParticipant } from '@/lib/guestIdentity'
 import { useAuthStore } from './authStore'
 import { useHouseholdStore } from './householdStore'
 import { useToastStore } from './toastStore'
@@ -139,10 +140,38 @@ export const usePotStore = defineStore('pot', () => {
   const participantExists = (participantId: string | null): boolean =>
     participants.value.some((x) => x.participant_id === participantId)
 
-  /** Der eigene Teilnehmer in einem Topf, falls man einer ist. */
-  const myParticipantId = (potId: string): string | null =>
-    participants.value.find((p) => p.pot_id === potId && p.user_id === authStore.user?.id)
-      ?.participant_id ?? null
+  // Der Browser-Speicher ist nicht reaktiv: jede Wahl zählt diesen Zähler
+  // hoch, damit Anzeigen, die vom eigenen Teilnehmer abhängen, neu rechnen.
+  const guestChoiceVersion = ref(0)
+
+  /**
+   * Der eigene Teilnehmer in einem Topf, falls man einer ist. Mitglieder sind
+   * es über ihr Konto; ein Gast ist, wen er gewählt hat (im Browser gemerkt).
+   * Diese Kennung landet als „zuletzt geändert von“ an Einträgen.
+   */
+  const myParticipantId = (potId: string): string | null => {
+    if (authStore.isGuest) {
+      void guestChoiceVersion.value
+      return rememberedGuestParticipant(
+        localStorage,
+        potId,
+        participants.value.filter((p) => p.pot_id === potId).map((p) => p.participant_id),
+      )
+    }
+    return (
+      participants.value.find((p) => p.pot_id === potId && p.user_id === authStore.user?.id)
+        ?.participant_id ?? null
+    )
+  }
+
+  /**
+   * Gast: „Das bin ich“ — Wahl aus der Teilnehmerliste oder nach „Ich bin neu“;
+   * eine neue Wahl ersetzt die alte (Wechseln).
+   */
+  const chooseGuestParticipant = (potId: string, participantId: string) => {
+    rememberGuestParticipant(localStorage, potId, participantId)
+    guestChoiceVersion.value++
+  }
 
   // ---------------------------------------------------------------
   // Laden und Realtime
@@ -614,6 +643,33 @@ export const usePotStore = defineStore('pot', () => {
     return pot.pot_id
   }
 
+  /**
+   * Gast: „Ich bin neu“ — sich selbst als Teilnehmer eintragen (RPC
+   * `join_pot_as_guest`) und die Wahl merken. Wartet auf die Datenbank statt
+   * optimistisch zu zeigen: ein vergebener Name soll gar nicht erst auftauchen.
+   */
+  const joinPotAsGuest = async (
+    potId: string,
+    name: string,
+  ): Promise<'ok' | 'duplicate' | 'closed' | 'error'> => {
+    const { data, error } = await supabase.rpc('join_pot_as_guest', {
+      p_pot_id: potId,
+      p_name: name.trim(),
+    })
+    if (error) {
+      console.error('Error joining pot:', error)
+      if (error.code === '23505') return 'duplicate'
+      if (error.message === 'pot_closed') return 'closed'
+      return 'error'
+    }
+    const row = data as PotParticipant
+    if (!participants.value.some((p) => p.participant_id === row.participant_id)) {
+      participants.value.push(row)
+    }
+    chooseGuestParticipant(potId, row.participant_id)
+    return 'ok'
+  }
+
   /** Teilnehmer per Namen in einen offenen Topf für einen Anlass eintragen. */
   const addParticipant = (potId: string, name: string): boolean => {
     const householdId = activeHouseholdId
@@ -776,6 +832,8 @@ export const usePotStore = defineStore('pot', () => {
     participantName,
     participantExists,
     myParticipantId,
+    chooseGuestParticipant,
+    joinPotAsGuest,
     createExpense,
     createEventPot,
     addParticipant,
