@@ -97,7 +97,8 @@ Weicht der Stand ab, die Sätze sinngemäß anpassen und das im Ergebnis vermerk
 | Nr | Satz | Erwartet |
 | --- | --- | --- |
 | F1 | Pack Skischuhe, Helm und zwei Paar Handschuhe auf die Skiurlaub-Liste | `add_checklist_entries` Skiurlaub: Skischuhe, Helm, Handschuhe ×2 |
-| F2 | auf die zelten liste noch isomatte unter kategorie schlafen | `add_checklist_entries` QC Zelten: Isomatte, Kategorie Schlafen (neu) |
+| F2 | auf die zelten liste noch isomatte unter kategorie schlafen | Rückfrage: QC Zelten oder Zelten Sommer (die Kopie aus E6 passt auch) |
+| F2b | qc zelten | `add_checklist_entries` QC Zelten: Isomatte, Kategorie Schlafen (neu) |
 | F3 | Ich muss noch Müll rausbringen, schreib das auf die To-do-Liste | Rückfrage: QC2 Todo oder Umzug |
 | F3b | auf qc2 todo | `add_checklist_entries` QC2 Todo: Müll rausbringen |
 
@@ -106,7 +107,7 @@ Weicht der Stand ab, die Sätze sinngemäß anpassen und das im Ergebnis vermerk
 | Nr | Satz | Erwartet |
 | --- | --- | --- |
 | G1 | Mach aus den Handschuhen drei Paar | `update_checklist_entries`: Handschuhe Menge 3 |
-| G2 | Sortier Zelt und Schlafsack auf der Zelten-Liste in die Kategorie Schlafen | `update_checklist_entries`: Zelt, Schlafsack → Kategorie Schlafen |
+| G2 | Sortier Zelt und Schlafsack auf der Zelten-Liste in die Kategorie Schlafen | `update_checklist_entries`: Zelt, Schlafsack → Kategorie Schlafen; oder Rückfrage QC Zelten / Zelten Sommer, mit Antwort „qc zelten“ dasselbe |
 | G3 | benenn auf der umzug liste strom ummelden um in strom und gas ummelden | `update_checklist_entries`: Name „Strom und Gas ummelden“ |
 
 ## H. Abhaken und wieder öffnen (`check_checklist_entries`)
@@ -165,7 +166,7 @@ Weicht der Stand ab, die Sätze sinngemäß anpassen und das im Ergebnis vermerk
 | --- | --- | --- |
 | N1 | Wo stelle ich das Wochenziel ein? | `get_app_guide`; Antwort: Einstellungen (Logo oben rechts), Angebot hinzuführen; noch kein `go_to_page` |
 | N2 | ja bring mich hin | `go_to_page` einstellungen |
-| N3 | Zeig mir die Packliste Zelten | `go_to_page` packlisten mit der ID von QC Zelten |
+| N3 | Zeig mir die Packliste Zelten | Rückfrage QC Zelten / Zelten Sommer; mit „QC Zelten“ `go_to_page` packlisten mit der ID von QC Zelten |
 | N4 | Wie hake ich im Laden was ab? | `get_app_guide`; Antwort: Tipp auf den Eintrag |
 
 ## O. Ablehnen: Ausgleich, Einstellungen, Gastlinks, für andere
@@ -198,7 +199,7 @@ Weicht der Stand ab, die Sätze sinngemäß anpassen und das im Ergebnis vermerk
 
 | Nr | Satz | Erwartet |
 | --- | --- | --- |
-| Q1 | Fenster putzen ist erledigt | Rückfrage: „Fenster“ oder „Fenster innen putzen“ (QC2 Todo) |
+| Q1 | Fenster putzen ist erledigt | Rückfrage: „Fenster“, „Fenster innen putzen“ (QC2 Todo) und seit Stufe 2 auch QC-Raster Fenster (Pinnwand); nichts abgehakt |
 | Q2 | Lösch die Liste | Rückfrage: welche Liste |
 | Q3 | Benenn die Liste in Wochenende um | Rückfrage: welche Liste |
 | Q4 | setz seife drauf | Rückfrage: welche Liste (Seife steht schon auf QC2 Einkauf; auch das darf er sagen) |
@@ -247,9 +248,11 @@ dabei zum ersten Mal bewertete Aufgabe ist wieder unbewertet.
 | T3 | Küche ist geputzt | Rückfrage nach den Punkten (unbewertet) |
 | T3b | 4 | `complete_task` QC-Raster Küche mit points 4; dann Rückgängig im Toast: Küche wieder an der Wand und unbewertet, Wochenziel −4 |
 | T4 | ich hab gerade den dachboden aufgeräumt sechs punkte | `log_quick_task` „Dachboden aufräumen“ mit 6 Punkten (keine passende Aufgabe); Rückgängig nimmt die 6 Punkte wieder raus |
-| T5 | Ich hab den Keller entrümpelt | Keine Aufgabe passt: Rückfrage, ob als Quick-Aufgabe und mit wie vielen Punkten |
+| T5 | Ich hab den Keller entrümpelt | Rückfrage nach den Punkten für eine Quick-Aufgabe, oder ob QC Keller aufräumen (aus S2, qc-agent-2 zugewiesen) gemeint ist; nie ablehnen, weil sie einem anderen zugewiesen ist |
+| T5b | nein, ich hab QC Keller aufräumen gemacht, die von qc-agent-2 | `complete_task` QC Keller aufräumen für den, der fragt (+8 P): zuweisen heißt zuständig, erledigen darf jeder; Rückgängig: wieder an der Wand, qc-agent-2 wieder zuständig, Wochenziel −8 |
+| T6b | trag qc-agent-2 eine Quick-Aufgabe Auto waschen mit 5 Punkten ein | Ablehnen: auch keine Quick-Aufgabe für ein anderes Mitglied; kein Werkzeug, das etwas ändert |
 | T6 | qc-agent-2 hat die Küche geputzt, 4 Punkte | Ablehnen: das hakt qc-agent-2 selbst ab; kein Werkzeug, das etwas ändert |
 | T7 | Fenster nochmal geputzt, diesmal 6 Punkte | Rückfrage nach der Begründung (Abweichung: sonst 3); nichts erledigt. Fragt er dazu nach Pinnwand oder Liste, ist das auch richtig |
 | T7b | die Pinnwand, war extrem dreckig nach der Party | `complete_task` QC-Raster Fenster mit points 6, note mit der Begründung, again (schon erledigt): Toast „+6 P statt 3“ |
 | T8 | Ich hab zwei Stunden am QC-Test Projekt gearbeitet | Rückfrage nach den Punkten; mit Antwort `complete_task` am Projekt: Toast „Projekt-Arbeit: QC-Test Projekt (+… P)“, das Projekt bleibt offen |
-| T9 | Bad ist geputzt | Ist QC-Raster Bad schon erledigt: Hinweis, dass es schon erledigt ist (wann); erledigt erst, wenn der Nutzer sagt, dass er es seitdem wieder geputzt hat |
+| T9 | Bad ist geputzt | QC-Raster Bad ist schon erledigt: Hinweis darauf und Frage, ob er es seitdem noch einmal geputzt hat; kein `complete_task` mit `again` von sich aus |
