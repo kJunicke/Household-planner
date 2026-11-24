@@ -584,7 +584,11 @@ onUnmounted(() => {
               <button
                 v-for="list in shoppingStore.lists"
                 :key="list.list_id"
-                :class="['list-chip', shoppingStore.currentListId === list.list_id && 'active']"
+                :class="[
+                  'list-chip',
+                  shoppingStore.currentListId === list.list_id && 'active',
+                  flashedShoppingIds.has(list.list_id) && 'row-flash',
+                ]"
                 @click="shoppingStore.currentListId = list.list_id"
               >
                 <i

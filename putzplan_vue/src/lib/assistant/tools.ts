@@ -11,11 +11,12 @@
  */
 import type { AppPage } from '@/lib/appNavigation'
 import { guideTools } from './appGuide'
+import { checklistTools, type ListToolStores } from './listTools'
 import { navigationTools } from './navigationTools'
 import { shoppingTools, type ShoppingToolStore } from './shoppingTools'
 
 /** Wo ein geänderter Eintrag in der App steht; zum Hinführen und Aufleuchten. */
-export type AssistantPage = { area: 'shopping'; listId: string }
+export type AssistantPage = { area: 'shopping' | 'packing' | 'todo'; listId: string }
 
 export interface ChangedEntry {
   id: string
@@ -71,6 +72,8 @@ export interface AssistantTool extends ToolDefinition {
 /** Die Stores, die die Werkzeuge bedienen. */
 export interface ToolDeps {
   shopping: ShoppingToolStore
+  /** Packlisten und To-do-Listen; dazu der Einkauf zum Anlegen und Umbenennen von Listen. */
+  lists: ListToolStores
   /** Bringt die App auf eine Seite (`createGoToPage`). */
   goToPage: (page: AppPage) => void
 }
@@ -83,6 +86,7 @@ export interface ToolRegistry {
 export function assistantTools(deps: ToolDeps): ToolRegistry {
   const tools = [
     ...shoppingTools(deps.shopping),
+    ...checklistTools(deps.lists),
     ...navigationTools(deps.goToPage),
     ...guideTools(),
   ]

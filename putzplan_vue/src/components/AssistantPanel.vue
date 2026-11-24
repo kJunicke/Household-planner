@@ -19,15 +19,18 @@ import { captureOverview } from '@/lib/assistant/captureOverview'
 import { assistantTools, type Change, type ToolOutcome } from '@/lib/assistant/tools'
 import { followApp } from '@/lib/assistant/followApp'
 import { useGoToPage } from '@/composables/useGoToPage'
+import { usePackingStore } from '@/stores/packingStore'
 import { useShoppingStore } from '@/stores/shoppingStore'
+import { useTodoStore } from '@/stores/todoStore'
 import { useToastStore } from '@/stores/toastStore'
 import { useRouter } from 'vue-router'
 
 const open = defineModel<boolean>('open', { required: true })
 const shoppingStore = useShoppingStore()
 const goToPage = useGoToPage()
-const tools = assistantTools({ shopping: shoppingStore, goToPage })
-const follow = followApp(useRouter(), shoppingStore, goToPage)
+const lists = { shopping: shoppingStore, packing: usePackingStore(), todo: useTodoStore() }
+const tools = assistantTools({ shopping: shoppingStore, lists, goToPage })
+const follow = followApp(useRouter(), shoppingStore, goToPage, lists)
 watch(open, (isOpen) => (isOpen ? follow.opened() : follow.closed()))
 const toastStore = useToastStore()
 

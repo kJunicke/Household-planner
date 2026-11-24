@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import type { AppPage } from '@/lib/appNavigation'
+import type { ListToolStores } from './listTools'
 import type { ShoppingToolStore } from './shoppingTools'
 import { assistantTools } from './tools'
 
@@ -8,6 +9,7 @@ function registry() {
   const visited: AppPage[] = []
   const tools = assistantTools({
     shopping: { lists: [], items: [] } as unknown as ShoppingToolStore,
+    lists: {} as ListToolStores,
     goToPage: (page) => visited.push(page),
   })
   return { tools, visited }

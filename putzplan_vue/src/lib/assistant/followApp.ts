@@ -3,8 +3,9 @@
  * letzten Änderung, und beim Schließen leuchten auf der dann gezeigten Seite
  * die Einträge auf, die seit dem Öffnen geändert wurden.
  *
- * Bisher gibt es nur Einkaufslisten als Seite; die Einkaufsansicht liest
- * `flashedShoppingIds` und lässt die Zeilen aufleuchten.
+ * Seiten sind bisher die Listen: die Einkaufsansicht liest
+ * `flashedShoppingIds`, die Ansicht der Pack- und To-do-Listen
+ * `flashedChecklistIds`, und lässt die Zeilen aufleuchten.
  */
 import { ref } from 'vue'
 import type { Router } from 'vue-router'
@@ -18,26 +19,43 @@ const FLASH_MS = 3600
 
 /** Die Einkaufsartikel, die gerade aufleuchten. */
 export const flashedShoppingIds = ref<ReadonlySet<string>>(new Set())
+/** Die Einträge, Kategorien (`categoryHighlightId`) und Listen der Pack- und To-do-Listen, die gerade aufleuchten. */
+export const flashedChecklistIds = ref<ReadonlySet<string>>(new Set())
 let flashTimer: number | undefined
 
 type FollowStore = Pick<ReturnType<typeof useShoppingStore>, 'currentListId' | 'currentItemId'>
 
-export function followApp(router: Router, shopping: FollowStore, goToPage: GoToPage) {
+/** Die offene Liste je Listenart; die Seite, die die App gerade zeigt. */
+type Checklists = Record<'packing' | 'todo', { currentListId: string | null }>
+
+const LISTS_TAB = { packlisten: 'packing', todo: 'todo' } as const
+
+export function followApp(
+  router: Router,
+  shopping: FollowStore,
+  goToPage: GoToPage,
+  checklists: Checklists,
+) {
   const trail = createChangeTrail()
 
-  const onShoppingTab = () => {
+  /** Welcher Listen-Reiter offen ist; `null` außerhalb der Listen. */
+  const listsTab = () => {
     const route = router.currentRoute.value
-    return route.name === 'listen' && !route.query.tab
+    if (route.name !== 'listen') return null
+    const tab = String(route.query.tab ?? '')
+    return tab in LISTS_TAB ? LISTS_TAB[tab as keyof typeof LISTS_TAB] : 'shopping'
   }
 
   // Über denselben Weg wie das Werkzeug „Gehe zu Seite“ (appNavigation.ts). Der
   // ruft push, nicht replace: Zurück führt dorthin, wo der Chat geöffnet wurde.
   const show = (page: AssistantPage) => goToPage(page)
 
-  const shownPage = (): AssistantPage | null =>
-    onShoppingTab() && shopping.currentListId
-      ? { area: 'shopping', listId: shopping.currentListId }
-      : null
+  const shownPage = (): AssistantPage | null => {
+    const area = listsTab()
+    if (!area) return null
+    const listId = area === 'shopping' ? shopping.currentListId : checklists[area].currentListId
+    return listId ? { area, listId } : null
+  }
 
   return {
     /** Beim Öffnen des Chats. */
@@ -57,12 +75,17 @@ export function followApp(router: Router, shopping: FollowStore, goToPage: GoToP
     closed() {
       const page = shownPage()
       const ids = page ? trail.changedOn(page) : []
-      if (ids.length === 0) return
-      // Neue Artikel trugen beim Anlegen eine vorläufige ID.
-      flashedShoppingIds.value = new Set(ids.map(shopping.currentItemId))
+      if (!page || ids.length === 0) return
+      if (page.area === 'shopping') {
+        // Neue Artikel trugen beim Anlegen eine vorläufige ID.
+        flashedShoppingIds.value = new Set(ids.map(shopping.currentItemId))
+      } else {
+        flashedChecklistIds.value = new Set(ids)
+      }
       window.clearTimeout(flashTimer)
       flashTimer = window.setTimeout(() => {
         flashedShoppingIds.value = new Set()
+        flashedChecklistIds.value = new Set()
       }, FLASH_MS)
     },
   }
