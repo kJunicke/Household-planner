@@ -1,0 +1,91 @@
+import { describe, expect, it } from 'vitest'
+
+import { createChangeTrail } from './changeTrail'
+import type { ToolOutcome } from './tools'
+
+const einkauf = { area: 'shopping', listId: 'einkauf' } as const
+const baumarkt = { area: 'shopping', listId: 'baumarkt' } as const
+
+const outcome = (changed: ToolOutcome['changed'], undo?: () => Promise<boolean>): ToolOutcome => ({
+  result: 'ok',
+  summary: '✓',
+  changed,
+  ...(undo ? { undo } : {}),
+})
+
+describe('the change trail of an open chat', () => {
+  it('a pure question changes nothing, so there is no page to follow', () => {
+    const trail = createChangeTrail()
+    trail.track({ result: 'Auf der Liste stehen Milch und Brot.' })
+    expect(trail.lastPage()).toBeNull()
+  })
+
+  it('follows the page of the latest change', () => {
+    const trail = createChangeTrail()
+    trail.track(outcome([{ id: 'milch', page: einkauf }]))
+    expect(trail.lastPage()).toEqual(einkauf)
+    trail.track(outcome([{ id: 'schrauben', page: baumarkt }]))
+    expect(trail.lastPage()).toEqual(baumarkt)
+  })
+
+  it('lists every entry changed on the shown page since the chat opened, and only those', () => {
+    const trail = createChangeTrail()
+    trail.track(outcome([{ id: 'alt', page: einkauf }]))
+    trail.reset()
+    trail.track(
+      outcome([
+        { id: 'milch', page: einkauf },
+        { id: 'brot', page: einkauf },
+      ]),
+    )
+    trail.track(outcome([{ id: 'schrauben', page: baumarkt }]))
+    expect(trail.changedOn(einkauf)).toEqual(['milch', 'brot'])
+    expect(trail.changedOn(baumarkt)).toEqual(['schrauben'])
+  })
+
+  it('a change that was undone does not light up', async () => {
+    const trail = createChangeTrail()
+    trail.track(outcome([{ id: 'milch', page: einkauf }]))
+    const tracked = trail.track(outcome([{ id: 'brot', page: einkauf }], async () => true))
+    expect(await tracked.undo!()).toBe(true)
+    expect(trail.changedOn(einkauf)).toEqual(['milch'])
+  })
+
+  it('undoing one change of a call (its toast) keeps the other changes of that call lit', async () => {
+    const trail = createChangeTrail()
+    const tracked = trail.track({
+      result: 'ok',
+      changed: [
+        { id: 'milch', page: einkauf },
+        { id: 'brot', page: einkauf },
+      ],
+      changes: [
+        { summary: '✓ Milch → Einkauf', undo: async () => true },
+        { summary: '✓ Brot → Einkauf', undo: async () => true },
+      ],
+    })
+    expect(await tracked.changes![1]!.undo()).toBe(true)
+    expect(trail.changedOn(einkauf)).toEqual(['milch'])
+  })
+
+  it('an entry changed twice still lights up when only the second change is undone', async () => {
+    const trail = createChangeTrail()
+    trail.track(outcome([{ id: 'milch', page: einkauf }]))
+    const second = trail.track(outcome([{ id: 'milch', page: einkauf }], async () => true))
+    await second.undo!()
+    expect(trail.changedOn(einkauf)).toEqual(['milch'])
+  })
+
+  it('an undo that failed leaves the change lit', async () => {
+    const trail = createChangeTrail()
+    const tracked = trail.track(outcome([{ id: 'milch', page: einkauf }], async () => false))
+    expect(await tracked.undo!()).toBe(false)
+    expect(trail.changedOn(einkauf)).toEqual(['milch'])
+  })
+
+  it('hands the outcome on unchanged for Claude and the chat', () => {
+    const trail = createChangeTrail()
+    const tracked = trail.track(outcome([{ id: 'milch', page: einkauf }]))
+    expect(tracked).toMatchObject({ result: 'ok', summary: '✓' })
+  })
+})

@@ -1,17 +1,19 @@
 /**
- * Ein Weg, die App auf eine Seite zu bringen: für das Werkzeug „Gehe zu
- * Seite“ des Assistenten und für alles, was der App hinter dem Chat folgt.
+ * Der eine Weg, die App auf eine Seite zu bringen: für das Werkzeug „Gehe zu
+ * Seite“ des Assistenten und für die App, die dem Chat folgt (followApp.ts).
  *
  * Seiten werden fachlich benannt (`area`), nicht als Route; welche Route und
- * welcher Untertab dazugehören, weiß nur diese Datei. Die Listen und die Kasse
- * tragen Untertab und offene Liste bzw. offenen Topf in der Adresse
- * (`/listen?tab=packlisten&liste=…`, `/kasse?tab=toepfe&topf=…`). Die
- * Einstellungen sind keine Seite, sondern die Seitenleiste im Header.
+ * welcher Untertab dazugehören, weiß nur diese Datei. Untertabs stehen in der
+ * Adresse (`/listen?tab=packlisten|todo`, ohne = Einkauf; `/kasse?tab=…&topf=…`).
+ * Die offene Liste ist die `currentListId` ihres Stores, wie beim Tipp auf einen
+ * Listen-Chip. Die Einstellungen sind keine Seite, sondern die Seitenleiste im
+ * Header.
  */
 import { ref } from 'vue'
 import type { RouteLocationRaw } from 'vue-router'
 
 type KasseTab = 'statistik' | 'ausgleich' | 'toepfe'
+type ListArea = 'shopping' | 'packing' | 'todo'
 
 export type AppPage =
   | { area: 'wall' }
@@ -20,10 +22,10 @@ export type AppPage =
   | { area: 'settings' }
   | { area: 'kasse'; tab: KasseTab }
   | { area: 'pot'; potId: string }
-  | { area: 'shopping' | 'packing' | 'todo'; listId?: string }
+  | { area: ListArea; listId?: string }
 
 /** Untertab der Listen in der Adresse; Einkauf ist der Standard und steht nicht darin. */
-export const LISTS_TAB_QUERY = { shopping: undefined, packing: 'packlisten', todo: 'todo' } as const
+const LISTS_TAB_QUERY = { shopping: undefined, packing: 'packlisten', todo: 'todo' } as const
 
 function routeFor(page: Exclude<AppPage, { area: 'settings' }>): RouteLocationRaw {
   switch (page.area) {
@@ -39,10 +41,7 @@ function routeFor(page: Exclude<AppPage, { area: 'settings' }>): RouteLocationRa
       return { name: 'kasse', query: { tab: 'toepfe', topf: page.potId } }
     default: {
       const tab = LISTS_TAB_QUERY[page.area]
-      return {
-        name: 'listen',
-        query: { ...(tab ? { tab } : {}), ...(page.listId ? { liste: page.listId } : {}) },
-      }
+      return { name: 'listen', query: tab ? { tab } : {} }
     }
   }
 }
@@ -50,12 +49,17 @@ function routeFor(page: Exclude<AppPage, { area: 'settings' }>): RouteLocationRa
 /** Ob die Einstellungen (Seitenleiste im Header) offen sind. */
 export const settingsSidebarOpen = ref(false)
 
+export type GoToPage = (page: AppPage) => void
+
 export function createGoToPage(app: {
   push: (to: RouteLocationRaw) => unknown
   openSettings: () => void
-}) {
-  return (page: AppPage): void => {
-    if (page.area === 'settings') app.openSettings()
-    else void app.push(routeFor(page))
+  /** Macht eine Liste zur offenen, wie der Tipp auf ihren Chip. */
+  selectList: (area: ListArea, listId: string) => void
+}): GoToPage {
+  return (page) => {
+    if (page.area === 'settings') return app.openSettings()
+    if ('listId' in page && page.listId) app.selectList(page.area, page.listId)
+    void app.push(routeFor(page))
   }
 }

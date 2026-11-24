@@ -17,21 +17,18 @@ import {
 import { createHistoryExpiry } from '@/lib/assistant/historyExpiry'
 import { captureOverview } from '@/lib/assistant/captureOverview'
 import { assistantTools, type Change } from '@/lib/assistant/tools'
-import { createGoToPage, settingsSidebarOpen } from '@/lib/appNavigation'
+import { followApp } from '@/lib/assistant/followApp'
+import { useGoToPage } from '@/composables/useGoToPage'
 import { useShoppingStore } from '@/stores/shoppingStore'
 import { useToastStore } from '@/stores/toastStore'
 import { useRouter } from 'vue-router'
 
 const open = defineModel<boolean>('open', { required: true })
 const shoppingStore = useShoppingStore()
-const router = useRouter()
-const tools = assistantTools({
-  shopping: shoppingStore,
-  goToPage: createGoToPage({
-    push: (to) => router.push(to),
-    openSettings: () => (settingsSidebarOpen.value = true),
-  }),
-})
+const goToPage = useGoToPage()
+const tools = assistantTools({ shopping: shoppingStore, goToPage })
+const follow = followApp(useRouter(), shoppingStore, goToPage)
+watch(open, (isOpen) => (isOpen ? follow.opened() : follow.closed()))
 const toastStore = useToastStore()
 
 /** So lange bleibt ein Toast mit Rückgängig stehen; wie beim Löschen im Topf. */
@@ -126,7 +123,7 @@ async function submit() {
       {
         send: (m) => send(m, overview),
         executeTool: async (name, input) => {
-          const outcome = await tools.execute(name, input)
+          const outcome = follow.track(await tools.execute(name, input))
           outcome.changes?.forEach(toastChange)
           return outcome
         },
