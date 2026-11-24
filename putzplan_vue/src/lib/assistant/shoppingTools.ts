@@ -1,16 +1,13 @@
 /**
  * Die Werkzeuge des Assistenten für die Einkaufslisten: der Stand, den Claude
- * zu sehen bekommt, und die Ausführer für seine Aufrufe.
- *
- * Name und Felder jedes Werkzeugs stehen ein zweites Mal in
- * supabase/functions/assistant/index.ts (`TOOLS`) — dort beschrieben, hier
- * ausgeführt. Wer eins ändert, ändert beide.
+ * zu sehen bekommt, und die Werkzeuge selbst, samt Beschreibung für Claude,
+ * Ausführung und Rücknahme.
  *
  * Ausgeführt wird über den shoppingStore, also genau wie beim Tippen in der
  * App: optimistisch, offline-fähig, per Echtzeit beim anderen sichtbar.
  */
 import type { useShoppingStore } from '@/stores/shoppingStore'
-import type { ToolOutcome } from './runAssistant'
+import { undoAll, type AssistantTool, type ChangedEntry, type ToolOutcome } from './tools'
 
 /**
  * Der Teil des shoppingStore, den die Werkzeuge brauchen. Hereingereicht statt
@@ -23,6 +20,7 @@ export type ShoppingToolStore = Pick<
   | 'loadLists'
   | 'loadItems'
   | 'createItem'
+  | 'deleteItem'
   | 'markPurchased'
   | 'markUnpurchased'
   | 'updateItem'
@@ -49,6 +47,15 @@ export async function ensureShoppingLoaded(store: ShoppingToolStore) {
 const sameName = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase()
 
 /**
+ * Ein neuer Artikel trägt erst eine vorläufige ID, die der Store nach dem
+ * Speichern gegen die echte tauscht. Die Rücknahme sucht ihn darum notfalls
+ * über Liste und Namen.
+ */
+const findCreated = (store: ShoppingToolStore, id: string, listId: string, name: string) =>
+  store.items.find((i) => i.shopping_item_id === id) ??
+  store.items.find((i) => i.list_id === listId && !i.purchased && sameName(i.name, name))
+
+/**
  * Dieselbe Regel wie `handleAddItem` in ShoppingView: offen → nichts tun,
  * gekauft → wieder öffnen, sonst neu anlegen mit der Kategorie aus der
  * Kaufhistorie.
@@ -60,12 +67,15 @@ async function addShoppingItems(
   const listId = String(input.list_id ?? '')
   const list = store.lists.find((l) => l.list_id === listId)
   if (!list) return { result: `Unbekannte list_id ${listId}`, isError: true }
+  const page = { area: 'shopping', listId } as const
 
   const wanted = Array.isArray(input.items) ? input.items : []
   const done: string[] = []
   // Der Store meldet einen Fehlschlag (z. B. abgemeldet) nur per Rückgabewert;
   // ohne diese Liste stünde ein „✓“ für etwas, das nie geschah.
   const failed: string[] = []
+  const changed: ChangedEntry[] = []
+  const undoSteps: (() => Promise<boolean>)[] = []
   for (const raw of wanted as { name?: unknown; quantity?: unknown }[]) {
     const name = String(raw.name ?? '').trim()
     if (!name) continue
@@ -79,17 +89,37 @@ async function addShoppingItems(
     const label = quantity > 1 ? `${quantity}× ${name}` : name
     const purchased = onList.find((i) => i.purchased)
     if (purchased) {
-      if (!(await store.markUnpurchased(purchased.shopping_item_id))) {
+      const id = purchased.shopping_item_id
+      const previousQuantity = purchased.quantity
+      if (!(await store.markUnpurchased(id))) {
         failed.push(name)
         continue
       }
-      if (quantity !== purchased.quantity) {
-        await store.updateItem(purchased.shopping_item_id, { quantity })
-      }
+      if (quantity !== previousQuantity) await store.updateItem(id, { quantity })
+      // Zurück auf gekauft. markPurchased zählt den Kauf dabei ein zweites Mal
+      // mit; einen Weg zurück ohne Zählen hat der Store nicht.
+      undoSteps.push(async () => {
+        const bought = await store.markPurchased(id)
+        if (quantity === previousQuantity) return bought
+        return (await store.updateItem(id, { quantity: previousQuantity })) && bought
+      })
+      changed.push({ id, page })
       done.push(label)
       continue
     }
-    if (await store.createItem(name, store.suggestCategoryFor(name), quantity, listId)) {
+    const created = await store.createItem({
+      name,
+      category: store.suggestCategoryFor(name),
+      quantity,
+      listId,
+    })
+    if (created) {
+      const tempId = created.shopping_item_id
+      undoSteps.push(async () => {
+        const item = findCreated(store, tempId, listId, name)
+        return item ? store.deleteItem(item.shopping_item_id) : false
+      })
+      changed.push({ id: tempId, page })
       done.push(label)
     } else {
       failed.push(name)
@@ -108,6 +138,7 @@ async function addShoppingItems(
   return {
     result: `Erledigt auf „${list.name}“: ${done.join(', ')}.${notDone}`,
     summary: `✓ ${done.join(', ')} → ${list.name}`,
+    ...(undoSteps.length ? { undo: undoAll(undoSteps), changed } : {}),
   }
 }
 
@@ -119,14 +150,19 @@ async function markShoppingItemsPurchased(
   const names: string[] = []
   const unknown: string[] = []
   const failed: string[] = []
+  const changed: ChangedEntry[] = []
   for (const id of ids) {
     const item = store.items.find((i) => i.shopping_item_id === id && !i.purchased)
     if (!item) {
       unknown.push(id)
       continue
     }
-    if (await store.markPurchased(id)) names.push(item.name)
-    else failed.push(item.name)
+    if (await store.markPurchased(id)) {
+      names.push(item.name)
+      changed.push({ id, page: { area: 'shopping', listId: item.list_id } })
+    } else {
+      failed.push(item.name)
+    }
   }
 
   const missing =
@@ -142,23 +178,67 @@ async function markShoppingItemsPurchased(
   return {
     result: `Abgehakt: ${names.join(', ')}.${missing}`,
     summary: `✓ abgehakt: ${names.join(', ')}`,
+    undo: undoAll(
+      changed.map(
+        ({ id }) =>
+          () =>
+            store.markUnpurchased(id),
+      ),
+    ),
+    changed,
   }
 }
 
-const executors: Record<
-  string,
-  (store: ShoppingToolStore, input: Record<string, unknown>) => Promise<ToolOutcome>
-> = {
-  add_shopping_items: addShoppingItems,
-  mark_shopping_items_purchased: markShoppingItemsPurchased,
-}
-
-export async function executeShoppingTool(
-  store: ShoppingToolStore,
-  name: string,
-  input: Record<string, unknown>,
-): Promise<ToolOutcome> {
-  const run = executors[name]
-  if (!run) return { result: `Unbekanntes Werkzeug ${name}`, isError: true }
-  return run(store, input)
-}
+export const shoppingTools = (store: ShoppingToolStore): AssistantTool[] => [
+  {
+    name: 'add_shopping_items',
+    description:
+      'Setzt Artikel auf eine Einkaufsliste. Ein schon gekaufter Artikel gleichen Namens wird ' +
+      'wieder geöffnet statt doppelt angelegt; ein schon offener bleibt, wie er ist.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        list_id: {
+          type: 'string',
+          description:
+            'ID der Liste aus dem Kontext. Nennt der Nutzer keine und gibt es mehr als eine ' +
+            'Liste, frag nach, statt eine zu wählen.',
+        },
+        items: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              name: {
+                type: 'string',
+                description: 'Artikelname, kurz, im Singular wie auf einem Einkaufszettel',
+              },
+              quantity: { type: 'integer', minimum: 1, description: 'Menge, Standard 1' },
+            },
+            required: ['name'],
+          },
+        },
+      },
+      required: ['list_id', 'items'],
+    },
+    execute: (input) => addShoppingItems(store, input),
+  },
+  {
+    name: 'mark_shopping_items_purchased',
+    description: 'Hakt offene Artikel als gekauft ab.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        item_ids: {
+          type: 'array',
+          items: { type: 'string' },
+          description:
+            'IDs offener Artikel aus dem Kontext. Passt der Name auf mehrere offene Artikel ' +
+            'verschiedener Listen, frag nach, welcher gemeint ist.',
+        },
+      },
+      required: ['item_ids'],
+    },
+    execute: (input) => markShoppingItemsPurchased(store, input),
+  },
+]

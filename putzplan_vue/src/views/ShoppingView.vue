@@ -299,7 +299,7 @@ const handleAddItem = async () => {
   const qty = Math.max(1, Math.floor(Number(topQty.value) || 1))
   const category = await ensureCategory(topCategory.value)
   resetTopBar()
-  await shoppingStore.createItem(value, category, qty)
+  await shoppingStore.createItem({ name: value, category, quantity: qty })
 }
 
 const selectSuggestion = (suggestion: string) => {
@@ -367,7 +367,7 @@ const handleSectionAdd = async (group: ShoppingCategoryGroup) => {
   addDraft.value[group.key] = ''
   addQty.value[group.key] = 1
   qtyFieldOpen.value.delete(group.key)
-  await shoppingStore.createItem(name, group.category, qty)
+  await shoppingStore.createItem({ name, category: group.category, quantity: qty })
 }
 
 const selectSectionSuggestion = (group: ShoppingCategoryGroup, name: string) => {

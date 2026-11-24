@@ -9,6 +9,7 @@
  * Bewusst ohne Supabase und ohne Store: `send` und `executeTool` kommen von
  * außen, damit die Schleife allein testbar ist (runAssistant.test.ts).
  */
+import type { ToolOutcome } from './tools'
 
 export interface TextBlock {
   type: 'text'
@@ -36,14 +37,6 @@ export interface Message {
 export interface AssistantReply {
   content: ContentBlock[]
   stop_reason: string
-}
-
-export interface ToolOutcome {
-  /** Geht an Claude zurück. */
-  result: string
-  isError?: boolean
-  /** Zeile für den Nutzer, z. B. „✓ Milch auf Einkauf“. Fehlt bei reinen Leseaktionen. */
-  summary?: string
 }
 
 export interface RunOptions {

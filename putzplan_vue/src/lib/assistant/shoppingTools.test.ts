@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
-import { executeShoppingTool, type ShoppingToolStore } from './shoppingTools'
+import { type ShoppingToolStore } from './shoppingTools'
+import { assistantTools } from './tools'
 
 type Item = ShoppingToolStore['items'][number]
 
@@ -12,12 +13,15 @@ function fakeStore(items: Partial<Item>[] = [], { fail = false } = {}): Shopping
     loadLists: async () => {},
     loadItems: async () => {},
     suggestCategoryFor: () => null,
-    createItem: async (
-      name: string,
-      _category: string | null,
-      quantity: number,
-      listId: string,
-    ) => {
+    createItem: async ({
+      name,
+      quantity,
+      listId,
+    }: {
+      name: string
+      quantity: number
+      listId: string
+    }) => {
       if (fail) return null
       const item = {
         shopping_item_id: `new-${name}`,
@@ -35,11 +39,28 @@ function fakeStore(items: Partial<Item>[] = [], { fail = false } = {}): Shopping
       item.purchased = true
       return true
     },
-    markUnpurchased: async () => true,
-    updateItem: async () => true,
+    markUnpurchased: async (id: string) => {
+      store.items.find((i) => i.shopping_item_id === id)!.purchased = false
+      return true
+    },
+    updateItem: async (id: string, patch: Partial<Item>) => {
+      Object.assign(store.items.find((i) => i.shopping_item_id === id)!, patch)
+      return true
+    },
+    deleteItem: async (id: string) => {
+      if (fail) return false
+      store.items = store.items.filter((i) => i.shopping_item_id !== id)
+      return true
+    },
   }
   return store as unknown as ShoppingToolStore
 }
+
+const executeShoppingTool = (
+  store: ShoppingToolStore,
+  name: string,
+  input: Record<string, unknown>,
+) => assistantTools({ shopping: store }).execute(name, input)
 
 describe('add_shopping_items', () => {
   it('puts a new item on the list and tells Claude and the user', async () => {
@@ -51,6 +72,43 @@ describe('add_shopping_items', () => {
     expect(store.items.map((i) => i.name)).toEqual(['Milch'])
     expect(outcome.isError).toBeFalsy()
     expect(outcome.summary).toBe('✓ Milch → Einkauf')
+  })
+
+  it('can be taken back: the new item is gone again', async () => {
+    const store = fakeStore([{ shopping_item_id: 'i1', name: 'Brot' }])
+    const outcome = await executeShoppingTool(store, 'add_shopping_items', {
+      list_id: 'l1',
+      items: [{ name: 'Milch' }],
+    })
+    expect(outcome.changed).toEqual([{ id: 'new-Milch', page: { area: 'shopping', listId: 'l1' } }])
+    expect(await outcome.undo!()).toBe(true)
+    expect(store.items.map((i) => i.name)).toEqual(['Brot'])
+  })
+
+  it('reopens a bought item, and taking it back makes it bought again with its old quantity', async () => {
+    const store = fakeStore([
+      { shopping_item_id: 'i1', name: 'Eier', purchased: true, quantity: 1 },
+    ])
+    const outcome = await executeShoppingTool(store, 'add_shopping_items', {
+      list_id: 'l1',
+      items: [{ name: 'eier', quantity: 2 }],
+    })
+    expect(store.items).toMatchObject([{ name: 'Eier', purchased: false, quantity: 2 }])
+    expect(outcome.summary).toBe('✓ 2× eier → Einkauf')
+    expect(outcome.changed).toEqual([{ id: 'i1', page: { area: 'shopping', listId: 'l1' } }])
+
+    expect(await outcome.undo!()).toBe(true)
+    expect(store.items).toMatchObject([{ name: 'Eier', purchased: true, quantity: 1 }])
+  })
+
+  it('offers nothing to take back when the item already stood on the list', async () => {
+    const store = fakeStore([{ shopping_item_id: 'i1', name: 'Brot' }])
+    const outcome = await executeShoppingTool(store, 'add_shopping_items', {
+      list_id: 'l1',
+      items: [{ name: 'Brot' }],
+    })
+    expect(outcome.result).toContain('stand schon drauf')
+    expect(outcome.undo).toBeUndefined()
   })
 
   it('reports an item the store refused as an error, not as done', async () => {
@@ -80,6 +138,27 @@ describe('mark_shopping_items_purchased', () => {
     })
     expect(store.items[0]!.purchased).toBe(true)
     expect(outcome.summary).toBe('✓ abgehakt: Brot')
+  })
+
+  it('can be taken back: the item is open again', async () => {
+    const store = fakeStore([{ shopping_item_id: 'i1', name: 'Brot' }])
+    const outcome = await executeShoppingTool(store, 'mark_shopping_items_purchased', {
+      item_ids: ['i1'],
+    })
+    expect(outcome.changed).toEqual([{ id: 'i1', page: { area: 'shopping', listId: 'l1' } }])
+    expect(await outcome.undo!()).toBe(true)
+    expect(store.items[0]!.purchased).toBe(false)
+  })
+
+  it('rejects an id that is not an open item and changes nothing', async () => {
+    const store = fakeStore([{ shopping_item_id: 'i1', name: 'Brot' }])
+    const outcome = await executeShoppingTool(store, 'mark_shopping_items_purchased', {
+      item_ids: ['erfunden'],
+    })
+    expect(outcome.isError).toBe(true)
+    expect(outcome.result).toContain('erfunden')
+    expect(outcome.undo).toBeUndefined()
+    expect(store.items[0]!.purchased).toBe(false)
   })
 
   it('reports an item the store refused as an error, not as checked off', async () => {

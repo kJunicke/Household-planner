@@ -14,15 +14,13 @@ import {
   type AssistantReply,
   type Message,
 } from '@/lib/assistant/runAssistant'
-import {
-  ensureShoppingLoaded,
-  executeShoppingTool,
-  shoppingContext,
-} from '@/lib/assistant/shoppingTools'
+import { ensureShoppingLoaded, shoppingContext } from '@/lib/assistant/shoppingTools'
+import { assistantTools } from '@/lib/assistant/tools'
 import { useShoppingStore } from '@/stores/shoppingStore'
 
 const open = defineModel<boolean>('open', { required: true })
 const shoppingStore = useShoppingStore()
+const tools = assistantTools({ shopping: shoppingStore })
 
 interface Entry {
   kind: 'user' | 'assistant' | 'action' | 'error'
@@ -65,7 +63,7 @@ async function send(
     year: 'numeric',
   })
   const { data, error } = await supabase.functions.invoke('assistant', {
-    body: { messages, lists, today },
+    body: { messages, lists, today, tools: tools.definitions },
   })
   if (error) {
     // FunctionsHttpError trägt die Antwort der Funktion; deren `error` ist aussagekräftiger.
@@ -89,7 +87,7 @@ async function submit() {
       trimHistory([...history.value, { role: 'user', content: question }]),
       {
         send: (m) => send(m, lists),
-        executeTool: (name, input) => executeShoppingTool(shoppingStore, name, input),
+        executeTool: tools.execute,
       },
     )
     history.value = messages
@@ -250,7 +248,7 @@ watch(open, async (isOpen) => {
 }
 .assistant-entry.error {
   align-self: flex-start;
-  color: #a12a2a;
+  color: var(--color-danger-dark);
   font-size: 0.9rem;
 }
 

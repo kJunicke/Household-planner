@@ -805,12 +805,17 @@ export const useShoppingStore = defineStore('shopping', () => {
   }
 
   /** `listId` defaults to the open list; the assistant passes it to write to another one. */
-  const createItem = async (
-    name: string,
-    category: string | null = null,
+  const createItem = async ({
+    name,
+    category = null,
     quantity = 1,
-    listId: string | null = currentListId.value,
-  ) => {
+    listId = currentListId.value,
+  }: {
+    name: string
+    category?: string | null
+    quantity?: number
+    listId?: string | null
+  }) => {
     const householdStore = useHouseholdStore()
     const toastStore = useToastStore()
 

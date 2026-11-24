@@ -1,10 +1,12 @@
 // Edge Function: Assistent
 //
 // Dünner Durchreicher zur Claude-API. Er prüft die Anmeldung, hängt
-// Systemprompt, Werkzeuge und den API-Schlüssel an und gibt Claudes Antwort
-// unverändert zurück. Die Werkzeuge AUSGEFÜHRT werden nicht hier, sondern im
-// Client über die Stores (src/lib/assistant/) — so gilt dieselbe Logik wie in
-// der Oberfläche, samt Offline-Warteschlange und Echtzeit-Abgleich.
+// Systemprompt und API-Schlüssel an und gibt Claudes Antwort zurück. Die
+// Werkzeuge sind im Client definiert und ausgeführt (src/lib/assistant/tools.ts,
+// ein Modul je Bereich): der Client schickt ihre Beschreibungen mit, diese
+// Funktion prüft nur Format, Anzahl und Größe und reicht sie weiter. So gilt
+// dieselbe Logik wie in der Oberfläche, samt Offline-Warteschlange und
+// Echtzeit-Abgleich.
 //
 // Der Schlüssel steht als Secret `ANTHROPIC_API_KEY` im Supabase-Projekt und
 // verlässt diese Funktion nie.
@@ -15,7 +17,10 @@ const MODEL = 'claude-haiku-5-5'
 const MAX_TOKENS = 1024
 /** Obergrenzen gegen versehentlich teure Aufrufe. */
 const MAX_MESSAGES = 40
-const MAX_BODY_CHARS = 60_000
+const MAX_BODY_CHARS = 100_000
+const MAX_TOOLS = 40
+const MAX_TOOLS_CHARS = 40_000
+const MAX_DESCRIPTION_CHARS = 2_000
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -28,63 +33,30 @@ const json = (status: number, body: unknown) =>
     headers: { ...corsHeaders, 'Content-Type': 'application/json' },
   })
 
-/**
- * Was die Werkzeuge können, beschreibt Claude allein diese Liste. Name und
- * Felder müssen zu den Ausführern in src/lib/assistant/shoppingTools.ts passen.
- */
-const TOOLS = [
-  {
-    name: 'add_shopping_items',
-    description:
-      'Setzt Artikel auf eine Einkaufsliste. Ein schon gekaufter Artikel gleichen Namens wird ' +
-      'wieder geöffnet statt doppelt angelegt; ein schon offener bleibt, wie er ist.',
-    input_schema: {
-      type: 'object',
-      properties: {
-        list_id: {
-          type: 'string',
-          description:
-            'ID der Liste aus dem Kontext. Nennt der Nutzer keine und gibt es mehr als eine ' +
-            'Liste, frag nach, statt eine zu wählen.',
-        },
-        items: {
-          type: 'array',
-          items: {
-            type: 'object',
-            properties: {
-              name: {
-                type: 'string',
-                description: 'Artikelname, kurz, im Singular wie auf einem Einkaufszettel',
-              },
-              quantity: { type: 'integer', minimum: 1, description: 'Menge, Standard 1' },
-            },
-            required: ['name'],
-          },
-        },
-      },
-      required: ['list_id', 'items'],
-    },
-  },
-  {
-    name: 'mark_shopping_items_purchased',
-    description:
-      'Hakt offene Artikel als gekauft ab. Auch für „Liste leeren“ — abgehakte Artikel ' +
-      'lassen sich in der App zurückholen.',
-    input_schema: {
-      type: 'object',
-      properties: {
-        item_ids: {
-          type: 'array',
-          items: { type: 'string' },
-          description:
-            'IDs offener Artikel aus dem Kontext. Passt der Name auf mehrere offene Artikel ' +
-            'verschiedener Listen, frag nach, welcher gemeint ist.',
-        },
-      },
-      required: ['item_ids'],
-    },
-  },
-]
+interface ToolDefinition {
+  name: string
+  description: string
+  input_schema: { type: 'object' }
+}
+
+/** Das Format der Messages API; mehr Felder (etwa `cache_control`) nimmt sie nicht vom Client. */
+const isToolDefinition = (value: unknown): value is ToolDefinition => {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return false
+  const tool = value as Record<string, unknown>
+  const schema = tool.input_schema as Record<string, unknown> | null
+  return (
+    Object.keys(tool).every((k) => k === 'name' || k === 'description' || k === 'input_schema') &&
+    typeof tool.name === 'string' &&
+    /^[a-zA-Z0-9_-]{1,64}$/.test(tool.name) &&
+    typeof tool.description === 'string' &&
+    tool.description.length > 0 &&
+    tool.description.length <= MAX_DESCRIPTION_CHARS &&
+    typeof schema === 'object' &&
+    schema !== null &&
+    !Array.isArray(schema) &&
+    schema.type === 'object'
+  )
+}
 
 interface ContextList {
   list_id: string
@@ -159,13 +131,14 @@ Deno.serve(async (req) => {
     // 2. Anfrage prüfen
     const raw = await req.text()
     if (raw.length > MAX_BODY_CHARS) return json(413, { error: 'Request too large' })
-    let body: { messages?: unknown; lists?: unknown; today?: unknown }
+    let body: { messages?: unknown; lists?: unknown; today?: unknown; tools?: unknown }
     try {
       body = JSON.parse(raw) ?? {}
     } catch {
       return json(400, { error: 'Body is not valid JSON' })
     }
-    const { messages, lists, today } = body
+    // Ein Client ohne `tools` (vor dem Werkzeug-Register) bekommt Claude ohne Werkzeuge.
+    const { messages, lists, today, tools = [] } = body
     if (!Array.isArray(messages) || messages.length === 0 || messages.length > MAX_MESSAGES) {
       return json(400, { error: `messages must hold 1 to ${MAX_MESSAGES} entries` })
     }
@@ -175,6 +148,16 @@ Deno.serve(async (req) => {
     if (typeof today !== 'string' || today.length > MAX_TODAY_CHARS) {
       return json(400, { error: `today must be a string of at most ${MAX_TODAY_CHARS} characters` })
     }
+    if (!Array.isArray(tools) || tools.length > MAX_TOOLS || !tools.every(isToolDefinition)) {
+      return json(400, {
+        error: `tools must hold at most ${MAX_TOOLS} entries of { name, description, input_schema }`,
+      })
+    }
+    if (JSON.stringify(tools).length > MAX_TOOLS_CHARS) {
+      return json(413, { error: 'tools too large' })
+    }
+    const names = new Set(tools.map((t) => t.name))
+    if (names.size !== tools.length) return json(400, { error: 'tool names must be unique' })
 
     // 3. Claude fragen
     const apiKey = Deno.env.get('ANTHROPIC_API_KEY')
@@ -191,7 +174,7 @@ Deno.serve(async (req) => {
         model: MODEL,
         max_tokens: MAX_TOKENS,
         system: systemPrompt(lists, today),
-        tools: TOOLS,
+        ...(tools.length ? { tools } : {}),
         messages,
       }),
     })
@@ -203,11 +186,7 @@ Deno.serve(async (req) => {
     }
 
     // 4. Nur zurückgeben, was der Client braucht.
-    return json(200, {
-      content: data.content,
-      stop_reason: data.stop_reason,
-      usage: data.usage,
-    })
+    return json(200, { content: data.content, stop_reason: data.stop_reason })
   } catch (error) {
     console.error('assistant failed:', error)
     return json(500, { error: error instanceof Error ? error.message : String(error) })
