@@ -7,6 +7,7 @@ import WallStatusBar from './WallStatusBar.vue'
 import BrandLogo from './BrandLogo.vue'
 import AssistantPanel from './AssistantPanel.vue'
 import { useElementHeightVar } from '../composables/useElementHeightVar'
+import { settingsSidebarOpen } from '../lib/appNavigation'
 
 /**
  * Der Header greift im `<style>` direkt auf die `--pw-*`-Rohtoken aus
@@ -32,7 +33,8 @@ import { useElementHeightVar } from '../composables/useElementHeightVar'
  */
 const householdStore = useHouseholdStore()
 
-const sidebarOpen = ref(false)
+// Geteilt, damit der Assistent die Einstellungen öffnen kann (appNavigation.ts).
+const sidebarOpen = settingsSidebarOpen
 const assistantOpen = ref(false)
 
 // Der Header meldet seine eigene Höhe (inkl. der jetzt eingebetteten

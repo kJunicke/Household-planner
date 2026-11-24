@@ -60,7 +60,7 @@ const executeShoppingTool = (
   store: ShoppingToolStore,
   name: string,
   input: Record<string, unknown>,
-) => assistantTools({ shopping: store }).execute(name, input)
+) => assistantTools({ shopping: store, goToPage: () => {} }).execute(name, input)
 
 describe('add_shopping_items', () => {
   it('puts a new item on the list and tells Claude and the user', async () => {
@@ -168,5 +168,45 @@ describe('mark_shopping_items_purchased', () => {
     })
     expect(outcome.isError).toBe(true)
     expect(outcome.summary ?? '').not.toContain('✓')
+  })
+})
+
+describe('read_shopping_list', () => {
+  it('shows the open and the bought items of a list with their ids, and changes nothing', async () => {
+    const store = fakeStore([
+      { shopping_item_id: 'i1', name: 'Brot', quantity: 2 },
+      { shopping_item_id: 'i2', name: 'Eier', purchased: true },
+    ])
+    const outcome = await executeShoppingTool(store, 'read_shopping_list', { list_id: 'l1' })
+    expect(outcome.isError).toBeFalsy()
+    expect(outcome.result).toContain('Offen:\n- Brot ×2 (id i1)')
+    expect(outcome.result).toContain('- Eier ×1 (id i2)')
+    expect(outcome.summary).toBeUndefined()
+    expect(outcome.undo).toBeUndefined()
+  })
+
+  it('says when nothing is open', async () => {
+    const outcome = await executeShoppingTool(fakeStore(), 'read_shopping_list', { list_id: 'l1' })
+    expect(outcome.result).toContain('Offen: nichts')
+  })
+
+  it('shows only the most recently bought items of a long history, and how many there are', async () => {
+    const bought = Array.from({ length: 45 }, (_, n) => ({
+      shopping_item_id: `b${n}`,
+      name: `Artikel ${n}`,
+      purchased: true,
+      last_purchased_at: `2026-11-${String((n % 28) + 1).padStart(2, '0')}T10:00:00Z`,
+    }))
+    const outcome = await executeShoppingTool(fakeStore(bought), 'read_shopping_list', {
+      list_id: 'l1',
+    })
+    // Artikel 27 ist am 28. gekauft, als einziger und zuletzt.
+    expect(outcome.result).toContain('Gekauft (die letzten 30 von 45):\n- Artikel 27 ×1 (id b27)')
+    expect(outcome.result.match(/^- /gm)).toHaveLength(30)
+  })
+
+  it('rejects an unknown list id', async () => {
+    const outcome = await executeShoppingTool(fakeStore(), 'read_shopping_list', { list_id: 'x' })
+    expect(outcome.isError).toBe(true)
   })
 })

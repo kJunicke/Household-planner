@@ -4,14 +4,20 @@ import type { ShoppingToolStore } from './shoppingTools'
 import { assistantTools } from './tools'
 
 const registry = () =>
-  assistantTools({ shopping: { lists: [], items: [] } as unknown as ShoppingToolStore })
+  assistantTools({
+    shopping: { lists: [], items: [] } as unknown as ShoppingToolStore,
+    goToPage: () => {},
+  })
 
 describe('the tool registry', () => {
   it('describes every tool for Claude as plain JSON: name, description, input schema', () => {
     const sent = JSON.parse(JSON.stringify(registry().definitions))
     expect(sent.map((t: { name: string }) => t.name)).toEqual([
+      'read_shopping_list',
       'add_shopping_items',
       'mark_shopping_items_purchased',
+      'go_to_page',
+      'get_app_guide',
     ])
     for (const tool of sent) {
       expect(Object.keys(tool).sort()).toEqual(['description', 'input_schema', 'name'])

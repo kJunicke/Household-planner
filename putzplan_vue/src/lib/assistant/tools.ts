@@ -9,6 +9,9 @@
  * Die Stores kommen als Abhängigkeit herein, damit jedes Werkzeugmodul gegen
  * gefälschte Stores testbar ist.
  */
+import type { AppPage } from '@/lib/appNavigation'
+import { guideTools } from './appGuide'
+import { navigationTools } from './navigationTools'
 import { shoppingTools, type ShoppingToolStore } from './shoppingTools'
 
 /** Wo ein geänderter Eintrag in der App steht; zum Hinführen und Aufleuchten. */
@@ -45,6 +48,8 @@ export interface AssistantTool extends ToolDefinition {
 /** Die Stores, die die Werkzeuge bedienen. */
 export interface ToolDeps {
   shopping: ShoppingToolStore
+  /** Bringt die App auf eine Seite (`createGoToPage`). */
+  goToPage: (page: AppPage) => void
 }
 
 export interface ToolRegistry {
@@ -53,7 +58,11 @@ export interface ToolRegistry {
 }
 
 export function assistantTools(deps: ToolDeps): ToolRegistry {
-  const tools = [...shoppingTools(deps.shopping)]
+  const tools = [
+    ...shoppingTools(deps.shopping),
+    ...navigationTools(deps.goToPage),
+    ...guideTools(),
+  ]
   return {
     definitions: tools.map(({ name, description, input_schema }) => ({
       name,

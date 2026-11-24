@@ -58,6 +58,10 @@ const isToolDefinition = (value: unknown): value is ToolDefinition => {
   )
 }
 
+/** Die Übersicht, die der Client je Frage schickt (src/lib/assistant/overview.ts). */
+const MAX_OVERVIEW_CHARS = 20_000
+
+/** Fassung vor der Übersicht: Einkaufslisten mit ihren offenen Artikeln. */
 interface ContextList {
   list_id: string
   name: string
@@ -79,7 +83,7 @@ const isContextList = (value: unknown): value is ContextList => {
   )
 }
 
-/** Der aktuelle Stand, den der Client mitschickt, als Text für den Systemprompt. */
+/** Der Stand, den ein Client der Fassung vor der Übersicht schickt, als Text. */
 const describeContext = (lists: ContextList[]) => {
   if (lists.length === 0) return 'Der Haushalt hat noch keine Einkaufsliste.'
   return lists
@@ -92,19 +96,24 @@ const describeContext = (lists: ContextList[]) => {
     .join('\n\n')
 }
 
-const systemPrompt = (lists: ContextList[], today: string) =>
-  `Du bist der Assistent einer Haushalts-App für zwei Personen. Du bedienst die App über ` +
-  `Werkzeuge. Heute ist ${today}.
+const legacyOverview = (lists: ContextList[], today: string) =>
+  `Heute ist ${today}.\n\nEinkaufslisten mit offenen Artikeln:\n${describeContext(lists)}`
+
+const systemPrompt = (overview: string) =>
+  `Du bist der Assistent der Haushalts-App „Putzplan“. Du bedienst die App über Werkzeuge, ` +
+  `mit denselben Mitteln wie man sie von Hand bedient, und immer als die Person, die fragt.
 
 Regeln:
 - Ist eindeutig, was gemeint ist, handle ohne Rückfrage.
-- Ist nicht eindeutig, welche Liste oder welcher Artikel gemeint ist, frag nach, statt zu raten.
-- Nutze nur IDs aus dem Stand unten. Erfinde keine.
-- Antworte kurz, in der Sprache des Nutzers, und sag, was du getan hast.
+- Ist nicht eindeutig, welche Liste, welcher Eintrag, welcher Betrag, welche Person oder welches Ziel gemeint ist, frag nach, statt zu raten.
+- Nutze nur IDs aus der Übersicht unten oder aus Ergebnissen deiner Werkzeuge. Erfinde keine. Was nicht in der Übersicht steht, etwa was auf einer Liste steht, holst du dir mit einem Lese-Werkzeug.
+- Fragt jemand, wie etwas in der App geht oder wo etwas liegt, ruf zuerst get_app_guide auf und antworte daraus in ein, zwei Sätzen. Biete dann an, hinzuführen; will er das, nutze go_to_page.
+- Das tust du nie, auch nicht auf Bitte, denn es bleibt Sache des Haushalts: einen Ausgleich eintragen (auch Punkte ausgleichen und Verrechnen mit dem Haushaltstopf); Einstellungen ändern (Wochenziel, Richtwerte, Umrechnung, Haushalt, Mitglieder, Profil); Gastlinks anlegen, erneuern oder beenden; etwas für ein anderes Mitglied erledigen (das hakt es selbst ab). Sag in einem Satz, dass das von Hand geht und wo, und bring die App mit go_to_page gleich dorthin: Ausgleich und Umrechnung → kasse_ausgleich, Einstellungen und Gastlinks → einstellungen.
 - Kannst du etwas mit deinen Werkzeugen nicht, sag das in einem Satz.
+- Antworte kurz, in der Sprache des Nutzers, und sag, was du getan hast.
 
-Aktueller Stand der Einkaufslisten:
-${describeContext(lists)}`
+Übersicht des Haushalts:
+${overview}`
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -131,22 +140,43 @@ Deno.serve(async (req) => {
     // 2. Anfrage prüfen
     const raw = await req.text()
     if (raw.length > MAX_BODY_CHARS) return json(413, { error: 'Request too large' })
-    let body: { messages?: unknown; lists?: unknown; today?: unknown; tools?: unknown }
+    let body: {
+      messages?: unknown
+      overview?: unknown
+      lists?: unknown
+      today?: unknown
+      tools?: unknown
+    }
     try {
       body = JSON.parse(raw) ?? {}
     } catch {
       return json(400, { error: 'Body is not valid JSON' })
     }
     // Ein Client ohne `tools` (vor dem Werkzeug-Register) bekommt Claude ohne Werkzeuge.
-    const { messages, lists, today, tools = [] } = body
+    const { messages, tools = [] } = body
     if (!Array.isArray(messages) || messages.length === 0 || messages.length > MAX_MESSAGES) {
       return json(400, { error: `messages must hold 1 to ${MAX_MESSAGES} entries` })
     }
-    if (!Array.isArray(lists) || !lists.every(isContextList)) {
-      return json(400, { error: 'lists must be an array of { list_id, name, open_items }' })
-    }
-    if (typeof today !== 'string' || today.length > MAX_TODAY_CHARS) {
-      return json(400, { error: `today must be a string of at most ${MAX_TODAY_CHARS} characters` })
+    // Ein Client vor der Übersicht schickt `lists` und `today` statt `overview`.
+    let overview: string
+    if (body.overview !== undefined) {
+      if (typeof body.overview !== 'string' || body.overview.length > MAX_OVERVIEW_CHARS) {
+        return json(400, {
+          error: `overview must be a string of at most ${MAX_OVERVIEW_CHARS} characters`,
+        })
+      }
+      overview = body.overview
+    } else {
+      const { lists, today } = body
+      if (!Array.isArray(lists) || !lists.every(isContextList)) {
+        return json(400, { error: 'lists must be an array of { list_id, name, open_items }' })
+      }
+      if (typeof today !== 'string' || today.length > MAX_TODAY_CHARS) {
+        return json(400, {
+          error: `today must be a string of at most ${MAX_TODAY_CHARS} characters`,
+        })
+      }
+      overview = legacyOverview(lists, today)
     }
     if (!Array.isArray(tools) || tools.length > MAX_TOOLS || !tools.every(isToolDefinition)) {
       return json(400, {
@@ -173,7 +203,7 @@ Deno.serve(async (req) => {
       body: JSON.stringify({
         model: MODEL,
         max_tokens: MAX_TOKENS,
-        system: systemPrompt(lists, today),
+        system: systemPrompt(overview),
         ...(tools.length ? { tools } : {}),
         messages,
       }),

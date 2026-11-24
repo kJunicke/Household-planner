@@ -15,13 +15,22 @@ import {
   type Message,
 } from '@/lib/assistant/runAssistant'
 import { createHistoryExpiry } from '@/lib/assistant/historyExpiry'
-import { ensureShoppingLoaded, shoppingContext } from '@/lib/assistant/shoppingTools'
+import { captureOverview } from '@/lib/assistant/captureOverview'
 import { assistantTools } from '@/lib/assistant/tools'
+import { createGoToPage, settingsSidebarOpen } from '@/lib/appNavigation'
 import { useShoppingStore } from '@/stores/shoppingStore'
+import { useRouter } from 'vue-router'
 
 const open = defineModel<boolean>('open', { required: true })
 const shoppingStore = useShoppingStore()
-const tools = assistantTools({ shopping: shoppingStore })
+const router = useRouter()
+const tools = assistantTools({
+  shopping: shoppingStore,
+  goToPage: createGoToPage({
+    push: (to) => router.push(to),
+    openSettings: () => (settingsSidebarOpen.value = true),
+  }),
+})
 
 interface Entry {
   kind: 'user' | 'assistant' | 'action' | 'error' | 'fresh'
@@ -50,22 +59,14 @@ function trimHistory(messages: Message[]): Message[] {
 }
 
 /**
- * `lists` ist der Stand VOR der Frage. Würde er bei jedem Schritt der Schleife
- * neu gelesen, sähe Claude nach dem Hinzufügen die neuen Artikel schon im Stand
- * und hielte sie für „stand schon drauf“ (beobachtet beim ersten Test).
+ * `overview` ist der Stand VOR der Frage. Würde er bei jedem Schritt der
+ * Schleife neu gelesen, sähe Claude nach dem Hinzufügen die neuen Einträge
+ * schon im Stand und hielte sie für „stand schon drauf“ (beobachtet beim
+ * ersten Test).
  */
-async function send(
-  messages: Message[],
-  lists: ReturnType<typeof shoppingContext>,
-): Promise<AssistantReply> {
-  const today = new Date().toLocaleDateString('de-DE', {
-    weekday: 'long',
-    day: 'numeric',
-    month: 'long',
-    year: 'numeric',
-  })
+async function send(messages: Message[], overview: string): Promise<AssistantReply> {
   const { data, error } = await supabase.functions.invoke('assistant', {
-    body: { messages, lists, today, tools: tools.definitions },
+    body: { messages, overview, tools: tools.definitions },
   })
   if (error) {
     // FunctionsHttpError trägt die Antwort der Funktion; deren `error` ist aussagekräftiger.
@@ -90,12 +91,11 @@ async function submit() {
   entries.value.push({ kind: 'user', text: question })
 
   try {
-    await ensureShoppingLoaded(shoppingStore)
-    const lists = shoppingContext(shoppingStore)
+    const overview = await captureOverview()
     const { messages, actions } = await runAssistant(
       trimHistory([...history.value, { role: 'user', content: question }]),
       {
-        send: (m) => send(m, lists),
+        send: (m) => send(m, overview),
         executeTool: tools.execute,
       },
     )

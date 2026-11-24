@@ -1,7 +1,7 @@
 /**
- * Die Werkzeuge des Assistenten für die Einkaufslisten: der Stand, den Claude
- * zu sehen bekommt, und die Werkzeuge selbst, samt Beschreibung für Claude,
- * Ausführung und Rücknahme.
+ * Die Werkzeuge des Assistenten für die Einkaufslisten, samt Beschreibung für
+ * Claude, Ausführung und Rücknahme. Was auf einer Liste steht, holt Claude über
+ * `read_shopping_list`; die Übersicht nennt nur die Listen.
  *
  * Ausgeführt wird über den shoppingStore, also genau wie beim Tippen in der
  * App: optimistisch, offline-fähig, per Echtzeit beim anderen sichtbar.
@@ -26,17 +26,6 @@ export type ShoppingToolStore = Pick<
   | 'updateItem'
   | 'suggestCategoryFor'
 >
-
-/** Was Claude von den Listen sieht. Nur offene Artikel; gekaufte braucht er nicht. */
-export function shoppingContext(store: ShoppingToolStore) {
-  return store.lists.map((list) => ({
-    list_id: list.list_id,
-    name: list.name,
-    open_items: store.items
-      .filter((i) => i.list_id === list.list_id && !i.purchased)
-      .map((i) => ({ id: i.shopping_item_id, name: i.name, quantity: i.quantity })),
-  }))
-}
 
 /** Lädt die Listen, falls der Chat geöffnet wird, bevor die Einkaufsansicht es tat. */
 export async function ensureShoppingLoaded(store: ShoppingToolStore) {
@@ -189,7 +178,49 @@ async function markShoppingItemsPurchased(
   }
 }
 
+/** Gekaufte Artikel sammeln sich über Jahre; Claude bekommt nur die jüngsten. */
+const MAX_BOUGHT_SHOWN = 30
+
+function readShoppingList(store: ShoppingToolStore, input: Record<string, unknown>): ToolOutcome {
+  const listId = String(input.list_id ?? '')
+  const list = store.lists.find((l) => l.list_id === listId)
+  if (!list) return { result: `Unbekannte list_id ${listId}`, isError: true }
+  const onList = store.items.filter((i) => i.list_id === listId)
+  const line = (i: (typeof onList)[number]) =>
+    `- ${i.name} ×${i.quantity} (id ${i.shopping_item_id})`
+  const open = onList.filter((i) => !i.purchased)
+  const bought = onList
+    .filter((i) => i.purchased)
+    .sort((a, b) => (b.last_purchased_at ?? '').localeCompare(a.last_purchased_at ?? ''))
+  const shown = bought.slice(0, MAX_BOUGHT_SHOWN)
+  const boughtTitle =
+    shown.length < bought.length
+      ? `Gekauft (die letzten ${shown.length} von ${bought.length}):`
+      : 'Gekauft:'
+  return {
+    result: [
+      `Liste „${list.name}“ (id ${listId})`,
+      open.length ? `Offen:\n${open.map(line).join('\n')}` : 'Offen: nichts',
+      bought.length ? `${boughtTitle}\n${shown.map(line).join('\n')}` : 'Gekauft: nichts',
+    ].join('\n'),
+  }
+}
+
 export const shoppingTools = (store: ShoppingToolStore): AssistantTool[] => [
+  {
+    name: 'read_shopping_list',
+    description:
+      'Zeigt, was auf einer Einkaufsliste steht: die offenen Artikel und die zuletzt gekauften, ' +
+      'je mit ID. Nutze es für Fragen nach dem Inhalt und bevor du Artikel abhakst.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        list_id: { type: 'string', description: 'ID der Einkaufsliste aus der Übersicht' },
+      },
+      required: ['list_id'],
+    },
+    execute: async (input) => readShoppingList(store, input),
+  },
   {
     name: 'add_shopping_items',
     description:
@@ -201,7 +232,7 @@ export const shoppingTools = (store: ShoppingToolStore): AssistantTool[] => [
         list_id: {
           type: 'string',
           description:
-            'ID der Liste aus dem Kontext. Nennt der Nutzer keine und gibt es mehr als eine ' +
+            'ID der Liste aus der Übersicht. Nennt der Nutzer keine und gibt es mehr als eine ' +
             'Liste, frag nach, statt eine zu wählen.',
         },
         items: {
@@ -233,8 +264,8 @@ export const shoppingTools = (store: ShoppingToolStore): AssistantTool[] => [
           type: 'array',
           items: { type: 'string' },
           description:
-            'IDs offener Artikel aus dem Kontext. Passt der Name auf mehrere offene Artikel ' +
-            'verschiedener Listen, frag nach, welcher gemeint ist.',
+            'IDs offener Artikel aus read_shopping_list. Passt der Name auf mehrere offene ' +
+            'Artikel verschiedener Listen, frag nach, welcher gemeint ist.',
         },
       },
       required: ['item_ids'],
