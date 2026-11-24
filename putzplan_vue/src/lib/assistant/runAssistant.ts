@@ -27,7 +27,21 @@ interface ToolResultBlock {
   content: string
   is_error?: boolean
 }
-type ContentBlock = TextBlock | ToolUseBlock | ToolResultBlock
+interface ThinkingBlock {
+  type: 'thinking'
+  thinking: string
+  signature: string
+}
+interface RedactedThinkingBlock {
+  type: 'redacted_thinking'
+  data: string
+}
+type ContentBlock =
+  | TextBlock
+  | ToolUseBlock
+  | ToolResultBlock
+  | ThinkingBlock
+  | RedactedThinkingBlock
 
 export interface Message {
   role: 'user' | 'assistant'
@@ -57,9 +71,25 @@ export interface RunResult {
   actions: { summary: string; isError: boolean }[]
 }
 
+/**
+ * Denkblöcke abgeschlossener Fragen fallen weg. Ihre Signatur hält fest, was
+ * vor ihnen stand, samt Systemprompt mit der Übersicht; die ändert sich
+ * zwischen zwei Fragen (und `trimHistory` kürzt vorn), und dann lehnt die API
+ * die alten Blöcke ab oder liest Denken über einen veralteten Stand. Innerhalb
+ * einer laufenden Werkzeug-Runde müssen sie dagegen mit: die kommen erst
+ * später in `messages` und bleiben unberührt.
+ */
+function withoutThinking(message: Message): Message {
+  if (typeof message.content === 'string') return message
+  return {
+    ...message,
+    content: message.content.filter((b) => b.type !== 'thinking' && b.type !== 'redacted_thinking'),
+  }
+}
+
 export async function runAssistant(history: Message[], options: RunOptions): Promise<RunResult> {
   const { send, executeTool, confirmDelete = async () => false, maxRounds = 5 } = options
-  const messages = [...history]
+  const messages = history.map(withoutThinking)
   const actions: RunResult['actions'] = []
 
   for (let round = 0; round < maxRounds; round++) {

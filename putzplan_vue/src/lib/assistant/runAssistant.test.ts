@@ -166,6 +166,54 @@ describe('runAssistant', () => {
     })
   })
 
+  describe('thinking blocks', () => {
+    const thinkingToolCall = (id: string): AssistantReply => ({
+      content: [
+        { type: 'thinking', thinking: 'Milch fehlt noch.', signature: 'sig-1' },
+        { type: 'redacted_thinking', data: 'redacted-1' },
+        { type: 'tool_use', id, name: 'add', input: { name: 'Milch' } },
+      ],
+      stop_reason: 'tool_use',
+    })
+    const hasThinking = (messages: Message[]) =>
+      messages.some(
+        (m) =>
+          typeof m.content !== 'string' &&
+          m.content.some((b) => b.type === 'thinking' || b.type === 'redacted_thinking'),
+      )
+
+    it('sends them back within the tool round, but not with the next question', async () => {
+      // Their signatures are bound to the system prompt; it carries the overview,
+      // which changes between questions, and the API then rejects the old blocks.
+      const sent: Message[][] = []
+      const options = (replies: AssistantReply[]) => ({
+        send: async (m: Message[]) => {
+          sent.push(structuredClone(m))
+          return replies.shift()!
+        },
+        executeTool: async () => ({ result: 'ok' }),
+      })
+
+      const first = await runAssistant(
+        ask('Milch'),
+        options([thinkingToolCall('t1'), text('Milch steht drauf.')]),
+      )
+      expect(hasThinking(sent[1]!)).toBe(true)
+
+      await runAssistant(
+        [...first.messages, { role: 'user', content: 'Und Brot?' }],
+        options([thinkingToolCall('t2'), text('Brot auch.')]),
+      )
+      expect(hasThinking(sent[2]!)).toBe(false)
+      // Within the second question's own tool round they still go back.
+      const secondRound = sent[3]!
+      expect(secondRound[secondRound.length - 2]!.content).toEqual(thinkingToolCall('t2').content)
+      expect(hasThinking(secondRound.slice(0, -2))).toBe(false)
+      // The earlier tool round itself stays, only without its thinking.
+      expect(JSON.stringify(secondRound)).toContain('"id":"t1"')
+    })
+  })
+
   it('gives up after maxRounds and still ends on an assistant message', async () => {
     const send = vi.fn(async () => toolCall('t', 'loop', {}))
     const { messages } = await runAssistant(ask('x'), {
