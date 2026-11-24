@@ -31,6 +31,8 @@ import TaskEditModal from './TaskEditModal.vue'
 import TaskAssignmentModal from './TaskAssignmentModal.vue'
 import SubtaskManagementModal from './SubtaskManagementModal.vue'
 import TaskPostponeModal from './TaskPostponeModal.vue'
+import { flashedTaskIds } from '@/lib/assistant/followApp'
+import { FLASH_CLASS } from '@/lib/assistant/flash'
 
 const props = defineProps<{ tasks: readonly Task[] }>()
 
@@ -317,7 +319,10 @@ const handlePostponeConfirm = async (targetDate: string) => {
         :key="row.task.task_id"
         class="done-row"
         :data-task-id="row.task.task_id"
-        :class="{ 'done-row--postponed': row.postponed }"
+        :class="{
+          'done-row--postponed': row.postponed,
+          [FLASH_CLASS]: flashedTaskIds.has(row.task.task_id),
+        }"
         :style="row.color ? { '--dot': row.color } : undefined"
       >
         <span class="dot" aria-hidden="true"></span>
