@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted, ref, computed, watch } from 'vue'
+import { nextTick, onMounted, onUnmounted, ref, computed, watch } from 'vue'
 import { useShoppingStore, type ShoppingCategoryGroup } from '@/stores/shoppingStore'
 import { categoryKey, compareCategoryGroups } from '@/lib/categoryOrder'
 import { useHouseholdStore } from '@/stores/householdStore'
@@ -19,6 +19,7 @@ import CategoryCombobox from '@/components/CategoryCombobox.vue'
 import LongSheet from '@/components/LongSheet.vue'
 import { SHOPPING_ITEM_NAME_MAX_LENGTH } from '@/lib/limits'
 import { useGuestShareStore } from '@/stores/guestShareStore'
+import { flashedShoppingIds } from '@/lib/assistant/followApp'
 
 const props = defineProps<{
   /**
@@ -447,6 +448,15 @@ const handleCategoryDelete = async (name: string, withItems: boolean) => {
   editingCategory.value = null
 }
 
+// --- Aufleuchten nach dem Assistenten ----------------------------------------
+// Beim Schließen des Chats leuchten die Artikel auf, die er geändert hat; der
+// erste wird dafür in die Mitte gescrollt.
+watch(flashedShoppingIds, async (ids) => {
+  if (ids.size === 0) return
+  await nextTick()
+  document.querySelector('.row-flash')?.scrollIntoView({ block: 'center' })
+})
+
 // --- Ziehen zwischen Kategorien ---------------------------------------------
 /**
  * Der Container trägt den Kategorienamen, nicht den Sektionsschlüssel: der
@@ -766,6 +776,7 @@ onUnmounted(() => {
                       :class="{
                         'row-priority': item.is_priority && !item.purchased,
                         'row-moved': item.shopping_item_id === justMovedId,
+                        'row-flash': flashedShoppingIds.has(item.shopping_item_id),
                       }"
                       @toggle="onItemToggle(item)"
                       @edit="openItemEdit(item)"
@@ -1347,6 +1358,27 @@ onUnmounted(() => {
   height: 8px;
   border-radius: 50%;
   flex-shrink: 0;
+}
+/* Vom Assistenten geändert: drei Pulse beim Schließen des Chats. */
+.row-flash {
+  animation: row-flash 1s ease-in-out 3;
+}
+@keyframes row-flash {
+  0%,
+  100% {
+    background: transparent;
+    box-shadow: none;
+  }
+  40% {
+    background: color-mix(in srgb, var(--color-primary) 22%, transparent);
+    box-shadow: inset 3px 0 0 var(--color-primary);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .row-flash {
+    animation: none;
+    background: color-mix(in srgb, var(--color-primary) 22%, transparent);
+  }
 }
 /* Frisch verschobenes Produkt kurz hervorheben: es springt nach dem Loslassen
    an seinen alphabetischen Platz, der Sprung soll nachvollziehbar bleiben. */

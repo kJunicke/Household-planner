@@ -17,11 +17,15 @@ import {
 import { createHistoryExpiry } from '@/lib/assistant/historyExpiry'
 import { ensureShoppingLoaded, shoppingContext } from '@/lib/assistant/shoppingTools'
 import { assistantTools } from '@/lib/assistant/tools'
+import { followApp } from '@/lib/assistant/followApp'
 import { useShoppingStore } from '@/stores/shoppingStore'
+import { useRouter } from 'vue-router'
 
 const open = defineModel<boolean>('open', { required: true })
 const shoppingStore = useShoppingStore()
 const tools = assistantTools({ shopping: shoppingStore })
+const follow = followApp(useRouter(), shoppingStore)
+watch(open, (isOpen) => (isOpen ? follow.opened() : follow.closed()))
 
 interface Entry {
   kind: 'user' | 'assistant' | 'action' | 'error' | 'fresh'
@@ -96,7 +100,7 @@ async function submit() {
       trimHistory([...history.value, { role: 'user', content: question }]),
       {
         send: (m) => send(m, lists),
-        executeTool: tools.execute,
+        executeTool: async (name, input) => follow.track(await tools.execute(name, input)),
       },
     )
     history.value = messages

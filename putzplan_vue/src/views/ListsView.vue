@@ -1,12 +1,33 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { computed } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import ShoppingView from './ShoppingView.vue'
 import PackingView from './PackingView.vue'
 import TodoView from './TodoView.vue'
 
 type ListsTab = 'shopping' | 'packing' | 'todo'
 
-const activeTab = ref<ListsTab>('shopping')
+// Der Untertab steht in der Adresse (?tab=packlisten|todo, ohne = Einkauf), damit
+// der Assistent auf die Einkaufsliste führen kann, auch wenn gerade ein anderer
+// Untertab offen ist.
+const route = useRoute()
+const router = useRouter()
+const TAB_QUERY: Record<ListsTab, string | undefined> = {
+  shopping: undefined,
+  packing: 'packlisten',
+  todo: 'todo',
+}
+
+const activeTab = computed<ListsTab>(() => {
+  const tab = route.query.tab
+  return tab === 'packlisten' ? 'packing' : tab === 'todo' ? 'todo' : 'shopping'
+})
+
+const selectTab = (tab: ListsTab) => {
+  if (tab === activeTab.value) return
+  const query = TAB_QUERY[tab]
+  void router.replace({ name: 'listen', query: query ? { tab: query } : {} })
+}
 </script>
 
 <template>
@@ -15,19 +36,19 @@ const activeTab = ref<ListsTab>('shopping')
     <div class="subtab-bar">
       <button
         :class="['subtab-chip', activeTab === 'shopping' && 'active']"
-        @click="activeTab = 'shopping'"
+        @click="selectTab('shopping')"
       >
         <i class="bi bi-cart3 me-1"></i> Einkauf
       </button>
       <button
         :class="['subtab-chip', activeTab === 'packing' && 'active']"
-        @click="activeTab = 'packing'"
+        @click="selectTab('packing')"
       >
         <i class="bi bi-bag-check me-1"></i> Packlisten
       </button>
       <button
         :class="['subtab-chip', activeTab === 'todo' && 'active']"
-        @click="activeTab = 'todo'"
+        @click="selectTab('todo')"
       >
         <i class="bi bi-check2-square me-1"></i> To-do
       </button>
