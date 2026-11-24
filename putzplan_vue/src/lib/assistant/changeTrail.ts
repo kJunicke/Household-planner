@@ -7,49 +7,57 @@
  */
 import type { AssistantPage, ChangedEntry, ToolOutcome } from './tools'
 
-const samePage = (a: AssistantPage, b: AssistantPage) =>
-  a.area === b.area && a.listId === b.listId
+const samePage = (a: AssistantPage, b: AssistantPage) => a.area === b.area && a.listId === b.listId
 
 export function createChangeTrail() {
-  // Je Werkzeugaufruf ein Eintrag: nimmt der zweite von zwei Aufrufen an
-  // demselben Artikel zurück, bleibt der erste stehen.
-  let calls: ChangedEntry[][] = []
+  // Je geänderten Eintrag ein eigener Datensatz: nimmt der zweite von zwei
+  // Aufrufen an demselben Artikel zurück, bleibt der erste stehen.
+  let records: { entry: ChangedEntry }[] = []
+
+  /** Wickelt eine Rücknahme so ein, dass sie bei Erfolg `dropped` herausnimmt. */
+  const dropOnUndo =
+    (undo: () => Promise<boolean>, dropped: { entry: ChangedEntry }[]) =>
+    async (): Promise<boolean> => {
+      const ok = await undo()
+      if (ok) records = records.filter((r) => !dropped.includes(r))
+      return ok
+    }
 
   return {
     /** Beim Öffnen des Chats: gesammelt wird ab jetzt. */
     reset() {
-      calls = []
+      records = []
     },
 
     /**
-     * Merkt sich die Änderungen eines Werkzeugaufrufs. Die Rücknahme des
-     * zurückgegebenen Ergebnisses nimmt sie wieder heraus, wenn sie gelingt.
+     * Merkt sich die Änderungen eines Werkzeugaufrufs. Die Rücknahmen des
+     * zurückgegebenen Ergebnisses nehmen sie wieder heraus, wenn sie gelingen:
+     * `undo` alle, eine einzelne aus `changes` nur ihren Eintrag. `changes`
+     * steht dafür in derselben Reihenfolge wie `changed`.
      */
     track(outcome: ToolOutcome): ToolOutcome {
       if (!outcome.changed?.length) return outcome
-      const call = outcome.changed
-      calls.push(call)
-      const { undo } = outcome
-      if (!undo) return outcome
+      const mine = outcome.changed.map((entry) => ({ entry }))
+      records.push(...mine)
+      const { undo, changes } = outcome
+      const paired = changes?.length === mine.length
       return {
         ...outcome,
-        undo: async () => {
-          const ok = await undo()
-          if (ok) calls = calls.filter((c) => c !== call)
-          return ok
-        },
+        ...(undo ? { undo: dropOnUndo(undo, mine) } : {}),
+        ...(changes && paired
+          ? { changes: changes.map((c, i) => ({ ...c, undo: dropOnUndo(c.undo, [mine[i]!]) })) }
+          : {}),
       }
     },
 
     /** Die Seite der letzten Änderung; `null`, wenn nichts geändert wurde. */
     lastPage(): AssistantPage | null {
-      const last = calls[calls.length - 1]
-      return last?.[last.length - 1]?.page ?? null
+      return records[records.length - 1]?.entry.page ?? null
     },
 
     /** Die IDs der Einträge, die auf `page` geändert wurden, ohne Doppelte. */
     changedOn(page: AssistantPage): string[] {
-      const ids = calls.flat().filter((c) => samePage(c.page, page)).map((c) => c.id)
+      const ids = records.filter((r) => samePage(r.entry.page, page)).map((r) => r.entry.id)
       return [...new Set(ids)]
     },
   }

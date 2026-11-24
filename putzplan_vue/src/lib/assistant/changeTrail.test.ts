@@ -51,6 +51,23 @@ describe('the change trail of an open chat', () => {
     expect(trail.changedOn(einkauf)).toEqual(['milch'])
   })
 
+  it('undoing one change of a call (its toast) keeps the other changes of that call lit', async () => {
+    const trail = createChangeTrail()
+    const tracked = trail.track({
+      result: 'ok',
+      changed: [
+        { id: 'milch', page: einkauf },
+        { id: 'brot', page: einkauf },
+      ],
+      changes: [
+        { summary: '✓ Milch → Einkauf', undo: async () => true },
+        { summary: '✓ Brot → Einkauf', undo: async () => true },
+      ],
+    })
+    expect(await tracked.changes![1]!.undo()).toBe(true)
+    expect(trail.changedOn(einkauf)).toEqual(['milch'])
+  })
+
   it('an entry changed twice still lights up when only the second change is undone', async () => {
     const trail = createChangeTrail()
     trail.track(outcome([{ id: 'milch', page: einkauf }]))
