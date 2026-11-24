@@ -6,7 +6,7 @@
  * Seitenwechsel stehen bleibt, und Schließen blendet nur das Panel aus: so
  * überlebt der Verlauf Schließen und Wiederöffnen, ein Neuladen beginnt frisch.
  */
-import { nextTick, ref, watch } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
 import { supabase } from '@/lib/supabase'
 import {
   runAssistant,
@@ -16,7 +16,7 @@ import {
 } from '@/lib/assistant/runAssistant'
 import { createHistoryExpiry } from '@/lib/assistant/historyExpiry'
 import { captureOverview } from '@/lib/assistant/captureOverview'
-import { assistantTools, type Change } from '@/lib/assistant/tools'
+import { assistantTools, type Change, type ToolOutcome } from '@/lib/assistant/tools'
 import { followApp } from '@/lib/assistant/followApp'
 import { useGoToPage } from '@/composables/useGoToPage'
 import { useShoppingStore } from '@/stores/shoppingStore'
@@ -54,8 +54,10 @@ function toastChange(change: Change) {
 }
 
 interface Entry {
-  kind: 'user' | 'assistant' | 'action' | 'error' | 'fresh'
+  kind: 'user' | 'assistant' | 'action' | 'error' | 'fresh' | 'card'
   text: string
+  /** Nur bei der Lösch-Karte: offen, bis ein Knopf sie beantwortet. */
+  card?: { state: 'open' | 'deleted' | 'cancelled'; answer: (ok: boolean) => void }
 }
 
 /** Mehr Verlauf kostet bei jeder Frage mit; ältere Runden fallen weg. */
@@ -68,6 +70,46 @@ const draft = ref('')
 const busy = ref(false)
 const listEl = ref<HTMLElement | null>(null)
 const inputEl = ref<HTMLInputElement | null>(null)
+
+/**
+ * Legt die Lösch-Karte in den Chat und wartet auf ihren Knopf. Solange sie
+ * offen ist, läuft die Frage noch und das Eingabefeld bleibt gesperrt: ein
+ * getipptes „ja“ kann den Knopf nicht ersetzen.
+ */
+function confirmDelete(what: string): Promise<boolean> {
+  return new Promise((resolve) => {
+    entries.value.push({
+      kind: 'card',
+      text: what,
+      card: {
+        state: 'open',
+        answer: (ok) => {
+          if (live.card!.state !== 'open') return
+          live.card!.state = ok ? 'deleted' : 'cancelled'
+          resolve(ok)
+        },
+      },
+    })
+    // Der reaktive Eintrag, nicht das Objekt oben: nur so zeigt die Karte ihren neuen Stand.
+    const live = entries.value[entries.value.length - 1]!
+  })
+}
+const cardOpen = computed(() => entries.value.some((e) => e.card?.state === 'open'))
+
+/**
+ * Ein Toast je Änderung, und die App folgt dem Chat; beides auch für das, was
+ * erst hinter einer Lösch-Karte geschieht.
+ */
+function announce(result: ToolOutcome): ToolOutcome {
+  const outcome = follow.track(result)
+  outcome.changes?.forEach(toastChange)
+  const card = outcome.deleteCard
+  if (!card) return outcome
+  return {
+    ...outcome,
+    deleteCard: { ...card, confirm: async () => announce(await card.confirm()) },
+  }
+}
 
 /**
  * Kürzt von vorn, bis der Verlauf wieder mit einer getippten Nutzerfrage
@@ -122,11 +164,8 @@ async function submit() {
       trimHistory([...history.value, { role: 'user', content }]),
       {
         send: (m) => send(m, overview),
-        executeTool: async (name, input) => {
-          const outcome = follow.track(await tools.execute(name, input))
-          outcome.changes?.forEach(toastChange)
-          return outcome
-        },
+        executeTool: async (name, input) => announce(await tools.execute(name, input)),
+        confirmDelete,
       },
     )
     history.value = messages
@@ -185,10 +224,28 @@ watch(open, async (isOpen) => {
             Zum Beispiel: „Milch und zwei Packungen Eier auf die Einkaufsliste“ oder „Hab Brot
             gekauft“.
           </p>
-          <p v-for="(entry, i) in entries" :key="i" :class="['assistant-entry', entry.kind]">
-            {{ entry.text }}
-          </p>
-          <p v-if="busy" class="assistant-entry assistant">…</p>
+          <template v-for="(entry, i) in entries" :key="i">
+            <div v-if="entry.card" :class="['assistant-card', entry.card.state]">
+              <p class="assistant-card-what">
+                <i class="bi bi-trash3" />
+                {{ entry.card.state === 'deleted' ? 'Gelöscht' : 'Löschen' }}:
+                {{ entry.text }}
+              </p>
+              <div v-if="entry.card.state === 'open'" class="assistant-card-buttons">
+                <button type="button" class="cancel" @click="entry.card.answer(false)">
+                  Abbrechen
+                </button>
+                <button type="button" class="delete" @click="entry.card.answer(true)">
+                  Löschen
+                </button>
+              </div>
+              <p v-else-if="entry.card.state === 'cancelled'" class="assistant-card-note">
+                Abgebrochen, nichts gelöscht.
+              </p>
+            </div>
+            <p v-else :class="['assistant-entry', entry.kind]">{{ entry.text }}</p>
+          </template>
+          <p v-if="busy && !cardOpen" class="assistant-entry assistant">…</p>
         </div>
 
         <form class="assistant-input" @submit.prevent="submit">
@@ -298,6 +355,49 @@ watch(open, async (isOpen) => {
   align-self: flex-start;
   color: var(--color-danger-dark);
   font-size: 0.9rem;
+}
+
+.assistant-card {
+  align-self: stretch;
+  border: 2px solid var(--color-danger-dark);
+  border-radius: 10px;
+  padding: 10px 12px;
+  background: #fff;
+}
+.assistant-card.deleted,
+.assistant-card.cancelled {
+  border-color: var(--pw-line);
+  background: none;
+  color: var(--pw-ink-soft);
+}
+.assistant-card-what {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.assistant-card-note {
+  margin: 4px 0 0;
+  font-size: 0.85rem;
+}
+.assistant-card-buttons {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+.assistant-card-buttons button {
+  flex: 1;
+  min-height: var(--touch-target-min);
+  border: 2px solid var(--pw-line);
+  border-radius: 8px;
+  font-weight: 600;
+}
+.assistant-card-buttons .cancel {
+  background: var(--pw-paper);
+  color: var(--pw-ink);
+}
+.assistant-card-buttons .delete {
+  background: var(--color-danger-dark);
+  border-color: var(--color-danger-dark);
+  color: #fff;
 }
 
 .assistant-input {

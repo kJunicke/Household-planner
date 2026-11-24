@@ -16,6 +16,7 @@ describe('the tool registry', () => {
       'read_shopping_list',
       'add_shopping_items',
       'mark_shopping_items_purchased',
+      'delete_shopping_items',
       'go_to_page',
       'get_app_guide',
     ])

@@ -52,6 +52,12 @@ function fakeStore(items: Partial<Item>[] = [], { fail = false } = {}): Shopping
       store.items = store.items.filter((i) => i.shopping_item_id !== id)
       return true
     },
+    restoreItem: async (item: Item) => {
+      if (fail) return null
+      const back = { ...item, shopping_item_id: `restored-${item.name}` }
+      store.items.push(back)
+      return back
+    },
   }
   return store as unknown as ShoppingToolStore
 }
@@ -239,5 +245,77 @@ describe('read_shopping_list', () => {
   it('rejects an unknown list id', async () => {
     const outcome = await executeShoppingTool(fakeStore(), 'read_shopping_list', { list_id: 'x' })
     expect(outcome.isError).toBe(true)
+  })
+})
+
+describe('delete_shopping_items', () => {
+  const sugar = {
+    shopping_item_id: 'z1',
+    name: 'Zucker',
+    quantity: 2,
+    category: 'Backen',
+    is_priority: true,
+  }
+
+  it('deletes nothing itself but lays a card naming the item and its list', async () => {
+    const store = fakeStore([sugar])
+    const outcome = await executeShoppingTool(store, 'delete_shopping_items', { item_ids: ['z1'] })
+    expect(outcome.deleteCard!.what).toBe('2× Zucker (Einkauf)')
+    expect(store.items.map((i) => i.name)).toEqual(['Zucker'])
+    expect(outcome.changes).toBeUndefined()
+  })
+
+  it('deletes once the card is confirmed, and tells Claude and the user', async () => {
+    const store = fakeStore([sugar, { shopping_item_id: 'm1', name: 'Mehl' }])
+    const card = (await executeShoppingTool(store, 'delete_shopping_items', { item_ids: ['z1'] }))
+      .deleteCard!
+    const outcome = await card.confirm()
+    expect(store.items.map((i) => i.name)).toEqual(['Mehl'])
+    expect(outcome.isError).toBeFalsy()
+    expect(outcome.result).toContain('Zucker')
+    expect(outcome.summary).toBe('✓ gelöscht: 2× Zucker (Einkauf)')
+  })
+
+  it('can be taken back: the item returns with name, quantity, category and state', async () => {
+    const store = fakeStore([{ ...sugar, purchased: true }])
+    const card = (await executeShoppingTool(store, 'delete_shopping_items', { item_ids: ['z1'] }))
+      .deleteCard!
+    const outcome = await card.confirm()
+    expect(outcome.changes).toHaveLength(1)
+    expect(await outcome.changes![0]!.undo()).toBe(true)
+    expect(store.items).toMatchObject([
+      {
+        name: 'Zucker',
+        quantity: 2,
+        category: 'Backen',
+        purchased: true,
+        is_priority: true,
+        list_id: 'l1',
+      },
+    ])
+  })
+
+  it('names every item on one card when several go at once', async () => {
+    const store = fakeStore([sugar, { shopping_item_id: 'm1', name: 'Mehl' }])
+    const outcome = await executeShoppingTool(store, 'delete_shopping_items', {
+      item_ids: ['z1', 'm1'],
+    })
+    expect(outcome.deleteCard!.what).toBe('2× Zucker, Mehl (Einkauf)')
+    const done = await outcome.deleteCard!.confirm()
+    expect(store.items).toEqual([])
+    expect(done.changes!.map((c) => c.summary)).toEqual([
+      '✓ gelöscht: 2× Zucker (Einkauf)',
+      '✓ gelöscht: Mehl (Einkauf)',
+    ])
+  })
+
+  it('rejects an unknown id without a card', async () => {
+    const store = fakeStore([sugar])
+    const outcome = await executeShoppingTool(store, 'delete_shopping_items', {
+      item_ids: ['erfunden'],
+    })
+    expect(outcome.isError).toBe(true)
+    expect(outcome.result).toContain('erfunden')
+    expect(outcome.deleteCard).toBeUndefined()
   })
 })

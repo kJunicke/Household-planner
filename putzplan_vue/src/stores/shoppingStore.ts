@@ -985,6 +985,40 @@ export const useShoppingStore = defineStore('shopping', () => {
     return true
   }
 
+  /**
+   * Holt einen gelöschten Artikel zurück: dieselbe Liste, Name, Menge,
+   * Kategorie, gekauft oder offen, Stern und Kaufzähler. Er bekommt eine neue
+   * ID; der Zustand reist als Folge-Mutation auf der temp-ID mit.
+   */
+  const restoreItem = async (item: ShoppingItem) => {
+    if (!useHouseholdStore().currentHousehold) return null
+    const restored = createItemOptimistic(item.name, item.list_id, item.category, item.quantity)
+    const state = {
+      purchased: item.purchased,
+      is_priority: item.is_priority,
+      times_purchased: item.times_purchased,
+      last_purchased_at: item.last_purchased_at,
+      last_purchased_by: item.last_purchased_by,
+    }
+    updateItemOptimistic(restored.shopping_item_id, state)
+    addToQueue({
+      operation: 'create',
+      payload: {
+        name: restored.name,
+        listId: item.list_id,
+        category: restored.category,
+        quantity: restored.quantity,
+        tempId: restored.shopping_item_id,
+      },
+    })
+    addToQueue({
+      operation: 'update',
+      payload: { itemId: restored.shopping_item_id, updates: state },
+    })
+    if (navigator.onLine) await syncMutations()
+    return restored
+  }
+
   // ============================================================================
   // Categories
   // ============================================================================
@@ -1391,6 +1425,7 @@ export const useShoppingStore = defineStore('shopping', () => {
     markPurchased,
     markUnpurchased,
     deleteItem,
+    restoreItem,
     loadCategories,
     createCategory,
     renameCategory,
