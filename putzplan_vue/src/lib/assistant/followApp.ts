@@ -12,8 +12,8 @@ import type { useShoppingStore } from '@/stores/shoppingStore'
 import { createChangeTrail } from './changeTrail'
 import type { AssistantPage, ToolOutcome } from './tools'
 
-/** So lange leuchten die Einträge (drei Pulse à 1 s, siehe ShoppingView). */
-const FLASH_MS = 3000
+/** So lange leuchten die Einträge (drei Pulse à 1,2 s, siehe ShoppingView). */
+const FLASH_MS = 3600
 
 /** Die Einkaufsartikel, die gerade aufleuchten. */
 export const flashedShoppingIds = ref<ReadonlySet<string>>(new Set())

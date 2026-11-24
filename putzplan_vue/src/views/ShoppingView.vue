@@ -1359,9 +1359,10 @@ onUnmounted(() => {
   border-radius: 50%;
   flex-shrink: 0;
 }
-/* Vom Assistenten geändert: drei Pulse beim Schließen des Chats. */
+/* Vom Assistenten geändert: drei Pulse beim Schließen des Chats, in der Farbe
+   des Klebebands, wie mit Textmarker angestrichen. */
 .row-flash {
-  animation: row-flash 1s ease-in-out 3;
+  animation: row-flash 1.2s ease-in-out 3;
 }
 @keyframes row-flash {
   0%,
@@ -1370,14 +1371,14 @@ onUnmounted(() => {
     box-shadow: none;
   }
   40% {
-    background: color-mix(in srgb, var(--color-primary) 22%, transparent);
-    box-shadow: inset 3px 0 0 var(--color-primary);
+    background: var(--pw-tape);
+    box-shadow: inset 4px 0 0 var(--pw-accent);
   }
 }
 @media (prefers-reduced-motion: reduce) {
   .row-flash {
     animation: none;
-    background: color-mix(in srgb, var(--color-primary) 22%, transparent);
+    background: var(--pw-tape);
   }
 }
 /* Frisch verschobenes Produkt kurz hervorheben: es springt nach dem Loslassen
