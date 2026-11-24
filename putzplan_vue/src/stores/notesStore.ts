@@ -178,9 +178,10 @@ export const useNotesStore = defineStore('notes', () => {
   }
 
   /**
-   * Legt eine gelöschte Notiz wieder an, mit ihrer ID, ihrem Text und ihrem
-   * Anlegedatum, also an ihrer alten Stelle. Als Verfasser steht danach, wer
-   * sie zurückholt: anders lässt die Datenbank kein Anlegen zu.
+   * Legt eine gelöschte Notiz wieder an, mit ihrer ID, ihrem Text und ihren
+   * Daten, also an ihrer alten Stelle und ohne neues „bearbeitet“. Als
+   * Verfasser steht danach, wer sie zurückholt: anders lässt die Datenbank
+   * kein Anlegen zu.
    */
   const restoreNote = async (note: Note) => {
     const householdStore = useHouseholdStore()
@@ -193,6 +194,7 @@ export const useNotesStore = defineStore('notes', () => {
           note_id: note.note_id,
           content: note.content,
           created_at: note.created_at,
+          updated_at: note.updated_at,
           household_id: householdStore.currentHousehold.household_id,
           created_by: authStore.user.id,
         })
