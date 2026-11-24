@@ -275,6 +275,20 @@ describe('complete_task, what it turns down', () => {
     expect(store.completions).toHaveLength(1)
   })
 
+  it('leaves "again" to the user: Claude first asks whether he did a done task once more', async () => {
+    const store = fakeStore([
+      { ...bad, completed: true, last_completed_at: '2026-11-24T08:00:00Z' },
+    ])
+    const outcome = await run(store, 'complete_task', { task_id: 'bad' })
+    expect(outcome.result).toMatch(/[Ff]rag den Nutzer/)
+
+    const tool = registry(store).definitions.find((t) => t.name === 'complete_task')!
+    const props = tool.input_schema.properties as Record<string, { description: string }>
+    expect(props.again!.description).toMatch(/nie von dir aus/i)
+    // „Die Pinnwand, war extrem dreckig“: die Antwort auf die Rückfrage gehört nicht in die Notiz.
+    expect(props.note!.description).toMatch(/nur die Begründung/i)
+  })
+
   it('completes a postponed task: postponing is no completion', async () => {
     const store = fakeStore([{ ...bad, completed: true, postponed_until: '2026-12-01' }])
     const outcome = await run(store, 'complete_task', { task_id: 'bad' })

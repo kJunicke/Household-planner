@@ -91,8 +91,9 @@ async function completeTask(
     const when = task.last_completed_at ? ` (zuletzt ${dateOf(task.last_completed_at)})` : ''
     return {
       result:
-        `„${task.title}“ ist schon erledigt${when}. Erledige sie nur noch einmal, wenn der ` +
-        'Nutzer sagt, dass er sie seitdem wieder gemacht hat: dann mit again.',
+        `„${task.title}“ ist schon erledigt${when}. Sag das dem Nutzer und frag den Nutzer, ` +
+        'ob er sie seitdem noch einmal gemacht hat; erst mit seinem Ja rufst du complete_task ' +
+        'mit again auf.',
       isError: true,
     }
   }
@@ -310,12 +311,13 @@ export const taskCompleteTools = (store: TaskCompleteToolStore): AssistantTool[]
           type: 'string',
           description:
             'Notiz zur Erledigung. Pflicht, wenn points von den Standardpunkten abweicht: dann ' +
-            'die Begründung des Nutzers, nie eine erfundene.',
+            'nur die Begründung des Nutzers, ohne seine Antwort auf andere Rückfragen, nie eine erfundene.',
         },
         again: {
           type: 'boolean',
           description:
-            'Nur wenn die Aufgabe schon erledigt ist und der Nutzer sie seitdem noch einmal gemacht hat.',
+            'Nie von dir aus: erst wenn die Aufgabe schon erledigt ist und der Nutzer sagt, dass er ' +
+            'sie seitdem noch einmal gemacht hat („nochmal“, „wieder“, oder Ja auf deine Rückfrage).',
         },
       },
       required: ['task_id'],
