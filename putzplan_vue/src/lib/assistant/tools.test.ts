@@ -12,6 +12,7 @@ describe('the tool registry', () => {
     expect(sent.map((t: { name: string }) => t.name)).toEqual([
       'add_shopping_items',
       'mark_shopping_items_purchased',
+      'delete_shopping_items',
     ])
     for (const tool of sent) {
       expect(Object.keys(tool).sort()).toEqual(['description', 'input_schema', 'name'])

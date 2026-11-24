@@ -27,6 +27,7 @@ export type ShoppingToolStore = Pick<
   | 'loadItems'
   | 'createItem'
   | 'deleteItem'
+  | 'restoreItem'
   | 'markPurchased'
   | 'markUnpurchased'
   | 'updateItem'
@@ -198,6 +199,74 @@ async function markShoppingItemsPurchased(
   }
 }
 
+type ShoppingItem = ShoppingToolStore['items'][number]
+
+const itemLabel = (item: ShoppingItem) =>
+  item.quantity > 1 ? `${item.quantity}× ${item.name}` : item.name
+
+/** „2× Zucker, Mehl (Einkauf)“; über mehrere Listen mit „;“ getrennt. */
+function describeItems(store: ShoppingToolStore, items: ShoppingItem[]) {
+  const byList = new Map<string, ShoppingItem[]>()
+  for (const item of items) byList.set(item.list_id, [...(byList.get(item.list_id) ?? []), item])
+  return [...byList]
+    .map(([listId, onList]) => {
+      const list = store.lists.find((l) => l.list_id === listId)?.name ?? 'Liste'
+      return `${onList.map(itemLabel).join(', ')} (${list})`
+    })
+    .join('; ')
+}
+
+/**
+ * Löscht erst nach der Karte im Chat (D7). Die Rücknahme legt den Artikel neu
+ * an, mit Name, Menge, Kategorie und Zustand; er bekommt dabei eine neue ID.
+ */
+function deleteShoppingItems(
+  store: ShoppingToolStore,
+  input: Record<string, unknown>,
+): ToolOutcome {
+  const ids = Array.isArray(input.item_ids) ? (input.item_ids as unknown[]).map(String) : []
+  const unknown = ids.filter((id) => !store.items.some((i) => i.shopping_item_id === id))
+  if (unknown.length) return { result: `Unbekannte item_ids: ${unknown.join(', ')}`, isError: true }
+  // Der Stand von jetzt: das, was die Karte nennt, ist das, was gelöscht und zurückgeholt wird.
+  const items = ids
+    .map((id) => store.items.find((i) => i.shopping_item_id === id)!)
+    .map((item) => ({ ...item }))
+  if (items.length === 0) return { result: 'Keine Artikel angegeben', isError: true }
+
+  return {
+    result: 'Wartet auf die Bestätigung des Nutzers.',
+    deleteCard: {
+      what: describeItems(store, items),
+      confirm: async () => {
+        const deleted: ShoppingItem[] = []
+        const failed: string[] = []
+        for (const item of items) {
+          if (await store.deleteItem(item.shopping_item_id)) deleted.push(item)
+          else failed.push(item.name)
+        }
+        const notDone = failed.length ? ` Fehlgeschlagen: ${failed.join(', ')}` : ''
+        if (deleted.length === 0) {
+          return {
+            result: `Nichts gelöscht.${notDone}`,
+            isError: true,
+            summary: `✗ nicht gelöscht: ${failed.join(', ')}`,
+          }
+        }
+        const changes: Change[] = deleted.map((item) => ({
+          summary: `✓ gelöscht: ${describeItems(store, [item])}`,
+          undo: async () => !!(await store.restoreItem(item)),
+        }))
+        return {
+          result: `Gelöscht: ${describeItems(store, deleted)}.${notDone}`,
+          summary: `✓ gelöscht: ${describeItems(store, deleted)}`,
+          undo: undoAll(changes.map((c) => c.undo)),
+          changes,
+        }
+      },
+    },
+  }
+}
+
 export const shoppingTools = (store: ShoppingToolStore): AssistantTool[] => [
   {
     name: 'add_shopping_items',
@@ -249,5 +318,27 @@ export const shoppingTools = (store: ShoppingToolStore): AssistantTool[] => [
       required: ['item_ids'],
     },
     execute: (input) => markShoppingItemsPurchased(store, input),
+  },
+  {
+    name: 'delete_shopping_items',
+    description:
+      'Löscht Artikel ganz von ihrer Einkaufsliste, z. B. bei „lösch den Zucker“ oder „der Zucker ' +
+      'kann runter“. Gekauft ist etwas anderes: dafür mark_shopping_items_purchased. Vor dem ' +
+      'Löschen zeigt die App dem Nutzer eine Karte mit „Löschen“ und „Abbrechen“; frag darum ' +
+      'nicht selbst nach, und melde das Löschen erst, wenn das Ergebnis es bestätigt.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        item_ids: {
+          type: 'array',
+          items: { type: 'string' },
+          description:
+            'IDs der Artikel aus dem Kontext. Passt der Name auf mehrere Artikel verschiedener ' +
+            'Listen, frag nach, welcher gemeint ist.',
+        },
+      },
+      required: ['item_ids'],
+    },
+    execute: async (input) => deleteShoppingItems(store, input),
   },
 ]

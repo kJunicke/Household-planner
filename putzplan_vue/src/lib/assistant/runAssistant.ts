@@ -42,6 +42,11 @@ export interface AssistantReply {
 export interface RunOptions {
   send: (messages: Message[]) => Promise<AssistantReply>
   executeTool: (name: string, input: Record<string, unknown>) => Promise<ToolOutcome>
+  /**
+   * Zeigt die Lösch-Karte und wartet auf den Knopf: `true` heißt „Löschen“.
+   * Fehlt sie, wird nie gelöscht: ein getipptes „ja“ ersetzt den Knopf nicht.
+   */
+  confirmDelete?: (what: string) => Promise<boolean>
   /** Obergrenze für Hin und Her, damit ein Fehler keine Endlosschleife (und Rechnung) wird. */
   maxRounds?: number
 }
@@ -53,7 +58,7 @@ export interface RunResult {
 }
 
 export async function runAssistant(history: Message[], options: RunOptions): Promise<RunResult> {
-  const { send, executeTool, maxRounds = 5 } = options
+  const { send, executeTool, confirmDelete = async () => false, maxRounds = 5 } = options
   const messages = [...history]
   const actions: RunResult['actions'] = []
 
@@ -81,6 +86,14 @@ export async function runAssistant(history: Message[], options: RunOptions): Pro
       let outcome: ToolOutcome
       try {
         outcome = await executeTool(block.name, block.input)
+        const card = outcome.deleteCard
+        if (card) {
+          outcome = (await confirmDelete(card.what))
+            ? await card.confirm()
+            : {
+                result: `Der Nutzer hat das Löschen abgebrochen; nichts gelöscht: ${card.what}.`,
+              }
+        }
       } catch (error) {
         outcome = {
           result: `Fehler: ${error instanceof Error ? error.message : String(error)}`,

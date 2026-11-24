@@ -86,6 +86,86 @@ describe('runAssistant', () => {
     expect(textOf(last)).not.toBe('')
   })
 
+  describe('a delete card', () => {
+    /** A tool that only asks; the delete itself runs behind the card's button. */
+    function deletingTool() {
+      const deleted: string[] = []
+      const executeTool = async () => ({
+        result: 'wartet auf die Karte',
+        deleteCard: {
+          what: 'Zucker (Einkauf)',
+          confirm: async () => {
+            deleted.push('Zucker')
+            return { result: 'Gelöscht: Zucker', summary: '✓ gelöscht: Zucker' }
+          },
+        },
+      })
+      return { deleted, executeTool }
+    }
+
+    it('holds the loop until the card is answered, then sends the delete to Claude', async () => {
+      const { deleted, executeTool } = deletingTool()
+      const replies = [toolCall('t1', 'delete', { item_ids: ['z'] }), text('Zucker ist weg.')]
+      const sent: Message[][] = []
+      let answer!: (ok: boolean) => void
+      const cards: string[] = []
+      const run = runAssistant(ask('Lösch den Zucker'), {
+        send: async (m) => {
+          sent.push(structuredClone(m))
+          return replies.shift()!
+        },
+        executeTool,
+        confirmDelete: (what) => {
+          cards.push(what)
+          return new Promise((resolve) => (answer = resolve))
+        },
+      })
+
+      await vi.waitFor(() => expect(cards).toEqual(['Zucker (Einkauf)']))
+      await new Promise((r) => setTimeout(r, 10))
+      expect(sent).toHaveLength(1)
+      expect(deleted).toEqual([])
+
+      answer(true)
+      const { actions } = await run
+      expect(deleted).toEqual(['Zucker'])
+      expect(sent[1]![sent[1]!.length - 1]).toEqual({
+        role: 'user',
+        content: [{ type: 'tool_result', tool_use_id: 't1', content: 'Gelöscht: Zucker' }],
+      })
+      expect(actions).toEqual([{ summary: '✓ gelöscht: Zucker', isError: false }])
+    })
+
+    it('tells Claude when the user cancels, and deletes nothing', async () => {
+      const { deleted, executeTool } = deletingTool()
+      const replies = [toolCall('t1', 'delete', { item_ids: ['z'] }), text('Gut, bleibt.')]
+      const sent: Message[][] = []
+      const { actions } = await runAssistant(ask('Lösch den Zucker'), {
+        send: async (m) => {
+          sent.push(structuredClone(m))
+          return replies.shift()!
+        },
+        executeTool,
+        confirmDelete: async () => false,
+      })
+      expect(deleted).toEqual([])
+      const result = (sent[1]![sent[1]!.length - 1]!.content as { content: string }[])[0]!
+      expect(result.content).toMatch(/abgebrochen/i)
+      expect(result.content).toContain('Zucker (Einkauf)')
+      expect(actions).toEqual([])
+    })
+
+    it('never deletes when nobody can answer a card', async () => {
+      const { deleted, executeTool } = deletingTool()
+      const replies = [toolCall('t1', 'delete', {}), text('ok')]
+      await runAssistant(ask('Lösch den Zucker'), {
+        send: async () => replies.shift()!,
+        executeTool,
+      })
+      expect(deleted).toEqual([])
+    })
+  })
+
   it('gives up after maxRounds and still ends on an assistant message', async () => {
     const send = vi.fn(async () => toolCall('t', 'loop', {}))
     const { messages } = await runAssistant(ask('x'), {

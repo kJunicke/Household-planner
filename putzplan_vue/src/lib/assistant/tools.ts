@@ -31,6 +31,19 @@ export interface ToolOutcome {
   changed?: ChangedEntry[]
   /** Dieselben Änderungen einzeln, je eine mit eigener Zeile und Rücknahme: ein Toast je Änderung. */
   changes?: Change[]
+  /**
+   * Ein Lösch-Werkzeug löscht nicht selbst, sondern legt diese Karte vor: die
+   * Werkzeugschleife hält an, bis der Nutzer „Löschen“ oder „Abbrechen“ tippt.
+   */
+  deleteCard?: DeleteCard
+}
+
+/** Die Karte vor einem Löschen. Für jedes Lösch-Werkzeug dieselbe. */
+interface DeleteCard {
+  /** Was verschwindet, wie es auf der Karte steht, z. B. „Zucker (Einkauf)“. */
+  what: string
+  /** Löscht; läuft erst nach dem Knopf „Löschen“. Sein Ergebnis geht an Claude. */
+  confirm: () => Promise<ToolOutcome>
 }
 
 /** Eine einzelne Änderung, für sich rücknehmbar. */
