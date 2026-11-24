@@ -32,6 +32,16 @@ export interface ToolOutcome {
   undo?: () => Promise<boolean>
   /** Die Einträge, die der Aufruf angelegt oder geändert hat. */
   changed?: ChangedEntry[]
+  /** Dieselben Änderungen einzeln, je eine mit eigener Zeile und Rücknahme: ein Toast je Änderung. */
+  changes?: Change[]
+}
+
+/** Eine einzelne Änderung, für sich rücknehmbar. */
+export interface Change {
+  /** Zeile im Toast, z. B. „✓ Eier → Einkauf“. */
+  summary: string
+  /** Stellt den Stand vor dieser Änderung wieder her; `false`, wenn das misslang. */
+  undo: () => Promise<boolean>
 }
 
 /** Was Claude von einem Werkzeug sieht, im Format der Messages API. */

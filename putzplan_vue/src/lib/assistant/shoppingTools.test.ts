@@ -101,6 +101,21 @@ describe('add_shopping_items', () => {
     expect(store.items).toMatchObject([{ name: 'Eier', purchased: true, quantity: 1 }])
   })
 
+  it('reports each added item as its own change; taking back the middle one removes only that item', async () => {
+    const store = fakeStore()
+    const outcome = await executeShoppingTool(store, 'add_shopping_items', {
+      list_id: 'l1',
+      items: [{ name: 'Milch' }, { name: 'Eier' }, { name: 'Butter' }],
+    })
+    expect(outcome.changes!.map((c) => c.summary)).toEqual([
+      '✓ Milch → Einkauf',
+      '✓ Eier → Einkauf',
+      '✓ Butter → Einkauf',
+    ])
+    expect(await outcome.changes![1]!.undo()).toBe(true)
+    expect(store.items.map((i) => i.name)).toEqual(['Milch', 'Butter'])
+  })
+
   it('offers nothing to take back when the item already stood on the list', async () => {
     const store = fakeStore([{ shopping_item_id: 'i1', name: 'Brot' }])
     const outcome = await executeShoppingTool(store, 'add_shopping_items', {
@@ -148,6 +163,22 @@ describe('mark_shopping_items_purchased', () => {
     expect(outcome.changed).toEqual([{ id: 'i1', page: { area: 'shopping', listId: 'l1' } }])
     expect(await outcome.undo!()).toBe(true)
     expect(store.items[0]!.purchased).toBe(false)
+  })
+
+  it('reports each checked-off item as its own change; taking one back reopens only that item', async () => {
+    const store = fakeStore([
+      { shopping_item_id: 'i1', name: 'Brot' },
+      { shopping_item_id: 'i2', name: 'Käse' },
+    ])
+    const outcome = await executeShoppingTool(store, 'mark_shopping_items_purchased', {
+      item_ids: ['i1', 'i2'],
+    })
+    expect(outcome.changes!.map((c) => c.summary)).toEqual(['✓ abgehakt: Brot', '✓ abgehakt: Käse'])
+    expect(await outcome.changes![0]!.undo()).toBe(true)
+    expect(store.items).toMatchObject([
+      { name: 'Brot', purchased: false },
+      { name: 'Käse', purchased: true },
+    ])
   })
 
   it('rejects an id that is not an open item and changes nothing', async () => {

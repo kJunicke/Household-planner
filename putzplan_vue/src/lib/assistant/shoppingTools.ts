@@ -7,7 +7,13 @@
  * App: optimistisch, offline-fähig, per Echtzeit beim anderen sichtbar.
  */
 import type { useShoppingStore } from '@/stores/shoppingStore'
-import { undoAll, type AssistantTool, type ChangedEntry, type ToolOutcome } from './tools'
+import {
+  undoAll,
+  type AssistantTool,
+  type Change,
+  type ChangedEntry,
+  type ToolOutcome,
+} from './tools'
 
 /**
  * Der Teil des shoppingStore, den die Werkzeuge brauchen. Hereingereicht statt
@@ -64,7 +70,7 @@ async function addShoppingItems(
   // ohne diese Liste stünde ein „✓“ für etwas, das nie geschah.
   const failed: string[] = []
   const changed: ChangedEntry[] = []
-  const undoSteps: (() => Promise<boolean>)[] = []
+  const changes: Change[] = []
   for (const raw of wanted as { name?: unknown; quantity?: unknown }[]) {
     const name = String(raw.name ?? '').trim()
     if (!name) continue
@@ -87,10 +93,13 @@ async function addShoppingItems(
       if (quantity !== previousQuantity) await store.updateItem(id, { quantity })
       // Zurück auf gekauft. markPurchased zählt den Kauf dabei ein zweites Mal
       // mit; einen Weg zurück ohne Zählen hat der Store nicht.
-      undoSteps.push(async () => {
-        const bought = await store.markPurchased(id)
-        if (quantity === previousQuantity) return bought
-        return (await store.updateItem(id, { quantity: previousQuantity })) && bought
+      changes.push({
+        summary: `✓ ${label} → ${list.name}`,
+        undo: async () => {
+          const bought = await store.markPurchased(id)
+          if (quantity === previousQuantity) return bought
+          return (await store.updateItem(id, { quantity: previousQuantity })) && bought
+        },
       })
       changed.push({ id, page })
       done.push(label)
@@ -104,9 +113,12 @@ async function addShoppingItems(
     })
     if (created) {
       const tempId = created.shopping_item_id
-      undoSteps.push(async () => {
-        const item = findCreated(store, tempId, listId, name)
-        return item ? store.deleteItem(item.shopping_item_id) : false
+      changes.push({
+        summary: `✓ ${label} → ${list.name}`,
+        undo: async () => {
+          const item = findCreated(store, tempId, listId, name)
+          return item ? store.deleteItem(item.shopping_item_id) : false
+        },
       })
       changed.push({ id: tempId, page })
       done.push(label)
@@ -127,7 +139,7 @@ async function addShoppingItems(
   return {
     result: `Erledigt auf „${list.name}“: ${done.join(', ')}.${notDone}`,
     summary: `✓ ${done.join(', ')} → ${list.name}`,
-    ...(undoSteps.length ? { undo: undoAll(undoSteps), changed } : {}),
+    ...(changes.length ? { undo: undoAll(changes.map((c) => c.undo)), changed, changes } : {}),
   }
 }
 
@@ -140,6 +152,7 @@ async function markShoppingItemsPurchased(
   const unknown: string[] = []
   const failed: string[] = []
   const changed: ChangedEntry[] = []
+  const changes: Change[] = []
   for (const id of ids) {
     const item = store.items.find((i) => i.shopping_item_id === id && !i.purchased)
     if (!item) {
@@ -149,6 +162,7 @@ async function markShoppingItemsPurchased(
     if (await store.markPurchased(id)) {
       names.push(item.name)
       changed.push({ id, page: { area: 'shopping', listId: item.list_id } })
+      changes.push({ summary: `✓ abgehakt: ${item.name}`, undo: () => store.markUnpurchased(id) })
     } else {
       failed.push(item.name)
     }
@@ -167,14 +181,9 @@ async function markShoppingItemsPurchased(
   return {
     result: `Abgehakt: ${names.join(', ')}.${missing}`,
     summary: `✓ abgehakt: ${names.join(', ')}`,
-    undo: undoAll(
-      changed.map(
-        ({ id }) =>
-          () =>
-            store.markUnpurchased(id),
-      ),
-    ),
+    undo: undoAll(changes.map((c) => c.undo)),
     changed,
+    changes,
   }
 }
 
