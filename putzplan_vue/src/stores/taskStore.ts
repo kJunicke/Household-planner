@@ -90,6 +90,14 @@ type StampSnapshot = Pick<Task, 'task_id' | 'emphasis_level' | 'project_saying_i
 type DirtySnapshot = Pick<Task, 'task_id' | 'completed' | 'postponed_until'>
 
 /**
+ * `quiet` lässt den Erfolgs-Toast weg: der Assistent zeigt seinen eigenen, mit
+ * Rückgängig. Fehler meldet der Store immer.
+ */
+interface WriteOptions {
+  quiet?: boolean
+}
+
+/**
  * Was nötig ist, um eine Erledigung zurückzunehmen (→ `undoCompletion`).
  *
  * Wird bei JEDER optimistisch angewandten Erledigung angelegt, weil der Store
@@ -948,7 +956,11 @@ export const useTaskStore = defineStore('tasks', () => {
   // last_completed_at bleibt ABSICHTLICH unangetastet: es wird keine Erledigung
   // erfunden, der Intervall-Anker bleibt erhalten. Kein task_completions-Eintrag,
   // also weder Punkte noch Verlaufszeile.
-  const postponeTask = async (taskId: string, targetDate: string) => {
+  const postponeTask = async (
+    taskId: string,
+    targetDate: string,
+    { quiet = false }: WriteOptions = {},
+  ) => {
     const toastStore = useToastStore()
 
     const { error } = await supabase
@@ -965,7 +977,7 @@ export const useTaskStore = defineStore('tasks', () => {
       return false
     }
 
-    toastStore.showToast(`Verschoben auf ${formatPostponeDate(targetDate)}`, 'success')
+    if (!quiet) toastStore.showToast(`Verschoben auf ${formatPostponeDate(targetDate)}`, 'success')
     // Reload tasks vom Backend (Source of Truth)
     await loadTasks()
     return true
@@ -976,6 +988,7 @@ export const useTaskStore = defineStore('tasks', () => {
   // task_type defaults to 'recurring' if not provided (for backwards compatibility)
   const createTask = async (
     taskData: Partial<Task> & Pick<Task, 'title' | 'effort' | 'recurrence_days' | 'task_type'>,
+    { quiet = false }: WriteOptions = {},
   ) => {
     const householdStore = useHouseholdStore()
     const toastStore = useToastStore()
@@ -1044,7 +1057,7 @@ export const useTaskStore = defineStore('tasks', () => {
       }
     }
 
-    toastStore.showToast('Aufgabe erstellt', 'success', 3000)
+    if (!quiet) toastStore.showToast('Aufgabe erstellt', 'success', 3000)
     return data
   }
 
@@ -1165,7 +1178,7 @@ export const useTaskStore = defineStore('tasks', () => {
 
   // DELETE - Task löschen (SOFT DELETE)
   // Setzt deleted_at statt echtem DELETE → Completions bleiben erhalten
-  const deleteTask = async (taskId: string) => {
+  const deleteTask = async (taskId: string, { quiet = false }: WriteOptions = {}) => {
     const toastStore = useToastStore()
     isLoading.value = true
 
@@ -1184,7 +1197,50 @@ export const useTaskStore = defineStore('tasks', () => {
 
     // Lokalen State aktualisieren (Task aus UI entfernen)
     tasks.value = tasks.value.filter((t) => t.task_id !== taskId)
-    toastStore.showToast('Aufgabe gelöscht', 'success', 3000)
+    if (!quiet) toastStore.showToast('Aufgabe gelöscht', 'success', 3000)
+    return true
+  }
+
+  // RESTORE - gelöschte Aufgabe zurückholen (Rückgängig des Assistenten).
+  // `deleted_at` wieder leeren: dieselbe Zeile mit ID, Titel, Punkten und
+  // Zuweisung, und ihre Erledigungen hingen ohnehin die ganze Zeit an ihr.
+  // Scheitert am eindeutigen Titel, wenn inzwischen eine gleichnamige Aufgabe
+  // angelegt wurde (→ CONTEXT.md „Duplikat").
+  const restoreTask = async (taskId: string) => {
+    const { data, error } = await supabase
+      .from('tasks')
+      .update({ deleted_at: null })
+      .eq('task_id', taskId)
+      .select()
+      .single()
+
+    if (error || !data) {
+      console.error('Error restoring task:', error)
+      return false
+    }
+    if (!tasks.value.some((t) => t.task_id === taskId)) tasks.value.push(data)
+    return true
+  }
+
+  // Schreibt `completed` und `postponed_until` auf einen früheren Stand zurück:
+  // Rückgängig des Assistenten nach „wieder dreckig" oder Verschieben. Keine
+  // Erledigung, kein Verlaufseintrag; der Stand davor war genau dieser.
+  const restoreTaskState = async (snapshot: DirtySnapshot) => {
+    const { error } = await supabase
+      .from('tasks')
+      .update({ completed: snapshot.completed, postponed_until: snapshot.postponed_until })
+      .eq('task_id', snapshot.task_id)
+
+    if (error) {
+      console.error('Error restoring task state:', error)
+      return false
+    }
+    const task = tasks.value.find((t) => t.task_id === snapshot.task_id)
+    if (task) {
+      task.completed = snapshot.completed
+      task.postponed_until = snapshot.postponed_until
+    }
+    await loadTasks([snapshot.task_id])
     return true
   }
 
@@ -1259,6 +1315,10 @@ export const useTaskStore = defineStore('tasks', () => {
             const index = tasks.value.findIndex((t) => t.task_id === updatedTask.task_id)
             if (index !== -1) {
               tasks.value[index] = updatedTask
+            } else {
+              // Eine wiederhergestellte Aufgabe (`deleted_at` geleert) kommt als
+              // UPDATE einer Zeile, die hier fehlt.
+              tasks.value.push(updatedTask)
             }
           }
 
@@ -1401,7 +1461,12 @@ export const useTaskStore = defineStore('tasks', () => {
   }
 
   // ASSIGN TASK - Weise Task einem Household-Member zu
-  const assignTask = async (taskId: string, userId: string | null, permanent: boolean) => {
+  const assignTask = async (
+    taskId: string,
+    userId: string | null,
+    permanent: boolean,
+    { quiet = false }: WriteOptions = {},
+  ) => {
     const toastStore = useToastStore()
     isLoading.value = true
 
@@ -1427,7 +1492,7 @@ export const useTaskStore = defineStore('tasks', () => {
       tasks.value[taskIndex].assigned_to = userId
       tasks.value[taskIndex].assignment_permanent = permanent
     }
-    toastStore.showToast('Aufgabe zugewiesen', 'success', 3000)
+    if (!quiet) toastStore.showToast('Aufgabe zugewiesen', 'success', 3000)
     return true
   }
 
@@ -1863,6 +1928,8 @@ export const useTaskStore = defineStore('tasks', () => {
     createQuickTask,
     updateTask,
     deleteTask,
+    restoreTask,
+    restoreTaskState,
     subscribeToTasks,
     unsubscribeFromTasks,
     assignTask,
