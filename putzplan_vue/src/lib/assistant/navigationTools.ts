@@ -43,7 +43,8 @@ export const navigationTools = (goToPage: (page: AppPage) => void): AssistantToo
     name: 'go_to_page',
     description:
       'Bringt die App hinter dem Chat auf eine Seite; der Chat bleibt offen. Nutze es, wenn ' +
-      'der Nutzer hingeführt werden möchte, und wenn du etwas ablehnst, das man dort von Hand tut.',
+      'der Nutzer hingeführt werden möchte („zeig mir die Liste …“, „öffne …“, „bring mich zu …“), ' +
+      'und wenn du etwas ablehnst, das man dort von Hand tut.',
     input_schema: {
       type: 'object',
       properties: {
@@ -52,7 +53,8 @@ export const navigationTools = (goToPage: (page: AppPage) => void): AssistantToo
           enum: Object.keys(PAGES),
           description:
             'putzen = Pinnwand mit den Aufgaben; einstellungen = Haushalt, Mitglieder, Profil, ' +
-            'Wochenziel, Gastlinks, Richtwerte; kasse_ausgleich = Bilanz, Ausgleich, Umrechnung.',
+            'Wochenziel, Gastlinks, Richtwerte; kasse_ausgleich = Punkte-Bilanz, Ausgleich, ' +
+            'Umrechnung; toepfe und topf = Ausgaben, Rückzahlungen und Salden in Euro.',
         },
         id: {
           type: 'string',

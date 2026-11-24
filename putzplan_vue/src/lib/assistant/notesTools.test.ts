@@ -65,6 +65,14 @@ describe('create_note', () => {
     expect(outcome.changes).toHaveLength(1)
   })
 
+  it('tells Claude the new note shows up in the next overview as this same note', async () => {
+    // Without it, Claude saw the note in the next question's overview and
+    // concluded it had overwritten an older note of the same name.
+    const outcome = await executeNotesTool(fakeStore(), 'create_note', { content: 'Müllabfuhr' })
+    expect(outcome.result).toContain('id new-0')
+    expect(outcome.result).toMatch(/nächsten Frage .*Übersicht/)
+  })
+
   it('can be taken back: the new note is gone again', async () => {
     const store = fakeStore()
     const outcome = await executeNotesTool(store, 'create_note', { content: 'Handwerker' })

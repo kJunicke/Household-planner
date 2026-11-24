@@ -66,7 +66,10 @@ async function createNote(store: NotesToolStore, input: Record<string, unknown>)
     }
   }
   const id = note.note_id
-  return changedNote(id, `Notiz angelegt (id ${id}).`, {
+  // Ab der nächsten Frage steht sie in der Übersicht; ohne den Hinweis hielt
+  // Claude sie dort für eine ältere Notiz, die er überschrieben hätte.
+  const result = `Notiz neu angelegt (id ${id}). Ab der nächsten Frage steht sie auch in der Übersicht, als diese Notiz.`
+  return changedNote(id, result, {
     summary: `✓ neue Notiz: ${noteTitle(content)}`,
     undo: () => store.deleteNote(id, QUIET),
   })
