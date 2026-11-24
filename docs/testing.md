@@ -127,6 +127,8 @@ Abmelden und lädt dessen Haushalt. Kein Passwort wird getippt.
   Ordner `Private/secrets/HouseholdPlanner` oberhalb von `putzplan_vue/`, also der von mastermind;
   ein anderer Ordner geht über die Umgebungsvariable `HP_DEV_LOGINS_DIR`. Fehlt der Ordner, startet
   der Dev-Server normal, nur ohne Knöpfe. Geänderte Dateien übernimmt er ohne Neustart.
+- **In einem Worktree außerhalb von mastermind** findet er den Ordner nicht: die `qc-login*.env` aus dem
+  Haupt-Checkout in die Worktree-Wurzel kopieren und mit `HP_DEV_LOGINS_DIR=<Worktree-Wurzel>` starten.
 - **Nur auf diesem Rechner:** Mit `--host` ist der Dev-Server im LAN erreichbar; das Modul
   bekommt aber nur ein Aufruf von `localhost`/`127.0.0.1`/`::1`, alle anderen 403 (dort dann keine
   Knöpfe).
