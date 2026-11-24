@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import type { AppPage } from '@/lib/appNavigation'
 import type { ListToolStores } from './listTools'
 import type { ShoppingToolStore } from './shoppingTools'
+import type { NotesToolStore } from './notesTools'
 import { assistantTools } from './tools'
 
 function registry() {
@@ -10,6 +11,7 @@ function registry() {
   const tools = assistantTools({
     shopping: { lists: [], items: [] } as unknown as ShoppingToolStore,
     lists: {} as ListToolStores,
+    notes: { notes: [] } as unknown as NotesToolStore,
     goToPage: (page) => visited.push(page),
   })
   return { tools, visited }

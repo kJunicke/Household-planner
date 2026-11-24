@@ -183,13 +183,13 @@ async function ensureCategory(found: Found, name: string) {
   const { store, list, page } = found
   const existing = categoryRow(store, list.list_id, name)
   if (existing) return { name: existing.name }
-  const created = await store.createCategory(name, [], { silent: true })
+  const created = await store.createCategory(name, [], { quiet: true })
   if (!created) return { name: null }
   const change: Change = {
     summary: `✓ neue Kategorie: ${created} (${list.name})`,
     undo: async () => {
       store.currentListId = list.list_id
-      await store.deleteCategory(created, { silent: true })
+      await store.deleteCategory(created, { quiet: true })
       return true
     },
   }
@@ -474,9 +474,11 @@ async function createList(stores: ListToolStores, input: Record<string, unknown>
   const undo = () =>
     kind.area === 'shopping'
       ? stores.shopping.deleteList(listId)
-      : stores[kind.area].deleteList(listId, { silent: true })
+      : stores[kind.area].deleteList(listId, { quiet: true })
   return {
-    result: `${kind.label} „${name}“ angelegt (id ${listId}).`,
+    // Ab der nächsten Frage steht sie in der Übersicht; ohne den Hinweis hielt
+    // Claude sie dort für eine schon vorher vorhandene Liste (im Browser beobachtet).
+    result: `${kind.label} „${name}“ neu angelegt (id ${listId}). Ab der nächsten Frage steht sie auch in der Übersicht, als diese Liste.`,
     summary,
     undo,
     changes: [{ summary, undo }],
@@ -500,7 +502,7 @@ function findAnyList(stores: ListToolStores, listId: string) {
       return {
         name: list.name,
         area: kind,
-        rename: (name: string) => stores[kind].renameList(listId, name, { silent: true }),
+        rename: (name: string) => stores[kind].renameList(listId, name, { quiet: true }),
       }
     }
   }
@@ -581,7 +583,7 @@ async function deleteChecklist(
     deleteCard: {
       what,
       confirm: async () => {
-        if (!(await store.deleteList(listId, { silent: true }))) {
+        if (!(await store.deleteList(listId, { quiet: true }))) {
           return {
             result: 'Löschen fehlgeschlagen',
             isError: true,
@@ -657,12 +659,12 @@ async function renameCategory(stores: ListToolStores, input: Record<string, unkn
       c.list_id === list.list_id && sameName(c.name, newName) && c.category_id !== row.category_id,
   )
   const finalName = merged?.name ?? newName
-  await store.renameCategory(row.name, newName, { silent: true })
+  await store.renameCategory(row.name, newName, { quiet: true })
   const summary = `✓ Kategorie ${merged ? 'zusammengeführt' : 'umbenannt'}: ${row.name} → ${finalName} (${list.name})`
   const undo = async () => {
     store.currentListId = list.list_id
     if (!merged) {
-      await store.renameCategory(finalName, row.name, { silent: true })
+      await store.renameCategory(finalName, row.name, { quiet: true })
       return true
     }
     // Zusammengeführt: die alte Kategorie zurückholen und ihre Einträge wieder einsortieren.
@@ -704,7 +706,7 @@ async function deleteCategory(
       what,
       confirm: async () => {
         store.currentListId = list.list_id
-        await store.deleteCategory(row.name, { withItems, silent: true })
+        await store.deleteCategory(row.name, { withItems, quiet: true })
         const summary = `✓ Kategorie gelöscht: ${row.name} (${list.name})`
         const undo = async () => {
           store.currentListId = list.list_id

@@ -2,12 +2,14 @@ import { describe, expect, it } from 'vitest'
 
 import type { ListToolStores } from './listTools'
 import type { ShoppingToolStore } from './shoppingTools'
+import type { NotesToolStore } from './notesTools'
 import { assistantTools } from './tools'
 
 const registry = () =>
   assistantTools({
     shopping: { lists: [], items: [] } as unknown as ShoppingToolStore,
     lists: {} as ListToolStores,
+    notes: { notes: [] } as unknown as NotesToolStore,
     goToPage: () => {},
   })
 
@@ -31,6 +33,11 @@ describe('the tool registry', () => {
       'create_checklist_category',
       'rename_checklist_category',
       'delete_checklist_category',
+      'read_note',
+      'create_note',
+      'append_to_note',
+      'rewrite_note',
+      'delete_note',
       'go_to_page',
       'get_app_guide',
     ])

@@ -547,8 +547,8 @@ export function createChecklistStore(config: ChecklistStoreConfig) {
       }
     }
 
-    /** `silent`: ohne Erfolgs-Toast; der Assistent zeigt seinen eigenen mit Rückgängig. */
-    const renameList = async (listId: string, name: string, opts: { silent?: boolean } = {}) => {
+    /** `quiet`: ohne Erfolgs-Toast; der Assistent zeigt seinen eigenen mit Rückgängig. */
+    const renameList = async (listId: string, name: string, opts: { quiet?: boolean } = {}) => {
       const toastStore = useToastStore()
 
       try {
@@ -561,7 +561,7 @@ export function createChecklistStore(config: ChecklistStoreConfig) {
 
         const idx = lists.value.findIndex((l) => l.list_id === listId)
         if (idx !== -1) lists.value[idx] = { ...lists.value[idx], name: name.trim() }
-        if (!opts.silent) toastStore.showToast('Liste umbenannt', 'success', 2000)
+        if (!opts.quiet) toastStore.showToast('Liste umbenannt', 'success', 2000)
         return true
       } catch (error) {
         console.error(`Error renaming ${listsTable} row:`, error)
@@ -596,7 +596,7 @@ export function createChecklistStore(config: ChecklistStoreConfig) {
       }
     }
 
-    const deleteList = async (listId: string, opts: { silent?: boolean } = {}) => {
+    const deleteList = async (listId: string, opts: { quiet?: boolean } = {}) => {
       const toastStore = useToastStore()
 
       try {
@@ -611,7 +611,7 @@ export function createChecklistStore(config: ChecklistStoreConfig) {
         if (currentListId.value === listId) {
           currentListId.value = lists.value[0]?.list_id ?? null
         }
-        if (!opts.silent) toastStore.showToast('Liste gelöscht', 'success', 2000)
+        if (!opts.quiet) toastStore.showToast('Liste gelöscht', 'success', 2000)
         return true
       } catch (error) {
         console.error(`Error deleting ${listsTable} row:`, error)
@@ -693,7 +693,7 @@ export function createChecklistStore(config: ChecklistStoreConfig) {
     const createCategory = async (
       name: string,
       itemIds: string[] = [],
-      opts: { importFrom?: ImportSource; silent?: boolean } = {},
+      opts: { importFrom?: ImportSource; quiet?: boolean } = {},
     ): Promise<string | null> => {
       if (!currentListId.value) return null
       const householdStore = useHouseholdStore()
@@ -723,7 +723,7 @@ export function createChecklistStore(config: ChecklistStoreConfig) {
         })
         // Deckt den Fall ab, dass jemand einen unbekannten Namen tippt und speichert,
         // ohne die Vorschlagsliste je zu benutzen — sonst entsteht die Kategorie stumm.
-        if (!opts.silent) {
+        if (!opts.quiet) {
           useToastStore().showToast(`Kategorie „${trimmed}" angelegt`, 'success', 2000)
         }
       }
@@ -755,7 +755,7 @@ export function createChecklistStore(config: ChecklistStoreConfig) {
     const renameCategory = async (
       oldName: string,
       newName: string,
-      opts: { silent?: boolean } = {},
+      opts: { quiet?: boolean } = {},
     ) => {
       const toastStore = useToastStore()
       if (!currentListId.value) return
@@ -804,7 +804,7 @@ export function createChecklistStore(config: ChecklistStoreConfig) {
       }
 
       if (navigator.onLine) await queue.sync()
-      if (opts.silent) return
+      if (opts.quiet) return
       toastStore.showToast(
         conflict ? `Mit „${target}" zusammengeführt` : 'Kategorie umbenannt',
         'success',
@@ -820,7 +820,7 @@ export function createChecklistStore(config: ChecklistStoreConfig) {
      */
     const deleteCategory = async (
       category: string,
-      options: { withItems?: boolean; silent?: boolean } = {},
+      options: { withItems?: boolean; quiet?: boolean } = {},
     ) => {
       const toastStore = useToastStore()
       if (!currentListId.value) return
@@ -848,7 +848,7 @@ export function createChecklistStore(config: ChecklistStoreConfig) {
       }
 
       if (navigator.onLine) await queue.sync()
-      if (!options.silent) toastStore.showToast('Kategorie gelöscht', 'success', 2000)
+      if (!options.quiet) toastStore.showToast('Kategorie gelöscht', 'success', 2000)
     }
 
     /** Eintrag in eine andere Kategorie hängen (Ziehen) — offline-fähig. */

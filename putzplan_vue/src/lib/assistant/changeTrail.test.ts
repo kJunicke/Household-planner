@@ -89,3 +89,15 @@ describe('the change trail of an open chat', () => {
     expect(tracked).toMatchObject({ result: 'ok', summary: '✓' })
   })
 })
+
+describe('the change trail across areas', () => {
+  it('keeps notes apart from the shopping lists', () => {
+    const trail = createChangeTrail()
+    const notes = { area: 'notes' } as const
+    trail.track(outcome([{ id: 'milch', page: einkauf }]))
+    trail.track(outcome([{ id: 'handwerker', page: notes }]))
+    expect(trail.lastPage()).toEqual(notes)
+    expect(trail.changedOn(notes)).toEqual(['handwerker'])
+    expect(trail.changedOn(einkauf)).toEqual(['milch'])
+  })
+})

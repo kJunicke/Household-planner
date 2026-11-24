@@ -3,9 +3,10 @@
  * letzten Änderung, und beim Schließen leuchten auf der dann gezeigten Seite
  * die Einträge auf, die seit dem Öffnen geändert wurden.
  *
- * Seiten sind bisher die Listen: die Einkaufsansicht liest
+ * Seiten sind die Listen und die Notizen: die Einkaufsansicht liest
  * `flashedShoppingIds`, die Ansicht der Pack- und To-do-Listen
- * `flashedChecklistIds`, und lässt die Zeilen aufleuchten.
+ * `flashedChecklistIds`, die Notizen `flashedNoteIds`, und lassen die
+ * Einträge aufleuchten.
  */
 import { ref } from 'vue'
 import type { Router } from 'vue-router'
@@ -21,6 +22,8 @@ const FLASH_MS = 3600
 export const flashedShoppingIds = ref<ReadonlySet<string>>(new Set())
 /** Die Einträge, Kategorien (`categoryHighlightId`) und Listen der Pack- und To-do-Listen, die gerade aufleuchten. */
 export const flashedChecklistIds = ref<ReadonlySet<string>>(new Set())
+/** Die Notizen, die gerade aufleuchten. */
+export const flashedNoteIds = ref<ReadonlySet<string>>(new Set())
 let flashTimer: number | undefined
 
 type FollowStore = Pick<ReturnType<typeof useShoppingStore>, 'currentListId' | 'currentItemId'>
@@ -51,6 +54,7 @@ export function followApp(
   const show = (page: AssistantPage) => goToPage(page)
 
   const shownPage = (): AssistantPage | null => {
+    if (router.currentRoute.value.name === 'notes') return { area: 'notes' }
     const area = listsTab()
     if (!area) return null
     const listId = area === 'shopping' ? shopping.currentListId : checklists[area].currentListId
@@ -79,6 +83,8 @@ export function followApp(
       if (page.area === 'shopping') {
         // Neue Artikel trugen beim Anlegen eine vorläufige ID.
         flashedShoppingIds.value = new Set(ids.map(shopping.currentItemId))
+      } else if (page.area === 'notes') {
+        flashedNoteIds.value = new Set(ids)
       } else {
         flashedChecklistIds.value = new Set(ids)
       }
@@ -86,6 +92,7 @@ export function followApp(
       flashTimer = window.setTimeout(() => {
         flashedShoppingIds.value = new Set()
         flashedChecklistIds.value = new Set()
+        flashedNoteIds.value = new Set()
       }, FLASH_MS)
     },
   }

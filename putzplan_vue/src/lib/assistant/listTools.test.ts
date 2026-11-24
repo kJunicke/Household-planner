@@ -4,6 +4,7 @@ import type { ChecklistItem, ChecklistList } from '@/types/Checklist'
 import type { CategoryRow } from '@/types/CategoryRow'
 import type { ListToolStores, ChecklistToolStore } from './listTools'
 import type { ShoppingToolStore } from './shoppingTools'
+import type { NotesToolStore } from './notesTools'
 import { assistantTools } from './tools'
 
 const key = (name: string) => name.trim().toLowerCase()
@@ -194,6 +195,7 @@ function setup(
   const registry = assistantTools({
     shopping: { lists: [], items: [] } as unknown as ShoppingToolStore,
     lists: stores,
+    notes: { notes: [] } as unknown as NotesToolStore,
     goToPage: () => {},
   })
   return { todo, packing, shopping, run: registry.execute }

@@ -29,7 +29,7 @@ export interface OverviewSources {
 const TITLE_CHARS = 40
 
 /** Die erste Zeile einer Notiz, gekürzt; Notizen haben keinen eigenen Titel. */
-function noteTitle(content: string): string {
+export function noteTitle(content: string): string {
   const firstLine = content.trim().split('\n')[0]!.trim()
   if (firstLine.length <= TITLE_CHARS) return firstLine || '(leer)'
   return `${firstLine.slice(0, TITLE_CHARS).trimEnd()}…`
