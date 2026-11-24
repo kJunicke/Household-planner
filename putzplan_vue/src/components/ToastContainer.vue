@@ -39,9 +39,12 @@ const icons: Record<ToastType, string> = {
           v-if="toast.action"
           type="button"
           class="toast-action"
+          :class="{ 'toast-action-icon': toast.action.icon }"
+          :aria-label="toast.action.icon ? toast.action.label : undefined"
           @click="toastStore.runAction(toast.id)"
         >
-          {{ toast.action.label }}
+          <i v-if="toast.action.icon" class="bi" :class="toast.action.icon"></i>
+          <template v-else>{{ toast.action.label }}</template>
         </button>
       </div>
     </TransitionGroup>
@@ -106,6 +109,14 @@ const icons: Record<ToastType, string> = {
   font-weight: 600;
   font-size: var(--font-md);
   cursor: pointer;
+}
+
+/* Ein Symbol statt Text braucht trotzdem eine Fläche, die der Daumen trifft. */
+.toast-action-icon {
+  min-width: var(--touch-target-min);
+  min-height: var(--touch-target-min);
+  margin: -0.375rem -0.5rem -0.375rem 0;
+  font-size: 1.1rem;
 }
 
 /* Normale Meldungen sind einzeilig. Lange Texte (der Offline-Erklärtext) brechen

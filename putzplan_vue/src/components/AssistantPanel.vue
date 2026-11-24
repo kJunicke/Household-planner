@@ -16,9 +16,10 @@ import {
 } from '@/lib/assistant/runAssistant'
 import { createHistoryExpiry } from '@/lib/assistant/historyExpiry'
 import { ensureShoppingLoaded, shoppingContext } from '@/lib/assistant/shoppingTools'
-import { assistantTools } from '@/lib/assistant/tools'
+import { assistantTools, type Change } from '@/lib/assistant/tools'
 import { followApp } from '@/lib/assistant/followApp'
 import { useShoppingStore } from '@/stores/shoppingStore'
+import { useToastStore } from '@/stores/toastStore'
 import { useRouter } from 'vue-router'
 
 const open = defineModel<boolean>('open', { required: true })
@@ -26,6 +27,29 @@ const shoppingStore = useShoppingStore()
 const tools = assistantTools({ shopping: shoppingStore })
 const follow = followApp(useRouter(), shoppingStore)
 watch(open, (isOpen) => (isOpen ? follow.opened() : follow.closed()))
+const toastStore = useToastStore()
+
+/** So lange bleibt ein Toast mit Rückgängig stehen; wie beim Löschen im Topf. */
+const UNDO_TOAST_MS = 8000
+
+/** Was der Nutzer seit der letzten Frage zurückgenommen hat; geht mit der nächsten Frage an Claude. */
+const undone: string[] = []
+
+/** Ein Toast je Änderung; sein Rückgängig-Symbol nimmt genau diese Änderung zurück. */
+function toastChange(change: Change) {
+  toastStore.showToast(change.summary.replace(/^✓\s*/, ''), 'success', UNDO_TOAST_MS, {
+    label: 'Rückgängig',
+    icon: 'bi-arrow-counterclockwise',
+    run: async () => {
+      if (!(await change.undo())) {
+        toastStore.showToast(`Rücknahme fehlgeschlagen: ${change.summary}`, 'error')
+        return
+      }
+      undone.push(change.summary)
+      entries.value.push({ kind: 'action', text: `↶ zurückgenommen: ${change.summary}` })
+    },
+  })
+}
 
 interface Entry {
   kind: 'user' | 'assistant' | 'action' | 'error' | 'fresh'
@@ -92,15 +116,24 @@ async function submit() {
       text: 'Neues Gespräch: nach 30 Minuten ohne Frage ist der Verlauf darüber vergessen.',
     })
   entries.value.push({ kind: 'user', text: question })
+  // Der Verlauf meldet die zurückgenommenen Änderungen noch als erledigt; ohne
+  // diesen Hinweis widerspräche er dem Stand, den Claude mit der Frage bekommt.
+  const content = undone.length
+    ? `(Inzwischen von mir zurückgenommen: ${undone.splice(0).join('; ')})\n\n${question}`
+    : question
 
   try {
     await ensureShoppingLoaded(shoppingStore)
     const lists = shoppingContext(shoppingStore)
     const { messages, actions } = await runAssistant(
-      trimHistory([...history.value, { role: 'user', content: question }]),
+      trimHistory([...history.value, { role: 'user', content }]),
       {
         send: (m) => send(m, lists),
-        executeTool: async (name, input) => follow.track(await tools.execute(name, input)),
+        executeTool: async (name, input) => {
+          const outcome = follow.track(await tools.execute(name, input))
+          outcome.changes?.forEach(toastChange)
+          return outcome
+        },
       },
     )
     history.value = messages
