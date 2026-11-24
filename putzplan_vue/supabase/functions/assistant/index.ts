@@ -61,44 +61,6 @@ const isToolDefinition = (value: unknown): value is ToolDefinition => {
 /** Die Übersicht, die der Client je Frage schickt (src/lib/assistant/overview.ts). */
 const MAX_OVERVIEW_CHARS = 20_000
 
-/** Fassung vor der Übersicht: Einkaufslisten mit ihren offenen Artikeln. */
-interface ContextList {
-  list_id: string
-  name: string
-  open_items: { id: string; name: string; quantity: number }[]
-}
-
-const MAX_TODAY_CHARS = 64
-
-const isContextList = (value: unknown): value is ContextList => {
-  const list = value as ContextList
-  return (
-    typeof list?.list_id === 'string' &&
-    typeof list.name === 'string' &&
-    Array.isArray(list.open_items) &&
-    list.open_items.every(
-      (i) =>
-        typeof i?.id === 'string' && typeof i.name === 'string' && typeof i.quantity === 'number',
-    )
-  )
-}
-
-/** Der Stand, den ein Client der Fassung vor der Übersicht schickt, als Text. */
-const describeContext = (lists: ContextList[]) => {
-  if (lists.length === 0) return 'Der Haushalt hat noch keine Einkaufsliste.'
-  return lists
-    .map((list) => {
-      const items = list.open_items.length
-        ? list.open_items.map((i) => `  - ${i.name} ×${i.quantity} (id ${i.id})`).join('\n')
-        : '  (keine offenen Artikel)'
-      return `Liste „${list.name}“ (id ${list.list_id}):\n${items}`
-    })
-    .join('\n\n')
-}
-
-const legacyOverview = (lists: ContextList[], today: string) =>
-  `Heute ist ${today}.\n\nEinkaufslisten mit offenen Artikeln:\n${describeContext(lists)}`
-
 const systemPrompt = (overview: string) =>
   `Du bist der Assistent der Haushalts-App „Putzplan“. Du bedienst die App über Werkzeuge, ` +
   `mit denselben Mitteln wie man sie von Hand bedient, und immer als die Person, die fragt.
@@ -112,7 +74,7 @@ Regeln:
 - Findest du einen genannten Eintrag oder eine Kategorie auf der gelesenen Liste nicht, lies die übrigen Listen derselben Art, bevor du sagst, dass es sie nicht gibt; passt mehr als eine, frag nach.
 - Fragt jemand, wie etwas in der App geht oder wo etwas liegt, ruf zuerst get_app_guide auf und antworte daraus in ein, zwei Sätzen. Biete dann an, hinzuführen; will er das, nutze go_to_page.
 - Das tust du nie, auch nicht auf Bitte, denn es bleibt Sache des Haushalts: einen Ausgleich eintragen (auch Punkte ausgleichen und Verrechnen mit dem Haushaltstopf); Einstellungen ändern (Wochenziel, Richtwerte, Umrechnung, Haushalt, Mitglieder, Profil); Gastlinks anlegen, erneuern oder beenden. Sag in einem Satz, dass das von Hand geht und wo, und bring die App mit go_to_page gleich dorthin: Ausgleich und Umrechnung → kasse_ausgleich, Einstellungen und Gastlinks → einstellungen.
-- Etwas für ein anderes Mitglied erledigen tust du nie, und du rätst auch nicht dazu, es an seiner Stelle abzuhaken: die Punkte gingen an den, der abhakt. Sag in einem Satz, dass das Mitglied es selbst abhakt.
+- Eine Aufgabe (Putzplan, Pinnwand, Punkte) für ein anderes Mitglied erledigen tust du nie, und du rätst auch nicht dazu, sie an seiner Stelle abzuhaken: die Punkte gingen an den, der abhakt. Sag in einem Satz, dass das Mitglied sie selbst abhakt. Das gilt nur für Aufgaben: Einkaufsartikel und Einträge auf Listen bringen keine Punkte; „Anna hat Milch gekauft“ oder „Tim hat die Schuhe eingepackt“ hakst du ganz normal ab.
 - Aufgaben (anlegen, erledigen, was dran ist) und Töpfe (Ausgaben, Rückzahlungen, Salden) kannst du noch nicht. Sag das in einem Satz und bring die App hin: Aufgaben → putzen, Töpfe → topf mit der ID aus der Übersicht, sonst toepfe. Eine Ausgabe gehört in einen Topf, nicht in den Ausgleich.
 - Kannst du etwas mit deinen Werkzeugen nicht, sag das in einem Satz.
 - Steht vor einer Frage „(Inzwischen von mir zurückgenommen: …)“, hat der Nutzer diese Änderungen per Rückgängig aufgehoben: es gilt wieder der Stand davor, Gelöschtes ist wieder da, Angelegtes wieder weg. Erwähne das nur, wenn die Frage es betrifft.
@@ -147,13 +109,7 @@ Deno.serve(async (req) => {
     // 2. Anfrage prüfen
     const raw = await req.text()
     if (raw.length > MAX_BODY_CHARS) return json(413, { error: 'Request too large' })
-    let body: {
-      messages?: unknown
-      overview?: unknown
-      lists?: unknown
-      today?: unknown
-      tools?: unknown
-    }
+    let body: { messages?: unknown; overview?: unknown; tools?: unknown }
     try {
       body = JSON.parse(raw) ?? {}
     } catch {
@@ -164,26 +120,11 @@ Deno.serve(async (req) => {
     if (!Array.isArray(messages) || messages.length === 0 || messages.length > MAX_MESSAGES) {
       return json(400, { error: `messages must hold 1 to ${MAX_MESSAGES} entries` })
     }
-    // Ein Client vor der Übersicht schickt `lists` und `today` statt `overview`.
-    let overview: string
-    if (body.overview !== undefined) {
-      if (typeof body.overview !== 'string' || body.overview.length > MAX_OVERVIEW_CHARS) {
-        return json(400, {
-          error: `overview must be a string of at most ${MAX_OVERVIEW_CHARS} characters`,
-        })
-      }
-      overview = body.overview
-    } else {
-      const { lists, today } = body
-      if (!Array.isArray(lists) || !lists.every(isContextList)) {
-        return json(400, { error: 'lists must be an array of { list_id, name, open_items }' })
-      }
-      if (typeof today !== 'string' || today.length > MAX_TODAY_CHARS) {
-        return json(400, {
-          error: `today must be a string of at most ${MAX_TODAY_CHARS} characters`,
-        })
-      }
-      overview = legacyOverview(lists, today)
+    const { overview } = body
+    if (typeof overview !== 'string' || overview.length > MAX_OVERVIEW_CHARS) {
+      return json(400, {
+        error: `overview must be a string of at most ${MAX_OVERVIEW_CHARS} characters`,
+      })
     }
     if (!Array.isArray(tools) || tools.length > MAX_TOOLS || !tools.every(isToolDefinition)) {
       return json(400, {
