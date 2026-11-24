@@ -7,7 +7,9 @@
  */
 import type { AssistantPage, ChangedEntry, ToolOutcome } from './tools'
 
-const samePage = (a: AssistantPage, b: AssistantPage) => a.area === b.area && a.listId === b.listId
+const listOf = (page: AssistantPage) => ('listId' in page ? page.listId : null)
+const samePage = (a: AssistantPage, b: AssistantPage) =>
+  a.area === b.area && listOf(a) === listOf(b)
 
 export function createChangeTrail() {
   // Je geänderten Eintrag ein eigener Datensatz: nimmt der zweite von zwei

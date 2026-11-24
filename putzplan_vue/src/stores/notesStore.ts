@@ -31,6 +31,14 @@ export const useNotesStore = defineStore('notes', () => {
   // Actions
   // ============================================================================
 
+  /**
+   * `quiet` lässt den Erfolgs-Toast weg: der Assistent zeigt seinen eigenen,
+   * mit Rückgängig. Fehler meldet der Store immer.
+   */
+  interface WriteOptions {
+    quiet?: boolean
+  }
+
   const loadNotes = async () => {
     const householdStore = useHouseholdStore()
     const toastStore = useToastStore()
@@ -67,7 +75,7 @@ export const useNotesStore = defineStore('notes', () => {
     }
   }
 
-  const createNote = async (content: string) => {
+  const createNote = async (content: string, { quiet = false }: WriteOptions = {}) => {
     const householdStore = useHouseholdStore()
     const authStore = useAuthStore()
     const toastStore = useToastStore()
@@ -102,7 +110,7 @@ export const useNotesStore = defineStore('notes', () => {
 
       // Realtime will add it to the list, but we can also add optimistically
       notes.value.unshift(data)
-      toastStore.showToast('Notiz erstellt', 'success', 2000)
+      if (!quiet) toastStore.showToast('Notiz erstellt', 'success', 2000)
       return data
     } catch (error) {
       console.error('Error creating note:', error)
@@ -111,7 +119,11 @@ export const useNotesStore = defineStore('notes', () => {
     }
   }
 
-  const updateNote = async (noteId: string, content: string) => {
+  const updateNote = async (
+    noteId: string,
+    content: string,
+    { quiet = false }: WriteOptions = {},
+  ) => {
     const toastStore = useToastStore()
 
     if (!content.trim()) {
@@ -137,7 +149,7 @@ export const useNotesStore = defineStore('notes', () => {
         }
       }
 
-      toastStore.showToast('Notiz aktualisiert', 'success', 2000)
+      if (!quiet) toastStore.showToast('Notiz aktualisiert', 'success', 2000)
       return true
     } catch (error) {
       console.error('Error updating note:', error)
@@ -146,7 +158,7 @@ export const useNotesStore = defineStore('notes', () => {
     }
   }
 
-  const deleteNote = async (noteId: string) => {
+  const deleteNote = async (noteId: string, { quiet = false }: WriteOptions = {}) => {
     const toastStore = useToastStore()
 
     try {
@@ -156,12 +168,43 @@ export const useNotesStore = defineStore('notes', () => {
 
       // Remove from local state
       notes.value = notes.value.filter((n) => n.note_id !== noteId)
-      toastStore.showToast('Notiz geloescht', 'success', 2000)
+      if (!quiet) toastStore.showToast('Notiz geloescht', 'success', 2000)
       return true
     } catch (error) {
       console.error('Error deleting note:', error)
       toastStore.showToast('Fehler beim Löschen der Notiz', 'error')
       return false
+    }
+  }
+
+  /**
+   * Legt eine gelöschte Notiz wieder an, mit ihrer ID, ihrem Text und ihrem
+   * Anlegedatum, also an ihrer alten Stelle. Als Verfasser steht danach, wer
+   * sie zurückholt: anders lässt die Datenbank kein Anlegen zu.
+   */
+  const restoreNote = async (note: Note) => {
+    const householdStore = useHouseholdStore()
+    const authStore = useAuthStore()
+    if (!householdStore.currentHousehold || !authStore.user) return null
+    try {
+      const { data, error } = await supabase
+        .from('notes')
+        .insert({
+          note_id: note.note_id,
+          content: note.content,
+          created_at: note.created_at,
+          household_id: householdStore.currentHousehold.household_id,
+          created_by: authStore.user.id,
+        })
+        .select()
+        .single()
+      if (error) throw error
+      if (!notes.value.some((n) => n.note_id === data.note_id)) notes.value.unshift(data)
+      return data as Note
+    } catch (error) {
+      console.error('Error restoring note:', error)
+      useToastStore().showToast('Fehler beim Wiederherstellen der Notiz', 'error')
+      return null
     }
   }
 
@@ -257,6 +300,7 @@ export const useNotesStore = defineStore('notes', () => {
     createNote,
     updateNote,
     deleteNote,
+    restoreNote,
     subscribeToNotes,
     unsubscribeFromNotes,
   }

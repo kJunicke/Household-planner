@@ -2,12 +2,14 @@ import { describe, expect, it } from 'vitest'
 
 import type { AppPage } from '@/lib/appNavigation'
 import type { ShoppingToolStore } from './shoppingTools'
+import type { NotesToolStore } from './notesTools'
 import { assistantTools } from './tools'
 
 function registry() {
   const visited: AppPage[] = []
   const tools = assistantTools({
     shopping: { lists: [], items: [] } as unknown as ShoppingToolStore,
+    notes: { notes: [] } as unknown as NotesToolStore,
     goToPage: (page) => visited.push(page),
   })
   return { tools, visited }

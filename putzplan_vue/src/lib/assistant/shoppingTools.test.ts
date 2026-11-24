@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import { type ShoppingToolStore } from './shoppingTools'
+import type { NotesToolStore } from './notesTools'
 import { assistantTools } from './tools'
 
 type Item = ShoppingToolStore['items'][number]
@@ -66,7 +67,12 @@ const executeShoppingTool = (
   store: ShoppingToolStore,
   name: string,
   input: Record<string, unknown>,
-) => assistantTools({ shopping: store, goToPage: () => {} }).execute(name, input)
+) =>
+  assistantTools({
+    shopping: store,
+    notes: { notes: [] } as unknown as NotesToolStore,
+    goToPage: () => {},
+  }).execute(name, input)
 
 describe('add_shopping_items', () => {
   it('puts a new item on the list and tells Claude and the user', async () => {

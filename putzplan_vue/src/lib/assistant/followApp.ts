@@ -3,8 +3,8 @@
  * letzten Änderung, und beim Schließen leuchten auf der dann gezeigten Seite
  * die Einträge auf, die seit dem Öffnen geändert wurden.
  *
- * Bisher gibt es nur Einkaufslisten als Seite; die Einkaufsansicht liest
- * `flashedShoppingIds` und lässt die Zeilen aufleuchten.
+ * Seiten sind bisher die Einkaufslisten und die Notizen; ihre Ansichten lesen
+ * `flashedShoppingIds` und `flashedNoteIds` und lassen die Einträge aufleuchten.
  */
 import { ref } from 'vue'
 import type { Router } from 'vue-router'
@@ -18,6 +18,8 @@ const FLASH_MS = 3600
 
 /** Die Einkaufsartikel, die gerade aufleuchten. */
 export const flashedShoppingIds = ref<ReadonlySet<string>>(new Set())
+/** Die Notizen, die gerade aufleuchten. */
+export const flashedNoteIds = ref<ReadonlySet<string>>(new Set())
 let flashTimer: number | undefined
 
 type FollowStore = Pick<ReturnType<typeof useShoppingStore>, 'currentListId' | 'currentItemId'>
@@ -34,10 +36,12 @@ export function followApp(router: Router, shopping: FollowStore, goToPage: GoToP
   // ruft push, nicht replace: Zurück führt dorthin, wo der Chat geöffnet wurde.
   const show = (page: AssistantPage) => goToPage(page)
 
-  const shownPage = (): AssistantPage | null =>
-    onShoppingTab() && shopping.currentListId
+  const shownPage = (): AssistantPage | null => {
+    if (router.currentRoute.value.name === 'notes') return { area: 'notes' }
+    return onShoppingTab() && shopping.currentListId
       ? { area: 'shopping', listId: shopping.currentListId }
       : null
+  }
 
   return {
     /** Beim Öffnen des Chats. */
@@ -57,12 +61,13 @@ export function followApp(router: Router, shopping: FollowStore, goToPage: GoToP
     closed() {
       const page = shownPage()
       const ids = page ? trail.changedOn(page) : []
-      if (ids.length === 0) return
+      if (!page || ids.length === 0) return
+      const flashed = page.area === 'notes' ? flashedNoteIds : flashedShoppingIds
       // Neue Artikel trugen beim Anlegen eine vorläufige ID.
-      flashedShoppingIds.value = new Set(ids.map(shopping.currentItemId))
+      flashed.value = new Set(page.area === 'notes' ? ids : ids.map(shopping.currentItemId))
       window.clearTimeout(flashTimer)
       flashTimer = window.setTimeout(() => {
-        flashedShoppingIds.value = new Set()
+        flashed.value = new Set()
       }, FLASH_MS)
     },
   }
