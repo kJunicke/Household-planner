@@ -19,13 +19,14 @@ import {
   executeShoppingTool,
   shoppingContext,
 } from '@/lib/assistant/shoppingTools'
+import { createHistoryExpiry } from '@/lib/assistant/historyExpiry'
 import { useShoppingStore } from '@/stores/shoppingStore'
 
 const open = defineModel<boolean>('open', { required: true })
 const shoppingStore = useShoppingStore()
 
 interface Entry {
-  kind: 'user' | 'assistant' | 'action' | 'error'
+  kind: 'user' | 'assistant' | 'action' | 'error' | 'fresh'
   text: string
 }
 
@@ -33,6 +34,7 @@ interface Entry {
 const MAX_HISTORY = 24
 
 const history = ref<Message[]>([])
+const historyExpiry = createHistoryExpiry()
 const entries = ref<Entry[]>([])
 const draft = ref('')
 const busy = ref(false)
@@ -80,6 +82,13 @@ async function submit() {
   if (!question || busy.value) return
   draft.value = ''
   busy.value = true
+  const { history: kept, fresh } = historyExpiry.startQuestion(history.value)
+  history.value = kept
+  if (fresh)
+    entries.value.push({
+      kind: 'fresh',
+      text: 'Neues Gespräch: nach 30 Minuten ohne Frage ist der Verlauf darüber vergessen.',
+    })
   entries.value.push({ kind: 'user', text: question })
 
   try {
@@ -247,6 +256,15 @@ watch(open, async (isOpen) => {
   align-self: flex-start;
   color: var(--pw-accent);
   font-size: 0.9rem;
+}
+.assistant-entry.fresh {
+  align-self: stretch;
+  max-width: none;
+  text-align: center;
+  color: var(--pw-ink-soft);
+  font-size: 0.85rem;
+  border-top: 1px dashed var(--pw-line);
+  padding-top: 6px;
 }
 .assistant-entry.error {
   align-self: flex-start;
