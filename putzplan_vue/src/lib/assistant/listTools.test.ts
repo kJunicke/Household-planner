@@ -5,6 +5,7 @@ import type { CategoryRow } from '@/types/CategoryRow'
 import type { ListToolStores, ChecklistToolStore } from './listTools'
 import type { ShoppingToolStore } from './shoppingTools'
 import type { NotesToolStore } from './notesTools'
+import type { TaskToolStores } from './taskTools'
 import { assistantTools } from './tools'
 
 const key = (name: string) => name.trim().toLowerCase()
@@ -242,6 +243,7 @@ function setup(
     shopping: { lists: [], items: [] } as unknown as ShoppingToolStore,
     lists: stores,
     notes: { notes: [] } as unknown as NotesToolStore,
+    tasks: {} as TaskToolStores,
     goToPage: () => {},
     currentUserId: () => 'me',
   })

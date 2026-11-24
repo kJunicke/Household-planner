@@ -15,11 +15,13 @@ import { checklistTools, type ListToolStores } from './listTools'
 import { navigationTools } from './navigationTools'
 import { notesTools, type NotesToolStore } from './notesTools'
 import { shoppingTools, type ShoppingToolStore } from './shoppingTools'
+import { taskTools, type TaskToolStores } from './taskTools'
 
 /** Wo ein geänderter Eintrag in der App steht; zum Hinführen und Aufleuchten. */
 export type AssistantPage =
   | { area: 'shopping' | 'packing' | 'todo'; listId: string }
   | { area: 'notes' }
+  | { area: 'wall' }
 
 export interface ChangedEntry {
   id: string
@@ -78,6 +80,8 @@ export interface ToolDeps {
   /** Packlisten und To-do-Listen; dazu der Einkauf zum Anlegen und Umbenennen von Listen. */
   lists: ListToolStores
   notes: NotesToolStore
+  /** Die Aufgaben der Pinnwand, dazu das Wochenziel. */
+  tasks: TaskToolStores
   /** Bringt die App auf eine Seite (`createGoToPage`). */
   goToPage: (page: AppPage) => void
   /** Wer fragt; `null` abgemeldet. */
@@ -94,6 +98,7 @@ export function assistantTools(deps: ToolDeps): ToolRegistry {
     ...shoppingTools(deps.shopping),
     ...checklistTools(deps.lists),
     ...notesTools(deps.notes, deps.currentUserId),
+    ...taskTools(deps.tasks),
     ...navigationTools(deps.goToPage),
     ...guideTools(),
   ]

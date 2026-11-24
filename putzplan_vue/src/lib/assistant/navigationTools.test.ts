@@ -4,6 +4,7 @@ import type { AppPage } from '@/lib/appNavigation'
 import type { ListToolStores } from './listTools'
 import type { ShoppingToolStore } from './shoppingTools'
 import type { NotesToolStore } from './notesTools'
+import type { TaskToolStores } from './taskTools'
 import { assistantTools } from './tools'
 
 function registry() {
@@ -12,6 +13,7 @@ function registry() {
     shopping: { lists: [], items: [] } as unknown as ShoppingToolStore,
     lists: {} as ListToolStores,
     notes: { notes: [] } as unknown as NotesToolStore,
+    tasks: {} as TaskToolStores,
     goToPage: (page) => visited.push(page),
     currentUserId: () => 'me',
   })
