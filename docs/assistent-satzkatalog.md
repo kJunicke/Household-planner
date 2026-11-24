@@ -188,8 +188,8 @@ Weicht der Stand ab, die Sätze sinngemäß anpassen und das im Ergebnis vermerk
 | Nr | Satz | Erwartet |
 | --- | --- | --- |
 | P1 | Ich hab das Bad geputzt | Noch nicht: Aufgaben erledigt man auf der Pinnwand; kein Listenwerkzeug; `go_to_page` putzen erlaubt |
-| P2 | Leg eine Aufgabe Keller aufräumen mit acht Punkten an | Noch nicht; kein Listenwerkzeug |
-| P3 | Was ist heute dran? | Noch nicht (keine Aufgaben-Lesewerkzeuge); keine erfundene Antwort |
+| P2 | Leg eine Aufgabe Keller aufräumen mit acht Punkten an | Seit Stufe 2 möglich → S2 |
+| P3 | Was ist heute dran? | Seit Stufe 2 möglich → S1 |
 | P4 | Trag 30 Euro für Pizza in den Haushaltstopf ein, hab ich bezahlt | Noch nicht; kein Werkzeug; `go_to_page` topf/toepfe erlaubt |
 | P5 | Wer schuldet im Haushaltstopf wem was? | Noch nicht (kein Lesewerkzeug für Töpfe); keine erfundenen Beträge |
 | P6 | Lösch die Einkaufsliste Bauhaus | `delete_shopping_list` Bauhaus → Karte (nennt die Artikel) → „Löschen“ → Toast; Rückgängig bringt sie zurück |
@@ -208,3 +208,25 @@ Weicht der Stand ab, die Sätze sinngemäß anpassen und das im Ergebnis vermerk
 | Nr | Satz | Erwartet |
 | --- | --- | --- |
 | R1 | (nach mehr als 30 Minuten ohne Frage) Was steht auf der Drogerieliste? | Trennlinie „Neues Gespräch“ im Chat, dann `read_shopping_list` wie in B1 |
+
+## S. Aufgaben anlegen, zuweisen, verschieben, wieder dreckig, löschen und lesen
+
+Aufgaben stehen nicht in der Übersicht: vor jedem schreibenden Werkzeug ist `read_tasks` erlaubt.
+Jede Änderung führt die App auf die Pinnwand; beim Schließen des Chats leuchten Zettel und Zeilen im
+Erledigt-Streifen auf. Ausgangslage: die Zettel „QC-Raster …“ und „QC-Test …“ des QC-Testhaushalts;
+„QC-Raster Bad“ erledigt.
+
+| Nr | Satz | Erwartet |
+| --- | --- | --- |
+| S1 | Was ist gerade dran? | `read_tasks`; Antwort nennt die Aufgaben, die dran sind, nicht die erledigten |
+| S2 | Leg eine Aufgabe QC Keller aufräumen an, einmalig, acht Punkte | `create_task` one-time, 8 Punkte; Toast, neuer Zettel; Rückgängig nimmt ihn wieder ab |
+| S3 | leg noch eine aufgabe qc keller aufräumen an mit fünf punkten einmalig | Duplikat: nichts angelegt, Antwort nennt die bestehende Aufgabe |
+| S4 | Leg eine Aufgabe QC Fenster innen putzen an | Rückfrage nach Punkten (und Typ), kein `create_task` ohne Punkte |
+| S5 | qc-agent-2 soll den Keller machen | `assign_task` QC Keller aufräumen → qc-agent-2; Befestigung in seiner Farbe; Rückgängig: wieder niemand |
+| S6 | Verschieb QC-Test Sieben auf Freitag | `postpone_task` until = kommender Freitag; Zeile „→ TT.MM.“ im Erledigt-Streifen; Rückgängig: wieder dran |
+| S7 | verschieb qc-test projekt um zwei tage | Ablehnen: Projekte lassen sich nicht verschieben; kein Werkzeug, das etwas ändert |
+| S8 | QC-Raster Bad ist wieder dreckig | `mark_task_dirty`; Zettel zurück an der Wand, Punkte bleiben; Rückgängig: wieder erledigt |
+| S9 | Wer hat zuletzt QC-Raster Bad geputzt? | `read_task_history` (mit task_id); Antwort: wer und wann, nichts erfunden |
+| S10 | Wie steht das Wochenziel? | `read_weekly_goal`; Antwort: Ziel, Punkte der Woche, Anteile ohne Rangliste |
+| S11 | Lösch die Aufgabe QC-Raster Bad | `delete_task` → Karte („ihre Erledigungen bleiben im Verlauf“) → „Löschen“ → Toast; Rückgängig hängt denselben Zettel wieder hin; die Punkte im Wochenziel bleiben die ganze Zeit |
+| S12 | Lösch die Aufgabe QC Keller aufräumen | `delete_task` → Karte ohne Verlaufshinweis → „Abbrechen“ → nichts gelöscht |
