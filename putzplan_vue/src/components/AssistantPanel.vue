@@ -30,6 +30,7 @@ import { useGuestShareStore } from '@/stores/guestShareStore'
 import { useNotesStore } from '@/stores/notesStore'
 import { usePackingStore } from '@/stores/packingStore'
 import { useShoppingStore } from '@/stores/shoppingStore'
+import { useTaskStore } from '@/stores/taskStore'
 import { useTodoStore } from '@/stores/todoStore'
 import { useToastStore } from '@/stores/toastStore'
 import { useRouter } from 'vue-router'
@@ -49,6 +50,7 @@ const tools = assistantTools({
   shopping: shoppingStore,
   lists,
   notes: useNotesStore(),
+  taskCompletion: useTaskStore(),
   goToPage,
   currentUserId: () => authStore.user?.id ?? null,
 })

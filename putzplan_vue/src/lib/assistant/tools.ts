@@ -15,6 +15,7 @@ import { checklistTools, type ListToolStores } from './listTools'
 import { navigationTools } from './navigationTools'
 import { notesTools, type NotesToolStore } from './notesTools'
 import { shoppingTools, type ShoppingToolStore } from './shoppingTools'
+import { taskCompleteTools, type TaskCompleteToolStore } from './taskCompleteTools'
 
 /** Wo ein geänderter Eintrag in der App steht; zum Hinführen und Aufleuchten. */
 export type AssistantPage =
@@ -78,6 +79,8 @@ export interface ToolDeps {
   /** Packlisten und To-do-Listen; dazu der Einkauf zum Anlegen und Umbenennen von Listen. */
   lists: ListToolStores
   notes: NotesToolStore
+  /** Aufgaben erledigen und Quick-Aufgaben verbuchen. */
+  taskCompletion: TaskCompleteToolStore
   /** Bringt die App auf eine Seite (`createGoToPage`). */
   goToPage: (page: AppPage) => void
   /** Wer fragt; `null` abgemeldet. */
@@ -94,6 +97,7 @@ export function assistantTools(deps: ToolDeps): ToolRegistry {
     ...shoppingTools(deps.shopping),
     ...checklistTools(deps.lists),
     ...notesTools(deps.notes, deps.currentUserId),
+    ...taskCompleteTools(deps.taskCompletion),
     ...navigationTools(deps.goToPage),
     ...guideTools(),
   ]
