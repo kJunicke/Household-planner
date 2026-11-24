@@ -17,12 +17,16 @@ import {
 import { createHistoryExpiry } from '@/lib/assistant/historyExpiry'
 import { ensureShoppingLoaded, shoppingContext } from '@/lib/assistant/shoppingTools'
 import { assistantTools, type Change, type ToolOutcome } from '@/lib/assistant/tools'
+import { followApp } from '@/lib/assistant/followApp'
 import { useShoppingStore } from '@/stores/shoppingStore'
 import { useToastStore } from '@/stores/toastStore'
+import { useRouter } from 'vue-router'
 
 const open = defineModel<boolean>('open', { required: true })
 const shoppingStore = useShoppingStore()
 const tools = assistantTools({ shopping: shoppingStore })
+const follow = followApp(useRouter(), shoppingStore)
+watch(open, (isOpen) => (isOpen ? follow.opened() : follow.closed()))
 const toastStore = useToastStore()
 
 /** So lange bleibt ein Toast mit Rückgängig stehen; wie beim Löschen im Topf. */
@@ -90,12 +94,19 @@ function confirmDelete(what: string): Promise<boolean> {
 }
 const cardOpen = computed(() => entries.value.some((e) => e.card?.state === 'open'))
 
-/** Ein Toast je Änderung, auch für das, was erst hinter einer Lösch-Karte geschieht. */
-function announce(outcome: ToolOutcome): ToolOutcome {
+/**
+ * Ein Toast je Änderung, und die App folgt dem Chat; beides auch für das, was
+ * erst hinter einer Lösch-Karte geschieht.
+ */
+function announce(result: ToolOutcome): ToolOutcome {
+  const outcome = follow.track(result)
   outcome.changes?.forEach(toastChange)
   const card = outcome.deleteCard
-  if (card) outcome.deleteCard = { ...card, confirm: async () => announce(await card.confirm()) }
-  return outcome
+  if (!card) return outcome
+  return {
+    ...outcome,
+    deleteCard: { ...card, confirm: async () => announce(await card.confirm()) },
+  }
 }
 
 /**

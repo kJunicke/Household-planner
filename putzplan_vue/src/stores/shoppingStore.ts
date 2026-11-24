@@ -330,7 +330,15 @@ export const useShoppingStore = defineStore('shopping', () => {
    * DB row and re-point every still-queued mutation that referenced the temp id.
    * If realtime already inserted the real row, just drop the temp duplicate.
    */
+  /**
+   * Vorläufige ID → echte ID, für alle, die sich eine vorläufige gemerkt haben
+   * (der Assistent, um seine Änderungen beim Schließen aufleuchten zu lassen).
+   */
+  const syncedIds = new Map<string, string>()
+  const currentItemId = (id: string) => syncedIds.get(id) ?? id
+
   const reconcileTempId = (tempId: string, realItem: ShoppingItem) => {
+    syncedIds.set(tempId, realItem.shopping_item_id)
     const realExists = items.value.some((i) => i.shopping_item_id === realItem.shopping_item_id)
     const tempIdx = items.value.findIndex((i) => i.shopping_item_id === tempId)
     if (tempIdx !== -1) {
@@ -1377,6 +1385,7 @@ export const useShoppingStore = defineStore('shopping', () => {
     lists.value = []
     categories.value = []
     currentListId.value = null
+    syncedIds.clear()
     try {
       removeKeysWithPrefix(localStorage, STORAGE_KEY_ITEMS)
     } catch (error) {
@@ -1392,6 +1401,7 @@ export const useShoppingStore = defineStore('shopping', () => {
   return {
     items,
     lists,
+    currentItemId,
     currentListId,
     isLoading,
     isSyncing,

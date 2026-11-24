@@ -12,7 +12,7 @@
 import { shoppingTools, type ShoppingToolStore } from './shoppingTools'
 
 /** Wo ein geänderter Eintrag in der App steht; zum Hinführen und Aufleuchten. */
-type AssistantPage = { area: 'shopping'; listId: string }
+export type AssistantPage = { area: 'shopping'; listId: string }
 
 export interface ChangedEntry {
   id: string
