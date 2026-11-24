@@ -800,6 +800,16 @@ export const useTaskStore = defineStore('tasks', () => {
   }
 
   /**
+   * Kennung des offenen Fahrscheins einer Aufgabe, `undefined` ohne. Wer eine
+   * Erledigung später zurücknehmen will (der Assistent), merkt sie sich direkt
+   * nach `completeTask` und nimmt nur zurück, solange sie gleich ist: hat
+   * inzwischen eine neuere Erledigung derselben Aufgabe den Fahrschein ersetzt,
+   * träfe `undoCompletion` sonst die neuere.
+   */
+  const undoTicketOf = (taskId: string): string | undefined =>
+    undoTickets.get(taskId)?.clientMutationId
+
+  /**
    * ZURÜCKKLEBEN — die jüngste eigene Erledigung dieser Aufgabe zurücknehmen.
    *
    * **Was „rückgängig" auf Datenebene heißt.** `task_completions` ist
@@ -840,8 +850,17 @@ export const useTaskStore = defineStore('tasks', () => {
    * oben, vor dem ersten `await` — dieselbe Regel wie bei `completeTask`. Ein
    * `:disabled` am Fetzen schützt nicht, weil Vue das Attribut erst im nächsten
    * Tick schreibt.
+   *
+   * `restoreRating`: auch die Standardpunkte zurück, die das erste Bewerten
+   * mit dieser Erledigung gesetzt hat — die Aufgabe ist danach wieder
+   * unbewertet. Der Fetzen tut das nicht (gefragt wird einmal je Aufgabe); der
+   * Assistent schon, denn seine Rücknahme stellt den Stand davor her, und ein
+   * verhörter Punktwert soll nicht als Standard stehen bleiben.
    */
-  const undoCompletion = async (taskId: string): Promise<boolean> => {
+  const undoCompletion = async (
+    taskId: string,
+    options: { restoreRating?: boolean } = {},
+  ): Promise<boolean> => {
     const toastStore = useToastStore()
     const householdStore = useHouseholdStore()
 
@@ -913,6 +932,11 @@ export const useTaskStore = defineStore('tasks', () => {
             postponed_until: snapshot.postponed_until,
             assigned_to: snapshot.assigned_to,
             emphasis_level: snapshot.emphasis_level,
+            // Nur die erledigte Zeile: die Standardpunkte ihrer Unteraufgaben
+            // fasst eine Erledigung nicht an.
+            ...(options.restoreRating && snapshot.task_id === taskId
+              ? { effort: snapshot.effort }
+              : {}),
           })
           .eq('task_id', snapshot.task_id)
         if (error) return error
@@ -1053,7 +1077,13 @@ export const useTaskStore = defineStore('tasks', () => {
   // aktiven Liste noch unter "Erledigt" auftaucht) und schreibt direkt eine
   // Completion mit is_quick=true. RLS erlaubt den Client-Insert in
   // task_completions, daher keine Edge Function nötig.
-  const createQuickTask = async (quickData: { title: string; effort: number; note?: string }) => {
+  // Liefert die Aufgabe und die Kennung ihrer Erledigung; über die nimmt der
+  // Assistent die Quick-Aufgabe zurück (`deleteCompletion`). `quiet`: ohne den
+  // Erfolgs-Toast, den zeigt dann der Aufrufer.
+  const createQuickTask = async (
+    quickData: { title: string; effort: number; note?: string },
+    options: { quiet?: boolean } = {},
+  ): Promise<{ task: Task; completionId: string } | null> => {
     const householdStore = useHouseholdStore()
     const authStore = useAuthStore()
     const toastStore = useToastStore()
@@ -1094,17 +1124,21 @@ export const useTaskStore = defineStore('tasks', () => {
     }
 
     // 2. Completion direkt schreiben (Single Source of Truth für Punkte/Historie)
-    const { error: completionError } = await supabase.from('task_completions').insert({
-      task_id: task.task_id,
-      user_id: authStore.user.id,
-      effort_override: quickData.effort,
-      completion_note: quickData.note?.trim() || null,
-      is_quick: true,
-    })
+    const { data: completion, error: completionError } = await supabase
+      .from('task_completions')
+      .insert({
+        task_id: task.task_id,
+        user_id: authStore.user.id,
+        effort_override: quickData.effort,
+        completion_note: quickData.note?.trim() || null,
+        is_quick: true,
+      })
+      .select('completion_id')
+      .single()
 
     isLoading.value = false
 
-    if (completionError) {
+    if (completionError || !completion) {
       console.error('Error creating quick completion:', completionError)
       toastStore.showToast('Fehler beim Abschließen der Quick-Aufgabe', 'error')
       return null
@@ -1113,8 +1147,8 @@ export const useTaskStore = defineStore('tasks', () => {
     // Header-Stats (Wochenpunkte) aktualisieren
     await householdStore.loadWeeklyCompletions({ force: true })
 
-    toastStore.showToast('Quick-Aufgabe abgeschlossen', 'success', 3000)
-    return task
+    if (!options.quiet) toastStore.showToast('Quick-Aufgabe abgeschlossen', 'success', 3000)
+    return { task: task as Task, completionId: completion.completion_id as string }
   }
 
   // UPDATE - Task vollständig aktualisieren
@@ -1555,8 +1589,9 @@ export const useTaskStore = defineStore('tasks', () => {
 
   // DELETE COMPLETION - Lösche einen Task-Completion Eintrag aus Historie
   // Wichtig: Löscht NUR aus task_completions, ändert NICHT tasks.completed Status
-  const deleteCompletion = async (completionId: string) => {
+  const deleteCompletion = async (completionId: string, options: { quiet?: boolean } = {}) => {
     const toastStore = useToastStore()
+    const householdStore = useHouseholdStore()
     isLoading.value = true
 
     // `.select()` liefert die tatsächlich gelöschten Zeilen zurück. Die
@@ -1595,7 +1630,10 @@ export const useTaskStore = defineStore('tasks', () => {
     // Summen neu. Die Zeile hier wird erst dann zur Absicherung, wenn
     // Erledigungen auch bei geöffneter Wand gelöscht werden können.
     refreshProjectEffortTotals()
-    toastStore.showToast('Eintrag gelöscht', 'success', 3000)
+    // Die Punkte aus dem Wochenziel: das Löschen-Echo trägt nur die
+    // `completion_id`, die Wochenliste zieht es nicht nach.
+    await householdStore.loadWeeklyCompletions({ force: true })
+    if (!options.quiet) toastStore.showToast('Eintrag gelöscht', 'success', 3000)
     return true
   }
 
@@ -1856,6 +1894,7 @@ export const useTaskStore = defineStore('tasks', () => {
     completeTask,
     undoCompletion,
     discardUndoTicket,
+    undoTicketOf,
     markAsDirty,
     cycleEmphasisLevel,
     postponeTask,
