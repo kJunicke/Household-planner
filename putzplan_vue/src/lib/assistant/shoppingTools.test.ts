@@ -8,10 +8,35 @@ import { assistantTools } from './tools'
 type Item = ShoppingToolStore['items'][number]
 
 /** A stand-in for the shopping store; `fail` makes every write report failure, as the real store does when logged out. */
-function fakeStore(items: Partial<Item>[] = [], { fail = false } = {}): ShoppingToolStore {
+const key = (name: string) => name.trim().toLowerCase()
+
+function fakeStore(
+  items: Partial<Item>[] = [],
+  { fail = false, categories = [] as string[] } = {},
+): ShoppingToolStore {
   const store = {
     lists: [{ list_id: 'l1', name: 'Einkauf' }],
-    items: items.map((i) => ({ list_id: 'l1', purchased: false, quantity: 1, ...i })),
+    items: items.map((i) => ({ list_id: 'l1', purchased: false, quantity: 1, category: null, ...i })),
+    categories: categories.map((name, n) => ({ category_id: `c${n}`, list_id: 'l1', name })),
+    currentListId: null as string | null,
+    // Wie der echte Store: die Kategorie hängt an der offenen Liste, ein bekannter Name behält seine Schreibweise.
+    createCategory: async (name: string) => {
+      if (fail || !store.currentListId) return null
+      const row = store.categories.find(
+        (c) => c.list_id === store.currentListId && key(c.name) === key(name),
+      )
+      if (row) return row.name
+      store.categories.push({ category_id: `cat-${name}`, list_id: store.currentListId, name })
+      return name
+    },
+    deleteCategory: async (name: string) => {
+      store.categories = store.categories.filter(
+        (c) => !(c.list_id === store.currentListId && key(c.name) === key(name)),
+      )
+      for (const i of store.items) {
+        if (i.list_id === store.currentListId && key(i.category ?? '') === key(name)) i.category = null
+      }
+    },
     loadLists: async () => {},
     loadItems: async () => {},
     suggestCategoryFor: () => null,
@@ -31,14 +56,24 @@ function fakeStore(items: Partial<Item>[] = [], { fail = false } = {}): Shopping
         quantity,
         list_id: listId,
         purchased: false,
+        category: null,
       }
       store.items.push(item)
       return item
     },
+    // Wie der echte Store: jeder Kauf zählt mit und trägt Zeit und Käufer ein.
     markPurchased: async (id: string) => {
       if (fail) return false
       const item = store.items.find((i) => i.shopping_item_id === id)!
       item.purchased = true
+      item.times_purchased = (item.times_purchased ?? 0) + 1
+      item.last_purchased_at = '2026-11-24T12:00:00Z'
+      item.last_purchased_by = 'me'
+      return true
+    },
+    setPurchaseState: async (id: string, state: Partial<Item>) => {
+      if (fail) return false
+      Object.assign(store.items.find((i) => i.shopping_item_id === id)!, state)
       return true
     },
     markUnpurchased: async (id: string) => {
@@ -74,6 +109,7 @@ const executeShoppingTool = (
     lists: {} as ListToolStores,
     notes: { notes: [] } as unknown as NotesToolStore,
     goToPage: () => {},
+    currentUserId: () => 'me',
   }).execute(name, input)
 
 describe('add_shopping_items', () => {
@@ -113,6 +149,24 @@ describe('add_shopping_items', () => {
 
     expect(await outcome.undo!()).toBe(true)
     expect(store.items).toMatchObject([{ name: 'Eier', purchased: true, quantity: 1 }])
+  })
+
+  it('taking back a reopened item restores its purchase counter, date and buyer exactly', async () => {
+    const bought = {
+      shopping_item_id: 'i1',
+      name: 'Eier',
+      purchased: true,
+      times_purchased: 4,
+      last_purchased_at: '2026-11-01T09:00:00Z',
+      last_purchased_by: 'anna',
+    }
+    const store = fakeStore([bought])
+    const outcome = await executeShoppingTool(store, 'add_shopping_items', {
+      list_id: 'l1',
+      items: [{ name: 'Eier' }],
+    })
+    expect(await outcome.undo!()).toBe(true)
+    expect(store.items).toMatchObject([bought])
   })
 
   it('reports each added item as its own change; taking back the middle one removes only that item', async () => {
@@ -159,6 +213,66 @@ describe('add_shopping_items', () => {
   })
 })
 
+describe('update_shopping_items', () => {
+  it('renames an item and changes its quantity; taking it back restores both', async () => {
+    const store = fakeStore([{ shopping_item_id: 'i1', name: 'Tomate', quantity: 1 }])
+    const outcome = await executeShoppingTool(store, 'update_shopping_items', {
+      items: [{ item_id: 'i1', name: 'Cherrytomaten', quantity: 2 }],
+    })
+    expect(store.items).toMatchObject([{ name: 'Cherrytomaten', quantity: 2 }])
+    expect(outcome.summary).toBe('✓ geändert: Tomate → „Cherrytomaten“, ×2')
+    expect(outcome.changed).toEqual([{ id: 'i1', page: { area: 'shopping', listId: 'l1' } }])
+    expect(await outcome.undo!()).toBe(true)
+    expect(store.items).toMatchObject([{ name: 'Tomate', quantity: 1 }])
+  })
+
+  it('files an item under an existing category in its spelling; taking it back restores the old one', async () => {
+    const store = fakeStore([{ shopping_item_id: 'i1', name: 'Milch' }], { categories: ['Kühlregal'] })
+    const outcome = await executeShoppingTool(store, 'update_shopping_items', {
+      items: [{ item_id: 'i1', category: 'kühlregal' }],
+    })
+    expect(store.items[0]!.category).toBe('Kühlregal')
+    expect(outcome.changes).toHaveLength(1)
+    expect(await outcome.undo!()).toBe(true)
+    expect(store.items[0]!.category).toBeNull()
+    expect(store.categories.map((c) => c.name)).toEqual(['Kühlregal'])
+  })
+
+  it('creates a missing category as its own change; taking all back removes it again', async () => {
+    const store = fakeStore([{ shopping_item_id: 'i1', name: 'Apfel' }])
+    const outcome = await executeShoppingTool(store, 'update_shopping_items', {
+      items: [{ item_id: 'i1', category: 'Obst' }],
+    })
+    expect(store.items[0]!.category).toBe('Obst')
+    expect(outcome.changes!.map((c) => c.summary)).toEqual([
+      '✓ neue Kategorie: Obst (Einkauf)',
+      '✓ geändert: Apfel → Kategorie Obst',
+    ])
+    expect(await outcome.undo!()).toBe(true)
+    expect(store.items[0]!.category).toBeNull()
+    expect(store.categories).toEqual([])
+  })
+
+  it('takes an item out of its category with an empty category', async () => {
+    const store = fakeStore([{ shopping_item_id: 'i1', name: 'Milch', category: 'Kühlregal' }], {
+      categories: ['Kühlregal'],
+    })
+    await executeShoppingTool(store, 'update_shopping_items', {
+      items: [{ item_id: 'i1', category: '' }],
+    })
+    expect(store.items[0]!.category).toBeNull()
+  })
+
+  it('rejects an unknown item id and changes nothing', async () => {
+    const store = fakeStore([{ shopping_item_id: 'i1', name: 'Milch' }])
+    const outcome = await executeShoppingTool(store, 'update_shopping_items', {
+      items: [{ item_id: 'erfunden', name: 'Hafermilch' }],
+    })
+    expect(outcome.isError).toBe(true)
+    expect(store.items[0]!.name).toBe('Milch')
+  })
+})
+
 describe('mark_shopping_items_purchased', () => {
   it('checks off an open item', async () => {
     const store = fakeStore([{ shopping_item_id: 'i1', name: 'Brot' }])
@@ -177,6 +291,24 @@ describe('mark_shopping_items_purchased', () => {
     expect(outcome.changed).toEqual([{ id: 'i1', page: { area: 'shopping', listId: 'l1' } }])
     expect(await outcome.undo!()).toBe(true)
     expect(store.items[0]!.purchased).toBe(false)
+  })
+
+  it('taking a check-off back restores the purchase counter, date and buyer of before', async () => {
+    const open = {
+      shopping_item_id: 'i1',
+      name: 'Brot',
+      purchased: false,
+      times_purchased: 2,
+      last_purchased_at: '2026-10-01T09:00:00Z',
+      last_purchased_by: 'anna',
+    }
+    const store = fakeStore([open])
+    const outcome = await executeShoppingTool(store, 'mark_shopping_items_purchased', {
+      item_ids: ['i1'],
+    })
+    expect(store.items[0]!.times_purchased).toBe(3)
+    expect(await outcome.undo!()).toBe(true)
+    expect(store.items).toMatchObject([open])
   })
 
   it('reports each checked-off item as its own change; taking one back reopens only that item', async () => {

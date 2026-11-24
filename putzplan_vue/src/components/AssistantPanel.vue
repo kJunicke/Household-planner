@@ -1,6 +1,7 @@
 <script setup lang="ts">
 /**
- * Chat mit dem Assistenten (erste Fassung: nur Einkaufslisten).
+ * Chat mit dem Assistenten: Listen und Notizen per Satz, mit Toast und
+ * Rückgängig je Änderung und einer Karte vor jedem Löschen.
  *
  * Der Verlauf lebt in dieser Komponente. Sie hängt im Header, der beim
  * Seitenwechsel stehen bleibt, und Schließen blendet nur das Panel aus: so
@@ -16,9 +17,16 @@ import {
 } from '@/lib/assistant/runAssistant'
 import { createHistoryExpiry } from '@/lib/assistant/historyExpiry'
 import { captureOverview } from '@/lib/assistant/captureOverview'
-import { assistantTools, type Change, type ToolOutcome } from '@/lib/assistant/tools'
+import {
+  assistantTools,
+  undoFailedText,
+  type Change,
+  type ToolOutcome,
+} from '@/lib/assistant/tools'
 import { followApp } from '@/lib/assistant/followApp'
 import { useGoToPage } from '@/composables/useGoToPage'
+import { useAuthStore } from '@/stores/authStore'
+import { useGuestShareStore } from '@/stores/guestShareStore'
 import { useNotesStore } from '@/stores/notesStore'
 import { usePackingStore } from '@/stores/packingStore'
 import { useShoppingStore } from '@/stores/shoppingStore'
@@ -29,8 +37,21 @@ import { useRouter } from 'vue-router'
 const open = defineModel<boolean>('open', { required: true })
 const shoppingStore = useShoppingStore()
 const goToPage = useGoToPage()
-const lists = { shopping: shoppingStore, packing: usePackingStore(), todo: useTodoStore() }
-const tools = assistantTools({ shopping: shoppingStore, lists, notes: useNotesStore(), goToPage })
+const guestShares = useGuestShareStore()
+const authStore = useAuthStore()
+const lists = {
+  shopping: shoppingStore,
+  packing: usePackingStore(),
+  todo: useTodoStore(),
+  hasGuestLink: (listId: string) => guestShares.shares.some((s) => s.target_id === listId),
+}
+const tools = assistantTools({
+  shopping: shoppingStore,
+  lists,
+  notes: useNotesStore(),
+  goToPage,
+  currentUserId: () => authStore.user?.id ?? null,
+})
 const follow = followApp(useRouter(), shoppingStore, goToPage, lists)
 watch(open, (isOpen) => (isOpen ? follow.opened() : follow.closed()))
 const toastStore = useToastStore()
@@ -48,7 +69,7 @@ function toastChange(change: Change) {
     icon: 'bi-arrow-counterclockwise',
     run: async () => {
       if (!(await change.undo())) {
-        toastStore.showToast(`Rücknahme fehlgeschlagen: ${change.summary}`, 'error')
+        toastStore.showToast(undoFailedText(change.summary, navigator.onLine), 'error')
         return
       }
       undone.push(change.summary)

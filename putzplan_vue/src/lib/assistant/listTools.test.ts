@@ -81,9 +81,19 @@ function fakeChecklist(
       store.items.push(item)
       return item
     },
+    // Wie der echte Store: weniger Menge kürzt den gepackten Stand mit.
     updateItem: async (itemId: string, patch: Partial<ChecklistItem>) => {
       if (fail) return false
-      Object.assign(store.items.find((i) => i.item_id === itemId)!, patch)
+      const item = store.items.find((i) => i.item_id === itemId)!
+      Object.assign(item, patch)
+      if (item.packed_count > item.quantity) item.packed_count = item.quantity
+      return true
+    },
+    setItemState: async (itemId: string, state: Partial<ChecklistItem>) => {
+      if (fail) return false
+      const item = store.items.find((i) => i.item_id === itemId)
+      if (!item) return false
+      Object.assign(item, state)
       return true
     },
     togglePacked: async (itemId: string) => {
@@ -95,6 +105,23 @@ function fakeChecklist(
     removeItem: async (itemId: string) => {
       if (fail) return false
       store.items = store.items.filter((i) => i.item_id !== itemId)
+      return true
+    },
+    copyList: async (sourceId: string, name: string) => {
+      if (fail) return null
+      const list = { list_id: `copy-${name}`, name, notes: null } as ChecklistList
+      store.lists.push(list)
+      for (const i of store.items.filter((i) => i.list_id === sourceId)) {
+        store.items.push({ ...i, item_id: `copy-${i.item_id}`, list_id: list.list_id, packed: false, packed_count: 0 })
+      }
+      store.currentListId = list.list_id
+      return list
+    },
+    resetAllUnpacked: async (listId: string) => {
+      if (fail) return false
+      for (const i of store.items) {
+        if (i.list_id === listId) Object.assign(i, { packed: false, packed_count: 0 })
+      }
       return true
     },
     restore: async (snapshot: {
@@ -152,10 +179,16 @@ function fakeChecklist(
 
 type FakeChecklist = ReturnType<typeof fakeChecklist>
 
+type Row = Record<string, unknown> & { list_id: string }
+
 function fakeShopping() {
   const store = {
     lists: [{ list_id: 's1', name: 'Einkauf' }] as { list_id: string; name: string }[],
-    items: [],
+    items: [
+      { shopping_item_id: 'si1', list_id: 's1', name: 'Milch', purchased: false },
+      { shopping_item_id: 'si2', list_id: 's1', name: 'Brot', purchased: true, times_purchased: 7 },
+    ] as Row[],
+    categories: [{ category_id: 'sc1', list_id: 's1', name: 'Kühlregal' }] as Row[],
     currentListId: 's1' as string | null,
     createList: async (name: string) => {
       const list = { list_id: `new-${name}`, name }
@@ -169,6 +202,18 @@ function fakeShopping() {
     },
     deleteList: async (listId: string) => {
       store.lists = store.lists.filter((l) => l.list_id !== listId)
+      store.items = store.items.filter((i) => i.list_id !== listId)
+      store.categories = store.categories.filter((c) => c.list_id !== listId)
+      return true
+    },
+    restoreList: async (snapshot: {
+      list: { list_id: string; name: string }
+      categories: Row[]
+      items: Row[]
+    }) => {
+      store.lists.push(snapshot.list)
+      store.categories.push(...snapshot.categories)
+      store.items.push(...snapshot.items)
       return true
     },
   }
@@ -179,7 +224,7 @@ function fakeShopping() {
 function setup(
   todoSeed: Parameters<typeof fakeChecklist>[0] = {},
   packingSeed: Parameters<typeof fakeChecklist>[0] = {},
-  opts: { fail?: boolean } = {},
+  opts: { fail?: boolean; sharedListIds?: string[] } = {},
 ) {
   const todo = fakeChecklist({ lists: [{ list_id: 't1', name: 'Putztag' }], ...todoSeed }, opts)
   const packing = fakeChecklist(
@@ -191,12 +236,14 @@ function setup(
     shopping,
     packing,
     todo,
+    hasGuestLink: (listId: string) => (opts.sharedListIds ?? []).includes(listId),
   } as unknown as ListToolStores
   const registry = assistantTools({
     shopping: { lists: [], items: [] } as unknown as ShoppingToolStore,
     lists: stores,
     notes: { notes: [] } as unknown as NotesToolStore,
     goToPage: () => {},
+    currentUserId: () => 'me',
   })
   return { todo, packing, shopping, run: registry.execute }
 }
@@ -351,6 +398,23 @@ describe('update_checklist_entries', () => {
     expect(outcome.changed).toEqual([{ id: 'g1', page: { area: 'packing', listId: 'p1' } }])
     expect(await outcome.undo!()).toBe(true)
     expect(packing.items).toMatchObject([{ name: 'Zahnbürste', quantity: 1, category: null }])
+  })
+
+  it('lowering the quantity cuts the packed count; taking it back restores both', async () => {
+    const { packing, run } = setup(
+      {},
+      {
+        items: [
+          { item_id: 'g1', list_id: 'p1', name: 'Socken', quantity: 3, packed_count: 3, packed: true },
+        ],
+      },
+    )
+    const outcome = await run('update_checklist_entries', {
+      entries: [{ entry_id: 'g1', quantity: 1 }],
+    })
+    expect(packing.items).toMatchObject([{ quantity: 1, packed_count: 1 }])
+    expect(await outcome.undo!()).toBe(true)
+    expect(packing.items).toMatchObject([{ quantity: 3, packed_count: 3, packed: true }])
   })
 
   it('takes an entry out of its category with an empty category', async () => {
@@ -545,6 +609,14 @@ describe('delete_checklist', () => {
     expect(todo.lists).toHaveLength(1)
   })
 
+  it('names a guest link on the list: it ends with the list and taking back does not return it', async () => {
+    const { run } = setup(seed, {}, { sharedListIds: ['t1'] })
+    const outcome = await run('delete_checklist', { list_id: 't1' })
+    expect(outcome.deleteCard!.what).toBe(
+      'To-do-Liste „Putztag“ mit 2 Einträgen; ihr Gastlink endet und kommt mit Rückgängig nicht zurück',
+    )
+  })
+
   it('deletes once confirmed; taking it back returns the list, its categories and entries', async () => {
     const { todo, run } = setup(seed)
     const outcome = await (await run('delete_checklist', { list_id: 't1' })).deleteCard!.confirm()
@@ -561,6 +633,114 @@ describe('delete_checklist', () => {
     const outcome = await setup(seed).run('delete_checklist', { list_id: 's1' })
     expect(outcome.isError).toBe(true)
     expect(outcome.deleteCard).toBeUndefined()
+  })
+})
+
+describe('delete_shopping_list', () => {
+  it('lays a card naming the list with its open and bought items', async () => {
+    const { shopping, run } = setup()
+    const outcome = await run('delete_shopping_list', { list_id: 's1' })
+    expect(outcome.deleteCard!.what).toBe('Einkaufsliste „Einkauf“ mit 1 offenen und 1 gekauften Artikel')
+    expect(shopping.lists).toHaveLength(1)
+  })
+
+  it('names a guest link on the list on the card', async () => {
+    const { run } = setup({}, {}, { sharedListIds: ['s1'] })
+    const outcome = await run('delete_shopping_list', { list_id: 's1' })
+    expect(outcome.deleteCard!.what).toContain(
+      '; ihr Gastlink endet und kommt mit Rückgängig nicht zurück',
+    )
+  })
+
+  it('deletes once confirmed; taking it back returns the list with its categories and items, purchase history included', async () => {
+    const { shopping, run } = setup()
+    const outcome = await (await run('delete_shopping_list', { list_id: 's1' })).deleteCard!.confirm()
+    expect(shopping.lists).toEqual([])
+    expect(outcome.summary).toBe('✓ gelöscht: Einkaufsliste „Einkauf“ mit 1 offenen und 1 gekauften Artikel')
+    expect(await outcome.undo!()).toBe(true)
+    expect(shopping.lists.map((l) => l.list_id)).toEqual(['s1'])
+    expect(shopping.categories.map((c) => c.category_id)).toEqual(['sc1'])
+    expect(shopping.items).toMatchObject([
+      { shopping_item_id: 'si1', purchased: false },
+      { shopping_item_id: 'si2', purchased: true, times_purchased: 7 },
+    ])
+  })
+
+  it('rejects a list that is no Einkaufsliste without a card', async () => {
+    const outcome = await setup().run('delete_shopping_list', { list_id: 't1' })
+    expect(outcome.isError).toBe(true)
+    expect(outcome.deleteCard).toBeUndefined()
+  })
+})
+
+describe('copy_checklist', () => {
+  it('copies a list with its entries under a new name; taking it back deletes the copy', async () => {
+    const { packing, run } = setup(
+      {},
+      { items: [{ item_id: 'a', list_id: 'p1', name: 'Socken', packed: true, packed_count: 1 }] },
+    )
+    const outcome = await run('copy_checklist', { list_id: 'p1', name: 'Sommer' })
+    expect(packing.lists.map((l) => l.name)).toEqual(['Urlaub', 'Sommer'])
+    expect(outcome.summary).toBe('✓ kopiert: Urlaub → Sommer')
+    expect(outcome.result).toContain('copy-Sommer')
+    expect(outcome.changed).toEqual([
+      { id: 'copy-Sommer', page: { area: 'packing', listId: 'copy-Sommer' } },
+    ])
+    expect(await outcome.undo!()).toBe(true)
+    expect(packing.lists.map((l) => l.name)).toEqual(['Urlaub'])
+    expect(packing.items.map((i) => i.item_id)).toEqual(['a'])
+  })
+
+  it('rejects an unknown list id or an empty name', async () => {
+    const { run } = setup()
+    expect((await run('copy_checklist', { list_id: 'x', name: 'Y' })).isError).toBe(true)
+    expect((await run('copy_checklist', { list_id: 'p1', name: ' ' })).isError).toBe(true)
+  })
+})
+
+describe('reset_checklist', () => {
+  const seed = {
+    items: [
+      { item_id: 'a', list_id: 'p1', name: 'Socken', quantity: 2, packed_count: 2, packed: true },
+      { item_id: 'b', list_id: 'p1', name: 'Hemd', quantity: 3, packed_count: 1, packed: false },
+      { item_id: 'c', list_id: 'p1', name: 'Hose' },
+    ],
+  }
+
+  it('opens every entry of the list again, as one change that lights up the reset entries', async () => {
+    const { packing, run } = setup({}, seed)
+    const outcome = await run('reset_checklist', { list_id: 'p1' })
+    expect(packing.items.map((i) => [i.packed, i.packed_count])).toEqual([
+      [false, 0],
+      [false, 0],
+      [false, 0],
+    ])
+    expect(outcome.summary).toBe('✓ zurückgesetzt: Urlaub (2 Einträge wieder offen)')
+    expect(outcome.changes).toHaveLength(1)
+    expect(outcome.changed!.map((c) => c.id)).toEqual(['a', 'b'])
+  })
+
+  it('taking it back checks exactly the entries of before again, with their packed counts', async () => {
+    const { packing, run } = setup({}, seed)
+    const outcome = await run('reset_checklist', { list_id: 'p1' })
+    expect(await outcome.undo!()).toBe(true)
+    expect(packing.items).toMatchObject([
+      { item_id: 'a', packed: true, packed_count: 2 },
+      { item_id: 'b', packed: false, packed_count: 1 },
+      { item_id: 'c', packed: false, packed_count: 0 },
+    ])
+  })
+
+  it('changes nothing on a list where nothing is checked', async () => {
+    const { run } = setup({}, { items: [{ item_id: 'c', list_id: 'p1', name: 'Hose' }] })
+    const outcome = await run('reset_checklist', { list_id: 'p1' })
+    expect(outcome.isError).toBeFalsy()
+    expect(outcome.changes).toBeUndefined()
+    expect(outcome.result).toContain('nichts abgehakt')
+  })
+
+  it('rejects an unknown list id', async () => {
+    expect((await setup().run('reset_checklist', { list_id: 'x' })).isError).toBe(true)
   })
 })
 

@@ -10,7 +10,7 @@ type Note = NotesToolStore['notes'][number]
 /** A stand-in for the notes store; `fail` makes every write report failure, as the real store does when logged out. */
 function fakeStore(notes: Partial<Note>[] = [], { fail = false } = {}) {
   const store = {
-    notes: notes.map((n) => ({ created_at: '2026-11-01T10:00:00Z', ...n }) as Note),
+    notes: notes.map((n) => ({ created_at: '2026-11-01T10:00:00Z', created_by: 'me', ...n }) as Note),
     loadNotes: async () => {},
     createNote: async (content: string) => {
       if (fail) return null
@@ -47,6 +47,7 @@ const executeNotesTool = (
     lists: {} as ListToolStores,
     notes: store as unknown as NotesToolStore,
     goToPage: () => {},
+    currentUserId: () => 'me',
   }).execute(name, input)
 
 const contentOf = (store: ReturnType<typeof fakeStore>, id: string) =>
@@ -205,6 +206,14 @@ describe('delete_note', () => {
     const outcome = await executeNotesTool(store, 'delete_note', { note_id: 'n1' })
     expect(outcome.deleteCard!.what).toBe('Notiz „Handwerker“')
     expect(store.notes).toHaveLength(1)
+  })
+
+  it("says on the card that another member's note comes back under the asker's name", async () => {
+    const store = fakeStore([{ ...notes()[0], created_by: 'anna' }])
+    const outcome = await executeNotesTool(store, 'delete_note', { note_id: 'n1' })
+    expect(outcome.deleteCard!.what).toBe(
+      'Notiz „Handwerker“ von einem anderen Mitglied; mit Rückgängig käme sie unter deinem Namen zurück',
+    )
   })
 
   it('deletes once the card is confirmed, and tells Claude and the user', async () => {

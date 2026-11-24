@@ -478,8 +478,14 @@ export function createChecklistStore(config: ChecklistStoreConfig) {
      * kopiert: übernommen werden nur `name` und `sort_order`, die neue Zeile
      * bekommt ihre eigene, echte `list_id` — der offene Sync-Zustand der
      * Quellzeile hat darauf keinen Einfluss.
+     *
+     * `quiet`: ohne Erfolgs-Toast; der Assistent zeigt seinen eigenen mit Rückgängig.
      */
-    const copyList = async (sourceListId: string, newName: string) => {
+    const copyList = async (
+      sourceListId: string,
+      newName: string,
+      opts: { quiet?: boolean } = {},
+    ) => {
       const householdStore = useHouseholdStore()
       const authStore = useAuthStore()
       const toastStore = useToastStore()
@@ -538,7 +544,7 @@ export function createChecklistStore(config: ChecklistStoreConfig) {
 
         lists.value.push(newList)
         currentListId.value = newList.list_id
-        toastStore.showToast('Liste kopiert', 'success', 2000)
+        if (!opts.quiet) toastStore.showToast('Liste kopiert', 'success', 2000)
         return newList as ChecklistList
       } catch (error) {
         console.error(`Error copying ${listsTable} row:`, error)
@@ -1103,6 +1109,19 @@ export function createChecklistStore(config: ChecklistStoreConfig) {
       })
 
     /**
+     * Setzt Felder eines Eintrags genau auf diese Werte, ohne Kappen und ohne
+     * Kanonisieren: für das Rückgängig des Assistenten, das den Stand vor
+     * einer Änderung zurückbringt (etwa den gepackten Stand, den eine kleinere
+     * Menge gekürzt hatte).
+     */
+    const setItemState = (
+      itemId: string,
+      state: Partial<
+        Pick<ChecklistItem, 'name' | 'category' | 'quantity' | 'packed' | 'packed_count'>
+      >,
+    ) => patchItem(itemId, () => ({ ...state }))
+
+    /**
      * Shared optimistic patch helper. `mutate` returns the DB patch to apply,
      * or null to abort (no-op). Reverts local state on error. `false` only when
      * the entry is unknown or the write failed.
@@ -1208,8 +1227,11 @@ export function createChecklistStore(config: ChecklistStoreConfig) {
       }
     }
 
-    /** Reset a whole list: packed_count → 0 AND packed → false for every item. */
-    const resetAllUnpacked = async (listId: string) => {
+    /**
+     * Reset a whole list: packed_count → 0 AND packed → false for every item.
+     * `quiet`: ohne Erfolgs-Toast; der Assistent zeigt seinen eigenen mit Rückgängig.
+     */
+    const resetAllUnpacked = async (listId: string, opts: { quiet?: boolean } = {}) => {
       const toastStore = useToastStore()
       const prev = items.value.map((i) => ({ ...i }))
 
@@ -1224,11 +1246,13 @@ export function createChecklistStore(config: ChecklistStoreConfig) {
           .eq('list_id', listId)
 
         if (error) throw error
-        toastStore.showToast(labels.resetSuccess, 'success', 2000)
+        if (!opts.quiet) toastStore.showToast(labels.resetSuccess, 'success', 2000)
+        return true
       } catch (error) {
         console.error(`Error resetting ${itemsTable}:`, error)
         items.value = prev
         toastStore.showToast('Fehler beim Zurücksetzen', 'error')
+        return false
       }
     }
 
@@ -1425,6 +1449,7 @@ export function createChecklistStore(config: ChecklistStoreConfig) {
       incrementPacked,
       decrementPacked,
       updateItem,
+      setItemState,
       removeItem,
       restore,
       resetAllUnpacked,

@@ -124,18 +124,27 @@ async function rewriteNote(store: NotesToolStore, input: Record<string, unknown>
 
 /**
  * Löscht erst nach der Karte im Chat. Die Rücknahme legt die Notiz mit ihrer
- * ID, ihrem Text und ihrem Datum wieder an.
+ * ID, ihrem Text und ihrem Datum wieder an, aber unter dem Namen dessen, der
+ * fragt: die Datenbank lässt niemanden eine Notiz für einen anderen anlegen.
+ * Bei der Notiz eines anderen sagt das die Karte.
  */
-function deleteNote(store: NotesToolStore, input: Record<string, unknown>): ToolOutcome {
+function deleteNote(
+  store: NotesToolStore,
+  currentUserId: () => string | null,
+  input: Record<string, unknown>,
+): ToolOutcome {
   const found = findNote(store, input)
   if (!('note_id' in found)) return found
   // Der Stand von jetzt: was die Karte nennt, wird gelöscht und zurückgeholt.
   const note = { ...found }
   const title = noteTitle(note.content)
+  const someoneElses = note.created_by !== currentUserId()
   return {
     result: 'Wartet auf die Bestätigung des Nutzers.',
     deleteCard: {
-      what: `Notiz „${title}“`,
+      what: someoneElses
+        ? `Notiz „${title}“ von einem anderen Mitglied; mit Rückgängig käme sie unter deinem Namen zurück`
+        : `Notiz „${title}“`,
       confirm: async () => {
         if (!(await store.deleteNote(note.note_id, QUIET))) {
           return {
@@ -161,7 +170,10 @@ function deleteNote(store: NotesToolStore, input: Record<string, unknown>): Tool
 
 const NOTE_ID = { type: 'string', description: 'ID der Notiz aus der Übersicht' }
 
-export const notesTools = (store: NotesToolStore): AssistantTool[] => [
+export const notesTools = (
+  store: NotesToolStore,
+  currentUserId: () => string | null,
+): AssistantTool[] => [
   {
     name: 'read_note',
     description:
@@ -225,6 +237,6 @@ export const notesTools = (store: NotesToolStore): AssistantTool[] => [
       'die App dem Nutzer eine Karte mit „Löschen“ und „Abbrechen“; frag darum nicht selbst ' +
       'nach, und melde das Löschen erst, wenn das Ergebnis es bestätigt.',
     input_schema: { type: 'object', properties: { note_id: NOTE_ID }, required: ['note_id'] },
-    execute: async (input) => deleteNote(store, input),
+    execute: async (input) => deleteNote(store, currentUserId, input),
   },
 ]

@@ -7,6 +7,7 @@
  * App: optimistisch, offline-fähig, per Echtzeit beim anderen sichtbar.
  */
 import type { useShoppingStore } from '@/stores/shoppingStore'
+import { normalizeCategoryName } from '@/lib/categoryOrder'
 import {
   undoAll,
   type AssistantTool,
@@ -23,6 +24,8 @@ export type ShoppingToolStore = Pick<
   ReturnType<typeof useShoppingStore>,
   | 'lists'
   | 'items'
+  | 'categories'
+  | 'currentListId'
   | 'loadLists'
   | 'loadItems'
   | 'createItem'
@@ -30,7 +33,10 @@ export type ShoppingToolStore = Pick<
   | 'restoreItem'
   | 'markPurchased'
   | 'markUnpurchased'
+  | 'setPurchaseState'
   | 'updateItem'
+  | 'createCategory'
+  | 'deleteCategory'
   | 'suggestCategoryFor'
 >
 
@@ -41,6 +47,14 @@ export async function ensureShoppingLoaded(store: ShoppingToolStore) {
 }
 
 const sameName = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase()
+
+/** Der Kaufstand eines Artikels, zum genauen Zurückstellen. */
+const purchaseState = (item: ShoppingToolStore['items'][number]) => ({
+  purchased: item.purchased,
+  times_purchased: item.times_purchased,
+  last_purchased_at: item.last_purchased_at,
+  last_purchased_by: item.last_purchased_by,
+})
 
 /**
  * Ein neuer Artikel trägt erst eine vorläufige ID, die der Store nach dem
@@ -87,17 +101,18 @@ async function addShoppingItems(
     if (purchased) {
       const id = purchased.shopping_item_id
       const previousQuantity = purchased.quantity
+      const before = purchaseState(purchased)
       if (!(await store.markUnpurchased(id))) {
         failed.push(name)
         continue
       }
       if (quantity !== previousQuantity) await store.updateItem(id, { quantity })
-      // Zurück auf gekauft. markPurchased zählt den Kauf dabei ein zweites Mal
-      // mit; einen Weg zurück ohne Zählen hat der Store nicht.
+      // Zurück auf gekauft, mit dem Kaufzähler von vorher: markPurchased
+      // zählte einen Kauf, den es nie gab.
       changes.push({
         summary: `✓ ${label} → ${list.name}`,
         undo: async () => {
-          const bought = await store.markPurchased(id)
+          const bought = await store.setPurchaseState(id, before)
           if (quantity === previousQuantity) return bought
           return (await store.updateItem(id, { quantity: previousQuantity })) && bought
         },
@@ -160,10 +175,15 @@ async function markShoppingItemsPurchased(
       unknown.push(id)
       continue
     }
+    const before = purchaseState(item)
     if (await store.markPurchased(id)) {
       names.push(item.name)
       changed.push({ id, page: { area: 'shopping', listId: item.list_id } })
-      changes.push({ summary: `✓ abgehakt: ${item.name}`, undo: () => store.markUnpurchased(id) })
+      // Offen wie vorher, samt Kaufzähler, letztem Kauf und Käufer.
+      changes.push({
+        summary: `✓ abgehakt: ${item.name}`,
+        undo: () => store.setPurchaseState(id, before),
+      })
     } else {
       failed.push(item.name)
     }
@@ -185,6 +205,112 @@ async function markShoppingItemsPurchased(
     undo: undoAll(changes.map((c) => c.undo)),
     changed,
     changes,
+  }
+}
+
+/**
+ * Ändert Name, Menge oder Kategorie von Artikeln, wie „Bearbeiten“ von Hand.
+ * Eine Kategorie, die es auf der Liste noch nicht gibt, wird angelegt; das ist
+ * eine eigene Änderung, die ihre Rücknahme wieder entfernt.
+ */
+async function updateShoppingItems(
+  store: ShoppingToolStore,
+  input: Record<string, unknown>,
+): Promise<ToolOutcome> {
+  const wanted = (Array.isArray(input.items) ? input.items : []) as {
+    item_id?: unknown
+    name?: unknown
+    quantity?: unknown
+    category?: unknown
+  }[]
+  const unknown: string[] = []
+  const done: string[] = []
+  const failed: string[] = []
+  const changes: Change[] = []
+  const changed: ChangedEntry[] = []
+  for (const raw of wanted) {
+    const id = String(raw.item_id ?? '')
+    const item = store.items.find((i) => i.shopping_item_id === id)
+    const list = item && store.lists.find((l) => l.list_id === item.list_id)
+    if (!item || !list) {
+      unknown.push(id)
+      continue
+    }
+    const page = { area: 'shopping', listId: list.list_id } as const
+    const before = { name: item.name, quantity: item.quantity, category: item.category }
+    const patch: { name?: string; quantity?: number; category?: string | null } = {}
+    const what: string[] = []
+    const name = typeof raw.name === 'string' ? raw.name.trim() : ''
+    if (name && name !== item.name) {
+      patch.name = name
+      what.push(`„${name}“`)
+    }
+    if (raw.quantity !== undefined) {
+      const quantity = Math.max(1, Math.floor(Number(raw.quantity) || 1))
+      if (quantity !== item.quantity) {
+        patch.quantity = quantity
+        what.push(`×${quantity}`)
+      }
+    }
+    if (typeof raw.category === 'string' || raw.category === null) {
+      const wantedCategory = (raw.category ?? '').trim()
+      let category: string | null = null
+      if (wantedCategory) {
+        // Kategorien hängen im Store an der offenen Liste; die App folgt ohnehin dorthin.
+        store.currentListId = list.list_id
+        const isNew = !store.categories.some(
+          (c) =>
+            c.list_id === list.list_id &&
+            normalizeCategoryName(c.name) === normalizeCategoryName(wantedCategory),
+        )
+        category = await store.createCategory(wantedCategory, [], { quiet: true })
+        if (!category) {
+          failed.push(item.name)
+          continue
+        }
+        if (isNew) {
+          const created = category
+          changes.push({
+            summary: `✓ neue Kategorie: ${created} (${list.name})`,
+            undo: async () => {
+              store.currentListId = list.list_id
+              await store.deleteCategory(created, { quiet: true })
+              return true
+            },
+          })
+        }
+      }
+      if (category !== item.category) {
+        patch.category = category
+        what.push(category ? `Kategorie ${category}` : 'ohne Kategorie')
+      }
+    }
+    if (what.length === 0) {
+      done.push(`${item.name} (unverändert)`)
+      continue
+    }
+    if (!(await store.updateItem(id, patch))) {
+      failed.push(item.name)
+      continue
+    }
+    const line = `${before.name} → ${what.join(', ')}`
+    changes.push({ summary: `✓ geändert: ${line}`, undo: () => store.updateItem(id, before) })
+    changed.push({ id, page })
+    done.push(line)
+  }
+  const unknownNote = unknown.length ? ` Unbekannte item_ids: ${unknown.join(', ')}` : ''
+  const notDone = failed.length ? ` Fehlgeschlagen: ${failed.join(', ')}` : ''
+  if (done.length === 0) {
+    return {
+      result: `Nichts geändert.${unknownNote}${notDone}`,
+      isError: true,
+      ...(failed.length ? { summary: `✗ nicht geändert: ${failed.join(', ')}` } : {}),
+    }
+  }
+  return {
+    result: `Geändert: ${done.join('; ')}.${unknownNote}${notDone}`,
+    summary: `✓ geändert: ${done.join('; ')}`,
+    ...(changes.length ? { undo: undoAll(changes.map((c) => c.undo)), changed, changes } : {}),
   }
 }
 
@@ -234,8 +360,10 @@ function describeItems(store: ShoppingToolStore, items: ShoppingItem[]) {
 }
 
 /**
- * Löscht erst nach der Karte im Chat (D7). Die Rücknahme legt den Artikel neu
- * an, mit Name, Menge, Kategorie und Zustand; er bekommt dabei eine neue ID.
+ * Löscht erst nach der Karte im Chat: ein Versprecher soll nichts wegwerfen,
+ * und ein getipptes „ja“ reicht dafür nicht, nur der Knopf. Die Rücknahme legt
+ * den Artikel neu an, mit Name, Menge, Kategorie, Zustand und Kaufhistorie; er
+ * bekommt dabei eine neue ID.
  */
 function deleteShoppingItems(
   store: ShoppingToolStore,
@@ -331,6 +459,33 @@ export const shoppingTools = (store: ShoppingToolStore): AssistantTool[] => [
       required: ['list_id', 'items'],
     },
     execute: (input) => addShoppingItems(store, input),
+  },
+  {
+    name: 'update_shopping_items',
+    description:
+      'Ändert Artikel einer Einkaufsliste: Name, Menge oder Kategorie (einsortieren; leere ' +
+      'Kategorie = ohne Kategorie). Nur die genannten Felder ändern sich. Eine neue Kategorie ' +
+      'wird auf der Liste des Artikels angelegt.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        items: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              item_id: { type: 'string', description: 'ID aus read_shopping_list' },
+              name: { type: 'string' },
+              quantity: { type: 'integer', minimum: 1 },
+              category: { type: 'string' },
+            },
+            required: ['item_id'],
+          },
+        },
+      },
+      required: ['items'],
+    },
+    execute: (input) => updateShoppingItems(store, input),
   },
   {
     name: 'mark_shopping_items_purchased',

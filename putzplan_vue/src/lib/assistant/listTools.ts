@@ -36,14 +36,17 @@ export type ChecklistToolStore = Pick<
   | 'loadItems'
   | 'loadCategories'
   | 'createList'
+  | 'copyList'
   | 'renameList'
   | 'updateNotes'
   | 'deleteList'
   | 'addItem'
   | 'updateItem'
+  | 'setItemState'
   | 'togglePacked'
   | 'removeItem'
   | 'restore'
+  | 'resetAllUnpacked'
   | 'createCategory'
   | 'renameCategory'
   | 'deleteCategory'
@@ -53,10 +56,19 @@ export type ChecklistToolStore = Pick<
 export interface ListToolStores {
   shopping: Pick<
     ReturnType<typeof useShoppingStore>,
-    'lists' | 'currentListId' | 'createList' | 'renameList' | 'deleteList'
+    | 'lists'
+    | 'items'
+    | 'categories'
+    | 'currentListId'
+    | 'createList'
+    | 'renameList'
+    | 'deleteList'
+    | 'restoreList'
   >
   packing: ChecklistToolStore
   todo: ChecklistToolStore
+  /** Ob die Liste einen Gastlink hat; der endet mit ihr, und kein Rückgängig holt ihn zurück. */
+  hasGuestLink: (listId: string) => boolean
 }
 
 type Kind = 'packing' | 'todo'
@@ -274,7 +286,14 @@ async function updateEntries(stores: ListToolStores, input: Record<string, unkno
     }
     const { store, list, entry, page } = found
     store.currentListId = list.list_id
-    const before = { name: entry.name, quantity: entry.quantity, category: entry.category }
+    // Mit dem gepackten Stand: eine kleinere Menge kürzt ihn, die Rücknahme bringt ihn zurück.
+    const before = {
+      name: entry.name,
+      quantity: entry.quantity,
+      category: entry.category,
+      packed: entry.packed,
+      packed_count: entry.packed_count,
+    }
     const patch: { name?: string; quantity?: number; category?: string | null } = {}
     const what: string[] = []
     const name = typeof raw.name === 'string' ? raw.name.trim() : ''
@@ -318,7 +337,7 @@ async function updateEntries(stores: ListToolStores, input: Record<string, unkno
       summary: `✓ geändert: ${line}`,
       undo: () => {
         store.currentListId = list.list_id
-        return store.updateItem(id, before)
+        return store.setItemState(id, before)
       },
     })
     changed.push({ id, page })
@@ -446,6 +465,45 @@ async function deleteEntries(
   }
 }
 
+/**
+ * „Alle zurücksetzen“ wie in der Liste von Hand: jeder Eintrag offen, nichts
+ * gepackt. Die Rücknahme hakt genau die Einträge wieder ab, die vorher
+ * abgehakt oder angefangen waren, mit ihrem gepackten Stand; was seither
+ * dazukam, bleibt, wie es ist.
+ */
+async function resetChecklist(stores: ListToolStores, input: Record<string, unknown>) {
+  const listId = String(input.list_id ?? '')
+  const found = await findList(stores, listId)
+  if (!found) return unknownList(listId)
+  const { store, list, page } = found
+  const checked = store.items
+    .filter((i) => i.list_id === listId && (i.packed || i.packed_count > 0))
+    .map((i) => ({ id: i.item_id, packed: i.packed, packed_count: i.packed_count }))
+  if (checked.length === 0) {
+    return { result: `Auf „${list.name}“ ist nichts abgehakt; nichts zurückgesetzt.` }
+  }
+  if (!(await store.resetAllUnpacked(listId, { quiet: true }))) {
+    return {
+      result: 'Zurücksetzen fehlgeschlagen',
+      isError: true,
+      summary: `✗ nicht zurückgesetzt: ${list.name}`,
+    }
+  }
+  const summary = `✓ zurückgesetzt: ${list.name} (${countEntries(checked.length)} wieder offen)`
+  const undo = async () => {
+    let ok = true
+    for (const { id, ...state } of checked) ok = (await store.setItemState(id, state)) && ok
+    return ok
+  }
+  return {
+    result: `Alle Einträge auf „${list.name}“ sind wieder offen (${countEntries(checked.length)} waren abgehakt oder angefangen).`,
+    summary,
+    undo,
+    changes: [{ summary, undo }],
+    changed: checked.map(({ id }) => ({ id, page })),
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Listen
 // ---------------------------------------------------------------------------
@@ -483,6 +541,33 @@ async function createList(stores: ListToolStores, input: Record<string, unknown>
     undo,
     changes: [{ summary, undo }],
     changed: [{ id: listId, page: { area: kind.area, listId } }],
+  }
+}
+
+/**
+ * Kopiert eine Packliste oder To-do-Liste wie „Liste kopieren“ von Hand: Kategorien
+ * und Einträge kommen mit, alles offen. Die Rücknahme löscht die Kopie wieder.
+ */
+async function copyChecklist(stores: ListToolStores, input: Record<string, unknown>) {
+  const listId = String(input.list_id ?? '')
+  const found = await findList(stores, listId)
+  if (!found) return unknownList(listId)
+  const name = String(input.name ?? '').trim()
+  if (!name) return { result: 'Kein Name angegeben', isError: true }
+  const { store, list, kind } = found
+  const copy = await store.copyList(listId, name, { quiet: true })
+  if (!copy) {
+    return { result: 'Kopieren fehlgeschlagen', isError: true, summary: `✗ nicht kopiert: ${list.name}` }
+  }
+  const copyId = copy.list_id
+  const summary = `✓ kopiert: ${list.name} → ${name}`
+  const undo = () => store.deleteList(copyId, { quiet: true })
+  return {
+    result: `${KIND_LABEL[kind]} „${list.name}“ kopiert als „${name}“ (id ${copyId}). Ab der nächsten Frage steht sie auch in der Übersicht, als diese Liste.`,
+    summary,
+    undo,
+    changes: [{ summary, undo }],
+    changed: [{ id: copyId, page: { area: kind, listId: copyId } }],
   }
 }
 
@@ -564,6 +649,14 @@ const countEntries = (n: number) => (n === 1 ? '1 Eintrag' : `${n} Einträge`)
 const withEntries = (n: number) =>
   n === 0 ? 'ohne Einträge' : n === 1 ? 'mit 1 Eintrag' : `mit ${n} Einträgen`
 
+/**
+ * Was ein Rückgängig nach dem Löschen einer Liste nicht zurückbringt, für die
+ * Karte: den Gastlink löscht die Datenbank mit der Liste, ein neuer hätte ein
+ * neues Geheimnis, und der Gast stünde ohne Zugang da.
+ */
+const guestLinkLoss = (stores: Pick<ListToolStores, 'hasGuestLink'>, listId: string) =>
+  stores.hasGuestLink(listId) ? '; ihr Gastlink endet und kommt mit Rückgängig nicht zurück' : ''
+
 async function deleteChecklist(
   stores: ListToolStores,
   input: Record<string, unknown>,
@@ -572,8 +665,7 @@ async function deleteChecklist(
   const found = await findList(stores, listId)
   if (!found) return unknownList(listId)
   const { store, kind } = found
-  // Der Stand von jetzt, zum Zurückholen mit denselben IDs. Gastlinks auf die
-  // Liste löscht die Datenbank mit; die kommen nicht zurück.
+  // Der Stand von jetzt, zum Zurückholen mit denselben IDs.
   const list = { ...found.list }
   const categories = store.categories.filter((c) => c.list_id === listId).map((c) => ({ ...c }))
   const entries = store.items.filter((i) => i.list_id === listId).map((i) => ({ ...i }))
@@ -581,7 +673,7 @@ async function deleteChecklist(
   return {
     result: 'Wartet auf die Bestätigung des Nutzers.',
     deleteCard: {
-      what,
+      what: `${what}${guestLinkLoss(stores, listId)}`,
       confirm: async () => {
         if (!(await store.deleteList(listId, { quiet: true }))) {
           return {
@@ -592,6 +684,49 @@ async function deleteChecklist(
         }
         const summary = `✓ gelöscht: ${what}`
         const undo = () => store.restore({ list, categories, items: entries })
+        return { result: `Gelöscht: ${what}.`, summary, undo, changes: [{ summary, undo }] }
+      },
+    },
+  }
+}
+
+/** „mit 2 offenen und 1 gekauften Artikel“ */
+function withArticles(open: number, bought: number) {
+  const counts = [
+    ...(open ? [`${open} offenen`] : []),
+    ...(bought ? [`${bought} gekauften`] : []),
+  ]
+  if (counts.length === 0) return 'ohne Artikel'
+  const last = bought || open
+  return `mit ${counts.join(' und ')} ${last === 1 ? 'Artikel' : 'Artikeln'}`
+}
+
+/**
+ * Löscht eine ganze Einkaufsliste erst nach der Karte. Die Rücknahme holt sie
+ * mit denselben IDs zurück, samt Kategorien und Artikeln mit ihrer
+ * Kaufhistorie; nur ein Gastlink kommt nicht wieder, das sagt die Karte.
+ */
+function deleteShoppingList(stores: ListToolStores, input: Record<string, unknown>): ToolOutcome {
+  const listId = String(input.list_id ?? '')
+  const { shopping } = stores
+  const found = shopping.lists.find((l) => l.list_id === listId)
+  if (!found) return { result: `Unbekannte list_id ${listId} (keine Einkaufsliste)`, isError: true }
+  // Der Stand von jetzt, zum Zurückholen.
+  const list = { ...found }
+  const categories = shopping.categories.filter((c) => c.list_id === listId).map((c) => ({ ...c }))
+  const items = shopping.items.filter((i) => i.list_id === listId).map((i) => ({ ...i }))
+  const bought = items.filter((i) => i.purchased).length
+  const what = `Einkaufsliste „${list.name}“ ${withArticles(items.length - bought, bought)}`
+  return {
+    result: 'Wartet auf die Bestätigung des Nutzers.',
+    deleteCard: {
+      what: `${what}${guestLinkLoss(stores, listId)}`,
+      confirm: async () => {
+        if (!(await shopping.deleteList(listId))) {
+          return { result: 'Löschen fehlgeschlagen', isError: true, summary: `✗ nicht gelöscht: ${what}` }
+        }
+        const summary = `✓ gelöscht: ${what}`
+        const undo = () => shopping.restoreList({ list, categories, items })
         return { result: `Gelöscht: ${what}.`, summary, undo, changes: [{ summary, undo }] }
       },
     },
@@ -817,6 +952,19 @@ export const checklistTools = (stores: ListToolStores): AssistantTool[] => [
     execute: (input) => checkEntries(stores, input),
   },
   {
+    name: 'reset_checklist',
+    description:
+      'Setzt eine ganze Packliste oder To-do-Liste zurück („alle zurücksetzen“, „alles wieder ' +
+      'auspacken“): jeder Eintrag wird wieder offen, nichts bleibt gepackt. Die Einträge bleiben ' +
+      'auf der Liste.',
+    input_schema: {
+      type: 'object',
+      properties: { list_id: { type: 'string', description: 'ID der Liste aus der Übersicht' } },
+      required: ['list_id'],
+    },
+    execute: (input) => resetChecklist(stores, input),
+  },
+  {
     name: 'delete_checklist_entries',
     description:
       'Löscht Einträge ganz von ihrer Packliste oder To-do-Liste. Abhaken ist etwas anderes: dafür ' +
@@ -848,6 +996,21 @@ export const checklistTools = (stores: ListToolStores): AssistantTool[] => [
       required: ['kind', 'name'],
     },
     execute: (input) => createList(stores, input),
+  },
+  {
+    name: 'copy_checklist',
+    description:
+      'Kopiert eine Packliste oder To-do-Liste unter neuem Namen, mit Kategorien und Einträgen, ' +
+      'alle offen (z. B. „mach aus der Zelten-Liste eine Kopie für den Sommer“).',
+    input_schema: {
+      type: 'object',
+      properties: {
+        list_id: { type: 'string', description: 'ID der Liste, die kopiert wird' },
+        name: { type: 'string', description: 'Name der Kopie' },
+      },
+      required: ['list_id', 'name'],
+    },
+    execute: (input) => copyChecklist(stores, input),
   },
   {
     name: 'rename_list',
@@ -888,6 +1051,18 @@ export const checklistTools = (stores: ListToolStores): AssistantTool[] => [
       required: ['list_id'],
     },
     execute: (input) => deleteChecklist(stores, input),
+  },
+  {
+    name: 'delete_shopping_list',
+    description:
+      'Löscht eine ganze Einkaufsliste mit allen Artikeln, offenen und gekauften. Vor dem Löschen ' +
+      'zeigt die App eine Karte mit „Löschen“ und „Abbrechen“; frag darum nicht selbst nach.',
+    input_schema: {
+      type: 'object',
+      properties: { list_id: { type: 'string', description: 'ID der Einkaufsliste aus der Übersicht' } },
+      required: ['list_id'],
+    },
+    execute: async (input) => deleteShoppingList(stores, input),
   },
   {
     name: 'create_checklist_category',

@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 import type { ListToolStores } from './listTools'
 import type { ShoppingToolStore } from './shoppingTools'
 import type { NotesToolStore } from './notesTools'
-import { assistantTools } from './tools'
+import { assistantTools, undoFailedText } from './tools'
 
 const registry = () =>
   assistantTools({
@@ -11,6 +11,7 @@ const registry = () =>
     lists: {} as ListToolStores,
     notes: { notes: [] } as unknown as NotesToolStore,
     goToPage: () => {},
+    currentUserId: () => 'me',
   })
 
 describe('the tool registry', () => {
@@ -19,17 +20,21 @@ describe('the tool registry', () => {
     expect(sent.map((t: { name: string }) => t.name)).toEqual([
       'read_shopping_list',
       'add_shopping_items',
+      'update_shopping_items',
       'mark_shopping_items_purchased',
       'delete_shopping_items',
       'read_checklist',
       'add_checklist_entries',
       'update_checklist_entries',
       'check_checklist_entries',
+      'reset_checklist',
       'delete_checklist_entries',
       'create_list',
+      'copy_checklist',
       'rename_list',
       'set_list_note',
       'delete_checklist',
+      'delete_shopping_list',
       'create_checklist_category',
       'rename_checklist_category',
       'delete_checklist_category',
@@ -63,5 +68,16 @@ describe('the tool registry', () => {
     const outcome = await registry().execute('settle_debts', {})
     expect(outcome.isError).toBe(true)
     expect(outcome.result).toContain('settle_debts')
+  })
+})
+
+describe('a failed undo', () => {
+  it('says what stays as it is, and that there is no connection when offline', () => {
+    expect(undoFailedText('✓ Milch → Einkauf', false)).toBe(
+      'Rückgängig ging nicht, keine Verbindung. Es bleibt: Milch → Einkauf',
+    )
+    expect(undoFailedText('✓ gelöscht: Zucker (Einkauf)', true)).toBe(
+      'Rückgängig ging nicht. Es bleibt: gelöscht: Zucker (Einkauf)',
+    )
   })
 })

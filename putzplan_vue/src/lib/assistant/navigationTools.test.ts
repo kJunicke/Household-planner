@@ -13,6 +13,7 @@ function registry() {
     lists: {} as ListToolStores,
     notes: { notes: [] } as unknown as NotesToolStore,
     goToPage: (page) => visited.push(page),
+    currentUserId: () => 'me',
   })
   return { tools, visited }
 }

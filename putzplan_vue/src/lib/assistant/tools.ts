@@ -80,6 +80,8 @@ export interface ToolDeps {
   notes: NotesToolStore
   /** Bringt die App auf eine Seite (`createGoToPage`). */
   goToPage: (page: AppPage) => void
+  /** Wer fragt; `null` abgemeldet. */
+  currentUserId: () => string | null
 }
 
 export interface ToolRegistry {
@@ -91,7 +93,7 @@ export function assistantTools(deps: ToolDeps): ToolRegistry {
   const tools = [
     ...shoppingTools(deps.shopping),
     ...checklistTools(deps.lists),
-    ...notesTools(deps.notes),
+    ...notesTools(deps.notes, deps.currentUserId),
     ...navigationTools(deps.goToPage),
     ...guideTools(),
   ]
@@ -115,3 +117,11 @@ export const undoAll = (steps: (() => Promise<boolean>)[]) => async (): Promise<
   for (const step of [...steps].reverse()) ok = (await step()) && ok
   return ok
 }
+
+/**
+ * Was der Toast sagt, wenn ein Rückgängig scheitert. Ohne Netz scheitern die
+ * Rücknahmen, die direkt in die Datenbank schreiben (Pack- und To-do-Listen,
+ * Notizen, gelöschte Listen); der Grund gehört dann in den Satz.
+ */
+export const undoFailedText = (summary: string, online: boolean) =>
+  `Rückgängig ging nicht${online ? '' : ', keine Verbindung'}. Es bleibt: ${summary.replace(/^✓\s*/, '')}`
