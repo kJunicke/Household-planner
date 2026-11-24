@@ -547,7 +547,8 @@ export function createChecklistStore(config: ChecklistStoreConfig) {
       }
     }
 
-    const renameList = async (listId: string, name: string) => {
+    /** `silent`: ohne Erfolgs-Toast; der Assistent zeigt seinen eigenen mit Rückgängig. */
+    const renameList = async (listId: string, name: string, opts: { silent?: boolean } = {}) => {
       const toastStore = useToastStore()
 
       try {
@@ -560,10 +561,12 @@ export function createChecklistStore(config: ChecklistStoreConfig) {
 
         const idx = lists.value.findIndex((l) => l.list_id === listId)
         if (idx !== -1) lists.value[idx] = { ...lists.value[idx], name: name.trim() }
-        toastStore.showToast('Liste umbenannt', 'success', 2000)
+        if (!opts.silent) toastStore.showToast('Liste umbenannt', 'success', 2000)
+        return true
       } catch (error) {
         console.error(`Error renaming ${listsTable} row:`, error)
         toastStore.showToast('Fehler beim Umbenennen', 'error')
+        return false
       }
     }
 
@@ -584,14 +587,16 @@ export function createChecklistStore(config: ChecklistStoreConfig) {
           .eq('list_id', listId)
 
         if (error) throw error
+        return true
       } catch (error) {
         console.error('Error updating notes:', error)
         if (idx !== -1 && prev) lists.value[idx] = prev
         toastStore.showToast('Fehler beim Speichern der Notiz', 'error')
+        return false
       }
     }
 
-    const deleteList = async (listId: string) => {
+    const deleteList = async (listId: string, opts: { silent?: boolean } = {}) => {
       const toastStore = useToastStore()
 
       try {
@@ -606,10 +611,12 @@ export function createChecklistStore(config: ChecklistStoreConfig) {
         if (currentListId.value === listId) {
           currentListId.value = lists.value[0]?.list_id ?? null
         }
-        toastStore.showToast('Liste gelöscht', 'success', 2000)
+        if (!opts.silent) toastStore.showToast('Liste gelöscht', 'success', 2000)
+        return true
       } catch (error) {
         console.error(`Error deleting ${listsTable} row:`, error)
         toastStore.showToast('Fehler beim Löschen der Liste', 'error')
+        return false
       }
     }
 
@@ -686,7 +693,7 @@ export function createChecklistStore(config: ChecklistStoreConfig) {
     const createCategory = async (
       name: string,
       itemIds: string[] = [],
-      opts: { importFrom?: ImportSource } = {},
+      opts: { importFrom?: ImportSource; silent?: boolean } = {},
     ): Promise<string | null> => {
       if (!currentListId.value) return null
       const householdStore = useHouseholdStore()
@@ -716,7 +723,9 @@ export function createChecklistStore(config: ChecklistStoreConfig) {
         })
         // Deckt den Fall ab, dass jemand einen unbekannten Namen tippt und speichert,
         // ohne die Vorschlagsliste je zu benutzen — sonst entsteht die Kategorie stumm.
-        useToastStore().showToast(`Kategorie „${trimmed}" angelegt`, 'success', 2000)
+        if (!opts.silent) {
+          useToastStore().showToast(`Kategorie „${trimmed}" angelegt`, 'success', 2000)
+        }
       }
 
       for (const itemId of itemIds) {
@@ -743,7 +752,11 @@ export function createChecklistStore(config: ChecklistStoreConfig) {
      * Die Einträge werden immer mitgezogen, erledigte eingeschlossen — sonst
      * taucht die alte Sektion beim Zurücksetzen wieder auf.
      */
-    const renameCategory = async (oldName: string, newName: string) => {
+    const renameCategory = async (
+      oldName: string,
+      newName: string,
+      opts: { silent?: boolean } = {},
+    ) => {
       const toastStore = useToastStore()
       if (!currentListId.value) return
 
@@ -791,6 +804,7 @@ export function createChecklistStore(config: ChecklistStoreConfig) {
       }
 
       if (navigator.onLine) await queue.sync()
+      if (opts.silent) return
       toastStore.showToast(
         conflict ? `Mit „${target}" zusammengeführt` : 'Kategorie umbenannt',
         'success',
@@ -804,7 +818,10 @@ export function createChecklistStore(config: ChecklistStoreConfig) {
      * Checkliste führt keine Historie, anders als der Einkauf). Ohne `withItems`
      * verlieren die Einträge nur ihre Zuordnung.
      */
-    const deleteCategory = async (category: string, options: { withItems?: boolean } = {}) => {
+    const deleteCategory = async (
+      category: string,
+      options: { withItems?: boolean; silent?: boolean } = {},
+    ) => {
       const toastStore = useToastStore()
       if (!currentListId.value) return
 
@@ -831,7 +848,7 @@ export function createChecklistStore(config: ChecklistStoreConfig) {
       }
 
       if (navigator.onLine) await queue.sync()
-      toastStore.showToast('Kategorie gelöscht', 'success', 2000)
+      if (!options.silent) toastStore.showToast('Kategorie gelöscht', 'success', 2000)
     }
 
     /** Eintrag in eine andere Kategorie hängen (Ziehen) — offline-fähig. */
@@ -1039,9 +1056,7 @@ export function createChecklistStore(config: ChecklistStoreConfig) {
     }
 
     /** Body-tap: flip the done flag only. Never touches packed_count. */
-    const togglePacked = async (itemId: string) => {
-      await patchItem(itemId, (item) => ({ packed: !item.packed }))
-    }
+    const togglePacked = (itemId: string) => patchItem(itemId, (item) => ({ packed: !item.packed }))
 
     /** Stepper [＋]: +1 progress; hitting full auto-marks done (never demotes). */
     const incrementPacked = async (itemId: string) => {
@@ -1072,8 +1087,8 @@ export function createChecklistStore(config: ChecklistStoreConfig) {
     const updateItem = async (
       itemId: string,
       patch: { name?: string; category?: string | null; quantity?: number },
-    ) => {
-      await patchItem(itemId, (item) => {
+    ) =>
+      patchItem(itemId, (item) => {
         const next: Partial<ChecklistItem> = {}
         if (patch.name !== undefined) next.name = patch.name.trim()
         if (patch.category !== undefined) {
@@ -1086,23 +1101,23 @@ export function createChecklistStore(config: ChecklistStoreConfig) {
         }
         return next
       })
-    }
 
     /**
      * Shared optimistic patch helper. `mutate` returns the DB patch to apply,
-     * or null to abort (no-op). Reverts local state on error.
+     * or null to abort (no-op). Reverts local state on error. `false` only when
+     * the entry is unknown or the write failed.
      */
     const patchItem = async (
       itemId: string,
       mutate: (item: ChecklistItem) => Partial<ChecklistItem> | null,
-    ) => {
+    ): Promise<boolean> => {
       const toastStore = useToastStore()
       const idx = items.value.findIndex((i) => i.item_id === itemId)
-      if (idx === -1) return
+      if (idx === -1) return false
       const item = items.value[idx]
 
       const patch = mutate(item)
-      if (!patch || Object.keys(patch).length === 0) return
+      if (!patch || Object.keys(patch).length === 0) return true
 
       const prev = item
       items.value[idx] = { ...item, ...patch }
@@ -1111,6 +1126,7 @@ export function createChecklistStore(config: ChecklistStoreConfig) {
         const { error } = await supabase.from(itemsTable).update(patch).eq('item_id', itemId)
 
         if (error) throw error
+        return true
       } catch (error) {
         console.error(`Error updating ${itemsTable} row:`, error)
         // Re-sync from the DB (source of truth) rather than blindly restoring the
@@ -1127,6 +1143,7 @@ export function createChecklistStore(config: ChecklistStoreConfig) {
           else items.value[revertIdx] = prev
         }
         toastStore.showToast('Fehler beim Aktualisieren', 'error')
+        return false
       }
     }
 
@@ -1139,9 +1156,55 @@ export function createChecklistStore(config: ChecklistStoreConfig) {
         if (error) throw error
 
         items.value = items.value.filter((i) => i.item_id !== itemId)
+        return true
       } catch (error) {
         console.error(`Error removing ${itemsTable} row:`, error)
         toastStore.showToast('Fehler beim Löschen', 'error')
+        return false
+      }
+    }
+
+    /**
+     * Holt Gelöschtes zurück, mit denselben IDs: erst die Liste, dann ihre
+     * Kategorien, dann die Einträge, so wie sie vor dem Löschen waren. Für das
+     * Rückgängig des Assistenten. Eine noch nicht synchronisierte Kategorie
+     * (`temp_`) bekommt dabei eine neue ID.
+     */
+    const restore = async (snapshot: {
+      list?: ChecklistList
+      categories?: CategoryRow[]
+      items?: ChecklistItem[]
+    }): Promise<boolean> => {
+      const { list, categories: cats = [], items: rows = [] } = snapshot
+      try {
+        if (list) {
+          const { error } = await supabase.from(listsTable).insert(list)
+          if (error) throw error
+          if (!lists.value.some((l) => l.list_id === list.list_id)) lists.value.push(list)
+        }
+        if (cats.length) {
+          const insert = cats.map(({ category_id, ...rest }) =>
+            category_id.startsWith('temp_') ? rest : { category_id, ...rest },
+          )
+          const { data, error } = await supabase.from(categoriesTable).insert(insert).select()
+          if (error) throw error
+          for (const row of (data ?? []) as CategoryRow[]) {
+            if (!categories.value.some((c) => c.category_id === row.category_id)) {
+              categories.value.push(row)
+            }
+          }
+        }
+        if (rows.length) {
+          const { error } = await supabase.from(itemsTable).insert(rows)
+          if (error) throw error
+          for (const row of rows) {
+            if (!items.value.some((i) => i.item_id === row.item_id)) items.value.push(row)
+          }
+        }
+        return true
+      } catch (error) {
+        console.error(`Error restoring ${listsTable} rows:`, error)
+        return false
       }
     }
 
@@ -1363,6 +1426,7 @@ export function createChecklistStore(config: ChecklistStoreConfig) {
       decrementPacked,
       updateItem,
       removeItem,
+      restore,
       resetAllUnpacked,
       subscribe,
       unsubscribe,
