@@ -9,6 +9,8 @@ export type ToastType = 'success' | 'error' | 'info'
  */
 export interface ToastAction {
   label: string
+  /** Bootstrap-Icon statt Text, etwa `bi-arrow-counterclockwise`; `label` bleibt die Beschriftung für Vorleser. */
+  icon?: string
   run: () => void
 }
 
