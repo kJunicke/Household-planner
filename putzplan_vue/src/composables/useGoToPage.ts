@@ -10,7 +10,7 @@ export function useGoToPage(): GoToPage {
   const lists = { shopping: useShoppingStore(), packing: usePackingStore(), todo: useTodoStore() }
   return createGoToPage({
     push: (to) => router.push(to),
-    openSettings: () => (settingsSidebarOpen.value = true),
+    setSettingsOpen: (open) => (settingsSidebarOpen.value = open),
     selectList: (area, listId) => (lists[area].currentListId = listId),
   })
 }

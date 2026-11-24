@@ -7,7 +7,7 @@
  * `createChecklistStore`) and the labels/icons. `PackingView` and `TodoView`
  * are thin shells around this.
  */
-import { nextTick, onMounted, onUnmounted, ref, computed, watch } from 'vue'
+import { onMounted, onUnmounted, ref, computed, watch } from 'vue'
 import type { ChecklistStore } from '@/stores/createChecklistStore'
 import type { CategoryGroup, ChecklistItem } from '@/types/Checklist'
 import type { ImportSource } from '@/types/CategoryImport'
@@ -27,6 +27,7 @@ import ListAddBar from '@/components/ListAddBar.vue'
 import LongSheet from '@/components/LongSheet.vue'
 import { SHOPPING_ITEM_NAME_MAX_LENGTH } from '@/lib/limits'
 import { flashedChecklistIds } from '@/lib/assistant/followApp'
+import { FLASH_CLASS, useFlash } from '@/lib/assistant/flash'
 import { categoryHighlightId } from '@/lib/assistant/listTools'
 import type { GuestShareKind } from '@/types/GuestShare'
 import { useGuestShareStore } from '@/stores/guestShareStore'
@@ -338,13 +339,16 @@ const onTopAdd = async (name: string, quantity: number, category: string) => {
 
 // --- Aufleuchten nach dem Assistenten ----------------------------------------
 // Beim Schließen des Chats leuchten die Einträge, Kategorien und Listen-Chips
-// auf, die er geändert hat; das erste wird dafür in die Mitte gescrollt.
-const flashed = (id: string) => flashedChecklistIds.value.has(id)
+// auf, die er geändert hat. Was davon eingeklappt ist (Kategorie, Block
+// „erledigt“), klappt dafür auf.
+const flashed = (id: string) => flashedChecklistIds.value.has(id) && FLASH_CLASS
 const categoryFlashed = (group: CategoryGroup) => flashed(categoryHighlightId(group.category))
-watch(flashedChecklistIds, async (ids) => {
-  if (ids.size === 0) return
-  await nextTick()
-  document.querySelector('.row-flash')?.scrollIntoView({ block: 'center' })
+useFlash(flashedChecklistIds, (ids) => {
+  for (const group of displaySections.value) {
+    if (!group.items.some((i) => ids.has(i.item_id))) continue
+    sectionOverride.value.set(group.key, true)
+    if (doneRows(group).some((i) => ids.has(i.item_id))) doneOpen.value.add(group.key)
+  }
 })
 
 // --- Item interactions ------------------------------------------------------
@@ -616,7 +620,7 @@ onUnmounted(() => {
                 :class="[
                   'list-chip',
                   store.currentListId === list.list_id && 'active',
-                  flashed(list.list_id) && 'row-flash',
+                  flashed(list.list_id),
                 ]"
                 @click="store.currentListId = list.list_id"
               >
@@ -735,7 +739,7 @@ onUnmounted(() => {
                  Kategorie hat sonst keine Fläche zum Hineinziehen. -->
                   <div
                     class="cat-header"
-                    :class="{ 'row-flash': categoryFlashed(group) }"
+                    :class="categoryFlashed(group)"
                     :ref="(el) => setDropEl(`${group.key}::head`, el)"
                     :data-cat-name="group.category ?? ''"
                     role="button"
@@ -802,10 +806,7 @@ onUnmounted(() => {
                       :key="item.item_id"
                       :item="item"
                       :data-item-id="item.packed ? null : item.item_id"
-                      :class="{
-                        'row-moved': item.item_id === justMovedId,
-                        'row-flash': flashed(item.item_id),
-                      }"
+                      :class="[{ 'row-moved': item.item_id === justMovedId }, flashed(item.item_id)]"
                       @toggle="onItemToggle(item)"
                       @increment="onItemIncrement(item)"
                       @decrement="onItemDecrement(item)"
@@ -814,15 +815,7 @@ onUnmounted(() => {
 
                     <!-- Erledigt (einklappbar) -->
                     <template v-if="doneRows(group).length > 0">
-                      <button
-                        class="done-toggle"
-                        :class="{
-                          'row-flash':
-                            !isDoneOpen(group.key) &&
-                            doneRows(group).some((i) => flashed(i.item_id)),
-                        }"
-                        @click="toggleDone(group.key)"
-                      >
+                      <button class="done-toggle" @click="toggleDone(group.key)">
                         <i class="bi bi-check2-circle done-check"></i>
                         <span>{{ doneRows(group).length }} {{ labels.progressVerb }}</span>
                         <i
@@ -835,7 +828,7 @@ onUnmounted(() => {
                           v-for="item in doneRows(group)"
                           :key="item.item_id"
                           :item="item"
-                          :class="{ 'row-flash': flashed(item.item_id) }"
+                          :class="flashed(item.item_id)"
                           @toggle="onItemToggle(item)"
                           @increment="onItemIncrement(item)"
                           @decrement="onItemDecrement(item)"
@@ -1400,28 +1393,6 @@ onUnmounted(() => {
 }
 .drag-chosen {
   border-color: var(--color-primary);
-}
-/* Vom Assistenten geändert: leuchtet nach dem Schließen des Chats dreimal auf
-   (wie im Einkauf). */
-.row-flash {
-  animation: row-flash 1.2s ease-in-out 3;
-}
-@keyframes row-flash {
-  0%,
-  100% {
-    background: transparent;
-    box-shadow: none;
-  }
-  40% {
-    background: var(--pw-tape);
-    box-shadow: inset 4px 0 0 var(--pw-accent);
-  }
-}
-@media (prefers-reduced-motion: reduce) {
-  .row-flash {
-    animation: none;
-    background: var(--pw-tape);
-  }
 }
 /* Frisch verschobener Eintrag kurz hervorheben: er springt nach dem Loslassen
    an seinen Platz in der Zielsektion, der Sprung soll nachvollziehbar bleiben. */

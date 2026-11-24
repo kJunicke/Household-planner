@@ -13,7 +13,7 @@ import { ref } from 'vue'
 import type { RouteLocationRaw } from 'vue-router'
 
 type KasseTab = 'statistik' | 'ausgleich' | 'toepfe'
-type ListArea = 'shopping' | 'packing' | 'todo'
+export type ListArea = 'shopping' | 'packing' | 'todo'
 
 export type AppPage =
   | { area: 'wall' }
@@ -25,7 +25,13 @@ export type AppPage =
   | { area: ListArea; listId?: string }
 
 /** Untertab der Listen in der Adresse; Einkauf ist der Standard und steht nicht darin. */
-const LISTS_TAB_QUERY = { shopping: undefined, packing: 'packlisten', todo: 'todo' } as const
+export const LISTS_TAB_QUERY = { shopping: undefined, packing: 'packlisten', todo: 'todo' } as const
+
+/** Welche Listenart `?tab=` in der Adresse der Listen zeigt; ohne oder unbekannt = Einkauf. */
+export function listAreaOfTab(tab: unknown): ListArea {
+  const areas = Object.keys(LISTS_TAB_QUERY) as ListArea[]
+  return areas.find((area) => tab !== undefined && LISTS_TAB_QUERY[area] === tab) ?? 'shopping'
+}
 
 function routeFor(page: Exclude<AppPage, { area: 'settings' }>): RouteLocationRaw {
   switch (page.area) {
@@ -53,12 +59,15 @@ export type GoToPage = (page: AppPage) => void
 
 export function createGoToPage(app: {
   push: (to: RouteLocationRaw) => unknown
-  openSettings: () => void
+  /** Öffnet oder schließt die Einstellungen (Seitenleiste im Header). */
+  setSettingsOpen: (open: boolean) => void
   /** Macht eine Liste zur offenen, wie der Tipp auf ihren Chip. */
   selectList: (area: ListArea, listId: string) => void
 }): GoToPage {
   return (page) => {
-    if (page.area === 'settings') return app.openSettings()
+    if (page.area === 'settings') return app.setSettingsOpen(true)
+    // Die Seitenleiste läge sonst über der neuen Seite, auf dem Handy über allem.
+    app.setSettingsOpen(false)
     if ('listId' in page && page.listId) app.selectList(page.area, page.listId)
     void app.push(routeFor(page))
   }

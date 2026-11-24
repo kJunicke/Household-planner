@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { nextTick, onMounted, onUnmounted, ref, computed, watch } from 'vue'
+import { onMounted, onUnmounted, ref, computed, watch } from 'vue'
 import { useShoppingStore, type ShoppingCategoryGroup } from '@/stores/shoppingStore'
 import { categoryKey, compareCategoryGroups } from '@/lib/categoryOrder'
 import { useHouseholdStore } from '@/stores/householdStore'
@@ -20,6 +20,7 @@ import LongSheet from '@/components/LongSheet.vue'
 import { SHOPPING_ITEM_NAME_MAX_LENGTH } from '@/lib/limits'
 import { useGuestShareStore } from '@/stores/guestShareStore'
 import { flashedShoppingIds } from '@/lib/assistant/followApp'
+import { FLASH_CLASS, useFlash } from '@/lib/assistant/flash'
 
 const props = defineProps<{
   /**
@@ -449,12 +450,15 @@ const handleCategoryDelete = async (name: string, withItems: boolean) => {
 }
 
 // --- Aufleuchten nach dem Assistenten ----------------------------------------
-// Beim Schließen des Chats leuchten die Artikel auf, die er geändert hat; der
-// erste wird dafür in die Mitte gescrollt.
-watch(flashedShoppingIds, async (ids) => {
-  if (ids.size === 0) return
-  await nextTick()
-  document.querySelector('.row-flash')?.scrollIntoView({ block: 'center' })
+// Beim Schließen des Chats leuchten die Artikel auf, die er geändert hat, auch
+// gekaufte; eine eingeklappte Kategorie mit einem davon klappt dafür auf.
+const flashClass = (id: string) => flashedShoppingIds.value.has(id) && FLASH_CLASS
+useFlash(flashedShoppingIds, (ids) => {
+  for (const group of displaySections.value) {
+    if (group.items.some((i) => ids.has(i.shopping_item_id))) {
+      sectionOverride.value.set(group.key, true)
+    }
+  }
 })
 
 // --- Ziehen zwischen Kategorien ---------------------------------------------
@@ -587,7 +591,7 @@ onUnmounted(() => {
                 :class="[
                   'list-chip',
                   shoppingStore.currentListId === list.list_id && 'active',
-                  flashedShoppingIds.has(list.list_id) && 'row-flash',
+                  flashClass(list.list_id),
                 ]"
                 @click="shoppingStore.currentListId = list.list_id"
               >
@@ -777,11 +781,13 @@ onUnmounted(() => {
                       :data-item-id="item.purchased ? null : item.shopping_item_id"
                       :checked="item.purchased"
                       :name="item.name"
-                      :class="{
-                        'row-priority': item.is_priority && !item.purchased,
-                        'row-moved': item.shopping_item_id === justMovedId,
-                        'row-flash': flashedShoppingIds.has(item.shopping_item_id),
-                      }"
+                      :class="[
+                        {
+                          'row-priority': item.is_priority && !item.purchased,
+                          'row-moved': item.shopping_item_id === justMovedId,
+                        },
+                        flashClass(item.shopping_item_id),
+                      ]"
                       @toggle="onItemToggle(item)"
                       @edit="openItemEdit(item)"
                     >
@@ -885,6 +891,7 @@ onUnmounted(() => {
                       <ListItemRow
                         :checked="true"
                         :name="item.name"
+                        :class="flashClass(item.shopping_item_id)"
                         :title="purchaseHistory(item)"
                         @toggle="onGekauftToggle(item)"
                         @edit="openItemEdit(item)"
@@ -1362,28 +1369,6 @@ onUnmounted(() => {
   height: 8px;
   border-radius: 50%;
   flex-shrink: 0;
-}
-/* Vom Assistenten geändert: drei Pulse beim Schließen des Chats, in der Farbe
-   des Klebebands, wie mit Textmarker angestrichen. */
-.row-flash {
-  animation: row-flash 1.2s ease-in-out 3;
-}
-@keyframes row-flash {
-  0%,
-  100% {
-    background: transparent;
-    box-shadow: none;
-  }
-  40% {
-    background: var(--pw-tape);
-    box-shadow: inset 4px 0 0 var(--pw-accent);
-  }
-}
-@media (prefers-reduced-motion: reduce) {
-  .row-flash {
-    animation: none;
-    background: var(--pw-tape);
-  }
 }
 /* Frisch verschobenes Produkt kurz hervorheben: es springt nach dem Loslassen
    an seinen alphabetischen Platz, der Sprung soll nachvollziehbar bleiben. */

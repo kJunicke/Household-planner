@@ -1,5 +1,6 @@
 import 'bootstrap/dist/css/bootstrap.min.css'
 import './assets/main.css'
+import './assets/assistant-flash.css'
 
 import { createApp, watch } from 'vue'
 import { createPinia } from 'pinia'

@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
+import { onMounted, onUnmounted, ref } from 'vue'
 import { useNotesStore } from '@/stores/notesStore'
 import { useHouseholdStore } from '@/stores/householdStore'
 import type { Note } from '@/types/Note'
 import { NOTE_CONTENT_MAX_LENGTH } from '@/lib/limits'
 import { flashedNoteIds } from '@/lib/assistant/followApp'
+import { FLASH_CLASS, useFlash } from '@/lib/assistant/flash'
 
 const notesStore = useNotesStore()
 const householdStore = useHouseholdStore()
@@ -74,13 +75,8 @@ const formatDate = (dateString: string) => {
   })
 }
 
-// Beim Schließen des Chats leuchten die Notizen auf, die er geändert hat; die
-// erste wird dafür in die Mitte gescrollt.
-watch(flashedNoteIds, async (ids) => {
-  if (ids.size === 0) return
-  await nextTick()
-  document.querySelector('.note-flash')?.scrollIntoView({ block: 'center' })
-})
+// Beim Schließen des Chats leuchten die Notizen auf, die er geändert hat.
+useFlash(flashedNoteIds)
 
 onMounted(async () => {
   await notesStore.loadNotes()
@@ -140,7 +136,7 @@ onUnmounted(() => {
           v-for="note in notesStore.sortedNotes"
           :key="note.note_id"
           class="note-item"
-          :class="{ 'note-flash': flashedNoteIds.has(note.note_id) }"
+          :class="flashedNoteIds.has(note.note_id) && FLASH_CLASS"
         >
           <!-- View Mode -->
           <template v-if="editingNote?.note_id !== note.note_id">
@@ -253,24 +249,6 @@ onUnmounted(() => {
   border-radius: var(--radius-md);
   border: 1px solid var(--color-border);
   transition: all 0.2s;
-}
-
-/* Vom Assistenten geändert: drei Pulse beim Schließen des Chats, wie die
-   Artikel in der Einkaufsliste. */
-.note-flash {
-  animation: note-flash 1.2s ease-in-out 3;
-}
-@keyframes note-flash {
-  40% {
-    background: var(--pw-tape);
-    box-shadow: inset 4px 0 0 var(--pw-accent);
-  }
-}
-@media (prefers-reduced-motion: reduce) {
-  .note-flash {
-    animation: none;
-    background: var(--pw-tape);
-  }
 }
 
 .note-item:hover {

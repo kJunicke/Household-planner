@@ -1,0 +1,22 @@
+/* Vom Assistenten geändert: pulst beim Schließen des Chats, in der Farbe des
+   Klebebands, wie mit Textmarker angestrichen. Takt und Anzahl der Pulse setzt
+   `src/lib/assistant/flash.ts`, die einzige Stelle dafür. Ohne Anfangs- und
+   Endbild läuft der Puls vom eigenen Hintergrund der Zeile oder Karte aus. */
+.assistant-flash {
+  animation: assistant-flash var(--assistant-flash-pulse, 1.2s) ease-in-out
+    var(--assistant-flash-pulses, 3);
+}
+@keyframes assistant-flash {
+  40% {
+    background: var(--pw-tape);
+    box-shadow: inset 4px 0 0 var(--pw-accent);
+  }
+}
+/* Ohne Bewegung: angestrichen, solange es leuchten soll. `!important`, weil
+   die Zeilen ihren Hintergrund in scoped Styles mit höherer Spezifität setzen. */
+@media (prefers-reduced-motion: reduce) {
+  .assistant-flash {
+    animation: none;
+    background: var(--pw-tape) !important;
+  }
+}

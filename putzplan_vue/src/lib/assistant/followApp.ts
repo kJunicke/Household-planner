@@ -11,12 +11,10 @@
 import { ref } from 'vue'
 import type { Router } from 'vue-router'
 import type { useShoppingStore } from '@/stores/shoppingStore'
-import type { GoToPage } from '@/lib/appNavigation'
+import { listAreaOfTab, type GoToPage } from '@/lib/appNavigation'
 import { createChangeTrail } from './changeTrail'
+import { FLASH_MS } from './flash'
 import type { AssistantPage, ToolOutcome } from './tools'
-
-/** So lange leuchten die Einträge (drei Pulse à 1,2 s, siehe ShoppingView). */
-const FLASH_MS = 3600
 
 /** Die Einkaufsartikel, die gerade aufleuchten. */
 export const flashedShoppingIds = ref<ReadonlySet<string>>(new Set())
@@ -31,8 +29,6 @@ type FollowStore = Pick<ReturnType<typeof useShoppingStore>, 'currentListId' | '
 /** Die offene Liste je Listenart; die Seite, die die App gerade zeigt. */
 type Checklists = Record<'packing' | 'todo', { currentListId: string | null }>
 
-const LISTS_TAB = { packlisten: 'packing', todo: 'todo' } as const
-
 export function followApp(
   router: Router,
   shopping: FollowStore,
@@ -44,9 +40,7 @@ export function followApp(
   /** Welcher Listen-Reiter offen ist; `null` außerhalb der Listen. */
   const listsTab = () => {
     const route = router.currentRoute.value
-    if (route.name !== 'listen') return null
-    const tab = String(route.query.tab ?? '')
-    return tab in LISTS_TAB ? LISTS_TAB[tab as keyof typeof LISTS_TAB] : 'shopping'
+    return route.name === 'listen' ? listAreaOfTab(route.query.tab) : null
   }
 
   // Über denselben Weg wie das Werkzeug „Gehe zu Seite“ (appNavigation.ts). Der
