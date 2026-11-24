@@ -804,7 +804,13 @@ export const useShoppingStore = defineStore('shopping', () => {
     }
   }
 
-  const createItem = async (name: string, category: string | null = null, quantity = 1) => {
+  /** `listId` defaults to the open list; the assistant passes it to write to another one. */
+  const createItem = async (
+    name: string,
+    category: string | null = null,
+    quantity = 1,
+    listId: string | null = currentListId.value,
+  ) => {
     const householdStore = useHouseholdStore()
     const toastStore = useToastStore()
 
@@ -818,20 +824,20 @@ export const useShoppingStore = defineStore('shopping', () => {
       return null
     }
 
-    if (!currentListId.value) {
+    if (!listId) {
       toastStore.showToast('Bitte zuerst eine Liste auswählen', 'error')
       return null
     }
 
     const cat = category?.trim() || null
     const qty = Math.max(1, Math.floor(quantity) || 1)
-    const tempItem = createItemOptimistic(name, currentListId.value, cat, qty)
+    const tempItem = createItemOptimistic(name, listId, cat, qty)
 
     addToQueue({
       operation: 'create',
       payload: {
         name: name.trim(),
-        listId: currentListId.value,
+        listId,
         category: cat,
         quantity: qty,
         tempId: tempItem.shopping_item_id,

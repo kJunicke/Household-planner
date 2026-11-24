@@ -5,6 +5,7 @@ import SettingsSidebar from './SettingsSidebar.vue'
 import SyncIndicator from './SyncIndicator.vue'
 import WallStatusBar from './WallStatusBar.vue'
 import BrandLogo from './BrandLogo.vue'
+import AssistantPanel from './AssistantPanel.vue'
 import { useElementHeightVar } from '../composables/useElementHeightVar'
 
 /**
@@ -32,6 +33,7 @@ import { useElementHeightVar } from '../composables/useElementHeightVar'
 const householdStore = useHouseholdStore()
 
 const sidebarOpen = ref(false)
+const assistantOpen = ref(false)
 
 // Der Header meldet seine eigene Höhe (inkl. der jetzt eingebetteten
 // Wochenziel-Leiste) global; Toasts, Sync-Indikator und die Verlauf-Kopfzeile
@@ -57,6 +59,15 @@ onMounted(async () => {
         <SyncIndicator />
         <button
           type="button"
+          class="header-assistant-btn"
+          aria-label="Assistent öffnen"
+          title="Assistent"
+          @click="assistantOpen = true"
+        >
+          <i class="bi bi-chat-dots" />
+        </button>
+        <button
+          type="button"
           class="header-logo-btn"
           :aria-expanded="sidebarOpen"
           aria-label="Einstellungen öffnen"
@@ -70,6 +81,7 @@ onMounted(async () => {
 
     <!-- Settings Sidebar -->
     <SettingsSidebar v-model:open="sidebarOpen" />
+    <AssistantPanel v-model:open="assistantOpen" />
   </header>
 </template>
 
@@ -128,6 +140,18 @@ onMounted(async () => {
   cursor: pointer;
   border-radius: var(--radius-md);
   line-height: 0;
+}
+
+.header-assistant-btn {
+  background: none;
+  border: none;
+  padding: 0 4px;
+  color: var(--pw-ink);
+  font-size: 1.25rem;
+  line-height: 1;
+  min-width: var(--touch-target-min);
+  min-height: var(--touch-target-min);
+  cursor: pointer;
 }
 
 .header-logo-btn::after {
