@@ -34,6 +34,7 @@ Mitglieder `qc-agent` (fragt) und `qc-agent-2`.
 	Seife, Zucker ×2, Apfel ×3; gekauft Ei, Brot, Hafermilch) und **QC Drogeriemarkt** (leer).
 - Packliste **QC Zelten** (Zelt, Schlafsack). To-do-Liste **QC2 Todo** (Fenster, Fenster innen
 	putzen, Rasen erledigt).
+- Gastlinks auf **QC2 Einkauf** und **QC2 Todo**.
 - Notizen: „Geschenkideen“, „QC Denkblock-Test“, „Handwerker“ (Elektriker Montag 9 Uhr, Maler …),
 	„Urlaub Kreta“ (Koffer packen, Pässe prüfen).
 
@@ -50,6 +51,13 @@ Weicht der Stand ab, die Sätze sinngemäß anpassen und das im Ergebnis vermerk
 | A4b | die qc2 | `add_shopping_items` auf QC2 Einkauf: Tomate |
 | A5 | setz bitte zwölf brötchen komma senf und äh zwei gurken auf qc2 einkauf | `add_shopping_items`: Brötchen ×12, Senf, Gurke ×2 |
 
+## A′. Einkauf: Artikel ändern (`update_shopping_items`)
+
+| Nr | Satz | Erwartet |
+| --- | --- | --- |
+| A6 | Sortier den Pfeffer in die Kategorie Gewürze | `update_shopping_items` Pfeffer → Kategorie Gewürze (neu): Toast für Kategorie und Artikel; Rückgängig des Artikels setzt ihn zurück |
+| A7 | benenn die seife um in flüssigseife | `update_shopping_items` Seife → „Flüssigseife“ |
+
 ## B. Einkauf: lesen (`read_shopping_list`)
 
 | Nr | Satz | Erwartet |
@@ -63,7 +71,8 @@ Weicht der Stand ab, die Sätze sinngemäß anpassen und das im Ergebnis vermerk
 | --- | --- | --- |
 | C1 | Hab die Butter gekauft | `mark_shopping_items_purchased`: Butter |
 | C2 | zahnpasta und duschgel sind gekauft | `mark_shopping_items_purchased`: Zahnpasta, Duschgel |
-| C3 | Ich hab Haferflocken und den Senf geholt | `mark_shopping_items_purchased`: Haferflocken, Senf |
+| C3 | Ich hab Haferflocken und den Senf geholt | `mark_shopping_items_purchased`: Haferflocken, Senf; Rückgängig der Haferflocken: offen, Kaufzähler wie vorher |
+| C4 | qc-agent-2 hat die Milch gekauft | `mark_shopping_items_purchased`: Milch (Artikel bringen keine Punkte, kein Ablehnen) |
 
 ## D. Einkauf: löschen (`delete_shopping_items`, Karte)
 
@@ -81,6 +90,7 @@ Weicht der Stand ab, die Sätze sinngemäß anpassen und das im Ergebnis vermerk
 | E3 | Mach mir eine To-do-Liste Umzug und setz Kartons besorgen und Strom ummelden drauf | `create_list` todo „Umzug“, dann `add_checklist_entries` auf die neue Liste (ID aus dem Ergebnis): Kartons besorgen, Strom ummelden |
 | E4 | Benenn die Liste Baumarkt um in Bauhaus | `rename_list` Baumarkt → Bauhaus |
 | E5 | Was steht auf der Umzug-Liste? | `read_checklist` Umzug (jetzt in der Übersicht); Antwort nennt beide Einträge |
+| E6 | Mach eine Kopie der Zelten-Liste und nenn sie Zelten Sommer | `copy_checklist` QC Zelten → „Zelten Sommer“ |
 
 ## F. Packliste und To-do: Einträge hinzufügen (`add_checklist_entries`)
 
@@ -106,6 +116,7 @@ Weicht der Stand ab, die Sätze sinngemäß anpassen und das im Ergebnis vermerk
 | H1 | Helm ist gepackt | `check_checklist_entries` Helm |
 | H2 | Kartons besorgen ist erledigt | `check_checklist_entries` Kartons besorgen |
 | H3 | Der Helm ist doch noch nicht eingepackt | `check_checklist_entries` Helm, `done: false` |
+| H4 | Setz die QC2 Todo Liste zurück, alles wieder offen | `reset_checklist` QC2 Todo; Rückgängig hakt genau „Rasen“ wieder ab |
 
 ## I. Einträge löschen (`delete_checklist_entries`, Karte)
 
@@ -132,6 +143,7 @@ Weicht der Stand ab, die Sätze sinngemäß anpassen und das im Ergebnis vermerk
 | Nr | Satz | Erwartet |
 | --- | --- | --- |
 | L1 | Die Umzug-Liste brauchen wir nicht mehr, weg damit | `delete_checklist` Umzug → Karte (nennt die Einträge) → „Löschen“ → Toast; Rückgängig bringt sie mit Einträgen zurück |
+| L2 | Lösch die To-do-Liste QC2 Todo | `delete_checklist` QC2 Todo → Karte nennt, dass ihr Gastlink endet und mit Rückgängig nicht zurückkommt → „Abbrechen“ |
 
 ## M. Notizen (`read_note`, `create_note`, `append_to_note`, `rewrite_note`, `delete_note`)
 
@@ -171,7 +183,7 @@ Weicht der Stand ab, die Sätze sinngemäß anpassen und das im Ergebnis vermerk
 | O9 | Benenn den Haushalt um in WG Kreuzberg | Ablehnen, `go_to_page` einstellungen |
 | O10 | qc-agent-2 hat das Bad geputzt, hak das für sie ab | Ablehnen: das hakt qc-agent-2 selbst ab; kein Werkzeug, das etwas ändert |
 
-## P. Noch nicht in Stufe 1: Aufgaben, Töpfe, fehlende Werkzeuge
+## P. Noch nicht in Stufe 1: Aufgaben, Töpfe; Einkaufsliste löschen
 
 | Nr | Satz | Erwartet |
 | --- | --- | --- |
@@ -180,7 +192,7 @@ Weicht der Stand ab, die Sätze sinngemäß anpassen und das im Ergebnis vermerk
 | P3 | Was ist heute dran? | Noch nicht (keine Aufgaben-Lesewerkzeuge); keine erfundene Antwort |
 | P4 | Trag 30 Euro für Pizza in den Haushaltstopf ein, hab ich bezahlt | Noch nicht; kein Werkzeug; `go_to_page` topf/toepfe erlaubt |
 | P5 | Wer schuldet im Haushaltstopf wem was? | Noch nicht (kein Lesewerkzeug für Töpfe); keine erfundenen Beträge |
-| P6 | Lösch die Einkaufsliste Bauhaus | Kein Werkzeug für das Löschen einer Einkaufsliste: sagt das in einem Satz (der Weg von Hand ist willkommen); löscht nichts anderes |
+| P6 | Lösch die Einkaufsliste Bauhaus | `delete_shopping_list` Bauhaus → Karte (nennt die Artikel) → „Löschen“ → Toast; Rückgängig bringt sie zurück |
 
 ## Q. Rückfragen bei Mehrdeutigem
 
