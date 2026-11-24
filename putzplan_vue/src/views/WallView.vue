@@ -26,6 +26,8 @@ import { useHouseholdStore } from '../stores/householdStore'
 import { useTaskBoard } from '@/composables/useTaskBoard'
 import { useOverlayHistoryEntry } from '@/composables/useOverlayHistoryEntry'
 import { searchWall } from '@/lib/taskSearch'
+import { flashedTaskIds } from '@/lib/assistant/followApp'
+import { useFlash } from '@/lib/assistant/flash'
 import { dropScrap, tornScrapState } from '@/composables/useTornScrap'
 import {
   layoutWall,
@@ -624,6 +626,9 @@ watch(layoutSignature, () => {
 
 let resizeObserver: ResizeObserver | null = null
 let lastWidth = 0
+
+// Was der Assistent an Aufgaben geändert hat, leuchtet beim Schließen des Chats auf.
+useFlash(flashedTaskIds)
 
 onMounted(async () => {
   // Zuerst abonnieren, dann laden: was zwischen dem Ende des SELECT und dem

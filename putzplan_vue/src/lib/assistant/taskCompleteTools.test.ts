@@ -4,7 +4,7 @@ import type { Task } from '@/types/Task'
 import type { ListToolStores } from './listTools'
 import type { NotesToolStore } from './notesTools'
 import type { ShoppingToolStore } from './shoppingTools'
-import type { TaskCompleteToolStore } from './taskCompleteTools'
+import type { TaskToolStores } from './taskTools'
 import { assistantTools } from './tools'
 
 interface FakeCompletion {
@@ -109,7 +109,7 @@ const registry = (store: FakeStore) =>
     shopping: { lists: [], items: [] } as unknown as ShoppingToolStore,
     lists: {} as ListToolStores,
     notes: { notes: [] } as unknown as NotesToolStore,
-    taskCompletion: store as unknown as TaskCompleteToolStore,
+    tasks: { tasks: store, household: {}, today: () => new Date() } as unknown as TaskToolStores,
     goToPage: () => {},
     currentUserId: () => 'me',
   })
@@ -131,6 +131,11 @@ describe('complete_task', () => {
     expect(outcome.summary).toBe('✓ erledigt: Bad putzen (+5 P)')
     expect(outcome.result).toContain('Bad putzen')
     expect(outcome.changes).toHaveLength(1)
+  })
+
+  it('leads the app to the wall, where the task lights up', async () => {
+    const outcome = await run(fakeStore([bad]), 'complete_task', { task_id: 'bad' })
+    expect(outcome.changed).toEqual([{ id: 'bad', page: { area: 'wall' } }])
   })
 })
 
@@ -359,6 +364,7 @@ describe('complete_task on a project (Projekt-Arbeit)', () => {
     expect(store.completions).toMatchObject([{ task_id: 'keller-work', points: 10 }])
     expect(store.tasks.find((t) => t.task_id === 'keller')!.completed).toBe(false)
     expect(outcome.summary).toBe('✓ Projekt-Arbeit: Keller entrümpeln (+10 P)')
+    expect(outcome.changed).toEqual([{ id: 'keller', page: { area: 'wall' } }])
   })
 
   it('the first work sets the default of the work, and undo takes all of it back', async () => {
@@ -368,42 +374,5 @@ describe('complete_task on a project (Projekt-Arbeit)', () => {
     expect(await outcome.changes![0]!.undo()).toBe(true)
     expect(store.completions).toEqual([])
     expect(store.tasks.find((t) => t.task_id === 'keller-work')!.effort).toBeNull()
-  })
-})
-
-describe('find_task_to_complete', () => {
-  const wall = [
-    bad,
-    { task_id: 'fenster', title: 'Fenster putzen', effort: null },
-    { task_id: 'muell', title: 'Müll rausbringen', effort: 1, completed: true },
-    { task_id: 'spiegel', title: 'Spiegel', effort: 1, parent_task_id: 'bad' },
-  ]
-
-  it('finds tasks by a word of their title, with ID, points and state, and changes nothing', async () => {
-    const store = fakeStore(wall)
-    const outcome = await run(store, 'find_task_to_complete', { query: 'putzen' })
-    expect(outcome.result).toContain('Bad putzen (id bad): 5 Standardpunkte, dran')
-    expect(outcome.result).toContain('Fenster putzen (id fenster): unbewertet, dran')
-    expect(outcome.result).not.toContain('Müll')
-    expect(outcome.summary).toBeUndefined()
-    expect(outcome.changes).toBeUndefined()
-  })
-
-  it('names a subtask with its task, and a task that is done as done', async () => {
-    const store = fakeStore(wall)
-    expect((await run(store, 'find_task_to_complete', { query: 'spiegel' })).result).toContain(
-      'Spiegel, Unteraufgabe von „Bad putzen“ (id spiegel)',
-    )
-    expect((await run(store, 'find_task_to_complete', { query: 'müll' })).result).toContain(
-      'erledigt',
-    )
-  })
-
-  it('lists every task without a query, and says when nothing matches', async () => {
-    const store = fakeStore(wall)
-    expect((await run(store, 'find_task_to_complete', {})).result.split('\n')).toHaveLength(5)
-    expect((await run(store, 'find_task_to_complete', { query: 'Garage' })).result).toMatch(
-      /[Kk]eine Aufgabe/,
-    )
   })
 })

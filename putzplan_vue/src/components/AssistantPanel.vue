@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * Chat mit dem Assistenten: Listen und Notizen per Satz, mit Toast und
+ * Chat mit dem Assistenten: Listen, Notizen und Aufgaben per Satz, mit Toast und
  * Rückgängig je Änderung und einer Karte vor jedem Löschen.
  *
  * Der Verlauf lebt in dieser Komponente. Sie hängt im Header, der beim
@@ -27,6 +27,7 @@ import { followApp } from '@/lib/assistant/followApp'
 import { useGoToPage } from '@/composables/useGoToPage'
 import { useAuthStore } from '@/stores/authStore'
 import { useGuestShareStore } from '@/stores/guestShareStore'
+import { useHouseholdStore } from '@/stores/householdStore'
 import { useNotesStore } from '@/stores/notesStore'
 import { usePackingStore } from '@/stores/packingStore'
 import { useShoppingStore } from '@/stores/shoppingStore'
@@ -50,7 +51,7 @@ const tools = assistantTools({
   shopping: shoppingStore,
   lists,
   notes: useNotesStore(),
-  taskCompletion: useTaskStore(),
+  tasks: { tasks: useTaskStore(), household: useHouseholdStore(), today: () => new Date() },
   goToPage,
   currentUserId: () => authStore.user?.id ?? null,
 })

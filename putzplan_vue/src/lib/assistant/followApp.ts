@@ -3,9 +3,10 @@
  * letzten Änderung, und beim Schließen leuchten auf der dann gezeigten Seite
  * die Einträge auf, die seit dem Öffnen geändert wurden.
  *
- * Seiten sind die Listen und die Notizen: die Einkaufsansicht liest
- * `flashedShoppingIds`, die Ansicht der Pack- und To-do-Listen
- * `flashedChecklistIds`, die Notizen `flashedNoteIds`, und lassen die
+ * Seiten sind die Listen, die Notizen und die Pinnwand: die Einkaufsansicht
+ * liest `flashedShoppingIds`, die Ansicht der Pack- und To-do-Listen
+ * `flashedChecklistIds`, die Notizen `flashedNoteIds`, die Pinnwand
+ * `flashedTaskIds` (Zettel und Zeilen im Erledigt-Streifen), und lassen die
  * Einträge aufleuchten.
  */
 import { ref } from 'vue'
@@ -22,6 +23,8 @@ export const flashedShoppingIds = ref<ReadonlySet<string>>(new Set())
 export const flashedChecklistIds = ref<ReadonlySet<string>>(new Set())
 /** Die Notizen, die gerade aufleuchten. */
 export const flashedNoteIds = ref<ReadonlySet<string>>(new Set())
+/** Die Aufgaben der Pinnwand, die gerade aufleuchten. */
+export const flashedTaskIds = ref<ReadonlySet<string>>(new Set())
 let flashTimer: number | undefined
 
 type FollowStore = Pick<ReturnType<typeof useShoppingStore>, 'currentListId' | 'currentItemId'>
@@ -49,6 +52,7 @@ export function followApp(
 
   const shownPage = (): AssistantPage | null => {
     if (router.currentRoute.value.name === 'notes') return { area: 'notes' }
+    if (router.currentRoute.value.name === 'home') return { area: 'wall' }
     const area = listsTab()
     if (!area) return null
     const listId = area === 'shopping' ? shopping.currentListId : checklists[area].currentListId
@@ -79,6 +83,8 @@ export function followApp(
         flashedShoppingIds.value = new Set(ids.map(shopping.currentItemId))
       } else if (page.area === 'notes') {
         flashedNoteIds.value = new Set(ids)
+      } else if (page.area === 'wall') {
+        flashedTaskIds.value = new Set(ids)
       } else {
         flashedChecklistIds.value = new Set(ids)
       }
@@ -87,6 +93,7 @@ export function followApp(
         flashedShoppingIds.value = new Set()
         flashedChecklistIds.value = new Set()
         flashedNoteIds.value = new Set()
+        flashedTaskIds.value = new Set()
       }, FLASH_MS)
     },
   }

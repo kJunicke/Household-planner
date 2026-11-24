@@ -187,9 +187,9 @@ Weicht der Stand ab, die Sätze sinngemäß anpassen und das im Ergebnis vermerk
 
 | Nr | Satz | Erwartet |
 | --- | --- | --- |
-| P1 | Ich hab das Bad geputzt | Seit Stufe 2: siehe S1 |
-| P2 | Leg eine Aufgabe Keller aufräumen mit acht Punkten an | Noch nicht; kein Listenwerkzeug |
-| P3 | Was ist heute dran? | Noch nicht (keine Aufgaben-Lesewerkzeuge); keine erfundene Antwort |
+| P1 | Ich hab das Bad geputzt | Seit Stufe 2 möglich → T1 |
+| P2 | Leg eine Aufgabe Keller aufräumen mit acht Punkten an | Seit Stufe 2 möglich → S2 |
+| P3 | Was ist heute dran? | Seit Stufe 2 möglich → S1 |
 | P4 | Trag 30 Euro für Pizza in den Haushaltstopf ein, hab ich bezahlt | Noch nicht; kein Werkzeug; `go_to_page` topf/toepfe erlaubt |
 | P5 | Wer schuldet im Haushaltstopf wem was? | Noch nicht (kein Lesewerkzeug für Töpfe); keine erfundenen Beträge |
 | P6 | Lösch die Einkaufsliste Bauhaus | `delete_shopping_list` Bauhaus → Karte (nennt die Artikel) → „Löschen“ → Toast; Rückgängig bringt sie zurück |
@@ -203,7 +203,35 @@ Weicht der Stand ab, die Sätze sinngemäß anpassen und das im Ergebnis vermerk
 | Q3 | Benenn die Liste in Wochenende um | Rückfrage: welche Liste |
 | Q4 | setz seife drauf | Rückfrage: welche Liste (Seife steht schon auf QC2 Einkauf; auch das darf er sagen) |
 
-## S. Aufgaben erledigen und Quick-Aufgaben (`find_task_to_complete`, `complete_task`, `log_quick_task`)
+## R. Verlauf: frisch nach 30 Minuten
+
+| Nr | Satz | Erwartet |
+| --- | --- | --- |
+| R1 | (nach mehr als 30 Minuten ohne Frage) Was steht auf der Drogerieliste? | Trennlinie „Neues Gespräch“ im Chat, dann `read_shopping_list` wie in B1 |
+
+## S. Aufgaben anlegen, zuweisen, verschieben, wieder dreckig, löschen und lesen
+
+Aufgaben stehen nicht in der Übersicht: vor jedem schreibenden Werkzeug ist `read_tasks` erlaubt.
+Jede Änderung führt die App auf die Pinnwand; beim Schließen des Chats leuchten Zettel und Zeilen im
+Erledigt-Streifen auf. Ausgangslage: die Zettel „QC-Raster …“ und „QC-Test …“ des QC-Testhaushalts;
+„QC-Raster Bad“ erledigt.
+
+| Nr | Satz | Erwartet |
+| --- | --- | --- |
+| S1 | Was ist gerade dran? | `read_tasks`; Antwort nennt die Aufgaben, die dran sind, nicht die erledigten |
+| S2 | Leg eine Aufgabe QC Keller aufräumen an, einmalig, acht Punkte | `create_task` one-time, 8 Punkte; Toast, neuer Zettel; Rückgängig nimmt ihn wieder ab |
+| S3 | leg noch eine aufgabe qc keller aufräumen an mit fünf punkten einmalig | Duplikat: nichts angelegt, Antwort nennt die bestehende Aufgabe |
+| S4 | Leg eine Aufgabe QC Fenster innen putzen an | Rückfrage nach Punkten (und Typ), kein `create_task` ohne Punkte |
+| S5 | qc-agent-2 soll den Keller machen | `assign_task` QC Keller aufräumen → qc-agent-2; Befestigung in seiner Farbe; Rückgängig: wieder niemand |
+| S6 | Verschieb QC-Test Sieben auf Freitag | `postpone_task` until = kommender Freitag; Zeile „→ TT.MM.“ im Erledigt-Streifen; Rückgängig: wieder dran |
+| S7 | verschieb qc-test projekt um zwei tage | Ablehnen: Projekte lassen sich nicht verschieben; kein Werkzeug, das etwas ändert |
+| S8 | QC-Raster Bad ist wieder dreckig | `mark_task_dirty`; Zettel zurück an der Wand, Punkte bleiben; Rückgängig: wieder erledigt |
+| S9 | Wer hat zuletzt QC-Raster Bad geputzt? | `read_task_history` (mit task_id); Antwort: wer und wann, nichts erfunden |
+| S10 | Wie steht das Wochenziel? | `read_weekly_goal`; Antwort: Ziel, Punkte der Woche, Anteile ohne Rangliste |
+| S11 | Lösch die Aufgabe QC-Raster Bad | `delete_task` → Karte („ihre Erledigungen bleiben im Verlauf“) → „Löschen“ → Toast; Rückgängig hängt denselben Zettel wieder hin; die Punkte im Wochenziel bleiben die ganze Zeit |
+| S12 | Lösch die Aufgabe QC Keller aufräumen | `delete_task` → Karte ohne Verlaufshinweis → „Abbrechen“ → nichts gelöscht |
+
+## T. Aufgaben erledigen und Quick-Aufgaben (`complete_task`, `log_quick_task`)
 
 Im QC-Testhaushalt sind alle Aufgaben unbewertet (Stand 25.11.2026): **QC-Raster Bad**, **QC-Raster
 Küche**, **QC-Raster Fenster**, **QC-Test Projekt** (mit „Am Projekt arbeiten“) u. a. Rückgängig ist
@@ -212,22 +240,16 @@ dabei zum ersten Mal bewertete Aufgabe ist wieder unbewertet.
 
 | Nr | Satz | Erwartet |
 | --- | --- | --- |
-| S1 | Ich hab das Bad geputzt | `find_task_to_complete`, `complete_task` weist ab (unbewertet) → Rückfrage nach den Punkten; nichts erledigt |
-| S1b | 5 Punkte | `complete_task` QC-Raster Bad mit points 5: Toast „erledigt: QC-Raster Bad (+5 P, ab jetzt Standard)“, Wochenziel +5 |
-| S2 | Hab auch das Fenster geputzt, waren 3 Punkte | Rückfrage: QC-Raster Fenster (Pinnwand) oder „Fenster“ / „Fenster innen putzen“ (QC2 Todo) |
-| S2b | die auf der Pinnwand | `complete_task` QC-Raster Fenster mit points 3 |
-| S3 | Küche ist geputzt | Rückfrage nach den Punkten (unbewertet) |
-| S3b | 4 | `complete_task` QC-Raster Küche mit points 4; dann Rückgängig im Toast: Küche wieder an der Wand und unbewertet, Wochenziel −4 |
-| S4 | ich hab gerade den dachboden aufgeräumt sechs punkte | `log_quick_task` „Dachboden aufräumen“ mit 6 Punkten (keine passende Aufgabe); Rückgängig nimmt die 6 Punkte wieder raus |
-| S5 | Ich hab den Keller entrümpelt | Keine Aufgabe passt: Rückfrage, ob als Quick-Aufgabe und mit wie vielen Punkten |
-| S6 | qc-agent-2 hat die Küche geputzt, 4 Punkte | Ablehnen: das hakt qc-agent-2 selbst ab; kein Werkzeug, das etwas ändert |
-| S7 | Fenster nochmal geputzt, diesmal 6 Punkte | Rückfrage nach der Begründung (Abweichung: sonst 3); nichts erledigt. Fragt er dazu nach Pinnwand oder Liste, ist das auch richtig |
-| S7b | die Pinnwand, war extrem dreckig nach der Party | `complete_task` QC-Raster Fenster mit points 6, note mit der Begründung, again (schon erledigt): Toast „+6 P statt 3“ |
-| S8 | Ich hab zwei Stunden am QC-Test Projekt gearbeitet | Rückfrage nach den Punkten; mit Antwort `complete_task` am Projekt: Toast „Projekt-Arbeit: QC-Test Projekt (+… P)“, das Projekt bleibt offen |
-| S9 | Bad ist geputzt | Ist QC-Raster Bad schon erledigt: Hinweis, dass es schon erledigt ist (wann); erledigt erst, wenn der Nutzer sagt, dass er es seitdem wieder geputzt hat |
-
-## R. Verlauf: frisch nach 30 Minuten
-
-| Nr | Satz | Erwartet |
-| --- | --- | --- |
-| R1 | (nach mehr als 30 Minuten ohne Frage) Was steht auf der Drogerieliste? | Trennlinie „Neues Gespräch“ im Chat, dann `read_shopping_list` wie in B1 |
+| T1 | Ich hab das Bad geputzt | `read_tasks`, `complete_task` weist ab (unbewertet) → Rückfrage nach den Punkten; nichts erledigt |
+| T1b | 5 Punkte | `complete_task` QC-Raster Bad mit points 5: Toast „erledigt: QC-Raster Bad (+5 P, ab jetzt Standard)“, Wochenziel +5 |
+| T2 | Hab auch das Fenster geputzt, waren 3 Punkte | Rückfrage: QC-Raster Fenster (Pinnwand) oder „Fenster“ / „Fenster innen putzen“ (QC2 Todo) |
+| T2b | die auf der Pinnwand | `complete_task` QC-Raster Fenster mit points 3 |
+| T3 | Küche ist geputzt | Rückfrage nach den Punkten (unbewertet) |
+| T3b | 4 | `complete_task` QC-Raster Küche mit points 4; dann Rückgängig im Toast: Küche wieder an der Wand und unbewertet, Wochenziel −4 |
+| T4 | ich hab gerade den dachboden aufgeräumt sechs punkte | `log_quick_task` „Dachboden aufräumen“ mit 6 Punkten (keine passende Aufgabe); Rückgängig nimmt die 6 Punkte wieder raus |
+| T5 | Ich hab den Keller entrümpelt | Keine Aufgabe passt: Rückfrage, ob als Quick-Aufgabe und mit wie vielen Punkten |
+| T6 | qc-agent-2 hat die Küche geputzt, 4 Punkte | Ablehnen: das hakt qc-agent-2 selbst ab; kein Werkzeug, das etwas ändert |
+| T7 | Fenster nochmal geputzt, diesmal 6 Punkte | Rückfrage nach der Begründung (Abweichung: sonst 3); nichts erledigt. Fragt er dazu nach Pinnwand oder Liste, ist das auch richtig |
+| T7b | die Pinnwand, war extrem dreckig nach der Party | `complete_task` QC-Raster Fenster mit points 6, note mit der Begründung, again (schon erledigt): Toast „+6 P statt 3“ |
+| T8 | Ich hab zwei Stunden am QC-Test Projekt gearbeitet | Rückfrage nach den Punkten; mit Antwort `complete_task` am Projekt: Toast „Projekt-Arbeit: QC-Test Projekt (+… P)“, das Projekt bleibt offen |
+| T9 | Bad ist geputzt | Ist QC-Raster Bad schon erledigt: Hinweis, dass es schon erledigt ist (wann); erledigt erst, wenn der Nutzer sagt, dass er es seitdem wieder geputzt hat |

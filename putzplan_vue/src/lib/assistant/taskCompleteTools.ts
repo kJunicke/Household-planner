@@ -43,56 +43,21 @@ export type TaskCompleteToolStore = Pick<
 
 const QUIET = { quiet: true }
 
-/** Ein Ergebnis aus genau einer rücknehmbaren Änderung. */
-function changed(result: string, change: Change): ToolOutcome {
-  return { result, summary: change.summary, undo: undoAll([change.undo]), changes: [change] }
+/** Ein Ergebnis aus genau einer rücknehmbaren Änderung; `shownId` führt die App zur Pinnwand. */
+function changed(result: string, change: Change, shownId?: string): ToolOutcome {
+  return {
+    result,
+    summary: change.summary,
+    undo: undoAll([change.undo]),
+    ...(shownId ? { changed: [{ id: shownId, page: { area: 'wall' } as const }] } : {}),
+    changes: [change],
+  }
 }
 
 /** Die Pinnwand lädt die Aufgaben; ist der Chat woanders geöffnet, fehlen sie noch. */
 async function loadedTasks(store: TaskCompleteToolStore): Promise<Task[]> {
   if (store.tasks.length === 0) await store.loadTasks()
   return store.tasks
-}
-
-/** Wie eine Aufgabe in der Suche für Claude steht: Name, ID, Punkte, Stand. */
-function taskLine(task: Task, parent: Task | undefined): string {
-  const name = parent ? `${task.title}, Unteraufgabe von „${parent.title}“` : task.title
-  if (task.task_type === 'project') {
-    return `- ${name} (id ${task.task_id}): Projekt, Arbeit daran mit complete_task und points`
-  }
-  const points = isUnrated(task) ? 'unbewertet' : `${task.effort} Standardpunkte`
-  let state = 'dran'
-  if (task.task_type === 'daily') state = 'täglich, immer dran'
-  else if (task.completed && task.postponed_until) state = `verschoben bis ${task.postponed_until}`
-  else if (task.completed) {
-    state = task.last_completed_at ? `erledigt ${dateOf(task.last_completed_at)}` : 'erledigt'
-  }
-  return `- ${name} (id ${task.task_id}): ${points}, ${state}`
-}
-
-/**
- * Sucht Aufgaben über ein Wort ihres Titels oder des Titels ihrer Hauptaufgabe;
- * ohne Suchwort alle. Die Zeilen „Am Projekt arbeiten“ stehen nicht darin: Arbeit
- * am Projekt bucht complete_task am Projekt selbst.
- */
-async function findTasks(store: TaskCompleteToolStore, input: Record<string, unknown>) {
-  const tasks = await loadedTasks(store)
-  const words = String(input.query ?? '')
-    .toLowerCase()
-    .split(/\s+/)
-    .filter(Boolean)
-  const parentOf = (t: Task) => tasks.find((p) => p.task_id === t.parent_task_id)
-  const lines = tasks
-    .filter(
-      (t) => !isProjectWork({ title: t.title, parentTaskType: parentOf(t)?.task_type ?? null }),
-    )
-    .filter((t) => {
-      const text = `${t.title} ${parentOf(t)?.title ?? ''}`.toLowerCase()
-      return words.length === 0 || words.some((w) => text.includes(w))
-    })
-    .map((t) => taskLine(t, parentOf(t)))
-  if (lines.length === 0) return { result: `Keine Aufgabe passt zu „${String(input.query)}“.` }
-  return { result: `Aufgaben:\n${lines.join('\n')}` }
 }
 
 /** `input.points` als gültige Punktzahl, `undefined` ohne, `null` bei einer ungültigen. */
@@ -231,6 +196,7 @@ async function logProjectWork(
     },
     points,
     `${points} P`,
+    project.task_id,
   )
   if (result.isError) return { ...result, summary: `✗ nicht gebucht: ${project.title}` }
   const summary = `✓ Projekt-Arbeit: ${project.title} (+${points} P)`
@@ -252,6 +218,8 @@ async function complete(
   options: Parameters<TaskCompleteToolStore['completeTask']>[1],
   points: number,
   pointsText: string,
+  /** Was an der Wand aufleuchten soll, wenn es nicht `task` selbst ist (Projekt-Arbeit). */
+  shownId?: string,
 ): Promise<ToolOutcome> {
   const id = task.task_id
   if (!(await store.completeTask(id, options))) {
@@ -265,11 +233,15 @@ async function complete(
   // den Fahrschein ersetzt, bleibt alles stehen (→ `undoTicketOf`).
   const ticket = store.undoTicketOf(id)
   const restoreRating = options?.standardPoints !== undefined
-  return changed(`Erledigt: „${task.title}“, ${points} Punkte für dich.`, {
-    summary: `✓ erledigt: ${task.title} (+${pointsText})`,
-    undo: async () =>
-      store.undoTicketOf(id) === ticket && store.undoCompletion(id, { restoreRating }),
-  })
+  return changed(
+    `Erledigt: „${task.title}“, ${points} Punkte für dich.`,
+    {
+      summary: `✓ erledigt: ${task.title} (+${pointsText})`,
+      undo: async () =>
+        store.undoTicketOf(id) === ticket && store.undoCompletion(id, { restoreRating }),
+    },
+    shownId ?? id,
+  )
 }
 
 /**
@@ -314,23 +286,9 @@ async function logQuickTask(
   })
 }
 
-const TASK_ID = { type: 'string', description: 'ID der Aufgabe aus find_task_to_complete' }
+const TASK_ID = { type: 'string', description: 'ID der Aufgabe aus read_tasks' }
 
 export const taskCompleteTools = (store: TaskCompleteToolStore): AssistantTool[] => [
-  {
-    name: 'find_task_to_complete',
-    description:
-      'Sucht Aufgaben der Pinnwand über ein Wort ihres Titels (z. B. „Bad“) und nennt ID, ' +
-      'Standardpunkte (oder unbewertet) und ob sie dran oder erledigt ist. Ohne query alle. ' +
-      'Nutze es, bevor du eine Aufgabe erledigst; passen mehrere, frag nach.',
-    input_schema: {
-      type: 'object',
-      properties: {
-        query: { type: 'string', description: 'Ein Wort aus dem Titel, z. B. „Bad“' },
-      },
-    },
-    execute: (input) => findTasks(store, input),
-  },
   {
     name: 'complete_task',
     description:

@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 import type { ListToolStores } from './listTools'
 import { type ShoppingToolStore } from './shoppingTools'
 import type { NotesToolStore } from './notesTools'
-import type { TaskCompleteToolStore } from './taskCompleteTools'
+import type { TaskToolStores } from './taskTools'
 import { assistantTools } from './tools'
 
 type Item = ShoppingToolStore['items'][number]
@@ -109,7 +109,7 @@ const executeShoppingTool = (
     shopping: store,
     lists: {} as ListToolStores,
     notes: { notes: [] } as unknown as NotesToolStore,
-    taskCompletion: {} as TaskCompleteToolStore,
+    tasks: {} as TaskToolStores,
     goToPage: () => {},
     currentUserId: () => 'me',
   }).execute(name, input)

@@ -55,6 +55,8 @@ import SubtaskManagementModal from './SubtaskManagementModal.vue'
 import TaskPostponeModal from './TaskPostponeModal.vue'
 import TaskRatingModal from './TaskRatingModal.vue'
 import { estimateParentPoints, isProjectWork, isUnrated } from '@/lib/taskPoints'
+import { flashedTaskIds } from '@/lib/assistant/followApp'
+import { FLASH_CLASS } from '@/lib/assistant/flash'
 
 const props = defineProps<{
   task: Task
@@ -863,6 +865,7 @@ const handlePostponeConfirm = async (targetDate: string) => {
         'zettel--pressed': pressOpen,
         'zettel--assigned': isAssigned,
         'zettel--loose': props.loose,
+        [FLASH_CLASS]: flashedTaskIds.has(props.task.task_id),
       },
     ]"
     :style="noteStyle"
