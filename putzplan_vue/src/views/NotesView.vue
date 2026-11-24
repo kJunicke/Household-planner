@@ -4,6 +4,8 @@ import { useNotesStore } from '@/stores/notesStore'
 import { useHouseholdStore } from '@/stores/householdStore'
 import type { Note } from '@/types/Note'
 import { NOTE_CONTENT_MAX_LENGTH } from '@/lib/limits'
+import { flashedNoteIds } from '@/lib/assistant/followApp'
+import { FLASH_CLASS, useFlash } from '@/lib/assistant/flash'
 
 const notesStore = useNotesStore()
 const householdStore = useHouseholdStore()
@@ -73,6 +75,9 @@ const formatDate = (dateString: string) => {
   })
 }
 
+// Beim Schließen des Chats leuchten die Notizen auf, die er geändert hat.
+useFlash(flashedNoteIds)
+
 onMounted(async () => {
   await notesStore.loadNotes()
   notesStore.subscribeToNotes()
@@ -127,7 +132,12 @@ onUnmounted(() => {
 
       <!-- Notes List -->
       <div v-else class="notes-list">
-        <div v-for="note in notesStore.sortedNotes" :key="note.note_id" class="note-item">
+        <div
+          v-for="note in notesStore.sortedNotes"
+          :key="note.note_id"
+          class="note-item"
+          :class="flashedNoteIds.has(note.note_id) && FLASH_CLASS"
+        >
           <!-- View Mode -->
           <template v-if="editingNote?.note_id !== note.note_id">
             <div class="note-content">

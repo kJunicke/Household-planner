@@ -19,6 +19,8 @@ import CategoryCombobox from '@/components/CategoryCombobox.vue'
 import LongSheet from '@/components/LongSheet.vue'
 import { SHOPPING_ITEM_NAME_MAX_LENGTH } from '@/lib/limits'
 import { useGuestShareStore } from '@/stores/guestShareStore'
+import { flashedShoppingIds } from '@/lib/assistant/followApp'
+import { FLASH_CLASS, useFlash } from '@/lib/assistant/flash'
 
 const props = defineProps<{
   /**
@@ -299,7 +301,7 @@ const handleAddItem = async () => {
   const qty = Math.max(1, Math.floor(Number(topQty.value) || 1))
   const category = await ensureCategory(topCategory.value)
   resetTopBar()
-  await shoppingStore.createItem(value, category, qty)
+  await shoppingStore.createItem({ name: value, category, quantity: qty })
 }
 
 const selectSuggestion = (suggestion: string) => {
@@ -367,7 +369,7 @@ const handleSectionAdd = async (group: ShoppingCategoryGroup) => {
   addDraft.value[group.key] = ''
   addQty.value[group.key] = 1
   qtyFieldOpen.value.delete(group.key)
-  await shoppingStore.createItem(name, group.category, qty)
+  await shoppingStore.createItem({ name, category: group.category, quantity: qty })
 }
 
 const selectSectionSuggestion = (group: ShoppingCategoryGroup, name: string) => {
@@ -446,6 +448,18 @@ const handleCategoryDelete = async (name: string, withItems: boolean) => {
   await shoppingStore.deleteCategory(name, { withItems })
   editingCategory.value = null
 }
+
+// --- Aufleuchten nach dem Assistenten ----------------------------------------
+// Beim Schließen des Chats leuchten die Artikel auf, die er geändert hat, auch
+// gekaufte; eine eingeklappte Kategorie mit einem davon klappt dafür auf.
+const flashClass = (id: string) => flashedShoppingIds.value.has(id) && FLASH_CLASS
+useFlash(flashedShoppingIds, (ids) => {
+  for (const group of displaySections.value) {
+    if (group.items.some((i) => ids.has(i.shopping_item_id))) {
+      sectionOverride.value.set(group.key, true)
+    }
+  }
+})
 
 // --- Ziehen zwischen Kategorien ---------------------------------------------
 /**
@@ -574,7 +588,11 @@ onUnmounted(() => {
               <button
                 v-for="list in shoppingStore.lists"
                 :key="list.list_id"
-                :class="['list-chip', shoppingStore.currentListId === list.list_id && 'active']"
+                :class="[
+                  'list-chip',
+                  shoppingStore.currentListId === list.list_id && 'active',
+                  flashClass(list.list_id),
+                ]"
                 @click="shoppingStore.currentListId = list.list_id"
               >
                 <i
@@ -763,10 +781,13 @@ onUnmounted(() => {
                       :data-item-id="item.purchased ? null : item.shopping_item_id"
                       :checked="item.purchased"
                       :name="item.name"
-                      :class="{
-                        'row-priority': item.is_priority && !item.purchased,
-                        'row-moved': item.shopping_item_id === justMovedId,
-                      }"
+                      :class="[
+                        {
+                          'row-priority': item.is_priority && !item.purchased,
+                          'row-moved': item.shopping_item_id === justMovedId,
+                        },
+                        flashClass(item.shopping_item_id),
+                      ]"
                       @toggle="onItemToggle(item)"
                       @edit="openItemEdit(item)"
                     >
@@ -870,6 +891,7 @@ onUnmounted(() => {
                       <ListItemRow
                         :checked="true"
                         :name="item.name"
+                        :class="flashClass(item.shopping_item_id)"
                         :title="purchaseHistory(item)"
                         @toggle="onGekauftToggle(item)"
                         @edit="openItemEdit(item)"

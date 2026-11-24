@@ -15,8 +15,7 @@ Tastaturbedienung sind kein Ziel, Gesten dürfen der einzige Weg sein.
 
 - **UI wird von Hand geprüft**, im Browser über die Chrome-Erweiterung; ein UI-Test-Framework gibt es bewusst
   nicht. Messfallen im ferngesteuerten Tab und wie man einen Deploy prüft: [docs/testing.md](docs/testing.md).
-- **Jede Codeänderung prüft ein zweiter Agent** mit `/code-review`, bei sichtbaren Änderungen auch das
-  Aussehen. Messen und Ansehen sind zwei Aufträge. (05.09.2026: „ist doch nur CSS“ ohne zweiten Blick →
+- **Sichtbare Änderungen werden auch angesehen, nicht nur gemessen.** (05.09.2026: „ist doch nur CSS“ →
   abgeschnittene Stempelränder auf 261 von 282 Lagen; die Messung fragte „wie breit“, nicht „sieht es ganz
   aus“.)
 

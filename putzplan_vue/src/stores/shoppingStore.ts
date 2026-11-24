@@ -326,11 +326,19 @@ export const useShoppingStore = defineStore('shopping', () => {
   }
 
   /**
+   * Vorläufige ID → echte ID, für alle, die sich eine vorläufige gemerkt haben
+   * (der Assistent, um seine Änderungen beim Schließen aufleuchten zu lassen).
+   */
+  const syncedIds = new Map<string, string>()
+  const currentItemId = (id: string) => syncedIds.get(id) ?? id
+
+  /**
    * After a queued create syncs, replace its optimistic temp row with the real
    * DB row and re-point every still-queued mutation that referenced the temp id.
    * If realtime already inserted the real row, just drop the temp duplicate.
    */
   const reconcileTempId = (tempId: string, realItem: ShoppingItem) => {
+    syncedIds.set(tempId, realItem.shopping_item_id)
     const realExists = items.value.some((i) => i.shopping_item_id === realItem.shopping_item_id)
     const tempIdx = items.value.findIndex((i) => i.shopping_item_id === tempId)
     if (tempIdx !== -1) {
@@ -725,6 +733,60 @@ export const useShoppingStore = defineStore('shopping', () => {
     }
   }
 
+  /**
+   * Holt eine gelöschte Liste zurück, mit denselben IDs: die Liste, ihre
+   * Kategorien und ihre Artikel samt Kaufhistorie, so wie sie vor dem Löschen
+   * waren. Für das Rückgängig des Assistenten; online, wie das Löschen.
+   * Noch nicht synchronisierte Zeilen (`temp_`) bekommen eine neue ID.
+   */
+  const restoreList = async (snapshot: {
+    list: ShoppingList
+    categories: ShoppingCategory[]
+    items: ShoppingItem[]
+  }) => {
+    const categoryRows = snapshot.categories.map(({ category_id, ...rest }) =>
+      category_id.startsWith('temp_') ? rest : { category_id, ...rest },
+    )
+    const itemRows = snapshot.items.map(({ shopping_item_id, ...rest }) =>
+      shopping_item_id.startsWith('temp_') ? rest : { shopping_item_id, ...rest },
+    )
+    try {
+      const { error: listError } = await supabase.from('shopping_lists').insert(snapshot.list)
+      if (listError) throw listError
+      if (!lists.value.some((l) => l.list_id === snapshot.list.list_id)) {
+        lists.value.push(snapshot.list)
+      }
+      if (snapshot.categories.length) {
+        const { data, error } = await supabase
+          .from('shopping_categories')
+          .insert(categoryRows)
+          .select()
+        if (error) throw error
+        for (const row of (data ?? []) as ShoppingCategory[]) {
+          if (!categories.value.some((c) => c.category_id === row.category_id)) {
+            categories.value.push(row)
+          }
+        }
+      }
+      if (snapshot.items.length) {
+        const { data, error } = await supabase
+          .from('shopping_items')
+          .insert(itemRows)
+          .select()
+        if (error) throw error
+        for (const row of (data ?? []) as ShoppingItem[]) {
+          if (!items.value.some((i) => i.shopping_item_id === row.shopping_item_id)) {
+            items.value.push(row)
+          }
+        }
+      }
+      return true
+    } catch (error) {
+      console.error('Error restoring shopping list:', error)
+      return false
+    }
+  }
+
   // ============================================================================
   // Item Actions
   // ============================================================================
@@ -804,7 +866,18 @@ export const useShoppingStore = defineStore('shopping', () => {
     }
   }
 
-  const createItem = async (name: string, category: string | null = null, quantity = 1) => {
+  /** `listId` defaults to the open list; the assistant passes it to write to another one. */
+  const createItem = async ({
+    name,
+    category = null,
+    quantity = 1,
+    listId = currentListId.value,
+  }: {
+    name: string
+    category?: string | null
+    quantity?: number
+    listId?: string | null
+  }) => {
     const householdStore = useHouseholdStore()
     const toastStore = useToastStore()
 
@@ -818,20 +891,20 @@ export const useShoppingStore = defineStore('shopping', () => {
       return null
     }
 
-    if (!currentListId.value) {
+    if (!listId) {
       toastStore.showToast('Bitte zuerst eine Liste auswählen', 'error')
       return null
     }
 
     const cat = category?.trim() || null
     const qty = Math.max(1, Math.floor(quantity) || 1)
-    const tempItem = createItemOptimistic(name, currentListId.value, cat, qty)
+    const tempItem = createItemOptimistic(name, listId, cat, qty)
 
     addToQueue({
       operation: 'create',
       payload: {
         name: name.trim(),
-        listId: currentListId.value,
+        listId,
         category: cat,
         quantity: qty,
         tempId: tempItem.shopping_item_id,
@@ -947,6 +1020,31 @@ export const useShoppingStore = defineStore('shopping', () => {
     return true
   }
 
+  /**
+   * Setzt den Kaufstand eines Artikels genau so, wie er war: gekauft oder
+   * offen, Kaufzähler, letzter Kauf und Käufer. Für das Rückgängig des
+   * Assistenten; `markPurchased` zählte einen Kauf mit, den es nie gab.
+   */
+  const setPurchaseState = async (
+    itemId: string,
+    state: Pick<
+      ShoppingItem,
+      'purchased' | 'times_purchased' | 'last_purchased_at' | 'last_purchased_by'
+    >,
+  ) => {
+    if (!items.value.some((i) => i.shopping_item_id === itemId)) return false
+    const updates = {
+      purchased: state.purchased,
+      times_purchased: state.times_purchased,
+      last_purchased_at: state.last_purchased_at,
+      last_purchased_by: state.last_purchased_by,
+    }
+    updateItemOptimistic(itemId, updates)
+    addToQueue({ operation: 'update', payload: { itemId, updates } })
+    if (navigator.onLine) await syncMutations()
+    return true
+  }
+
   const deleteItem = async (itemId: string) => {
     const toastStore = useToastStore()
 
@@ -964,6 +1062,40 @@ export const useShoppingStore = defineStore('shopping', () => {
     }
 
     return true
+  }
+
+  /**
+   * Holt einen gelöschten Artikel zurück: dieselbe Liste, Name, Menge,
+   * Kategorie, gekauft oder offen, Stern und Kaufzähler. Er bekommt eine neue
+   * ID; der Zustand reist als Folge-Mutation auf der temp-ID mit.
+   */
+  const restoreItem = async (item: ShoppingItem) => {
+    if (!useHouseholdStore().currentHousehold) return null
+    const restored = createItemOptimistic(item.name, item.list_id, item.category, item.quantity)
+    const state = {
+      purchased: item.purchased,
+      is_priority: item.is_priority,
+      times_purchased: item.times_purchased,
+      last_purchased_at: item.last_purchased_at,
+      last_purchased_by: item.last_purchased_by,
+    }
+    updateItemOptimistic(restored.shopping_item_id, state)
+    addToQueue({
+      operation: 'create',
+      payload: {
+        name: restored.name,
+        listId: item.list_id,
+        category: restored.category,
+        quantity: restored.quantity,
+        tempId: restored.shopping_item_id,
+      },
+    })
+    addToQueue({
+      operation: 'update',
+      payload: { itemId: restored.shopping_item_id, updates: state },
+    })
+    if (navigator.onLine) await syncMutations()
+    return restored
   }
 
   // ============================================================================
@@ -1014,7 +1146,11 @@ export const useShoppingStore = defineStore('shopping', () => {
    * Die Zuordnung läuft über den Namen — deshalb braucht das Umhängen keine
    * fertige Kategorie-ID und funktioniert auch offline.
    */
-  const createCategory = async (name: string, itemIds: string[] = []) => {
+  const createCategory = async (
+    name: string,
+    itemIds: string[] = [],
+    opts: { quiet?: boolean } = {},
+  ) => {
     if (!currentListId.value) return null
     const householdStore = useHouseholdStore()
     if (!householdStore.currentHousehold) return null
@@ -1043,7 +1179,10 @@ export const useShoppingStore = defineStore('shopping', () => {
       })
       // Deckt den Fall ab, dass jemand einen unbekannten Namen tippt und speichert,
       // ohne die Vorschlagsliste je zu benutzen — sonst entsteht die Kategorie stumm.
-      useToastStore().showToast(`Kategorie „${trimmed}" angelegt`, 'success', 2000)
+      // `quiet`: der Assistent zeigt seinen eigenen Toast mit Rückgängig.
+      if (!opts.quiet) {
+        useToastStore().showToast(`Kategorie „${trimmed}" angelegt`, 'success', 2000)
+      }
     }
 
     for (const itemId of itemIds) {
@@ -1102,7 +1241,10 @@ export const useShoppingStore = defineStore('shopping', () => {
    * Fällen ihre Zuordnung: sonst kehrt die Sektion beim nächsten Zurücksetzen als
    * verwaiste Gruppe zurück.
    */
-  const deleteCategory = async (category: string, options: { withItems?: boolean } = {}) => {
+  const deleteCategory = async (
+    category: string,
+    options: { withItems?: boolean; quiet?: boolean } = {},
+  ) => {
     const toastStore = useToastStore()
     if (!currentListId.value) return
 
@@ -1129,7 +1271,7 @@ export const useShoppingStore = defineStore('shopping', () => {
     }
 
     if (navigator.onLine) await syncMutations()
-    toastStore.showToast('Kategorie gelöscht', 'success', 2000)
+    if (!options.quiet) toastStore.showToast('Kategorie gelöscht', 'success', 2000)
   }
 
   /**
@@ -1332,6 +1474,7 @@ export const useShoppingStore = defineStore('shopping', () => {
     lists.value = []
     categories.value = []
     currentListId.value = null
+    syncedIds.clear()
     try {
       removeKeysWithPrefix(localStorage, STORAGE_KEY_ITEMS)
     } catch (error) {
@@ -1347,6 +1490,7 @@ export const useShoppingStore = defineStore('shopping', () => {
   return {
     items,
     lists,
+    currentItemId,
     currentListId,
     isLoading,
     isSyncing,
@@ -1363,13 +1507,16 @@ export const useShoppingStore = defineStore('shopping', () => {
     createList,
     renameList,
     deleteList,
+    restoreList,
     loadItems,
     createItem,
     updateItem,
     togglePriority,
     markPurchased,
     markUnpurchased,
+    setPurchaseState,
     deleteItem,
+    restoreItem,
     loadCategories,
     createCategory,
     renameCategory,

@@ -26,6 +26,9 @@ import CategoryEditModal from '@/components/CategoryEditModal.vue'
 import ListAddBar from '@/components/ListAddBar.vue'
 import LongSheet from '@/components/LongSheet.vue'
 import { SHOPPING_ITEM_NAME_MAX_LENGTH } from '@/lib/limits'
+import { flashedChecklistIds } from '@/lib/assistant/followApp'
+import { FLASH_CLASS, useFlash } from '@/lib/assistant/flash'
+import { categoryHighlightId } from '@/lib/assistant/listTools'
 import type { GuestShareKind } from '@/types/GuestShare'
 import { useGuestShareStore } from '@/stores/guestShareStore'
 
@@ -334,6 +337,20 @@ const onTopAdd = async (name: string, quantity: number, category: string) => {
   await store.addItem(name, target, quantity)
 }
 
+// --- Aufleuchten nach dem Assistenten ----------------------------------------
+// Beim Schließen des Chats leuchten die Einträge, Kategorien und Listen-Chips
+// auf, die er geändert hat. Was davon eingeklappt ist (Kategorie, Block
+// „erledigt“), klappt dafür auf.
+const flashed = (id: string) => flashedChecklistIds.value.has(id) && FLASH_CLASS
+const categoryFlashed = (group: CategoryGroup) => flashed(categoryHighlightId(group.category))
+useFlash(flashedChecklistIds, (ids) => {
+  for (const group of displaySections.value) {
+    if (!group.items.some((i) => ids.has(i.item_id))) continue
+    sectionOverride.value.set(group.key, true)
+    if (doneRows(group).some((i) => ids.has(i.item_id))) doneOpen.value.add(group.key)
+  }
+})
+
 // --- Item interactions ------------------------------------------------------
 const openItemEdit = (item: ChecklistItem) => {
   editingItem.value = item
@@ -600,7 +617,11 @@ onUnmounted(() => {
               <button
                 v-for="list in store.lists"
                 :key="list.list_id"
-                :class="['list-chip', store.currentListId === list.list_id && 'active']"
+                :class="[
+                  'list-chip',
+                  store.currentListId === list.list_id && 'active',
+                  flashed(list.list_id),
+                ]"
                 @click="store.currentListId = list.list_id"
               >
                 <i
@@ -718,6 +739,7 @@ onUnmounted(() => {
                  Kategorie hat sonst keine Fläche zum Hineinziehen. -->
                   <div
                     class="cat-header"
+                    :class="categoryFlashed(group)"
                     :ref="(el) => setDropEl(`${group.key}::head`, el)"
                     :data-cat-name="group.category ?? ''"
                     role="button"
@@ -784,7 +806,7 @@ onUnmounted(() => {
                       :key="item.item_id"
                       :item="item"
                       :data-item-id="item.packed ? null : item.item_id"
-                      :class="{ 'row-moved': item.item_id === justMovedId }"
+                      :class="[{ 'row-moved': item.item_id === justMovedId }, flashed(item.item_id)]"
                       @toggle="onItemToggle(item)"
                       @increment="onItemIncrement(item)"
                       @decrement="onItemDecrement(item)"
@@ -806,6 +828,7 @@ onUnmounted(() => {
                           v-for="item in doneRows(group)"
                           :key="item.item_id"
                           :item="item"
+                          :class="flashed(item.item_id)"
                           @toggle="onItemToggle(item)"
                           @increment="onItemIncrement(item)"
                           @decrement="onItemDecrement(item)"
