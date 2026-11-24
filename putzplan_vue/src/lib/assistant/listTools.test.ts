@@ -831,6 +831,13 @@ describe('checklist categories', () => {
     expect(packing.items.map((i) => [i.item_id, i.category])).toContainEqual(['g1', 'Bad'])
   })
 
+  it('says to Claude that a deleted category was empty, so no entry is claimed to have moved', async () => {
+    const { run } = setup({}, { ...seed, categories: [...seed.categories, { list_id: 'p1', name: 'Leer' }] })
+    const card = await run('delete_checklist_category', { list_id: 'p1', category: 'Leer' })
+    const done = await card.deleteCard!.confirm()
+    expect(done.result).toBe('Gelöscht: Kategorie Leer (Urlaub). Sie war leer; kein Eintrag hat sich geändert.')
+  })
+
   it('rejects a category the list does not have', async () => {
     const { run } = setup({}, seed)
     for (const name of ['rename_checklist_category', 'delete_checklist_category']) {

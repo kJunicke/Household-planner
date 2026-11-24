@@ -185,8 +185,9 @@ export const notesTools = (
   {
     name: 'create_note',
     description:
-      'Legt eine neue Notiz an. Notizen haben keinen Titel; ihre erste Zeile nennt sie in der ' +
-      'Übersicht. Gehört das Neue zu einer bestehenden Notiz, nimm append_to_note.',
+      'Legt eine neue Notiz an, z. B. bei „notier dir …“ oder „schreib auf, dass …“ ohne genannte ' +
+      'Notiz: dann nicht nachfragen, sondern anlegen. Notizen haben keinen Titel; ihre erste Zeile ' +
+      'nennt sie in der Übersicht. Nennt der Nutzer eine bestehende Notiz, nimm append_to_note.',
     input_schema: {
       type: 'object',
       properties: {

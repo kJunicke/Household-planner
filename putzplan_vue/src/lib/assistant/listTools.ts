@@ -850,7 +850,14 @@ async function deleteCategory(
           for (const entry of entries) await store.moveItemToCategory(entry.item_id, row.name)
           return true
         }
-        return { result: `Gelöscht: ${what}.`, summary, undo, changes: [{ summary, undo }] }
+        // Ohne den Zusatz erfand Claude Einträge, die aus der leeren Kategorie gefallen seien.
+        const empty = entries.length === 0 ? ' Sie war leer; kein Eintrag hat sich geändert.' : ''
+        return {
+          result: `Gelöscht: ${what}.${empty}`,
+          summary,
+          undo,
+          changes: [{ summary, undo }],
+        }
       },
     },
   }
@@ -908,7 +915,8 @@ export const checklistTools = (stores: ListToolStores): AssistantTool[] => [
     description:
       'Ändert Einträge auf Packlisten oder To-do-Listen: Name, Menge oder Kategorie (einsortieren; ' +
       'leere Kategorie = ohne Kategorie). Nur die genannten Felder ändern sich. Eine neue ' +
-      'Kategorie wird angelegt.',
+      'Kategorie wird angelegt. Eine Kategorie umbenennen ist etwas anderes: dafür ' +
+      'rename_checklist_category, die Einträge ziehen dort von selbst mit.',
     input_schema: {
       type: 'object',
       properties: {
@@ -1080,8 +1088,9 @@ export const checklistTools = (stores: ListToolStores): AssistantTool[] => [
   {
     name: 'rename_checklist_category',
     description:
-      'Benennt eine Kategorie einer Packliste oder To-do-Liste um, ihre Einträge ziehen mit. ' +
-      'Gibt es den neuen Namen schon, werden beide zusammengeführt.',
+      'Benennt eine Kategorie einer Packliste oder To-do-Liste um („benenn die Kategorie X in Y ' +
+      'um“), ihre Einträge ziehen von selbst mit; verschiebe sie nicht vorher. Gibt es den neuen ' +
+      'Namen schon, werden beide zusammengeführt.',
     input_schema: {
       type: 'object',
       properties: {
