@@ -493,7 +493,9 @@ export const shoppingTools = (store: ShoppingToolStore): AssistantTool[] => [
   },
   {
     name: 'mark_shopping_items_purchased',
-    description: 'Hakt offene Artikel als gekauft ab.',
+    description:
+      'Hakt offene Artikel einer Einkaufsliste als gekauft ab. Nur für Einkaufslisten; Einträge ' +
+      'von Pack- und To-do-Listen hakt check_checklist_entries ab.',
     input_schema: {
       type: 'object',
       properties: {
