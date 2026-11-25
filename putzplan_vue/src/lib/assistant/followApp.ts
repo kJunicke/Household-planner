@@ -7,8 +7,9 @@
  * liest `flashedShoppingIds`, die Ansicht der Pack- und To-do-Listen
  * `flashedChecklistIds`, die Notizen `flashedNoteIds`, die Pinnwand
  * `flashedTaskIds` (Zettel und Zeilen im Erledigt-Streifen), der Verlauf
- * `flashedCompletionIds` (eine Quick-Aufgabe), ein Topf `flashedPotEntryIds`
- * (Ausgaben und Rückzahlungen), und lassen die Einträge aufleuchten.
+ * `flashedCompletionIds` (eine Quick-Aufgabe), ein Topf `flashedPotIds` (sein
+ * Titel) und `flashedPotEntryIds` (Ausgaben und Rückzahlungen), und lassen die
+ * Einträge aufleuchten.
  */
 import { ref } from 'vue'
 import type { Router } from 'vue-router'
@@ -28,6 +29,8 @@ export const flashedNoteIds = ref<ReadonlySet<string>>(new Set())
 export const flashedTaskIds = ref<ReadonlySet<string>>(new Set())
 /** Die Erledigungen im Verlauf, die gerade aufleuchten. */
 export const flashedCompletionIds = ref<ReadonlySet<string>>(new Set())
+/** Die Töpfe, deren Titel gerade aufleuchtet. */
+export const flashedPotIds = ref<ReadonlySet<string>>(new Set())
 /** Die Ausgaben und Rückzahlungen im offenen Topf, die gerade aufleuchten. */
 export const flashedPotEntryIds = ref<ReadonlySet<string>>(new Set())
 let flashTimer: number | undefined
@@ -69,9 +72,9 @@ export function followApp(
     if (router.currentRoute.value.name === 'notes') return { area: 'notes' }
     if (router.currentRoute.value.name === 'home') return { area: 'wall' }
     if (router.currentRoute.value.name === 'history') return { area: 'history' }
-    const { name, query } = router.currentRoute.value
-    if (name === 'kasse' && query.tab === 'toepfe' && typeof query.topf === 'string') {
-      return { area: 'pot', potId: query.topf }
+    const potId = router.currentRoute.value.query.topf
+    if (router.currentRoute.value.name === 'kasse' && typeof potId === 'string') {
+      return { area: 'pot', potId }
     }
     const area = listsTab()
     if (!area) return null
@@ -92,6 +95,8 @@ export function followApp(
     } else if (page.area === 'history') {
       flashedCompletionIds.value = new Set(ids)
     } else if (page.area === 'pot') {
+      // Der Topf selbst (Titel) oder seine Einträge: die IDs sind verschieden.
+      flashedPotIds.value = new Set(ids)
       flashedPotEntryIds.value = new Set(ids)
     } else {
       flashedChecklistIds.value = new Set(ids)
@@ -103,6 +108,7 @@ export function followApp(
       flashedNoteIds.value = new Set()
       flashedTaskIds.value = new Set()
       flashedCompletionIds.value = new Set()
+      flashedPotIds.value = new Set()
       flashedPotEntryIds.value = new Set()
     }, FLASH_MS)
   }

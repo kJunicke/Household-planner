@@ -6,7 +6,7 @@ import { participantNameProblem, participantNameProblemText, potTitle } from '@/
 import { POT_PARTICIPANT_NAME_MAX_LENGTH } from '@/lib/limits'
 import { formatCents, suggestTransfers } from '@/lib/potLedger'
 import { entryChangeLine } from '@/lib/potEntryChange'
-import { flashedPotEntryIds } from '@/lib/assistant/followApp'
+import { flashedPotEntryIds, flashedPotIds } from '@/lib/assistant/followApp'
 import { FLASH_CLASS, useFlash } from '@/lib/assistant/flash'
 import ExpenseCreateModal from './ExpenseCreateModal.vue'
 import RepaymentCreateModal from './RepaymentCreateModal.vue'
@@ -24,13 +24,16 @@ const emit = defineEmits<{ 'switch-identity': [] }>()
 
 const potStore = usePotStore()
 const router = useRouter()
-// Was der Assistent eingetragen oder geändert hat, leuchtet beim Schließen des Chats auf.
-useFlash(flashedPotEntryIds)
 
 const showCreateModal = ref(false)
 const editingExpense = ref<PotExpense | null>(null)
 
 const title = computed(() => potTitle(props.pot))
+
+// Nach dem Assistenten leuchtet der Titel auf (Topf angelegt, abgeschlossen, wieder
+// geöffnet) oder die Ausgabe bzw. Rückzahlung, die er eingetragen oder geändert hat.
+// followApp füllt beide Mengen zugleich; eine Beobachtung genügt.
+useFlash(flashedPotIds)
 
 const balanceRows = computed(() => {
   const balances = potStore.balancesOf(props.pot.pot_id)
@@ -257,7 +260,7 @@ const handleDelete = () => {
       </div>
     </div>
 
-    <h2 class="pot-title">{{ title }}</h2>
+    <h2 :class="['pot-title', flashedPotIds.has(pot.pot_id) && FLASH_CLASS]">{{ title }}</h2>
     <div v-if="pot.closed_at" class="closed-banner">
       <i class="bi bi-lock me-1"></i> Abgeschlossen am {{ formatClosedAt(pot.closed_at) }} —
       schreibgeschützt

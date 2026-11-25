@@ -15,6 +15,7 @@ import { expenseTools, type ExpenseToolStores } from './expenseTools'
 import { checklistTools, type ListToolStores } from './listTools'
 import { navigationTools } from './navigationTools'
 import { notesTools, type NotesToolStore } from './notesTools'
+import { potTools, type PotToolStores } from './potTools'
 import { shoppingTools, type ShoppingToolStore } from './shoppingTools'
 import { taskCompleteTools } from './taskCompleteTools'
 import { taskTools, type TaskToolStores } from './taskTools'
@@ -91,8 +92,10 @@ export interface ToolDeps {
   notes: NotesToolStore
   /** Die Aufgaben der Pinnwand, dazu das Wochenziel. */
   tasks: TaskToolStores
-  /** Ausgaben und Rückzahlungen in den Töpfen. */
-  expenses: ExpenseToolStores
+  /** Töpfe für einen Anlass; fehlt in Tests anderer Bereiche. */
+  pots?: PotToolStores
+  /** Ausgaben und Rückzahlungen in den Töpfen; fehlt in Tests anderer Bereiche. */
+  expenses?: ExpenseToolStores
   /** Bringt die App auf eine Seite (`createGoToPage`). */
   goToPage: (page: AppPage) => void
   /** Wer fragt; `null` abgemeldet. */
@@ -111,7 +114,8 @@ export function assistantTools(deps: ToolDeps): ToolRegistry {
     ...notesTools(deps.notes, deps.currentUserId),
     ...taskTools(deps.tasks),
     ...taskCompleteTools(deps.tasks.tasks),
-    ...expenseTools(deps.expenses),
+    ...(deps.pots ? potTools(deps.pots) : []),
+    ...(deps.expenses ? expenseTools(deps.expenses) : []),
     ...navigationTools(deps.goToPage),
     ...guideTools(),
   ]
