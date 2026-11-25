@@ -3,7 +3,9 @@ import { describe, expect, it } from 'vitest'
 import type { ListToolStores } from './listTools'
 import { type ShoppingToolStore } from './shoppingTools'
 import type { NotesToolStore } from './notesTools'
+import type { TaskToolStores } from './taskTools'
 import { assistantTools } from './tools'
+import { createChangeTrail } from './changeTrail'
 
 type Item = ShoppingToolStore['items'][number]
 
@@ -16,7 +18,13 @@ function fakeStore(
 ): ShoppingToolStore {
   const store = {
     lists: [{ list_id: 'l1', name: 'Einkauf' }],
-    items: items.map((i) => ({ list_id: 'l1', purchased: false, quantity: 1, category: null, ...i })),
+    items: items.map((i) => ({
+      list_id: 'l1',
+      purchased: false,
+      quantity: 1,
+      category: null,
+      ...i,
+    })),
     categories: categories.map((name, n) => ({ category_id: `c${n}`, list_id: 'l1', name })),
     currentListId: null as string | null,
     // Wie der echte Store: die Kategorie hängt an der offenen Liste, ein bekannter Name behält seine Schreibweise.
@@ -34,7 +42,8 @@ function fakeStore(
         (c) => !(c.list_id === store.currentListId && key(c.name) === key(name)),
       )
       for (const i of store.items) {
-        if (i.list_id === store.currentListId && key(i.category ?? '') === key(name)) i.category = null
+        if (i.list_id === store.currentListId && key(i.category ?? '') === key(name))
+          i.category = null
       }
     },
     loadLists: async () => {},
@@ -108,6 +117,7 @@ const executeShoppingTool = (
     shopping: store,
     lists: {} as ListToolStores,
     notes: { notes: [] } as unknown as NotesToolStore,
+    tasks: {} as TaskToolStores,
     goToPage: () => {},
     currentUserId: () => 'me',
   }).execute(name, input)
@@ -227,7 +237,9 @@ describe('update_shopping_items', () => {
   })
 
   it('files an item under an existing category in its spelling; taking it back restores the old one', async () => {
-    const store = fakeStore([{ shopping_item_id: 'i1', name: 'Milch' }], { categories: ['Kühlregal'] })
+    const store = fakeStore([{ shopping_item_id: 'i1', name: 'Milch' }], {
+      categories: ['Kühlregal'],
+    })
     const outcome = await executeShoppingTool(store, 'update_shopping_items', {
       items: [{ item_id: 'i1', category: 'kühlregal' }],
     })
@@ -251,6 +263,21 @@ describe('update_shopping_items', () => {
     expect(await outcome.undo!()).toBe(true)
     expect(store.items[0]!.category).toBeNull()
     expect(store.categories).toEqual([])
+  })
+
+  it('undoing the item’s change from its toast leaves the item dark, even with a new category (A6)', async () => {
+    const store = fakeStore([{ shopping_item_id: 'i1', name: 'Pfeffer' }])
+    const trail = createChangeTrail()
+    const outcome = trail.track(
+      await executeShoppingTool(store, 'update_shopping_items', {
+        items: [{ item_id: 'i1', category: 'Gewürze' }],
+      }),
+    )
+    const page = { area: 'shopping', listId: 'l1' } as const
+    expect(trail.changedOn(page)).toContain('i1')
+    const itemChange = outcome.changes!.find((c) => c.summary.includes('Pfeffer'))!
+    expect(await itemChange.undo()).toBe(true)
+    expect(trail.changedOn(page)).not.toContain('i1')
   })
 
   it('takes an item out of its category with an empty category', async () => {

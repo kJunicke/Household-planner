@@ -8,6 +8,7 @@
  */
 import type { useShoppingStore } from '@/stores/shoppingStore'
 import { normalizeCategoryName } from '@/lib/categoryOrder'
+import { categoryHighlightId } from './listTools'
 import {
   undoAll,
   type AssistantTool,
@@ -278,6 +279,9 @@ async function updateShoppingItems(
               return true
             },
           })
+          // `changed` steht parallel zu `changes`: so nimmt das Rückgängig des
+          // Artikels genau den Artikel aus dem Aufleuchten (A6: Pfeffer leuchtete weiter).
+          changed.push({ id: categoryHighlightId(created), page })
         }
       }
       if (category !== item.category) {
@@ -489,7 +493,9 @@ export const shoppingTools = (store: ShoppingToolStore): AssistantTool[] => [
   },
   {
     name: 'mark_shopping_items_purchased',
-    description: 'Hakt offene Artikel als gekauft ab.',
+    description:
+      'Hakt offene Artikel einer Einkaufsliste als gekauft ab. Nur für Einkaufslisten; Einträge ' +
+      'von Pack- und To-do-Listen hakt check_checklist_entries ab.',
     input_schema: {
       type: 'object',
       properties: {

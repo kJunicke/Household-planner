@@ -2,6 +2,8 @@
 import { computed, watch } from 'vue'
 import type { HistoryEntry } from '@/composables/useHistoryGroups'
 import { useSwipeAction } from '@/composables/useSwipeAction'
+import { flashedCompletionIds } from '@/lib/assistant/followApp'
+import { FLASH_CLASS } from '@/lib/assistant/flash'
 
 // Eine Completion als dichte Zeile — im Verlauf entweder für sich stehend oder
 // eingerückt als Kind einer aufgeklappten Subtask-Faltgruppe. Ein Wisch nach links
@@ -80,7 +82,10 @@ const onKeydown = (e: KeyboardEvent) => {
       </button>
       <div
         class="completion-row"
-        :class="{ 'is-expandable': isExpandable }"
+        :class="{
+          'is-expandable': isExpandable,
+          [FLASH_CLASS]: flashedCompletionIds.has(completion.completion_id),
+        }"
         :role="isExpandable ? 'button' : undefined"
         :tabindex="isExpandable ? 0 : undefined"
         :aria-expanded="isExpandable ? noteExpanded : undefined"

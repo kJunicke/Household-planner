@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import type { ListToolStores } from './listTools'
 import type { ShoppingToolStore } from './shoppingTools'
 import type { NotesToolStore } from './notesTools'
+import type { TaskToolStores } from './taskTools'
 import { assistantTools, undoFailedText } from './tools'
 
 const registry = () =>
@@ -10,6 +11,7 @@ const registry = () =>
     shopping: { lists: [], items: [] } as unknown as ShoppingToolStore,
     lists: {} as ListToolStores,
     notes: { notes: [] } as unknown as NotesToolStore,
+    tasks: {} as TaskToolStores,
     goToPage: () => {},
     currentUserId: () => 'me',
   })
@@ -43,6 +45,17 @@ describe('the tool registry', () => {
       'append_to_note',
       'rewrite_note',
       'delete_note',
+      'read_tasks',
+      'read_task_history',
+      'read_weekly_goal',
+      'create_task',
+      'update_task',
+      'assign_task',
+      'postpone_task',
+      'mark_task_dirty',
+      'delete_task',
+      'complete_task',
+      'log_quick_task',
       'go_to_page',
       'get_app_guide',
     ])

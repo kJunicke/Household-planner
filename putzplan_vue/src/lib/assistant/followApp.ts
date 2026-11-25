@@ -3,16 +3,18 @@
  * letzten Änderung, und beim Schließen leuchten auf der dann gezeigten Seite
  * die Einträge auf, die seit dem Öffnen geändert wurden.
  *
- * Seiten sind die Listen und die Notizen: die Einkaufsansicht liest
- * `flashedShoppingIds`, die Ansicht der Pack- und To-do-Listen
- * `flashedChecklistIds`, die Notizen `flashedNoteIds`, und lassen die
- * Einträge aufleuchten.
+ * Seiten sind die Listen, die Notizen und die Pinnwand: die Einkaufsansicht
+ * liest `flashedShoppingIds`, die Ansicht der Pack- und To-do-Listen
+ * `flashedChecklistIds`, die Notizen `flashedNoteIds`, die Pinnwand
+ * `flashedTaskIds` (Zettel und Zeilen im Erledigt-Streifen), der Verlauf
+ * `flashedCompletionIds` (eine Quick-Aufgabe), und lassen die Einträge
+ * aufleuchten.
  */
 import { ref } from 'vue'
 import type { Router } from 'vue-router'
 import type { useShoppingStore } from '@/stores/shoppingStore'
 import { listAreaOfTab, type GoToPage } from '@/lib/appNavigation'
-import { createChangeTrail } from './changeTrail'
+import { createChangeTrail, samePage } from './changeTrail'
 import { FLASH_MS } from './flash'
 import type { AssistantPage, ToolOutcome } from './tools'
 
@@ -22,6 +24,10 @@ export const flashedShoppingIds = ref<ReadonlySet<string>>(new Set())
 export const flashedChecklistIds = ref<ReadonlySet<string>>(new Set())
 /** Die Notizen, die gerade aufleuchten. */
 export const flashedNoteIds = ref<ReadonlySet<string>>(new Set())
+/** Die Aufgaben der Pinnwand, die gerade aufleuchten. */
+export const flashedTaskIds = ref<ReadonlySet<string>>(new Set())
+/** Die Erledigungen im Verlauf, die gerade aufleuchten. */
+export const flashedCompletionIds = ref<ReadonlySet<string>>(new Set())
 let flashTimer: number | undefined
 
 type FollowStore = Pick<ReturnType<typeof useShoppingStore>, 'currentListId' | 'currentItemId'>
@@ -35,7 +41,17 @@ export function followApp(
   goToPage: GoToPage,
   checklists: Checklists,
 ) {
-  const trail = createChangeTrail()
+  let open = false
+  // Ein zurückgenommenes Löschen bringt den Eintrag zurück: bei offenem Chat
+  // folgt die App ihm und er leuchtet beim Schließen auf; bei geschlossenem
+  // leuchtet er gleich auf, wenn seine Seite gezeigt wird.
+  const trail = createChangeTrail({
+    onRestored: (entry) => {
+      if (open) return show(entry.page)
+      const page = shownPage()
+      if (page && samePage(page, entry.page)) flash(page, [entry.id])
+    },
+  })
 
   /** Welcher Listen-Reiter offen ist; `null` außerhalb der Listen. */
   const listsTab = () => {
@@ -49,15 +65,43 @@ export function followApp(
 
   const shownPage = (): AssistantPage | null => {
     if (router.currentRoute.value.name === 'notes') return { area: 'notes' }
+    if (router.currentRoute.value.name === 'home') return { area: 'wall' }
+    if (router.currentRoute.value.name === 'history') return { area: 'history' }
     const area = listsTab()
     if (!area) return null
     const listId = area === 'shopping' ? shopping.currentListId : checklists[area].currentListId
     return listId ? { area, listId } : null
   }
 
+  /** Lässt die Einträge `ids` auf der gezeigten Seite `page` aufleuchten. */
+  const flash = (page: AssistantPage, ids: string[]) => {
+    if (ids.length === 0) return
+    if (page.area === 'shopping') {
+      // Neue Artikel trugen beim Anlegen eine vorläufige ID.
+      flashedShoppingIds.value = new Set(ids.map(shopping.currentItemId))
+    } else if (page.area === 'notes') {
+      flashedNoteIds.value = new Set(ids)
+    } else if (page.area === 'wall') {
+      flashedTaskIds.value = new Set(ids)
+    } else if (page.area === 'history') {
+      flashedCompletionIds.value = new Set(ids)
+    } else {
+      flashedChecklistIds.value = new Set(ids)
+    }
+    window.clearTimeout(flashTimer)
+    flashTimer = window.setTimeout(() => {
+      flashedShoppingIds.value = new Set()
+      flashedChecklistIds.value = new Set()
+      flashedNoteIds.value = new Set()
+      flashedTaskIds.value = new Set()
+      flashedCompletionIds.value = new Set()
+    }, FLASH_MS)
+  }
+
   return {
     /** Beim Öffnen des Chats. */
     opened() {
+      open = true
       trail.reset()
     },
 
@@ -71,23 +115,9 @@ export function followApp(
 
     /** Beim Schließen des Chats. */
     closed() {
+      open = false
       const page = shownPage()
-      const ids = page ? trail.changedOn(page) : []
-      if (!page || ids.length === 0) return
-      if (page.area === 'shopping') {
-        // Neue Artikel trugen beim Anlegen eine vorläufige ID.
-        flashedShoppingIds.value = new Set(ids.map(shopping.currentItemId))
-      } else if (page.area === 'notes') {
-        flashedNoteIds.value = new Set(ids)
-      } else {
-        flashedChecklistIds.value = new Set(ids)
-      }
-      window.clearTimeout(flashTimer)
-      flashTimer = window.setTimeout(() => {
-        flashedShoppingIds.value = new Set()
-        flashedChecklistIds.value = new Set()
-        flashedNoteIds.value = new Set()
-      }, FLASH_MS)
+      if (page) flash(page, trail.changedOn(page))
     },
   }
 }

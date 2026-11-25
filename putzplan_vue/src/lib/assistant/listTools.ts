@@ -557,7 +557,11 @@ async function copyChecklist(stores: ListToolStores, input: Record<string, unkno
   const { store, list, kind } = found
   const copy = await store.copyList(listId, name, { quiet: true })
   if (!copy) {
-    return { result: 'Kopieren fehlgeschlagen', isError: true, summary: `✗ nicht kopiert: ${list.name}` }
+    return {
+      result: 'Kopieren fehlgeschlagen',
+      isError: true,
+      summary: `✗ nicht kopiert: ${list.name}`,
+    }
   }
   const copyId = copy.list_id
   const summary = `✓ kopiert: ${list.name} → ${name}`
@@ -692,10 +696,7 @@ async function deleteChecklist(
 
 /** „mit 2 offenen und 1 gekauften Artikel“ */
 function withArticles(open: number, bought: number) {
-  const counts = [
-    ...(open ? [`${open} offenen`] : []),
-    ...(bought ? [`${bought} gekauften`] : []),
-  ]
+  const counts = [...(open ? [`${open} offenen`] : []), ...(bought ? [`${bought} gekauften`] : [])]
   if (counts.length === 0) return 'ohne Artikel'
   const last = bought || open
   return `mit ${counts.join(' und ')} ${last === 1 ? 'Artikel' : 'Artikeln'}`
@@ -723,7 +724,11 @@ function deleteShoppingList(stores: ListToolStores, input: Record<string, unknow
       what: `${what}${guestLinkLoss(stores, listId)}`,
       confirm: async () => {
         if (!(await shopping.deleteList(listId))) {
-          return { result: 'Löschen fehlgeschlagen', isError: true, summary: `✗ nicht gelöscht: ${what}` }
+          return {
+            result: 'Löschen fehlgeschlagen',
+            isError: true,
+            summary: `✗ nicht gelöscht: ${what}`,
+          }
         }
         const summary = `✓ gelöscht: ${what}`
         const undo = () => shopping.restoreList({ list, categories, items })
@@ -942,7 +947,7 @@ export const checklistTools = (stores: ListToolStores): AssistantTool[] => [
     name: 'check_checklist_entries',
     description:
       'Hakt Einträge auf Packlisten oder To-do-Listen ab (erledigt, gepackt), oder mit done: false ' +
-      'öffnet es sie wieder.',
+      'öffnet es sie wieder. Nicht für Einkaufslisten (dafür mark_shopping_items_purchased).',
     input_schema: {
       type: 'object',
       properties: {
@@ -1067,7 +1072,9 @@ export const checklistTools = (stores: ListToolStores): AssistantTool[] => [
       'zeigt die App eine Karte mit „Löschen“ und „Abbrechen“; frag darum nicht selbst nach.',
     input_schema: {
       type: 'object',
-      properties: { list_id: { type: 'string', description: 'ID der Einkaufsliste aus der Übersicht' } },
+      properties: {
+        list_id: { type: 'string', description: 'ID der Einkaufsliste aus der Übersicht' },
+      },
       required: ['list_id'],
     },
     execute: async (input) => deleteShoppingList(stores, input),

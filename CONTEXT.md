@@ -11,7 +11,7 @@ Architekturentscheidungen: [docs/adr/](docs/adr/).
 
 ### dran
 - Offen und zu tun.
-- Einzige Quelle: `tasks.completed` in der DB — geschrieben vom nächtlichen Cron, von der Edge Function `complete-task` und von **wieder dreckig**.
+- Einzige Quelle: `tasks.completed` in der DB — geschrieben vom nächtlichen Cron, von der Edge Function `complete-task`, von **wieder dreckig**, von **verschieben** und vom Rückgängig dieser beiden, das den Stand davor zurückschreibt.
 - Das Frontend liest den Zustand, es leitet ihn nicht ab → [ADR-0001](docs/adr/0001-completed-ist-zustand-keine-ableitung.md).
 
 ### überfällig

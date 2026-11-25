@@ -21,6 +21,11 @@ Unten fünf Seiten: Putzen, Verlauf, Kasse, Listen, Notizen. Oben auf jeder Seit
 - Projekte haben keinen Kranz; nach unten ziehen öffnet „Am Projekt arbeiten“.
 - Überstempeln: Tipp auf den Stempel legt WICHTIG, dann DRINGEND, dann wieder sauber. Fällt beim Erledigen weg.
 - Tipp auf einen Zettel mit Unteraufgaben klappt ihn auf. Der Stift auf dem Zettel öffnet „Aufgabe bearbeiten“ (Titel, Typ, Punkte, Wiederholung, Verschieben, Zuweisen, Unteraufgaben, Löschen).
+- Typen: wiederkehrend (alle X Tage wieder dran), täglich (setzt sich jede Nacht selbst zurück), einmalig, Projekt (wird nie fertig; man arbeitet daran über „Am Projekt arbeiten“).
+- Der Stempel unten auf dem Zettel zeigt, wie sie steht: NEU (noch nie gemacht), FÄLLIG, bei täglichen BEDARF, bei Projekten ein Spruch. Überfällig ist eine Aufgabe, die dran ist und deren Tage abgelaufen sind; gezählt wird ab dem Ablauf.
+- Zuweisen: Kranz links oder Stift → „Zuweisen“; Mitglied oder „Niemand“ wählen. „Zuweisung dauerhaft beibehalten“ lässt sie auch nach dem Putzen stehen, sonst fällt sie mit dem Erledigen weg.
+- Verschieben: Kranz oben oder Stift → „Verschieben“. Termin nach dem Intervall, in eigener Anzahl Tage oder an einem Datum, frühestens morgen. Keine Punkte, kein Verlaufseintrag; bis dahin steht die Aufgabe im Erledigt-Streifen mit „verschoben auf …“. Nicht für tägliche Aufgaben und Projekte.
+- Löschen: Stift → „Löschen“. Der Zettel verschwindet, seine Erledigungen bleiben im Verlauf (als gelöscht markiert) und zählen weiter.
 - Erledigt-Streifen unter der Wand: je Aufgabe Stift und „Wieder dreckig“ (wieder dran, die Punkte bleiben).
 - Die Suche filtert die Wand; erledigte Treffer erscheinen als lose Zettel, Tipp auf die Nadelstelle ist „wieder dreckig“.
 
