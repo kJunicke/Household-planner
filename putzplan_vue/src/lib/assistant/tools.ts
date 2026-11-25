@@ -11,6 +11,7 @@
  */
 import type { AppPage } from '@/lib/appNavigation'
 import { guideTools } from './appGuide'
+import { expenseTools, type ExpenseToolStores } from './expenseTools'
 import { checklistTools, type ListToolStores } from './listTools'
 import { navigationTools } from './navigationTools'
 import { notesTools, type NotesToolStore } from './notesTools'
@@ -24,6 +25,7 @@ export type AssistantPage =
   | { area: 'notes' }
   | { area: 'wall' }
   | { area: 'history' }
+  | { area: 'pot'; potId: string }
 
 export interface ChangedEntry {
   id: string
@@ -89,6 +91,8 @@ export interface ToolDeps {
   notes: NotesToolStore
   /** Die Aufgaben der Pinnwand, dazu das Wochenziel. */
   tasks: TaskToolStores
+  /** Ausgaben und Rückzahlungen in den Töpfen. */
+  expenses: ExpenseToolStores
   /** Bringt die App auf eine Seite (`createGoToPage`). */
   goToPage: (page: AppPage) => void
   /** Wer fragt; `null` abgemeldet. */
@@ -107,6 +111,7 @@ export function assistantTools(deps: ToolDeps): ToolRegistry {
     ...notesTools(deps.notes, deps.currentUserId),
     ...taskTools(deps.tasks),
     ...taskCompleteTools(deps.tasks.tasks),
+    ...expenseTools(deps.expenses),
     ...navigationTools(deps.goToPage),
     ...guideTools(),
   ]

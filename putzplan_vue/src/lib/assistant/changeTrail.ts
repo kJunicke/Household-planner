@@ -9,9 +9,11 @@
  */
 import type { AssistantPage, ChangedEntry, ToolOutcome } from './tools'
 
-const listOf = (page: AssistantPage) => ('listId' in page ? page.listId : null)
+/** Welche Liste oder welcher Topf; die übrigen Seiten gibt es nur einmal. */
+const targetOf = (page: AssistantPage) =>
+  'listId' in page ? page.listId : 'potId' in page ? page.potId : null
 export const samePage = (a: AssistantPage, b: AssistantPage) =>
-  a.area === b.area && listOf(a) === listOf(b)
+  a.area === b.area && targetOf(a) === targetOf(b)
 
 export function createChangeTrail({
   onRestored,

@@ -6,6 +6,7 @@ import type { ListToolStores, ChecklistToolStore } from './listTools'
 import type { ShoppingToolStore } from './shoppingTools'
 import type { NotesToolStore } from './notesTools'
 import type { TaskToolStores } from './taskTools'
+import type { ExpenseToolStores } from './expenseTools'
 import { assistantTools } from './tools'
 
 const key = (name: string) => name.trim().toLowerCase()
@@ -244,6 +245,7 @@ function setup(
     lists: stores,
     notes: { notes: [] } as unknown as NotesToolStore,
     tasks: {} as TaskToolStores,
+    expenses: {} as ExpenseToolStores,
     goToPage: () => {},
     currentUserId: () => 'me',
   })

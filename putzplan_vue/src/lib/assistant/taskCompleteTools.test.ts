@@ -5,6 +5,7 @@ import type { ListToolStores } from './listTools'
 import type { NotesToolStore } from './notesTools'
 import type { ShoppingToolStore } from './shoppingTools'
 import type { TaskToolStores } from './taskTools'
+import type { ExpenseToolStores } from './expenseTools'
 import { assistantTools } from './tools'
 
 interface FakeCompletion {
@@ -110,6 +111,7 @@ const registry = (store: FakeStore) =>
     lists: {} as ListToolStores,
     notes: { notes: [] } as unknown as NotesToolStore,
     tasks: { tasks: store, household: {}, today: () => new Date() } as unknown as TaskToolStores,
+    expenses: {} as ExpenseToolStores,
     goToPage: () => {},
     currentUserId: () => 'me',
   })

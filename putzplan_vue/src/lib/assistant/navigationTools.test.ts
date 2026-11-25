@@ -5,6 +5,7 @@ import type { ListToolStores } from './listTools'
 import type { ShoppingToolStore } from './shoppingTools'
 import type { NotesToolStore } from './notesTools'
 import type { TaskToolStores } from './taskTools'
+import type { ExpenseToolStores } from './expenseTools'
 import { assistantTools } from './tools'
 
 function registry() {
@@ -14,6 +15,7 @@ function registry() {
     lists: {} as ListToolStores,
     notes: { notes: [] } as unknown as NotesToolStore,
     tasks: {} as TaskToolStores,
+    expenses: {} as ExpenseToolStores,
     goToPage: (page) => visited.push(page),
     currentUserId: () => 'me',
   })

@@ -135,4 +135,14 @@ describe('the change trail across areas', () => {
     expect(trail.changedOn(notes)).toEqual(['handwerker'])
     expect(trail.changedOn(einkauf)).toEqual(['milch'])
   })
+
+  it('keeps one pot apart from another', () => {
+    const trail = createChangeTrail()
+    const urlaub = { area: 'pot', potId: 'urlaub' } as const
+    const haushalt = { area: 'pot', potId: 'haushalt' } as const
+    trail.track(outcome([{ id: 'pizza', page: urlaub }]))
+    trail.track(outcome([{ id: 'strom', page: haushalt }]))
+    expect(trail.changedOn(urlaub)).toEqual(['pizza'])
+    expect(trail.changedOn(haushalt)).toEqual(['strom'])
+  })
 })
