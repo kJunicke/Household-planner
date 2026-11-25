@@ -281,6 +281,9 @@ describe('complete_task, what it turns down', () => {
     ])
     const outcome = await run(store, 'complete_task', { task_id: 'bad' })
     expect(outcome.result).toMatch(/[Ff]rag den Nutzer/)
+    // T9: die Antwort nennt, wann sie erledigt wurde.
+    expect(outcome.result).toMatch(/erledigt am Dienstag, 24\. November/)
+    expect(outcome.result).toMatch(/wann/)
 
     const tool = registry(store).definitions.find((t) => t.name === 'complete_task')!
     const props = tool.input_schema.properties as Record<string, { description: string }>

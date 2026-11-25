@@ -24,7 +24,15 @@ import {
   type PointsKind,
 } from '@/lib/taskPoints'
 import type { AssistantTool, ToolOutcome } from './tools'
-import { changedTask, invalidTitle, loadedTasks, QUIET, TASK_ID, WALL } from './taskToolShared'
+import {
+  changedTask,
+  dateOf,
+  invalidTitle,
+  loadedTasks,
+  QUIET,
+  TASK_ID,
+  WALL,
+} from './taskToolShared'
 
 /**
  * Der Teil des taskStore, den die Werkzeuge brauchen. Hereingereicht statt
@@ -48,9 +56,6 @@ function pointsOf(input: Record<string, unknown>, kind: PointsKind): number | un
   return isValidPoints(points, kind) ? points : null
 }
 
-const dateOf = (iso: string) =>
-  new Date(iso).toLocaleDateString('de-DE', { weekday: 'long', day: 'numeric', month: 'long' })
-
 const invalidPoints = (kind: PointsKind): ToolOutcome => ({
   result: `Punkte müssen eine ganze Zahl von ${kind === 'standard' ? 1 : 0} bis ${POINTS_MAX} sein.`,
   isError: true,
@@ -69,12 +74,12 @@ async function completeTask(
   // Erledigt und nicht nur verschoben: ein zweites Mal zählte doppelt. Von Hand
   // geht es (lose Zettel in der Suche), also auf ausdrücklichen Wunsch auch hier.
   if (task.completed && !task.postponed_until && input.again !== true) {
-    const when = task.last_completed_at ? ` (zuletzt ${dateOf(task.last_completed_at)})` : ''
+    const when = task.last_completed_at ? ` am ${dateOf(task.last_completed_at)}` : ''
     return {
       result:
-        `„${task.title}“ ist schon erledigt${when}. Sag das dem Nutzer und frag den Nutzer, ` +
-        'ob er sie seitdem noch einmal gemacht hat; erst mit seinem Ja rufst du complete_task ' +
-        'mit again auf.',
+        `„${task.title}“ ist schon erledigt${when}. Sag dem Nutzer, dass und wann sie erledigt ` +
+        'wurde, und frag den Nutzer, ob er sie seitdem noch einmal gemacht hat; erst mit seinem ' +
+        'Ja rufst du complete_task mit again auf.',
       isError: true,
     }
   }

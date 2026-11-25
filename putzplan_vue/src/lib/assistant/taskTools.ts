@@ -28,7 +28,15 @@ import {
 } from '@/lib/taskSchedule'
 import type { AssistantTool, Change, ToolOutcome } from './tools'
 import type { TaskCompleteToolStore } from './taskCompleteTools'
-import { changedTask, invalidTitle, loadedTasks, QUIET, TASK_ID, WALL } from './taskToolShared'
+import {
+  changedTask,
+  dateOf,
+  invalidTitle,
+  loadedTasks,
+  QUIET,
+  TASK_ID,
+  WALL,
+} from './taskToolShared'
 
 /**
  * Die Teile von taskStore und householdStore, die die Werkzeuge brauchen.
@@ -83,9 +91,13 @@ function stateOf(task: Task, today: Date): string {
     return `verschoben auf ${formatPostponeDate(schedule.postponedUntil!)}`
   }
   if (task.completed) {
+    // Wann, damit die Antwort auf „ist das Bad schon geputzt“ es nennen kann.
+    const done = task.last_completed_at
+      ? `erledigt am ${dateOf(task.last_completed_at)}`
+      : 'erledigt'
     return schedule.daysUntilDue === null
-      ? 'erledigt'
-      : `erledigt, wieder fällig in ${days(schedule.daysUntilDue)}`
+      ? done
+      : `${done}, wieder fällig in ${days(schedule.daysUntilDue)}`
   }
   if (schedule.status === 'never-done') return 'dran, noch nie gemacht'
   if (schedule.status === 'overdue') {
@@ -307,14 +319,18 @@ async function deleteTask(
   return {
     result: 'Wartet auf die Bestätigung des Nutzers.',
     deleteCard: {
-      what: `Aufgabe „${title}“${hasHistory ? '; ihre Erledigungen bleiben im Verlauf' : ''}`,
+      // Rückgängig scheitert am eindeutigen Titel, sobald inzwischen eine
+      // gleichnamige Aufgabe angelegt wurde (Duplikat): das sagt die Karte vorher.
+      what:
+        `Aufgabe „${title}“${hasHistory ? '; ihre Erledigungen bleiben im Verlauf' : ''}; ` +
+        'Rückgängig nur, solange keine neue Aufgabe so heißt',
       confirm: async () => {
         if (!(await stores.tasks.deleteTask(id, QUIET))) {
           return { ...error('Nichts gelöscht.'), summary: `✗ Aufgabe nicht gelöscht: ${title}` }
         }
         const change: Change = {
           summary: `✓ Aufgabe gelöscht: ${title}`,
-          // Scheitert, wenn inzwischen eine gleichnamige Aufgabe angelegt wurde (Duplikat).
+          // Scheitert, wenn inzwischen eine gleichnamige Aufgabe angelegt wurde (s. Karte).
           undo: () => stores.tasks.restoreTask(id),
         }
         return changedTask(

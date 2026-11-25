@@ -171,7 +171,10 @@ describe('read_tasks', () => {
     expect(line('Bad putzen')).toMatch(/dran, 3 Tage überfällig/)
     expect(line('Fenster putzen')).toMatch(/unbewertet/)
     expect(line('Fenster putzen')).toMatch(/noch nie gemacht/)
-    expect(line('Staubsaugen')).toMatch(/erledigt, wieder fällig in 5 Tagen/)
+    // T9: wann sie erledigt wurde, damit die Antwort es nennen kann.
+    expect(line('Staubsaugen')).toMatch(
+      /erledigt am Sonntag, 22\. November, wieder fällig in 5 Tagen/,
+    )
     expect(line('Keller')).toMatch(/einmalig/)
     expect(line('Keller')).toMatch(/verschoben auf Samstag, 28\.11\./)
     expect(line('Abwasch')).toMatch(/täglich/)
@@ -551,7 +554,12 @@ describe('delete_task', () => {
     const outcome = await execute(withHistory(), 'delete_task', { task_id: 't-bad-putzen' })
     expect(outcome.deleteCard!.what).toMatch(/Erledigungen bleiben im Verlauf/)
     const fresh = await execute(withHistory(), 'delete_task', { task_id: 't-keller' })
-    expect(fresh.deleteCard!.what).toBe('Aufgabe „Keller“')
+    expect(fresh.deleteCard!.what).not.toMatch(/Verlauf/)
+  })
+
+  it('says on the card that undo fails once a new task of the same name exists (Duplikat)', async () => {
+    const outcome = await execute(withHistory(), 'delete_task', { task_id: 't-keller' })
+    expect(outcome.deleteCard!.what).toMatch(/Rückgängig nur, solange keine neue Aufgabe so heißt/)
   })
 
   it('after „Löschen“ the task leaves the wall, and its completions stay in the history', async () => {

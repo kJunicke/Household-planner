@@ -38,6 +38,10 @@ export function changedTask(result: string, change: Change, shown: ChangedEntry)
   }
 }
 
+/** Ein Tag für Claude, z. B. „Sonntag, 22. November“; die Übersicht nennt das heutige Datum. */
+export const dateOf = (iso: string) =>
+  new Date(iso).toLocaleDateString('de-DE', { weekday: 'long', day: 'numeric', month: 'long' })
+
 /** Das Fehlerergebnis für Claude, wenn der Titel leer oder zu lang ist; sonst `null`. */
 export function invalidTitle(title: string, empty: string): ToolOutcome | null {
   if (!title) return { result: empty, isError: true }
