@@ -75,8 +75,15 @@ function countOf(n: number, one: string, many: string) {
   return n === 1 ? `1 ${one}` : `${n} ${many}`
 }
 
-/** Was im Topf steht und ihn unwiederbringlich machte, z. B. „2 Ausgaben und einen Gastlink“; leer: `null`. */
-async function contents(stores: PotToolStores, potId: string): Promise<string | null> {
+/**
+ * Was im Topf steht und ihn unwiederbringlich machte, z. B. „hat 2 Ausgaben und
+ * einen Gastlink“ (`verb` davor); leer: `null`.
+ */
+async function contents(
+  stores: PotToolStores,
+  potId: string,
+  verb: string,
+): Promise<string | null> {
   const expenses = stores.pots.expensesOf(potId).length
   const repayments = stores.pots.repaymentsOf(potId).length
   const parts = [
@@ -86,7 +93,7 @@ async function contents(stores: PotToolStores, potId: string): Promise<string | 
   ]
   if (parts.length === 0) return null
   const last = parts.pop()!
-  return parts.length ? `${parts.join(', ')} und ${last}` : last
+  return `${verb} ${parts.length ? `${parts.join(', ')} und ${last}` : last}`
 }
 
 async function createPot(
@@ -114,16 +121,25 @@ async function createPot(
   if (!potId)
     return { ...error('Anlegen fehlgeschlagen'), summary: `✗ Topf nicht angelegt: ${name}` }
   const names = members.filter((m) => wanted.includes(m.user_id)).map((m) => m.display_name)
-  const undo = async () => {
-    // Ein Rückgängig löscht den Topf; was inzwischen darin steht, ginge mit.
-    return (await contents(stores, potId)) === null && stores.pots.deletePot(potId)
+  // Ein Rückgängig löscht den Topf; was inzwischen darin steht, ginge mit.
+  const undoBlocked = async () => {
+    const held = await contents(stores, potId, 'hat inzwischen')
+    return held
+      ? `Rückgängig geht nicht mehr: der Topf „${name}“ ${held}. Löschen lässt er sich von Hand im Topf.`
+      : null
   }
+  const undo = async () => (await undoBlocked()) === null && stores.pots.deletePot(potId)
   return changedPot(
     potId,
     `Topf „${name}“ angelegt (id ${potId}), Teilnehmer: ${names.join(', ')}. ` +
       'Er steht ab der nächsten Frage in der Übersicht. Gäste kommen über den Gastlink, ' +
       'den man im Topf von Hand anlegt.',
-    { summary: `✓ neuer Topf: ${name}`, undo },
+    {
+      summary: `✓ neuer Topf: ${name}`,
+      undo,
+      undoBlocked,
+      undone: () => `Topf „${name}“ (id ${potId}) gibt es nicht mehr`,
+    },
   )
 }
 
@@ -142,6 +158,7 @@ function closePot(stores: PotToolStores, input: Record<string, unknown>): ToolOu
     {
       summary: `✓ abgeschlossen: Topf ${pot.name}`,
       undo: async () => stores.pots.setPotClosed(pot.pot_id, false),
+      undone: () => `Topf „${pot.name}“ ist wieder offen`,
     },
   )
 }
@@ -158,6 +175,7 @@ function reopenPot(stores: PotToolStores, input: Record<string, unknown>): ToolO
     summary: `✓ wieder geöffnet: Topf ${pot.name}`,
     // Mit dem alten Datum: „Abgeschlossen am …“ steht wieder wie vorher.
     undo: async () => stores.pots.setPotClosed(pot.pot_id, true, closedAt),
+    undone: () => `Topf „${pot.name}“ ist wieder abgeschlossen`,
   })
 }
 
@@ -173,12 +191,12 @@ async function deletePot(
 ): Promise<ToolOutcome> {
   const pot = findEventPot(stores, input)
   if (!isPot(pot)) return pot
-  const held = await contents(stores, pot.pot_id)
+  const held = await contents(stores, pot.pot_id, 'hat')
   if (held) {
     stores.showPot(pot.pot_id)
     return {
       result:
-        `Nicht gelöscht: der Topf „${pot.name}“ hat ${held}. Das ließe sich nicht zurücknehmen, ` +
+        `Nicht gelöscht: der Topf „${pot.name}“ ${held}. Das ließe sich nicht zurücknehmen, ` +
         'darum löscht so einen Topf nur der Nutzer selbst, von Hand im Topf unten mit „Löschen“. ' +
         'Die App zeigt ihn jetzt.',
       summary: `→ Topf ${pot.name}`,
@@ -205,12 +223,20 @@ async function deletePot(
           return { ...error('Löschen fehlgeschlagen'), summary: `✗ nicht gelöscht: ${what}` }
         }
         const summary = `✓ gelöscht: ${what}`
+        let backAs: string | null = null
         const undo = async () => {
-          const potId = await stores.pots.createEventPot({ name, memberIds, guestNames })
-          if (!potId) return false
-          return closedAt ? stores.pots.setPotClosed(potId, true, closedAt) : true
+          backAs = await stores.pots.createEventPot({ name, memberIds, guestNames })
+          if (!backAs) return false
+          return closedAt ? stores.pots.setPotClosed(backAs, true, closedAt) : true
         }
-        return { result: `Gelöscht: ${what}.`, summary, undo, changes: [{ summary, undo }] }
+        const undone = () =>
+          `Topf „${name}“ ist wieder da, mit neuer ID ${backAs}; die alte ID ${pot.pot_id} gilt nicht mehr`
+        return {
+          result: `Gelöscht: ${what}.`,
+          summary,
+          undo,
+          changes: [{ summary, undo, undone }],
+        }
       },
     },
   }

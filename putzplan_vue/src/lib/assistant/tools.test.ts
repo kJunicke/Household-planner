@@ -6,7 +6,7 @@ import type { NotesToolStore } from './notesTools'
 import type { PotToolStores } from './potTools'
 import type { TaskToolStores } from './taskTools'
 import type { ExpenseToolStores } from './expenseTools'
-import { assistantTools, undoFailedText } from './tools'
+import { assistantTools, undoFailedText, undoneNote } from './tools'
 
 const registry = () =>
   assistantTools({
@@ -106,6 +106,15 @@ describe('a failed undo', () => {
     )
     expect(undoFailedText('✓ gelöscht: Zucker (Einkauf)', true)).toBe(
       'Rückgängig ging nicht. Es bleibt: gelöscht: Zucker (Einkauf)',
+    )
+  })
+})
+
+describe('the note on what was taken back', () => {
+  it('tells Claude before the next question that these changes no longer hold', () => {
+    expect(undoneNote(['neuer Topf: Kino', 'Topf „Ski“ ist wieder da, neue ID p2'])).toBe(
+      '(Inzwischen von mir per Rückgängig zurückgenommen, gilt nicht mehr: neuer Topf: Kino; ' +
+        'Topf „Ski“ ist wieder da, neue ID p2)',
     )
   })
 })

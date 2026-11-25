@@ -171,6 +171,26 @@ describe('create_pot', () => {
     expect(potNamed(state, 'Kino')).toBeUndefined()
   })
 
+  it('says why it cannot be taken back once the pot holds something', async () => {
+    const { state, stores } = fakeStores()
+    const outcome = await run(stores, 'create_pot', { name: 'Kino' })
+    const change = outcome.changes![0]!
+    expect(await change.undoBlocked!()).toBeNull()
+    state.expenses.push({ pot_id: potNamed(state, 'Kino')!.pot_id } as PotExpense)
+    expect(await change.undoBlocked!()).toBe(
+      'Rückgängig geht nicht mehr: der Topf „Kino“ hat inzwischen 1 Ausgabe. ' +
+        'Löschen lässt er sich von Hand im Topf.',
+    )
+  })
+
+  it('tells Claude afterwards that the pot is gone', async () => {
+    const { state, stores } = fakeStores()
+    const outcome = await run(stores, 'create_pot', { name: 'Kino' })
+    const potId = potNamed(state, 'Kino')!.pot_id
+    await outcome.changes![0]!.undo()
+    expect(outcome.changes![0]!.undone!()).toBe(`Topf „Kino“ (id ${potId}) gibt es nicht mehr`)
+  })
+
   it('is not taken back once the pot holds an expense, a repayment or a Gastlink', async () => {
     for (const add of ['expense', 'repayment', 'guestLink'] as const) {
       const guestLinks: string[] = []
@@ -214,6 +234,7 @@ describe('close_pot', () => {
     const outcome = await run(stores, 'close_pot', { pot_id: 'ski' })
     expect(await outcome.changes![0]!.undo()).toBe(true)
     expect(potNamed(state, 'Skiurlaub')!.closed_at).toBeNull()
+    expect(outcome.changes![0]!.undone!()).toBe('Topf „Skiurlaub“ ist wieder offen')
   })
 
   it('never closes the Haushaltstopf', async () => {
@@ -250,6 +271,7 @@ describe('reopen_pot', () => {
     const outcome = await run(stores, 'reopen_pot', { pot_id: 'ski' })
     expect(await outcome.changes![0]!.undo()).toBe(true)
     expect(potNamed(state, 'Skiurlaub')!.closed_at).toBe(closedAt)
+    expect(outcome.changes![0]!.undone!()).toBe('Topf „Skiurlaub“ ist wieder abgeschlossen')
   })
 
   it('rejects a pot that is open, and the Haushaltstopf', async () => {
@@ -326,6 +348,17 @@ describe('delete_pot', () => {
       { pot_id: back.pot_id, user_id: 'anna', name: 'anna' },
       { pot_id: back.pot_id, user_id: null, name: 'Tom' },
     ])
+  })
+
+  it('tells Claude afterwards under which new id the pot is back', async () => {
+    const { state, stores } = fakeStores({ participants: people })
+    const outcome = await run(stores, 'delete_pot', { pot_id: 'ski' })
+    const change = (await outcome.deleteCard!.confirm()).changes![0]!
+    await change.undo()
+    const back = potNamed(state, 'Skiurlaub')!
+    expect(change.undone!()).toBe(
+      `Topf „Skiurlaub“ ist wieder da, mit neuer ID ${back.pot_id}; die alte ID ski gilt nicht mehr`,
+    )
   })
 
   it('brings a closed pot back closed, with its old date', async () => {

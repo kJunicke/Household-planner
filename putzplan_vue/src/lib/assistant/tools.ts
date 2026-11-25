@@ -71,6 +71,16 @@ export interface Change {
   summary: string
   /** Stellt den Stand vor dieser Änderung wieder her; `false`, wenn das misslang. */
   undo: () => Promise<boolean>
+  /**
+   * Warum sich die Änderung nicht mehr zurücknehmen lässt, als Satz für den
+   * Toast; `null`, solange sie es noch tut. Fehlt, geht es immer.
+   */
+  undoBlocked?: () => Promise<string | null>
+  /**
+   * Der Stand nach dem Rückgängig, für Claude vor der nächsten Frage, z. B. mit
+   * der neuen ID eines zurückgeholten Topfs. Fehlt, steht dort `summary`.
+   */
+  undone?: () => string
 }
 
 /** Was Claude von einem Werkzeug sieht, im Format der Messages API. */
@@ -147,3 +157,11 @@ export const undoAll = (steps: (() => Promise<boolean>)[]) => async (): Promise<
  */
 export const undoFailedText = (summary: string, online: boolean) =>
   `Rückgängig ging nicht${online ? '' : ', keine Verbindung'}. Es bleibt: ${summary.replace(/^✓\s*/, '')}`
+
+/**
+ * Geht vor die nächste Frage an Claude: der Verlauf meldet die Änderungen
+ * noch als erledigt und widerspräche sonst dem Stand, den Claude mit der Frage
+ * bekommt. `lines` je Änderung, `Change.undone` oder ihre Zeile ohne „✓“.
+ */
+export const undoneNote = (lines: string[]) =>
+  `(Inzwischen von mir per Rückgängig zurückgenommen, gilt nicht mehr: ${lines.join('; ')})`

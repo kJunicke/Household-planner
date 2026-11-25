@@ -464,6 +464,17 @@ describe('delete_shopping_items', () => {
     ])
   })
 
+  it('tells Claude afterwards that the item is back under a new id', async () => {
+    const store = fakeStore([sugar])
+    const card = (await executeShoppingTool(store, 'delete_shopping_items', { item_ids: ['z1'] }))
+      .deleteCard!
+    const change = (await card.confirm()).changes![0]!
+    await change.undo()
+    expect(change.undone!()).toBe(
+      '2× Zucker (Einkauf) ist wieder da, mit neuer ID; die alte ID z1 gilt nicht mehr',
+    )
+  })
+
   it('names every item on one card when several go at once', async () => {
     const store = fakeStore([sugar, { shopping_item_id: 'm1', name: 'Mehl' }])
     const outcome = await executeShoppingTool(store, 'delete_shopping_items', {

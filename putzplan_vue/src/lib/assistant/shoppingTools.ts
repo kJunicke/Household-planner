@@ -404,6 +404,9 @@ function deleteShoppingItems(
         const changes: Change[] = deleted.map((item) => ({
           summary: `✓ gelöscht: ${describeItems(store, [item])}`,
           undo: async () => !!(await store.restoreItem(item)),
+          undone: () =>
+            `${describeItems(store, [item])} ist wieder da, mit neuer ID; ` +
+            `die alte ID ${item.shopping_item_id} gilt nicht mehr`,
         }))
         return {
           result: `Gelöscht: ${describeItems(store, deleted)}.${notDone}`,

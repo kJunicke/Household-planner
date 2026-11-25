@@ -20,6 +20,7 @@ import { captureOverview } from '@/lib/assistant/captureOverview'
 import {
   assistantTools,
   undoFailedText,
+  undoneNote,
   type Change,
   type ToolOutcome,
 } from '@/lib/assistant/tools'
@@ -79,11 +80,16 @@ function toastChange(change: Change) {
     label: 'Rückgängig',
     icon: 'bi-arrow-counterclockwise',
     run: async () => {
+      const blocked = await change.undoBlocked?.()
+      if (blocked) {
+        toastStore.showToast(blocked, 'error')
+        return
+      }
       if (!(await change.undo())) {
         toastStore.showToast(undoFailedText(change.summary, navigator.onLine), 'error')
         return
       }
-      undone.push(change.summary)
+      undone.push(change.undone?.() ?? change.summary.replace(/^✓\s*/, ''))
       entries.value.push({ kind: 'action', text: `↶ zurückgenommen: ${change.summary}` })
     },
   })
@@ -188,11 +194,7 @@ async function submit() {
       text: 'Neues Gespräch: nach 30 Minuten ohne Frage ist der Verlauf darüber vergessen.',
     })
   entries.value.push({ kind: 'user', text: question })
-  // Der Verlauf meldet die zurückgenommenen Änderungen noch als erledigt; ohne
-  // diesen Hinweis widerspräche er dem Stand, den Claude mit der Frage bekommt.
-  const content = undone.length
-    ? `(Inzwischen von mir zurückgenommen: ${undone.splice(0).join('; ')})\n\n${question}`
-    : question
+  const content = undone.length ? `${undoneNote(undone.splice(0))}\n\n${question}` : question
 
   try {
     const overview = await captureOverview()
