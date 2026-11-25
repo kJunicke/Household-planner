@@ -365,6 +365,33 @@ describe('add_expense', () => {
     })
   })
 
+  it('takes exact amounts as whole cents, also tricky ones and plain numbers', async () => {
+    const store = fakePots()
+    const outcome = await execute(store, 'add_expense', {
+      pot_id: 'urlaub',
+      description: 'Kiosk',
+      amount: '20,28',
+      split: { kind: 'exact', values: { 'p-kilian': '19,99', 'p-bea': 0.29 } },
+    })
+    expect(outcome.isError).toBeFalsy()
+    expect(store.expenses[0]).toMatchObject({
+      amount_cents: 2028,
+      split_values: { 'p-kilian': 1999, 'p-bea': 29 },
+    })
+  })
+
+  it('rejects an exact amount written with a thousands separator', async () => {
+    const store = fakePots()
+    const outcome = await execute(store, 'add_expense', {
+      pot_id: 'urlaub',
+      description: 'Ferienhaus',
+      amount: '1234,56',
+      split: { kind: 'exact', values: { 'p-kilian': '1.234,56' } },
+    })
+    expect(outcome.isError).toBe(true)
+    expect(store.expenses).toEqual([])
+  })
+
   it('rejects exact amounts that do not add up, says how much is missing and enters nothing', async () => {
     const store = fakePots()
     const outcome = await execute(store, 'add_expense', {

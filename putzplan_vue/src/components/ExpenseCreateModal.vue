@@ -2,7 +2,7 @@
 import { computed, ref } from 'vue'
 import { usePotStore } from '@/stores/potStore'
 import { expenseShares, formatCents, splitValidity, type ExpenseSplit } from '@/lib/potLedger'
-import { formatEuroInput, parseEuroInput } from '@/lib/settlementAmount'
+import { formatEuroInput, parseEuroCents, parseEuroInput } from '@/lib/settlementAmount'
 import { POT_EXPENSE_DESCRIPTION_MAX_LENGTH } from '@/lib/limits'
 import { defaultParticipant, parsePotAmount } from '@/lib/potRules'
 import { toIsoDate } from '@/lib/taskSchedule'
@@ -115,15 +115,15 @@ if (editing && !isQuickMode(editing.split_kind)) {
   )
 }
 
-/** Eingabe als Zahl; leer zählt als 0, Unlesbares als `null`. */
-const parseValue = (text: string | undefined): number | null =>
-  !text?.trim() ? 0 : parseEuroInput(text)
+/** Eingabe als gespeicherter Wert (Beträge in ganzen Cent); leer zählt als 0, Unlesbares als `null`. */
+const parseValue = (kind: ValueMode, text: string | undefined): number | null =>
+  !text?.trim() ? 0 : kind === 'exact' ? parseEuroCents(text) : parseEuroInput(text)
 
 const badInputIds = computed(() => {
   const current = mode.value
   if (current === 'equal' || current === 'whole_group') return new Set<string>()
   const texts = valueTexts.value[current]
-  return new Set(participantOrder.value.filter((id) => parseValue(texts[id]) === null))
+  return new Set(participantOrder.value.filter((id) => parseValue(current, texts[id]) === null))
 })
 
 const split = computed((): ExpenseSplit => {
@@ -135,11 +135,10 @@ const split = computed((): ExpenseSplit => {
     return { kind: 'equal', participantIds: participantOrder.value.filter(isSelected) }
   }
   const texts = valueTexts.value[current]
-  const toRaw = (n: number) => (current === 'exact' ? Math.round(n * 100) : n)
   return {
     kind: current,
     values: Object.fromEntries(
-      participantOrder.value.map((id) => [id, toRaw(parseValue(texts[id]) ?? 0)]),
+      participantOrder.value.map((id) => [id, parseValue(current, texts[id]) ?? 0]),
     ),
   }
 })

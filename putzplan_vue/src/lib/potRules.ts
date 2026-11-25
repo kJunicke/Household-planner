@@ -4,7 +4,7 @@
  * (`./potLedger`), nicht hier.
  */
 import { POT_AMOUNT_MAX_CENTS, POT_PARTICIPANT_NAME_MAX_LENGTH } from './limits'
-import { parseEuroInput } from './settlementAmount'
+import { parseEuroCents } from './settlementAmount'
 import type { GroupParticipant } from './potLedger'
 
 interface SortablePot {
@@ -89,9 +89,8 @@ export function potTitle(pot: { kind: 'household' | 'event'; name: string }): st
  * größer null und höchstens so groß, wie die Datenbank speichert. Sonst `null`.
  */
 export function parsePotAmount(text: string): number | null {
-  const euros = parseEuroInput(text)
-  if (euros === null) return null
-  const cents = Math.round(euros * 100)
+  const cents = parseEuroCents(text)
+  if (cents === null) return null
   return cents > 0 && cents <= POT_AMOUNT_MAX_CENTS ? cents : null
 }
 

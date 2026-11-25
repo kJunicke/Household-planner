@@ -19,7 +19,7 @@ import type { Pot, PotExpense, PotRepayment } from '@/types/Pot'
 import { POT_EXPENSE_DESCRIPTION_MAX_LENGTH } from '@/lib/limits'
 import { formatCents, splitValidity, suggestTransfers, type ExpenseSplit } from '@/lib/potLedger'
 import { parsePotAmount, potTitle } from '@/lib/potRules'
-import { parseEuroInput } from '@/lib/settlementAmount'
+import { parseEuroCents } from '@/lib/settlementAmount'
 import { toIsoDate } from '@/lib/taskSchedule'
 import {
   undoAll,
@@ -294,9 +294,9 @@ function splitOf(
       const values: Record<string, number> = {}
       for (const [id, value] of entries) {
         if (input.kind === 'exact') {
-          const euros = parseEuroInput(String(value))
-          if (euros === null) return error(`Betrag für ${store.participantName(id)} ungültig.`)
-          values[id] = Math.round(euros * 100)
+          const cents = parseEuroCents(String(value))
+          if (cents === null) return error(`Betrag für ${store.participantName(id)} ungültig.`)
+          values[id] = cents
         } else {
           const n = Number(value)
           if (!Number.isFinite(n) || n < 0 || !hasTwoDecimals(n)) {

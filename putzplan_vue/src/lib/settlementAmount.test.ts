@@ -5,6 +5,7 @@ import {
   formatEuroInput,
   householdPotCredit,
   openBalance,
+  parseEuroCents,
   parseEuroInput,
   potOffsetPoints,
   suggestEuros,
@@ -33,6 +34,24 @@ describe('parseEuroInput', () => {
     expect(parseEuroInput('-1')).toBeNull()
     expect(parseEuroInput('abc')).toBeNull()
     expect(parseEuroInput('')).toBeNull()
+  })
+})
+
+describe('parseEuroCents', () => {
+  it('liest Euro als ganze Cent, ohne Umweg über Fließkomma', () => {
+    expect(parseEuroCents('0,29')).toBe(29)
+    expect(parseEuroCents('19,99')).toBe(1999)
+    expect(parseEuroCents('1,15')).toBe(115)
+    expect(parseEuroCents(' 7.5 ')).toBe(750)
+    expect(parseEuroCents('0')).toBe(0)
+  })
+
+  it('weist Tausenderpunkte, mehr als zwei Nachkommastellen, Negatives und Text ab', () => {
+    expect(parseEuroCents('1.234,56')).toBeNull()
+    expect(parseEuroCents('0,835')).toBeNull()
+    expect(parseEuroCents('-1')).toBeNull()
+    expect(parseEuroCents('abc')).toBeNull()
+    expect(parseEuroCents('')).toBeNull()
   })
 })
 
