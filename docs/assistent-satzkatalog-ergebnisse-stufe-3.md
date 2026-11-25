@@ -76,3 +76,68 @@ der Topfansicht. Rückgängig lief über den Knopf im Toast.
 	anderen Seite aus richtig.
 - Mit Version 24 schrieb er in einem Gespräch Markdown (`**QC-Test Urlaub**`), das der Chat roh zeigt.
 - Ein `add_expense` trug ein erfundenes Feld `pot_id_placeholder`; das Werkzeug überging es.
+
+## Nachlauf nach der Fix-Runde, 25.11.2026
+
+Gegen die deployte Edge Function `assistant`, durch die Oberfläche des Dev-Servers, als QC 1 im
+`QC-Test-Haushalt`; jede Gruppe in einem frischen Gespräch. Gelaufen: U und V ganz, dazu H2, T3/T3b,
+T5, T6, T6b, O1–O3, V11 frisch; mit Version 28 noch einmal die Sätze, deren Werkzeugergebnis sich
+geändert hat (V1, V11, V13, V20, V22) und O1–O3. Rückgängig über die Aktion des Toasts.
+
+- **Versionen:** U, V und der Rest mit Version 27 (`max_tokens` 4096, neuer Hinweis nach Rückgängig,
+	Regel zu zugewiesenen Aufgaben), die Nachläufe mit Version 28 (Salden im Ergebnis jeder Änderung).
+- **Handybreite:** `html` und Chat-Panel per injiziertem Stil auf 390 px.
+- **Ausgangslage:** leere Töpfe Skiurlaub (abgeschlossen) und QC Merge-Test aus dem Bau gelöscht; für
+	V16 der abgeschlossene Topf QC Silvester angelegt. QC-Test Urlaub hatte schon zwei Pizzen zu 34 €:
+	V7, V8 und V14 fragten deshalb richtig nach, welche.
+- **Kein Ausgleich entstanden.**
+
+### Zählung
+
+| | Sätze | Erwartete Reaktion | Falsch |
+| --- | --- | --- | --- |
+| Desktop | 51 | 46 | 5 (V11b, T5, O2, V1 mit Version 28, O3 mit Version 28) |
+| Handybreite | 49 | 46 | 3 (V11b, V17, T5) |
+
+- **`max_tokens`:** kein Abbruch mehr. V10 („Wer hat was bezahlt?“, 29 Ausgaben) fasst je Zahler
+	zusammen, die Summen stimmen (375,50 €, 2755,00 €, 19,00 €; auf dem Handy 499,50 €, 3667,50 €,
+	19,00 €).
+- **Rückgängig-Hinweis:** U4 sagt nach dem Rückgängig des Abschließens „ist schon offen“ (kein zweiter
+	Topf); U8b löscht nach dem zurückgeholten Topf mit der neuen ID, ohne Zweifel an früheren Schritten;
+	T6 nach dem Rückgängig von T3b ohne „schon verbucht“; V7 auf dem Handy weiß, dass die
+	zurückgenommene Pizza weg ist.
+- **T5:** keine Ablehnung mehr wegen der Zuweisung; „die Punkte gehen an dich, obwohl qc-agent-2
+	zugewiesen war“.
+- **Gastlink beim Löschen:** Topf Skiurlaub mit nur einem Gastlink, Gastlinks im Store vorher geleert
+	(wie vor dem ersten Laden): `delete_pot` lädt sie, nennt den Gastlink, keine Karte, die App im Topf.
+- **Rückgängig gesperrt:** Topf QC Kino angelegt, eine Ausgabe eingetragen, dann Rückgängig des
+	Anlegens: Fehler-Toast „Rückgängig geht nicht mehr: der Topf „QC Kino“ hat inzwischen 1 Ausgabe.
+	Löschen lässt er sich von Hand im Topf.“ Der Topf bleibt.
+- **Beträge und Aufteilungen** im Store und in der Topfansicht, beide Breiten: Taxi 6,25/6,25,
+	Ferienhaus 150 € je sechs, Wein 2:1 20/10, Tanken 3,92 viermal und 3,91 zweimal, Parken 6,25/6,25,
+	Skipass 75/25 % 30/10, Brot nach Beträgen 10/8, Rückzahlung QC-Ben 20 €; Pizza im Haushaltstopf
+	15/15. 12,345 € fragt er nach.
+- **V11:** frisch fragt er nach dem Topf (beide Breiten, auch mit Version 28); im Gespräch über den
+	Urlaubstopf bucht er dorthin, der Toast nennt den Topf (erwartet nach der Entscheidung).
+
+### Falsch
+
+| Satz | Was falsch lief | Stand |
+| --- | --- | --- |
+| V11b | trug richtig ein, nannte dann einen selbst gerechneten Saldo verkehrt herum (37 € statt 47 €; Handy 57 statt 67) | Korrigiert in Version 28: das Ergebnis jeder Änderung nennt die Salden, der Prompt verbietet Nachrechnen; danach V11b, V13, V22 auf beiden Breiten mit den richtigen Salden |
+| T5 | erledigte QC Keller aufräumen ohne Rückfrage (beide Breiten); der Katalog erwartet eine Rückfrage. Nach der Prompt-Regel ist „Keller“ ein Treffer im Namen, also genau ein Treffer | offen: Katalog oder Regel entscheiden |
+| O2 (Desktop, Version 27), O3 (Desktop, Version 28) | direkt nach einem `go_to_page` kein neues, „die Seite ist schon offen“ | offen; wie im ersten Lauf O3 |
+| V17 (Handy) | fragte, welche Rückzahlung er ändern soll, statt abzulehnen; suchte im Urlaubstopf (die verrechnete steht im Haushaltstopf) | offen; auf Desktop abgelehnt |
+| V1 (Desktop, Version 28) | fragte „QC Kino oder QC-Test Urlaub?“, obwohl „Urlaubstopf“ genannt war (seit es den offenen Topf QC Kino gibt) | offen; auf dem Handy mit Version 28 richtig |
+
+### Offen, ohne falsches Werkzeug
+
+- V20 (beide Breiten): nach richtigem Eintrag ein verwirrter Satz „entspricht nicht ganz deiner Angabe
+	… das stimmt also“.
+- V23 (Desktop): korrigierte ungefragt eine richtige Aussage aus V22 („das habe ich nicht geprüft“).
+- V9 (Handy): sprach ungefragt die zurückgenommene Pizza an.
+- V17 (Desktop): lehnte ab, sah aber im falschen Topf nach.
+- U9, O1, V15, V23: „von Hand“ und `go_to_page`, aber nicht ausdrücklich „das mache ich nicht“.
+- Markdown kam in diesem Lauf nicht vor; der Chat entfernt `**`, `__` und `#` jetzt ohnehin.
+- Setup-Rest: eine zweite To-do-Liste „Umzug“ (der Store war beim Anlegen nicht geladen, die alte
+	stand schon), Töpfe Skiurlaub (abgeschlossen), QC Kino und QC Silvester bleiben stehen.
