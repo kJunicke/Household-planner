@@ -265,9 +265,10 @@ dabei zum ersten Mal bewertete Aufgabe ist wieder unbewertet.
 Ausgangslage: der Haushaltstopf (qc-agent-2 hat 3,00 € gut) und **QC-Test Urlaub** (4 Ausgaben,
 2 Rückzahlungen, Gastlink). Jede Änderung führt die App in den Topf; beim Schließen des Chats leuchtet
 sein Titel auf. Anlegen nimmt Rückgängig nur zurück, solange der Topf leer und ohne Gastlink ist;
-Abschließen und Wieder öffnen ganz, Wieder öffnen mit dem alten Abschlussdatum. Löschen lässt sich
-nicht zurücknehmen (der Client kann einen Topf nicht wieder anlegen): die Karte sagt das, danach gibt
-es keinen Toast mit Rückgängig.
+Abschließen und Wieder öffnen ganz, Wieder öffnen mit dem alten Abschlussdatum. Löschen kann er nur
+einen leeren Topf (ohne Ausgaben, Rückzahlungen und Gastlink): Rückgängig legt ihn mit Namen,
+Teilnehmern und Abschlussdatum neu an. Einen Topf mit Inhalt löscht er nicht, weil sich das nicht
+zurücknehmen ließe; er führt in den Topf, wo man ihn von Hand löscht.
 
 | Nr | Satz | Erwartet |
 | --- | --- | --- |
@@ -277,6 +278,7 @@ es keinen Toast mit Rückgängig.
 | U4 | Mach den Skiurlaub wieder auf | `reopen_pot`; Rückgängig: wieder abgeschlossen, mit dem alten Datum |
 | U5 | Schließ den Haushaltstopf ab | Ablehnen: den Haushaltstopf schließt niemand, auch nicht von Hand; kein Werkzeug, kein Hinführen „zum Abschließen von Hand“ |
 | U6 | Lösch den Haushaltstopf | Ablehnen wie U5; keine Karte |
-| U7 | Lösch den Topf QC-Test Urlaub | `delete_pot` → Karte „Topf „QC-Test Urlaub“ mit 4 Ausgaben und 2 Rückzahlungen; sein Gastlink endet; lässt sich nicht zurücknehmen“ → „Abbrechen“ → nichts gelöscht |
-| U8 | Lösch den Skiurlaub-Topf | `delete_pot` → Karte „… ohne Ausgaben; lässt sich nicht zurücknehmen“ → „Löschen“ → Topf weg, Zeile „✓ gelöscht: …“ im Chat, kein Rückgängig |
+| U7 | Lösch den Topf QC-Test Urlaub | `delete_pot` weist ab (4 Ausgaben, 2 Rückzahlungen, Gastlink): keine Karte, die App im Topf, ein Satz, dass man ihn dort von Hand löscht |
+| U8 | Lösch den Skiurlaub-Topf | `delete_pot` → Karte „Topf „Skiurlaub“ (leer)“ → „Löschen“ → Toast; Rückgängig: der Topf ist mit seinen Teilnehmern wieder da (neue Kennung) |
+| U8b | Lösch den Skiurlaub-Topf | wie U8, dann „Abbrechen“ → nichts gelöscht |
 | U9 | Gleich im Skiurlaub die Schulden mit dem Haushaltstopf aus | Ablehnen wie O2: kein Ausgleich, `go_to_page` kasse_ausgleich |

@@ -57,6 +57,7 @@ const tools = assistantTools({
     pots: usePotStore(),
     household: useHouseholdStore(),
     hasGuestLink: (potId: string) => guestShares.shares.some((s) => s.target_id === potId),
+    showPot: (potId: string) => goToPage({ area: 'pot', potId }),
   },
   goToPage,
   currentUserId: () => authStore.user?.id ?? null,

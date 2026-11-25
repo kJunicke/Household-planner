@@ -11,12 +11,14 @@
  * - Nichts hier verrechnet oder gleicht aus.
  *
  * Was sich zurücknehmen lässt: Anlegen (solange der Topf leer ist), Abschließen
- * und Wieder öffnen ganz. Löschen gar nicht: Zurückholen kann der Client einen
- * Topf nicht, er legt keine Zeile in `pots` an, nur `create_event_pot` einen
- * neuen Topf mit neuen Teilnehmern (andere Kennungen, Anlagezeiten und offene
- * Entscheidungen zur ganzen Gruppe; die Rechnung hinge daran). Den Gastlink
- * löscht die Datenbank mit. Darum geht Löschen nur über die Karte, die das sagt,
- * und ohne Rückgängig.
+ * und Wieder öffnen ganz. Löschen nur bei einem leeren Topf (Spec D19: was sich
+ * gar nicht zurücknehmen lässt, kann er nicht). Zurückholen kann der Client
+ * einen Topf nur über `create_event_pot`: ein neuer Topf mit neuen Teilnehmern
+ * (andere Kennungen, Anlagezeiten, offene Entscheidungen zur ganzen Gruppe).
+ * An Ausgaben und Rückzahlungen hinge die Rechnung daran, und einen Gastlink
+ * löscht die Datenbank mit; einen Topf mit einem davon löscht nur, wer es von
+ * Hand im Topf tut, und dorthin führt das Werkzeug. Ein leerer Topf kommt mit
+ * Namen, Teilnehmern und Abschlussdatum zurück, nur mit neuer Kennung.
  */
 import type { useHouseholdStore } from '@/stores/householdStore'
 import type { usePotStore } from '@/stores/potStore'
@@ -39,6 +41,8 @@ export interface PotToolStores {
   household: Pick<ReturnType<typeof useHouseholdStore>, 'householdMembers'>
   /** Ob der Topf einen Gastlink hat; der endet mit ihm. */
   hasGuestLink: (potId: string) => boolean
+  /** Bringt die App in den Topf. */
+  showPot: (potId: string) => void
 }
 
 const POT_ID = { type: 'string', description: 'ID des Topfs aus der Übersicht' }
@@ -79,15 +83,18 @@ function countOf(n: number, one: string, many: string) {
   return n === 1 ? `1 ${one}` : `${n} ${many}`
 }
 
-/** „mit 2 Ausgaben und 1 Rückzahlung“, „ohne Ausgaben“ */
-function contents(stores: PotToolStores, potId: string): string {
+/** Was im Topf steht und ihn unwiederbringlich machte, z. B. „2 Ausgaben und einen Gastlink“; leer: `null`. */
+function contents(stores: PotToolStores, potId: string): string | null {
   const expenses = stores.pots.expensesOf(potId).length
   const repayments = stores.pots.repaymentsOf(potId).length
   const parts = [
     ...(expenses ? [countOf(expenses, 'Ausgabe', 'Ausgaben')] : []),
     ...(repayments ? [countOf(repayments, 'Rückzahlung', 'Rückzahlungen')] : []),
+    ...(stores.hasGuestLink(potId) ? ['einen Gastlink'] : []),
   ]
-  return parts.length ? `mit ${parts.join(' und ')}` : 'ohne Ausgaben'
+  if (parts.length === 0) return null
+  const last = parts.pop()!
+  return parts.length ? `${parts.join(', ')} und ${last}` : last
 }
 
 async function createPot(
@@ -166,23 +173,53 @@ function reopenPot(stores: PotToolStores, input: Record<string, unknown>): ToolO
   })
 }
 
+/**
+ * Löscht nur einen leeren Topf, nach der Karte. Die Rücknahme legt ihn mit
+ * demselben Namen und denselben Teilnehmern neu an (neue Kennung) und schließt
+ * ihn wieder ab, wenn er abgeschlossen war, mit dem alten Datum. Einen Topf mit
+ * Inhalt löscht er nicht; er führt hin.
+ */
 function deletePot(stores: PotToolStores, input: Record<string, unknown>): ToolOutcome {
   const pot = findEventPot(stores, input)
   if (!isPot(pot)) return pot
-  const what = `Topf „${pot.name}“ ${contents(stores, pot.pot_id)}`
-  const guestLink = stores.hasGuestLink(pot.pot_id) ? '; sein Gastlink endet' : ''
+  const held = contents(stores, pot.pot_id)
+  if (held) {
+    stores.showPot(pot.pot_id)
+    return {
+      result:
+        `Nicht gelöscht: der Topf „${pot.name}“ hat ${held}. Das ließe sich nicht zurücknehmen, ` +
+        'darum löscht so einen Topf nur der Nutzer selbst, von Hand im Topf unten mit „Löschen“. ' +
+        'Die App zeigt ihn jetzt.',
+      summary: `→ Topf ${pot.name}`,
+    }
+  }
+  // Der Stand von jetzt, zum Neuanlegen.
+  const { name, closed_at: closedAt } = { ...pot }
+  const people = stores.pots.participantsOf(pot.pot_id)
+  const memberIds = people.filter((p) => p.user_id).map((p) => p.user_id!)
+  const guestNames = people.filter((p) => !p.user_id).map((p) => p.name)
+  // Offene Töpfe stehen nach ihrer Anlage, der neue also oben.
+  const movesUp =
+    !closedAt &&
+    stores.pots.pots.some(
+      (p) => p.kind === 'event' && !p.closed_at && p.created_at > pot.created_at,
+    )
+  const what = `Topf „${name}“ (leer)`
   return {
     result: 'Wartet auf die Bestätigung des Nutzers.',
     deleteCard: {
-      what: `${what}${guestLink}; lässt sich nicht zurücknehmen`,
+      what: `${what}${movesUp ? '; Rückgängig holt ihn als neuesten Topf oben zurück' : ''}`,
       confirm: async () => {
         if (!stores.pots.deletePot(pot.pot_id)) {
           return { ...error('Löschen fehlgeschlagen'), summary: `✗ nicht gelöscht: ${what}` }
         }
-        return {
-          result: `Gelöscht: ${what}. Das lässt sich nicht zurücknehmen.`,
-          summary: `✓ gelöscht: ${what}`,
+        const summary = `✓ gelöscht: ${what}`
+        const undo = async () => {
+          const potId = await stores.pots.createEventPot({ name, memberIds, guestNames })
+          if (!potId) return false
+          return closedAt ? stores.pots.setPotClosed(potId, true, closedAt) : true
         }
+        return { result: `Gelöscht: ${what}.`, summary, undo, changes: [{ summary, undo }] }
       },
     },
   }
@@ -226,10 +263,11 @@ export const potTools = (stores: PotToolStores): AssistantTool[] => [
   {
     name: 'delete_pot',
     description:
-      'Löscht einen Topf für einen Anlass samt Ausgaben und Rückzahlungen, nie den Haushaltstopf. ' +
-      'Vor dem Löschen zeigt die App dem Nutzer eine Karte mit „Löschen“ und „Abbrechen“; frag ' +
-      'darum nicht selbst nach, und melde das Löschen erst, wenn das Ergebnis es bestätigt. ' +
-      'Zurücknehmen lässt es sich nicht.',
+      'Löscht einen leeren Topf für einen Anlass (ohne Ausgaben, Rückzahlungen und Gastlink), nie ' +
+      'den Haushaltstopf. Einen Topf mit Inhalt löscht es nicht, sondern bringt die App hin: das ' +
+      'tut der Nutzer von Hand. Vor dem Löschen zeigt die App eine Karte mit „Löschen“ und ' +
+      '„Abbrechen“; frag darum nicht selbst nach, und melde das Löschen erst, wenn das Ergebnis ' +
+      'es bestätigt.',
     input_schema: { type: 'object', properties: { pot_id: POT_ID }, required: ['pot_id'] },
     execute: async (input) => deletePot(stores, input),
   },
