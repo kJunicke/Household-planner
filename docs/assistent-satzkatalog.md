@@ -259,3 +259,24 @@ dabei zum ersten Mal bewertete Aufgabe ist wieder unbewertet.
 | T7b | die Pinnwand, war extrem dreckig nach der Party | `complete_task` QC-Raster Fenster mit points 6, note mit der Begründung, again (schon erledigt): Toast „+6 P statt 3“ |
 | T8 | Ich hab zwei Stunden am QC-Test Projekt gearbeitet | Rückfrage nach den Punkten; mit Antwort `complete_task` am Projekt: Toast „Projekt-Arbeit: QC-Test Projekt (+… P)“, das Projekt bleibt offen |
 | T9 | Bad ist geputzt | QC-Raster Bad ist schon erledigt: Hinweis darauf, wann, und Frage, ob er es seitdem noch einmal geputzt hat; kein `complete_task` mit `again` von sich aus |
+
+## U. Töpfe anlegen, abschließen, wieder öffnen und löschen (`create_pot`, `close_pot`, `reopen_pot`, `delete_pot`)
+
+Ausgangslage: der Haushaltstopf (qc-agent-2 hat 3,00 € gut) und **QC-Test Urlaub** (4 Ausgaben,
+2 Rückzahlungen, Gastlink). Jede Änderung führt die App in den Topf; beim Schließen des Chats leuchtet
+sein Titel auf. Anlegen nimmt Rückgängig nur zurück, solange der Topf leer und ohne Gastlink ist;
+Abschließen und Wieder öffnen ganz, Wieder öffnen mit dem alten Abschlussdatum. Löschen lässt sich
+nicht zurücknehmen (der Client kann einen Topf nicht wieder anlegen): die Karte sagt das, danach gibt
+es keinen Toast mit Rückgängig.
+
+| Nr | Satz | Erwartet |
+| --- | --- | --- |
+| U1 | Mach einen Topf für den Skiurlaub | `create_pot` „Skiurlaub“ mit allen Mitgliedern; Toast, die App im neuen Topf; Rückgängig: der Topf ist wieder weg |
+| U2 | Mach einen Topf für den Skiurlaub mit mir und meinem Kumpel Tom | `create_pot` nur mit dem, der fragt (Tom ist kein Mitglied), und ein Satz: Gäste kommen über den Gastlink, den man im Topf von Hand anlegt; kein Gastlink, kein Teilnehmer Tom |
+| U3 | Schließ den Skiurlaub-Topf ab | `close_pot`; „Abgeschlossen am …“ im Topf; Rückgängig: wieder offen |
+| U4 | Mach den Skiurlaub wieder auf | `reopen_pot`; Rückgängig: wieder abgeschlossen, mit dem alten Datum |
+| U5 | Schließ den Haushaltstopf ab | Ablehnen: den Haushaltstopf schließt niemand, auch nicht von Hand; kein Werkzeug, kein Hinführen „zum Abschließen von Hand“ |
+| U6 | Lösch den Haushaltstopf | Ablehnen wie U5; keine Karte |
+| U7 | Lösch den Topf QC-Test Urlaub | `delete_pot` → Karte „Topf „QC-Test Urlaub“ mit 4 Ausgaben und 2 Rückzahlungen; sein Gastlink endet; lässt sich nicht zurücknehmen“ → „Abbrechen“ → nichts gelöscht |
+| U8 | Lösch den Skiurlaub-Topf | `delete_pot` → Karte „… ohne Ausgaben; lässt sich nicht zurücknehmen“ → „Löschen“ → Topf weg, Zeile „✓ gelöscht: …“ im Chat, kein Rückgängig |
+| U9 | Gleich im Skiurlaub die Schulden mit dem Haushaltstopf aus | Ablehnen wie O2: kein Ausgleich, `go_to_page` kasse_ausgleich |
