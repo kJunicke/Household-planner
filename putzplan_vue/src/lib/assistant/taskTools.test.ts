@@ -73,6 +73,11 @@ function fakeStores(
       all.set(created.task_id, created)
       return created
     },
+    updateTask: async (taskId: string, updates: Partial<Task>) => {
+      if (fail) return false
+      Object.assign(all.get(taskId)!, updates)
+      return true
+    },
     assignTask: async (taskId: string, userId: string | null, permanent: boolean) => {
       if (fail) return false
       Object.assign(all.get(taskId)!, { assigned_to: userId, assignment_permanent: permanent })
@@ -355,6 +360,122 @@ describe('create_task', () => {
       points: 8,
       task_type: 'one-time',
     })
+    expect(outcome.isError).toBe(true)
+    expect(outcome.changes).toBeUndefined()
+  })
+})
+
+describe('update_task', () => {
+  const wall = () =>
+    fakeStores([
+      task('Bad putzen', { effort: 5, recurrence_days: 7 }),
+      task('Fenster putzen', { effort: null, task_type: 'one-time', recurrence_days: 0 }),
+      task('Garten', { task_type: 'project', recurrence_days: 0 }),
+    ])
+
+  it('changes title, points, type and cadence like the edit window, and leads to the wall', async () => {
+    const fakes = wall()
+    const outcome = await execute(fakes, 'update_task', {
+      task_id: 't-bad-putzen',
+      title: 'Bad gründlich putzen',
+      points: 8,
+      recurrence_days: 14,
+    })
+    expect(outcome.isError).toBeFalsy()
+    expect(fakes.all.get('t-bad-putzen')).toMatchObject({
+      title: 'Bad gründlich putzen',
+      effort: 8,
+      recurrence_days: 14,
+    })
+    expect(outcome.summary).toBe(
+      '✓ geändert: Bad putzen → „Bad gründlich putzen“, 8 Punkte, alle 14 Tage',
+    )
+    expect(outcome.changed).toEqual([{ id: 't-bad-putzen', page: WALL }])
+    expect(outcome.changes).toHaveLength(1)
+  })
+
+  it('makes a one-time task recurring only with a cadence, and a recurring one-time without', async () => {
+    const fakes = wall()
+    const asked = await execute(fakes, 'update_task', {
+      task_id: 't-fenster-putzen',
+      task_type: 'recurring',
+    })
+    expect(asked.isError).toBe(true)
+    expect(asked.result).toMatch(/recurrence_days/)
+    await execute(fakes, 'update_task', {
+      task_id: 't-fenster-putzen',
+      task_type: 'recurring',
+      recurrence_days: 30,
+    })
+    expect(fakes.all.get('t-fenster-putzen')).toMatchObject({
+      task_type: 'recurring',
+      recurrence_days: 30,
+    })
+    await execute(fakes, 'update_task', { task_id: 't-bad-putzen', task_type: 'one-time' })
+    expect(fakes.all.get('t-bad-putzen')).toMatchObject({
+      task_type: 'one-time',
+      recurrence_days: 0,
+    })
+  })
+
+  it('can be taken back: title, points, type and cadence as before, unrated again if it was', async () => {
+    const fakes = wall()
+    const outcome = await execute(fakes, 'update_task', {
+      task_id: 't-fenster-putzen',
+      title: 'Fenster',
+      points: 6,
+      task_type: 'recurring',
+      recurrence_days: 30,
+    })
+    expect(await outcome.changes![0]!.undo()).toBe(true)
+    expect(fakes.all.get('t-fenster-putzen')).toMatchObject({
+      title: 'Fenster putzen',
+      effort: null,
+      task_type: 'one-time',
+      recurrence_days: 0,
+    })
+  })
+
+  it('rejects a new title another task has (Duplikat), naming that task', async () => {
+    const fakes = wall()
+    const outcome = await execute(fakes, 'update_task', {
+      task_id: 't-bad-putzen',
+      title: 'fenster putzen',
+    })
+    expect(outcome.isError).toBe(true)
+    expect(outcome.result).toMatch(/„Fenster putzen“ gibt es schon \(id t-fenster-putzen/)
+    expect(fakes.all.get('t-bad-putzen')!.title).toBe('Bad putzen')
+  })
+
+  it('turns no task into a project and no project into anything else, as the edit window', async () => {
+    const fakes = wall()
+    for (const input of [
+      { task_id: 't-bad-putzen', task_type: 'project' },
+      { task_id: 't-garten', task_type: 'one-time' },
+    ]) {
+      const outcome = await execute(fakes, 'update_task', input)
+      expect(outcome.isError).toBe(true)
+      expect(outcome.result).toMatch(/Projekt/)
+    }
+    expect(fakes.all.get('t-garten')!.task_type).toBe('project')
+  })
+
+  it('rejects points outside 1 to 999, and a call that changes nothing', async () => {
+    const fakes = wall()
+    for (const input of [
+      { task_id: 't-bad-putzen', points: 0 },
+      { task_id: 't-bad-putzen', points: 1000 },
+      { task_id: 't-bad-putzen' },
+      { task_id: 't-bad-putzen', title: 'Bad putzen', points: 5 },
+    ]) {
+      expect((await execute(fakes, 'update_task', input)).isError).toBe(true)
+    }
+    expect(fakes.all.get('t-bad-putzen')).toMatchObject({ title: 'Bad putzen', effort: 5 })
+  })
+
+  it('reports a change the store refused as an error', async () => {
+    const fakes = fakeStores([task('Bad putzen')], { fail: true })
+    const outcome = await execute(fakes, 'update_task', { task_id: 't-bad-putzen', points: 8 })
     expect(outcome.isError).toBe(true)
     expect(outcome.changes).toBeUndefined()
   })

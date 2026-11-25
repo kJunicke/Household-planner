@@ -1,7 +1,8 @@
 /**
  * Die Werkzeuge des Assistenten für die Aufgaben der Pinnwand: lesen, was dran
  * ist, wer was zuletzt gemacht hat und wie das Wochenziel steht; anlegen,
- * zuweisen, verschieben, wieder dreckig und löschen, je mit Rücknahme.
+ * bearbeiten, zuweisen, verschieben, wieder dreckig und löschen, je mit
+ * Rücknahme.
  * Erledigen gehört nicht hierher.
  *
  * Ausgeführt wird über den taskStore wie von Hand, nur ohne dessen
@@ -17,7 +18,7 @@
 import type { useHouseholdStore } from '@/stores/householdStore'
 import type { DirtySnapshot, useTaskStore } from '@/stores/taskStore'
 import type { Task } from '@/types/Task'
-import { findDuplicateTask } from '@/lib/taskDuplicates'
+import { findDuplicateTask, normalizeTaskTitle } from '@/lib/taskDuplicates'
 import { isValidPoints, POINTS_MAX } from '@/lib/taskPoints'
 import {
   canPostpone,
@@ -49,6 +50,7 @@ export interface TaskToolStores {
     Pick<
       ReturnType<typeof useTaskStore>,
       | 'createTask'
+      | 'updateTask'
       | 'assignTask'
       | 'postponeTask'
       | 'markAsDirty'
@@ -211,6 +213,92 @@ async function createTask(
     // Weich gelöscht wie in der App; eine neue Aufgabe hat noch keinen Verlauf,
     // und hätte sie inzwischen einen, bliebe er stehen.
     undo: () => stores.tasks.deleteTask(id, QUIET),
+  })
+}
+
+/** Die Felder des Bearbeiten-Fensters (`TaskEditModal`). */
+type EditableFields = Pick<Task, 'title' | 'effort' | 'task_type' | 'recurrence_days'>
+
+/**
+ * Ändert Titel, Punkte, Typ und Wiederholung wie das Bearbeiten-Fenster und mit
+ * dessen Regeln: kein Duplikat, keine Aufgabe wird Projekt und kein Projekt
+ * etwas anderes, eine bewertete Aufgabe bleibt bewertet. Die Rücknahme schreibt
+ * die alten Werte zurück, auch ein vorheriges Unbewertet.
+ */
+async function updateTask(
+  stores: TaskToolStores,
+  input: Record<string, unknown>,
+): Promise<ToolOutcome> {
+  const found = await findTask(stores, input)
+  if (!('task_id' in found)) return found
+  const before: EditableFields = {
+    title: found.title,
+    effort: found.effort,
+    task_type: found.task_type,
+    recurrence_days: found.recurrence_days,
+  }
+  const after = { ...before }
+  if (input.title !== undefined) {
+    after.title = String(input.title ?? '').trim()
+    const badTitle = invalidTitle(after.title, 'Kein Titel')
+    if (badTitle) return badTitle
+    const existing = findDuplicateTask(stores.tasks.tasks, after.title, found.task_id)
+    if (existing && normalizeTaskTitle(after.title) !== normalizeTaskTitle(found.title)) {
+      return error(
+        `Nicht geändert: „${existing.title}“ gibt es schon (id ${existing.task_id}). ` +
+          'Nenne dem Nutzer diese Aufgabe.',
+      )
+    }
+  }
+  if (input.points !== undefined) {
+    const points = input.points
+    if (typeof points !== 'number' || !isValidPoints(points, 'standard')) {
+      return error(`Punkte ungültig (ganze Zahl 1 bis ${POINTS_MAX}).`)
+    }
+    after.effort = points
+  }
+  if (input.task_type !== undefined) {
+    const type = input.task_type as Task['task_type']
+    if (!TASK_TYPES.includes(type)) return error(`Unbekannter task_type ${String(type)}`)
+    if ((type === 'project') !== (found.task_type === 'project')) {
+      return error(
+        'Projekt ist kein Wechselziel, in keine Richtung: ein Projekt bleibt Projekt, eine ' +
+          'andere Aufgabe wird keins (wie im Bearbeiten-Fenster).',
+      )
+    }
+    after.task_type = type
+  }
+  if (after.task_type === 'recurring') {
+    const asked = input.recurrence_days
+    const recurrence = asked === undefined ? before.recurrence_days : Number(asked)
+    if (!(Number.isInteger(recurrence) && recurrence >= 1)) {
+      return error(
+        'Eine wiederkehrende Aufgabe braucht recurrence_days (alle wie viele Tage). Frag nach.',
+      )
+    }
+    after.recurrence_days = recurrence
+  } else {
+    after.recurrence_days = 0
+  }
+
+  const what = [
+    after.title !== before.title ? `„${after.title}“` : null,
+    after.effort !== before.effort ? `${after.effort} Punkte` : null,
+    after.task_type !== before.task_type ? TYPE_LABEL[after.task_type] : null,
+    after.recurrence_days !== before.recurrence_days && after.recurrence_days > 0
+      ? `alle ${after.recurrence_days} Tage`
+      : null,
+  ].filter(Boolean)
+  if (what.length === 0) return error('Nichts zu ändern: die Aufgabe steht schon so.')
+
+  const id = found.task_id
+  if (!(await stores.tasks.updateTask(id, after, QUIET))) {
+    return { ...error('Nicht geändert'), summary: `✗ nicht geändert: ${found.title}` }
+  }
+  const line = `${before.title} → ${what.join(', ')}`
+  return changedOnWall(id, `Geändert: ${line}.`, {
+    summary: `✓ geändert: ${line}`,
+    undo: () => stores.tasks.updateTask(id, before, QUIET),
   })
 }
 
@@ -467,6 +555,35 @@ export const taskTools = (stores: TaskToolStores): AssistantTool[] => [
       required: ['title', 'points', 'task_type'],
     },
     execute: (input) => createTask(stores, input),
+  },
+  {
+    name: 'update_task',
+    description:
+      'Ändert eine bestehende Aufgabe wie das Bearbeiten-Fenster der App: Titel, Standardpunkte, ' +
+      'Typ und alle wie viele Tage. Nur die genannten Felder ändern sich. Projekt ist kein ' +
+      'Wechselziel, in keine Richtung. Zuweisen, verschieben und löschen haben eigene Werkzeuge.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        task_id: TASK_ID,
+        title: { type: 'string', description: 'Optional: neuer Titel' },
+        points: {
+          type: 'integer',
+          description: `Optional: neue Standardpunkte (1 bis ${POINTS_MAX})`,
+        },
+        task_type: {
+          type: 'string',
+          enum: TASK_TYPES,
+          description: 'Optional: recurring, daily oder one-time; project nur, wenn sie eins ist',
+        },
+        recurrence_days: {
+          type: 'integer',
+          description: 'Optional, nur bei recurring: alle wie viele Tage',
+        },
+      },
+      required: ['task_id'],
+    },
+    execute: (input) => updateTask(stores, input),
   },
   {
     name: 'assign_task',

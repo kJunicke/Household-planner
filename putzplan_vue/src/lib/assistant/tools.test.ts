@@ -49,6 +49,7 @@ describe('the tool registry', () => {
       'read_task_history',
       'read_weekly_goal',
       'create_task',
+      'update_task',
       'assign_task',
       'postpone_task',
       'mark_task_dirty',

@@ -1165,7 +1165,11 @@ export const useTaskStore = defineStore('tasks', () => {
   }
 
   // UPDATE - Task vollständig aktualisieren
-  const updateTask = async (taskId: string, updates: Partial<Omit<Task, 'task_id'>>) => {
+  const updateTask = async (
+    taskId: string,
+    updates: Partial<Omit<Task, 'task_id'>>,
+    { quiet = false }: WriteOptions = {},
+  ) => {
     const toastStore = useToastStore()
 
     const current = tasks.value.find((t) => t.task_id === taskId)
@@ -1206,7 +1210,7 @@ export const useTaskStore = defineStore('tasks', () => {
     if (taskIndex !== -1) {
       tasks.value[taskIndex] = { ...tasks.value[taskIndex], ...updates }
     }
-    toastStore.showToast('Aufgabe aktualisiert', 'success', 3000)
+    if (!quiet) toastStore.showToast('Aufgabe aktualisiert', 'success', 3000)
     return true
   }
 
