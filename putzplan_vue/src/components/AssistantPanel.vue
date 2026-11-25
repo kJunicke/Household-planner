@@ -73,7 +73,7 @@ const toastStore = useToastStore()
 const UNDO_TOAST_MS = 8000
 
 /** Was der Nutzer seit der letzten Frage zurückgenommen hat; geht mit der nächsten Frage an Claude. */
-const undone: string[] = []
+const undone: Change[] = []
 
 /** Ein Toast je Änderung; sein Rückgängig-Symbol nimmt genau diese Änderung zurück. */
 function toastChange(change: Change) {
@@ -90,7 +90,7 @@ function toastChange(change: Change) {
         toastStore.showToast(undoFailedText(change.summary, navigator.onLine), 'error')
         return
       }
-      undone.push(change.undone?.() ?? change.summary.replace(/^✓\s*/, ''))
+      undone.push(change)
       entries.value.push({ kind: 'action', text: `↶ zurückgenommen: ${change.summary}` })
     },
   })

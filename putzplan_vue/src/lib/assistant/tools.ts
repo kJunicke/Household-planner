@@ -78,7 +78,8 @@ export interface Change {
   undoBlocked?: () => Promise<string | null>
   /**
    * Der Stand nach dem Rückgängig, für Claude vor der nächsten Frage, z. B. mit
-   * der neuen ID eines zurückgeholten Topfs. Fehlt, steht dort `summary`.
+   * der neuen ID eines zurückgeholten Topfs. Fehlt, heißt es dort, dass
+   * `summary` nicht mehr gilt.
    */
   undone?: () => string
 }
@@ -161,7 +162,9 @@ export const undoFailedText = (summary: string, online: boolean) =>
 /**
  * Geht vor die nächste Frage an Claude: der Verlauf meldet die Änderungen
  * noch als erledigt und widerspräche sonst dem Stand, den Claude mit der Frage
- * bekommt. `lines` je Änderung, `Change.undone` oder ihre Zeile ohne „✓“.
+ * bekommt. Je Änderung ihr `undone`, sonst, dass ihre Zeile nicht mehr gilt.
  */
-export const undoneNote = (lines: string[]) =>
-  `(Inzwischen von mir per Rückgängig zurückgenommen, gilt nicht mehr: ${lines.join('; ')})`
+export const undoneNote = (changes: Change[]) =>
+  `(Inzwischen von mir per Rückgängig zurückgenommen: ${changes
+    .map((c) => c.undone?.() ?? `„${c.summary.replace(/^✓\s*/, '')}“ gilt nicht mehr`)
+    .join('; ')})`

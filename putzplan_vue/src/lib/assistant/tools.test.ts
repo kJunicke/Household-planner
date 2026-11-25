@@ -112,9 +112,14 @@ describe('a failed undo', () => {
 
 describe('the note on what was taken back', () => {
   it('tells Claude before the next question that these changes no longer hold', () => {
-    expect(undoneNote(['neuer Topf: Kino', 'Topf „Ski“ ist wieder da, neue ID p2'])).toBe(
-      '(Inzwischen von mir per Rückgängig zurückgenommen, gilt nicht mehr: neuer Topf: Kino; ' +
-        'Topf „Ski“ ist wieder da, neue ID p2)',
+    expect(
+      undoneNote([
+        { summary: '✓ neuer Topf: Kino', undo: async () => true },
+        { summary: '✓ gelöscht: Topf „Ski“', undo: async () => true, undone: () => 'Ski ist wieder da' },
+      ]),
+    ).toBe(
+      '(Inzwischen von mir per Rückgängig zurückgenommen: „neuer Topf: Kino“ gilt nicht mehr; ' +
+        'Ski ist wieder da)',
     )
   })
 })
