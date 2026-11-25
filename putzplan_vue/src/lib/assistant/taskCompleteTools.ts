@@ -298,7 +298,8 @@ export const taskCompleteTools = (store: TaskCompleteToolStore): AssistantTool[]
           type: 'string',
           description:
             'Notiz zur Erledigung. Pflicht, wenn points von den Standardpunkten abweicht: dann ' +
-            'nur die Begründung des Nutzers, ohne seine Antwort auf andere Rückfragen, nie eine erfundene.',
+            'nur die Begründung des Nutzers, ohne seine Antwort auf andere Rückfragen und ohne ' +
+            'Angaben, welche Aufgabe oder Liste gemeint ist („die Pinnwand“), nie eine erfundene.',
         },
         again: {
           type: 'boolean',
