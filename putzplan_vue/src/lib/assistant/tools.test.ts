@@ -3,8 +3,10 @@ import { describe, expect, it } from 'vitest'
 import type { ListToolStores } from './listTools'
 import type { ShoppingToolStore } from './shoppingTools'
 import type { NotesToolStore } from './notesTools'
+import type { PotToolStores } from './potTools'
 import type { TaskToolStores } from './taskTools'
-import { assistantTools, undoFailedText } from './tools'
+import type { ExpenseToolStores } from './expenseTools'
+import { assistantTools, undoFailedText, undoneNote } from './tools'
 
 const registry = () =>
   assistantTools({
@@ -12,6 +14,8 @@ const registry = () =>
     lists: {} as ListToolStores,
     notes: { notes: [] } as unknown as NotesToolStore,
     tasks: {} as TaskToolStores,
+    pots: {} as PotToolStores,
+    expenses: {} as ExpenseToolStores,
     goToPage: () => {},
     currentUserId: () => 'me',
   })
@@ -56,6 +60,17 @@ describe('the tool registry', () => {
       'delete_task',
       'complete_task',
       'log_quick_task',
+      'create_pot',
+      'close_pot',
+      'reopen_pot',
+      'delete_pot',
+      'read_pot',
+      'add_expense',
+      'update_expense',
+      'delete_expense',
+      'add_repayment',
+      'update_repayment',
+      'delete_repayment',
       'go_to_page',
       'get_app_guide',
     ])
@@ -91,6 +106,20 @@ describe('a failed undo', () => {
     )
     expect(undoFailedText('✓ gelöscht: Zucker (Einkauf)', true)).toBe(
       'Rückgängig ging nicht. Es bleibt: gelöscht: Zucker (Einkauf)',
+    )
+  })
+})
+
+describe('the note on what was taken back', () => {
+  it('tells Claude before the next question that these changes no longer hold', () => {
+    expect(
+      undoneNote([
+        { summary: '✓ neuer Topf: Kino', undo: async () => true },
+        { summary: '✓ gelöscht: Topf „Ski“', undo: async () => true, undone: () => 'Ski ist wieder da' },
+      ]),
+    ).toBe(
+      '(Inzwischen von mir per Rückgängig zurückgenommen: „neuer Topf: Kino“ gilt nicht mehr; ' +
+        'Ski ist wieder da)',
     )
   })
 })

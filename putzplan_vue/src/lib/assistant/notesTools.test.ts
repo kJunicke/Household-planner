@@ -4,6 +4,7 @@ import type { ListToolStores } from './listTools'
 import { type NotesToolStore } from './notesTools'
 import type { ShoppingToolStore } from './shoppingTools'
 import type { TaskToolStores } from './taskTools'
+import type { ExpenseToolStores } from './expenseTools'
 import { assistantTools } from './tools'
 
 type Note = NotesToolStore['notes'][number]
@@ -48,6 +49,7 @@ const executeNotesTool = (
     lists: {} as ListToolStores,
     notes: store as unknown as NotesToolStore,
     tasks: {} as TaskToolStores,
+    expenses: {} as ExpenseToolStores,
     goToPage: () => {},
     currentUserId: () => 'me',
   }).execute(name, input)

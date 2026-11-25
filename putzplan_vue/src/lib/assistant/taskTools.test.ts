@@ -5,6 +5,7 @@ import type { ListToolStores } from './listTools'
 import type { NotesToolStore } from './notesTools'
 import type { ShoppingToolStore } from './shoppingTools'
 import type { TaskToolStores } from './taskTools'
+import type { ExpenseToolStores } from './expenseTools'
 import { assistantTools } from './tools'
 
 /** Tuesday, 24 November 2026, noon: the "today" of every test here. */
@@ -142,6 +143,7 @@ const execute = (fakes: Fakes, name: string, input: Record<string, unknown>) =>
       household: fakes.household,
       today: () => TODAY,
     } as unknown as TaskToolStores,
+    expenses: {} as ExpenseToolStores,
     goToPage: () => {},
     currentUserId: () => 'me',
   }).execute(name, input)

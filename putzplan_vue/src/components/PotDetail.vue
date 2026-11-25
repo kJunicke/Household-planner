@@ -6,6 +6,8 @@ import { participantNameProblem, participantNameProblemText, potTitle } from '@/
 import { POT_PARTICIPANT_NAME_MAX_LENGTH } from '@/lib/limits'
 import { formatCents, suggestTransfers } from '@/lib/potLedger'
 import { entryChangeLine } from '@/lib/potEntryChange'
+import { flashedPotIds } from '@/lib/assistant/followApp'
+import { FLASH_CLASS, useFlash } from '@/lib/assistant/flash'
 import ExpenseCreateModal from './ExpenseCreateModal.vue'
 import RepaymentCreateModal from './RepaymentCreateModal.vue'
 import GuestShareControls from './GuestShareControls.vue'
@@ -27,6 +29,11 @@ const showCreateModal = ref(false)
 const editingExpense = ref<PotExpense | null>(null)
 
 const title = computed(() => potTitle(props.pot))
+
+// Nach dem Assistenten leuchtet der Titel auf (Topf angelegt, abgeschlossen, wieder
+// geöffnet) oder die Ausgabe bzw. Rückzahlung, die er eingetragen oder geändert hat;
+// beides steht in derselben Menge.
+useFlash(flashedPotIds)
 
 const balanceRows = computed(() => {
   const balances = potStore.balancesOf(props.pot.pot_id)
@@ -130,7 +137,7 @@ const handleRepaymentSubmit = (payload: Parameters<typeof potStore.createRepayme
     // Schlägt nur fehl, wenn die Rückzahlung inzwischen gelöscht ist; der Store meldet das.
     potStore.updateRepayment(editing.repayment_id, payload)
     repaymentModal.value = null
-  } else if (potStore.createRepayment(payload)) {
+  } else if (potStore.createRepayment(payload).applied) {
     repaymentModal.value = null
   }
 }
@@ -220,7 +227,7 @@ const handleSubmit = (payload: Parameters<typeof potStore.createExpense>[0]) => 
     // Schlägt nur fehl, wenn die Ausgabe inzwischen gelöscht ist; der Store meldet das.
     potStore.updateExpense(editingExpense.value.expense_id, payload)
     closeExpenseModal()
-  } else if (potStore.createExpense(payload)) {
+  } else if (potStore.createExpense(payload).applied) {
     closeExpenseModal()
   }
 }
@@ -253,7 +260,7 @@ const handleDelete = () => {
       </div>
     </div>
 
-    <h2 class="pot-title">{{ title }}</h2>
+    <h2 :class="['pot-title', flashedPotIds.has(pot.pot_id) && FLASH_CLASS]">{{ title }}</h2>
     <div v-if="pot.closed_at" class="closed-banner">
       <i class="bi bi-lock me-1"></i> Abgeschlossen am {{ formatClosedAt(pot.closed_at) }} —
       schreibgeschützt
@@ -349,7 +356,7 @@ const handleDelete = () => {
           <button
             v-if="entry.kind === 'expense'"
             type="button"
-            class="expense-item"
+            :class="['expense-item', { [FLASH_CLASS]: flashedPotIds.has(entry.id) }]"
             :disabled="!isOpen"
             @click="openEdit(entry)"
           >
@@ -374,7 +381,10 @@ const handleDelete = () => {
           <button
             v-else
             type="button"
-            class="expense-item repayment-item"
+            :class="[
+              'expense-item repayment-item',
+              { [FLASH_CLASS]: flashedPotIds.has(entry.id) },
+            ]"
             :disabled="!isOpen || !!entry.repayment.settlement_id"
             @click="openEdit(entry)"
           >

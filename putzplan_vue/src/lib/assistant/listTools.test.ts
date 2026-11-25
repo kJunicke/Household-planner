@@ -6,6 +6,7 @@ import type { ListToolStores, ChecklistToolStore } from './listTools'
 import type { ShoppingToolStore } from './shoppingTools'
 import type { NotesToolStore } from './notesTools'
 import type { TaskToolStores } from './taskTools'
+import type { ExpenseToolStores } from './expenseTools'
 import { assistantTools } from './tools'
 
 const key = (name: string) => name.trim().toLowerCase()
@@ -233,17 +234,25 @@ function setup(
     opts,
   )
   const shopping = fakeShopping()
+  // Wie der echte Store: Gastlinks kennt er erst, wenn er geladen hat.
+  const guestLinks = {
+    shares: [] as { target_id: string }[],
+    load: async () => {
+      guestLinks.shares = (opts.sharedListIds ?? []).map((target_id) => ({ target_id }))
+    },
+  }
   const stores = {
     shopping,
     packing,
     todo,
-    hasGuestLink: (listId: string) => (opts.sharedListIds ?? []).includes(listId),
+    guestLinks,
   } as unknown as ListToolStores
   const registry = assistantTools({
     shopping: { lists: [], items: [] } as unknown as ShoppingToolStore,
     lists: stores,
     notes: { notes: [] } as unknown as NotesToolStore,
     tasks: {} as TaskToolStores,
+    expenses: {} as ExpenseToolStores,
     goToPage: () => {},
     currentUserId: () => 'me',
   })

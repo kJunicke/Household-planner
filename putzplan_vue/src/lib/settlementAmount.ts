@@ -25,10 +25,18 @@ export function suggestEuros(points: number, rate: number): number {
  * Browser und Tastatur verschlucken.
  */
 export function parseEuroInput(text: string): number | null {
+  const cents = parseEuroCents(text)
+  return cents === null ? null : cents / 100
+}
+
+/**
+ * Dieselbe Euro-Eingabe in ganzen Cent, gerechnet aus den Ziffern, ohne Umweg
+ * über Fließkomma: für Beträge in Töpfen, die in Cent gespeichert werden.
+ */
+export function parseEuroCents(text: string): number | null {
   const match = /^(\d+)(?:[.,](\d{1,2}))?$/.exec(text.trim())
   if (!match) return null
-  const cents = Number(match[1]) * 100 + Number((match[2] ?? '').padEnd(2, '0'))
-  return cents / 100
+  return Number(match[1]) * 100 + Number((match[2] ?? '').padEnd(2, '0'))
 }
 
 /** Betrag fürs Eingabefeld: zwei Nachkommastellen, Komma. */

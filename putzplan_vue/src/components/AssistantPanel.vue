@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * Chat mit dem Assistenten: Listen, Notizen und Aufgaben per Satz, mit Toast und
+ * Chat mit dem Assistenten: Listen, Notizen, Aufgaben und Töpfe per Satz, mit Toast und
  * Rückgängig je Änderung und einer Karte vor jedem Löschen.
  *
  * Der Verlauf lebt in dieser Komponente. Sie hängt im Header, der beim
@@ -20,15 +20,18 @@ import { captureOverview } from '@/lib/assistant/captureOverview'
 import {
   assistantTools,
   undoFailedText,
+  undoneNote,
   type Change,
   type ToolOutcome,
 } from '@/lib/assistant/tools'
 import { followApp } from '@/lib/assistant/followApp'
+import { withoutMarkdown } from '@/lib/assistant/plainText'
 import { useGoToPage } from '@/composables/useGoToPage'
 import { useAuthStore } from '@/stores/authStore'
 import { useGuestShareStore } from '@/stores/guestShareStore'
 import { useHouseholdStore } from '@/stores/householdStore'
 import { useNotesStore } from '@/stores/notesStore'
+import { usePotStore } from '@/stores/potStore'
 import { usePackingStore } from '@/stores/packingStore'
 import { useShoppingStore } from '@/stores/shoppingStore'
 import { useTaskStore } from '@/stores/taskStore'
@@ -45,13 +48,20 @@ const lists = {
   shopping: shoppingStore,
   packing: usePackingStore(),
   todo: useTodoStore(),
-  hasGuestLink: (listId: string) => guestShares.shares.some((s) => s.target_id === listId),
+  guestLinks: guestShares,
 }
 const tools = assistantTools({
   shopping: shoppingStore,
   lists,
   notes: useNotesStore(),
   tasks: { tasks: useTaskStore(), household: useHouseholdStore(), today: () => new Date() },
+  pots: {
+    pots: usePotStore(),
+    household: useHouseholdStore(),
+    guestLinks: guestShares,
+    showPot: (potId: string) => goToPage({ area: 'pot', potId }),
+  },
+  expenses: { pots: usePotStore(), today: () => new Date() },
   goToPage,
   currentUserId: () => authStore.user?.id ?? null,
 })
@@ -63,7 +73,7 @@ const toastStore = useToastStore()
 const UNDO_TOAST_MS = 8000
 
 /** Was der Nutzer seit der letzten Frage zurückgenommen hat; geht mit der nächsten Frage an Claude. */
-const undone: string[] = []
+const undone: Change[] = []
 
 /** Ein Toast je Änderung; sein Rückgängig-Symbol nimmt genau diese Änderung zurück. */
 function toastChange(change: Change) {
@@ -71,11 +81,16 @@ function toastChange(change: Change) {
     label: 'Rückgängig',
     icon: 'bi-arrow-counterclockwise',
     run: async () => {
+      const blocked = await change.undoBlocked?.()
+      if (blocked) {
+        toastStore.showToast(blocked, 'error')
+        return
+      }
       if (!(await change.undo())) {
         toastStore.showToast(undoFailedText(change.summary, navigator.onLine), 'error')
         return
       }
-      undone.push(change.summary)
+      undone.push(change)
       entries.value.push({ kind: 'action', text: `↶ zurückgenommen: ${change.summary}` })
     },
   })
@@ -180,11 +195,7 @@ async function submit() {
       text: 'Neues Gespräch: nach 30 Minuten ohne Frage ist der Verlauf darüber vergessen.',
     })
   entries.value.push({ kind: 'user', text: question })
-  // Der Verlauf meldet die zurückgenommenen Änderungen noch als erledigt; ohne
-  // diesen Hinweis widerspräche er dem Stand, den Claude mit der Frage bekommt.
-  const content = undone.length
-    ? `(Inzwischen von mir zurückgenommen: ${undone.splice(0).join('; ')})\n\n${question}`
-    : question
+  const content = undone.length ? `${undoneNote(undone.splice(0))}\n\n${question}` : question
 
   try {
     const overview = await captureOverview()
@@ -201,7 +212,7 @@ async function submit() {
       entries.value.push({ kind: action.isError ? 'error' : 'action', text: action.summary })
     }
     const answer = textOf(messages[messages.length - 1]!)
-    if (answer) entries.value.push({ kind: 'assistant', text: answer })
+    if (answer) entries.value.push({ kind: 'assistant', text: withoutMarkdown(answer) })
   } catch (error) {
     entries.value.push({
       kind: 'error',

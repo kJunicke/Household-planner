@@ -11,9 +11,11 @@
  */
 import type { AppPage } from '@/lib/appNavigation'
 import { guideTools } from './appGuide'
+import { expenseTools, type ExpenseToolStores } from './expenseTools'
 import { checklistTools, type ListToolStores } from './listTools'
 import { navigationTools } from './navigationTools'
 import { notesTools, type NotesToolStore } from './notesTools'
+import { potTools, type PotToolStores } from './potTools'
 import { shoppingTools, type ShoppingToolStore } from './shoppingTools'
 import { taskCompleteTools } from './taskCompleteTools'
 import { taskTools, type TaskToolStores } from './taskTools'
@@ -24,6 +26,7 @@ export type AssistantPage =
   | { area: 'notes' }
   | { area: 'wall' }
   | { area: 'history' }
+  | { area: 'pot'; potId: string }
 
 export interface ChangedEntry {
   id: string
@@ -68,6 +71,17 @@ export interface Change {
   summary: string
   /** Stellt den Stand vor dieser Änderung wieder her; `false`, wenn das misslang. */
   undo: () => Promise<boolean>
+  /**
+   * Warum sich die Änderung nicht mehr zurücknehmen lässt, als Satz für den
+   * Toast; `null`, solange sie es noch tut. Fehlt, geht es immer.
+   */
+  undoBlocked?: () => Promise<string | null>
+  /**
+   * Der Stand nach dem Rückgängig, für Claude vor der nächsten Frage, z. B. mit
+   * der neuen ID eines zurückgeholten Topfs. Fehlt, heißt es dort, dass
+   * `summary` nicht mehr gilt.
+   */
+  undone?: () => string
 }
 
 /** Was Claude von einem Werkzeug sieht, im Format der Messages API. */
@@ -89,6 +103,10 @@ export interface ToolDeps {
   notes: NotesToolStore
   /** Die Aufgaben der Pinnwand, dazu das Wochenziel. */
   tasks: TaskToolStores
+  /** Töpfe für einen Anlass; fehlt in Tests anderer Bereiche. */
+  pots?: PotToolStores
+  /** Ausgaben und Rückzahlungen in den Töpfen; fehlt in Tests anderer Bereiche. */
+  expenses?: ExpenseToolStores
   /** Bringt die App auf eine Seite (`createGoToPage`). */
   goToPage: (page: AppPage) => void
   /** Wer fragt; `null` abgemeldet. */
@@ -107,6 +125,8 @@ export function assistantTools(deps: ToolDeps): ToolRegistry {
     ...notesTools(deps.notes, deps.currentUserId),
     ...taskTools(deps.tasks),
     ...taskCompleteTools(deps.tasks.tasks),
+    ...(deps.pots ? potTools(deps.pots) : []),
+    ...(deps.expenses ? expenseTools(deps.expenses) : []),
     ...navigationTools(deps.goToPage),
     ...guideTools(),
   ]
@@ -138,3 +158,13 @@ export const undoAll = (steps: (() => Promise<boolean>)[]) => async (): Promise<
  */
 export const undoFailedText = (summary: string, online: boolean) =>
   `Rückgängig ging nicht${online ? '' : ', keine Verbindung'}. Es bleibt: ${summary.replace(/^✓\s*/, '')}`
+
+/**
+ * Geht vor die nächste Frage an Claude: der Verlauf meldet die Änderungen
+ * noch als erledigt und widerspräche sonst dem Stand, den Claude mit der Frage
+ * bekommt. Je Änderung ihr `undone`, sonst, dass ihre Zeile nicht mehr gilt.
+ */
+export const undoneNote = (changes: Change[]) =>
+  `(Inzwischen von mir per Rückgängig zurückgenommen: ${changes
+    .map((c) => c.undone?.() ?? `„${c.summary.replace(/^✓\s*/, '')}“ gilt nicht mehr`)
+    .join('; ')})`

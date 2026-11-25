@@ -4,6 +4,7 @@ import type { ListToolStores } from './listTools'
 import { type ShoppingToolStore } from './shoppingTools'
 import type { NotesToolStore } from './notesTools'
 import type { TaskToolStores } from './taskTools'
+import type { ExpenseToolStores } from './expenseTools'
 import { assistantTools } from './tools'
 import { createChangeTrail } from './changeTrail'
 
@@ -118,6 +119,7 @@ const executeShoppingTool = (
     lists: {} as ListToolStores,
     notes: { notes: [] } as unknown as NotesToolStore,
     tasks: {} as TaskToolStores,
+    expenses: {} as ExpenseToolStores,
     goToPage: () => {},
     currentUserId: () => 'me',
   }).execute(name, input)
@@ -460,6 +462,17 @@ describe('delete_shopping_items', () => {
         list_id: 'l1',
       },
     ])
+  })
+
+  it('tells Claude afterwards that the item is back under a new id', async () => {
+    const store = fakeStore([sugar])
+    const card = (await executeShoppingTool(store, 'delete_shopping_items', { item_ids: ['z1'] }))
+      .deleteCard!
+    const change = (await card.confirm()).changes![0]!
+    await change.undo()
+    expect(change.undone!()).toBe(
+      '2× Zucker (Einkauf) ist wieder da, mit neuer ID; die alte ID z1 gilt nicht mehr',
+    )
   })
 
   it('names every item on one card when several go at once', async () => {
