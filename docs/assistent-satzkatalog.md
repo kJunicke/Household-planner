@@ -191,8 +191,8 @@ Weicht der Stand ab, die Sätze sinngemäß anpassen und das im Ergebnis vermerk
 | P1 | Ich hab das Bad geputzt | Seit Stufe 2 möglich → T1 |
 | P2 | Leg eine Aufgabe Keller aufräumen mit acht Punkten an | Seit Stufe 2 möglich → S2 |
 | P3 | Was ist heute dran? | Seit Stufe 2 möglich → S1 |
-| P4 | Trag 30 Euro für Pizza in den Haushaltstopf ein, hab ich bezahlt | Noch nicht; kein Werkzeug; `go_to_page` topf/toepfe erlaubt |
-| P5 | Wer schuldet im Haushaltstopf wem was? | Noch nicht (kein Lesewerkzeug für Töpfe); keine erfundenen Beträge |
+| P4 | Trag 30 Euro für Pizza in den Haushaltstopf ein, hab ich bezahlt | Seit Stufe 3 möglich → U5 |
+| P5 | Wer schuldet im Haushaltstopf wem was? | Seit Stufe 3 möglich → U9 |
 | P6 | Lösch die Einkaufsliste Bauhaus | `delete_shopping_list` Bauhaus → Karte (nennt die Artikel) → „Löschen“ → Toast; Rückgängig bringt sie zurück |
 
 ## Q. Rückfragen bei Mehrdeutigem
@@ -259,3 +259,32 @@ dabei zum ersten Mal bewertete Aufgabe ist wieder unbewertet.
 | T7b | die Pinnwand, war extrem dreckig nach der Party | `complete_task` QC-Raster Fenster mit points 6, note mit der Begründung, again (schon erledigt): Toast „+6 P statt 3“ |
 | T8 | Ich hab zwei Stunden am QC-Test Projekt gearbeitet | Rückfrage nach den Punkten; mit Antwort `complete_task` am Projekt: Toast „Projekt-Arbeit: QC-Test Projekt (+… P)“, das Projekt bleibt offen |
 | T9 | Bad ist geputzt | QC-Raster Bad ist schon erledigt: Hinweis darauf, wann, und Frage, ob er es seitdem noch einmal geputzt hat; kein `complete_task` mit `again` von sich aus |
+
+## U. Ausgaben und Rückzahlungen (`read_pot`, `add_expense`, `update_expense`, `delete_expense`, `add_repayment`, `update_repayment`, `delete_repayment`)
+
+Vor jedem schreibenden Werkzeug ist `read_pot` erlaubt. Jede Änderung führt die App in den Topf;
+beim Schließen des Chats leuchtet der Eintrag dort auf. Beträge stehen in ganzen Cent, genau wie
+gesagt; ein Cent-Rest geht an die ersten Teilnehmer in der Reihenfolge des Topfs. Ausgangslage:
+**Haushaltstopf** (qc-agent, qc-agent-2) und **QC-Test Urlaub** (dazu die Gäste QC-Anna, QC-Ben,
+QC-Cara, QC-Test Gast), beide offen. Gibt es weitere offene Töpfe mit „Urlaub“ im Namen, ist eine
+Rückfrage nach dem Topf richtig.
+
+| Nr | Satz | Erwartet |
+| --- | --- | --- |
+| U1 | 34 € Pizza in den Urlaubstopf, für alle | `add_expense` QC-Test Urlaub, 34,00 €, bezahlt vom Fragenden, heute, gleich auf alle sechs (5,67 € viermal, 5,66 € zweimal); Toast „Pizza 34,00 € → QC-Test Urlaub“; Rückgängig nimmt sie wieder heraus |
+| U2 | 12,50 Taxi im Urlaubstopf, hab ich bezahlt, für QC-Anna und mich | `add_expense` 12,50 €, gleich auf qc-agent und QC-Anna (je 6,25 €) |
+| U3 | 900 € Ferienhaus in den Urlaubstopf, hat qc-agent-2 bezahlt, ganze Gruppe | `add_expense` bezahlt von qc-agent-2, Aufteilung ganze Gruppe |
+| U4 | 30 € Wein im Urlaubstopf, ich zahl zwei Drittel, QC-Anna ein Drittel | `add_expense` nach Verhältnis 2:1 (20 € und 10 €); oder Rückfrage, ob nach Verhältnis; nie gerundete Beträge erfunden |
+| U5 | Trag 30 Euro für Pizza in den Haushaltstopf ein, hab ich bezahlt | Rückfrage, wer sie trägt (gleich auf alle, Auswahl, ganze Gruppe, erweitert); mit „für uns beide“ `add_expense` gleich auf beide |
+| U6 | 12,345 € Eis in den Urlaubstopf für alle | Rückfrage nach dem Betrag; nichts gerundet eingetragen |
+| U7 | Die Pizza im Urlaubstopf waren 36 €, nicht 34 | `update_expense` Betrag 36,00 €; Toast „geändert: Pizza → 36,00 €“; Rückgängig: wieder 34,00 € |
+| U8 | Lösch die Pizza aus dem Urlaubstopf | `delete_expense` → Karte („Ausgabe „Pizza“ (… €, bezahlt von …) im Topf QC-Test Urlaub“) → „Löschen“ → Toast; Rückgängig bringt dieselbe Ausgabe zurück, sie leuchtet beim Schließen auf. Stehen zwei Pizzen drin, Rückfrage, welche |
+| U9 | wer schuldet im urlaubstopf wem was | `read_pot`; Antwort: Salden und vorgeschlagene Rückzahlungen, nur Beträge aus dem Ergebnis; nichts eingetragen |
+| U10 | Wer hat im Urlaubstopf was bezahlt? | `read_pot`; Antwort: Ausgaben mit Zahler und Betrag |
+| U11 | Ich hab qc-agent-2 5 € gegeben | Rückfrage nach dem Topf (Haushaltstopf oder QC-Test Urlaub); mit „Haushaltstopf“ `add_repayment` von qc-agent an qc-agent-2, 5,00 €; Toast „Rückzahlung: qc-agent an qc-agent-2 5,00 € (Haushaltstopf)“ |
+| U12 | Ich hab QC-Anna im Urlaubstopf ausgezahlt | Darf den Vorschlag aus `read_pot` nennen und fragen, ob es der Betrag war; `add_repayment` erst nach dem Ja |
+| U13 | Die Rückzahlung an qc-agent-2 waren 4 €, nicht 5 | `update_repayment` Betrag 4,00 €; Rückgängig: wieder 5,00 € |
+| U14 | Lösch die Rückzahlung an qc-agent-2 | `delete_repayment` → Karte → „Abbrechen“ → nichts gelöscht |
+| U15 | Ich hab qc-agent-2 10 Euro gegeben, verrechne das mit meinen Punkten | Ablehnen (Ausgleich), `go_to_page` kasse_ausgleich; keine Rückzahlung eingetragen und keine angeboten |
+| U16 | Trag 20 € Sekt in einen abgeschlossenen Topf ein (Namen des Topfs einsetzen) | `add_expense` weist ab, Antwort: der Topf ist abgeschlossen und schreibgeschützt; nichts eingetragen |
+| U17 | Ändere die Rückzahlung, die mit dem Ausgleich verrechnet wurde | Ablehnen: ändert nur ihr Ausgleich, von Hand; nichts geändert |
