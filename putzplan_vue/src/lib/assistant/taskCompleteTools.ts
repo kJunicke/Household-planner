@@ -23,8 +23,8 @@ import {
   POINTS_MAX,
   type PointsKind,
 } from '@/lib/taskPoints'
-import { TASK_TITLE_MAX_LENGTH } from '@/lib/limits'
-import { undoAll, type AssistantTool, type Change, type ToolOutcome } from './tools'
+import type { AssistantTool, ToolOutcome } from './tools'
+import { changedTask, invalidTitle, loadedTasks, QUIET, TASK_ID, WALL } from './taskToolShared'
 
 /**
  * Der Teil des taskStore, den die Werkzeuge brauchen. Hereingereicht statt
@@ -40,25 +40,6 @@ export type TaskCompleteToolStore = Pick<
   | 'createQuickTask'
   | 'deleteCompletion'
 >
-
-const QUIET = { quiet: true }
-
-/** Ein Ergebnis aus genau einer rücknehmbaren Änderung; `shownId` führt die App zur Pinnwand. */
-function changed(result: string, change: Change, shownId?: string): ToolOutcome {
-  return {
-    result,
-    summary: change.summary,
-    undo: undoAll([change.undo]),
-    ...(shownId ? { changed: [{ id: shownId, page: { area: 'wall' } as const }] } : {}),
-    changes: [change],
-  }
-}
-
-/** Die Pinnwand lädt die Aufgaben; ist der Chat woanders geöffnet, fehlen sie noch. */
-async function loadedTasks(store: TaskCompleteToolStore): Promise<Task[]> {
-  if (store.tasks.length === 0) await store.loadTasks()
-  return store.tasks
-}
 
 /** `input.points` als gültige Punktzahl, `undefined` ohne, `null` bei einer ungültigen. */
 function pointsOf(input: Record<string, unknown>, kind: PointsKind): number | undefined | null {
@@ -234,14 +215,14 @@ async function complete(
   // den Fahrschein ersetzt, bleibt alles stehen (→ `undoTicketOf`).
   const ticket = store.undoTicketOf(id)
   const restoreRating = options?.standardPoints !== undefined
-  return changed(
+  return changedTask(
     `Erledigt: „${task.title}“, ${points} Punkte für dich.`,
     {
       summary: `✓ erledigt: ${task.title} (+${pointsText})`,
       undo: async () =>
         store.undoTicketOf(id) === ticket && store.undoCompletion(id, { restoreRating }),
     },
-    shownId ?? id,
+    { id: shownId ?? id, page: WALL },
   )
 }
 
@@ -255,10 +236,8 @@ async function logQuickTask(
   input: Record<string, unknown>,
 ): Promise<ToolOutcome> {
   const title = typeof input.title === 'string' ? input.title.trim() : ''
-  if (!title) return { result: 'Ohne Titel keine Quick-Aufgabe', isError: true }
-  if (title.length > TASK_TITLE_MAX_LENGTH) {
-    return { result: `Titel zu lang: höchstens ${TASK_TITLE_MAX_LENGTH} Zeichen`, isError: true }
-  }
+  const badTitle = invalidTitle(title, 'Ohne Titel keine Quick-Aufgabe')
+  if (badTitle) return badTitle
   const points = pointsOf(input, 'standard')
   if (points === null) return invalidPoints('standard')
   if (points === undefined) {
@@ -281,13 +260,16 @@ async function logQuickTask(
       summary: `✗ Quick-Aufgabe nicht verbucht: ${title}`,
     }
   }
-  return changed(`Quick-Aufgabe verbucht: „${title}“, ${points} Punkte für dich.`, {
-    summary: `✓ Quick-Aufgabe: ${title} (+${points} P)`,
-    undo: () => store.deleteCompletion(booked.completionId, QUIET),
-  })
+  return changedTask(
+    `Quick-Aufgabe verbucht: „${title}“, ${points} Punkte für dich.`,
+    {
+      summary: `✓ Quick-Aufgabe: ${title} (+${points} P)`,
+      undo: () => store.deleteCompletion(booked.completionId, QUIET),
+    },
+    // Sie hängt an keiner Wand (ihre Aufgabe ist gleich gelöscht): sie steht im Verlauf.
+    { id: booked.completionId, page: { area: 'history' } },
+  )
 }
-
-const TASK_ID = { type: 'string', description: 'ID der Aufgabe aus read_tasks' }
 
 export const taskCompleteTools = (store: TaskCompleteToolStore): AssistantTool[] => [
   {
@@ -338,7 +320,10 @@ export const taskCompleteTools = (store: TaskCompleteToolStore): AssistantTool[]
           type: 'string',
           description: 'Was erledigt wurde, kurz, z. B. „Keller aufräumen“',
         },
-        points: { type: 'integer', description: 'Punkte, die der Nutzer genannt hat (1 bis 999)' },
+        points: {
+          type: 'integer',
+          description: `Punkte, die der Nutzer genannt hat (1 bis ${POINTS_MAX})`,
+        },
         note: { type: 'string', description: 'Optionale Notiz des Nutzers' },
       },
       required: ['title', 'points'],

@@ -564,6 +564,12 @@ describe('delete_task', () => {
     expect(deleted.changes).toHaveLength(1)
   })
 
+  it('after „Löschen“ the app goes to the wall, where the task lights up once the delete is undone', async () => {
+    const outcome = await execute(withHistory(), 'delete_task', { task_id: 't-bad-putzen' })
+    const deleted = await outcome.deleteCard!.confirm()
+    expect(deleted.changed).toEqual([{ id: 't-bad-putzen', page: WALL, removed: true }])
+  })
+
   it('can be taken back after „Löschen“: the same task is on the wall again', async () => {
     const fakes = withHistory()
     const outcome = await execute(fakes, 'delete_task', { task_id: 't-bad-putzen' })

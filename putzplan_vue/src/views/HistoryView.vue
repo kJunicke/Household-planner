@@ -6,10 +6,15 @@ import { useAuthStore } from '../stores/authStore'
 import { useHistoryGroups, type HistoryEntry } from '@/composables/useHistoryGroups'
 import HistoryRow from '@/components/HistoryRow.vue'
 import HistoryFoldRow from '@/components/HistoryFoldRow.vue'
+import { flashedCompletionIds } from '@/lib/assistant/followApp'
+import { useFlash } from '@/lib/assistant/flash'
 
 const taskStore = useTaskStore()
 const householdStore = useHouseholdStore()
 const authStore = useAuthStore()
+
+// Was der Assistent eingetragen hat (Quick-Aufgabe), leuchtet beim Schließen des Chats auf.
+useFlash(flashedCompletionIds)
 
 // Löschen nur für eigene Einträge — fremde lehnt die DB ab (DELETE-Policy).
 const isOwnEntry = (entry: HistoryEntry) => entry.user_id === authStore.user?.id

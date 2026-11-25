@@ -15,10 +15,9 @@
  * Werkzeug an.
  */
 import type { useHouseholdStore } from '@/stores/householdStore'
-import type { useTaskStore } from '@/stores/taskStore'
+import type { DirtySnapshot, useTaskStore } from '@/stores/taskStore'
 import type { Task } from '@/types/Task'
 import { findDuplicateTask } from '@/lib/taskDuplicates'
-import { TASK_TITLE_MAX_LENGTH } from '@/lib/limits'
 import { isValidPoints, POINTS_MAX } from '@/lib/taskPoints'
 import {
   canPostpone,
@@ -27,7 +26,9 @@ import {
   postponeTargetDate,
   scheduleOf,
 } from '@/lib/taskSchedule'
-import { undoAll, type AssistantTool, type Change, type ToolOutcome } from './tools'
+import type { AssistantTool, Change, ToolOutcome } from './tools'
+import type { TaskCompleteToolStore } from './taskCompleteTools'
+import { changedTask, invalidTitle, loadedTasks, QUIET, TASK_ID, WALL } from './taskToolShared'
 
 /**
  * Die Teile von taskStore und householdStore, die die Werkzeuge brauchen.
@@ -35,25 +36,19 @@ import { undoAll, type AssistantTool, type Change, type ToolOutcome } from './to
  * können; `today` aus demselben Grund.
  */
 export interface TaskToolStores {
-  tasks: Pick<
-    ReturnType<typeof useTaskStore>,
-    | 'tasks'
-    | 'loadTasks'
-    | 'createTask'
-    | 'assignTask'
-    | 'postponeTask'
-    | 'markAsDirty'
-    | 'restoreTaskState'
-    | 'deleteTask'
-    | 'restoreTask'
-    | 'fetchCompletions'
-    // Für taskCompleteTools: erledigen, Quick-Aufgabe, Zurückkleben.
-    | 'completeTask'
-    | 'undoTicketOf'
-    | 'undoCompletion'
-    | 'createQuickTask'
-    | 'deleteCompletion'
-  >
+  /** Dazu, was taskCompleteTools braucht: dieselben Stores bedienen beide. */
+  tasks: TaskCompleteToolStore &
+    Pick<
+      ReturnType<typeof useTaskStore>,
+      | 'createTask'
+      | 'assignTask'
+      | 'postponeTask'
+      | 'markAsDirty'
+      | 'restoreTaskState'
+      | 'deleteTask'
+      | 'restoreTask'
+      | 'fetchCompletions'
+    >
   household: Pick<
     ReturnType<typeof useHouseholdStore>,
     | 'householdMembers'
@@ -66,19 +61,11 @@ export interface TaskToolStores {
   today: () => Date
 }
 
-const QUIET = { quiet: true }
-const PAGE = { area: 'wall' } as const
-
 const TYPE_LABEL: Record<Task['task_type'], string> = {
   recurring: 'wiederkehrend',
   daily: 'täglich',
   'one-time': 'einmalig',
   project: 'Projekt',
-}
-
-/** Lädt die Aufgaben, wenn noch keine Seite es getan hat: der Chat kann auf jeder Seite offen sein. */
-async function ensureLoaded(stores: TaskToolStores) {
-  if (stores.tasks.tasks.length === 0) await stores.tasks.loadTasks()
 }
 
 const mainTasks = (stores: TaskToolStores) =>
@@ -126,22 +113,15 @@ function taskLine(stores: TaskToolStores, task: Task, today: Date): string {
 }
 
 async function readTasks(stores: TaskToolStores): Promise<ToolOutcome> {
-  await ensureLoaded(stores)
+  await loadedTasks(stores.tasks)
   const today = stores.today()
   const lines = mainTasks(stores).map((t) => taskLine(stores, t, today))
   return { result: lines.length ? `Aufgaben:\n${lines.join('\n')}` : 'Keine Aufgaben.' }
 }
 
-/** Ein Ergebnis aus genau einer rücknehmbaren Änderung an einer Aufgabe. */
-function changedTask(id: string, result: string, change: Change): ToolOutcome {
-  return {
-    result,
-    summary: change.summary,
-    undo: undoAll([change.undo]),
-    changed: [{ id, page: PAGE }],
-    changes: [change],
-  }
-}
+/** Ein Ergebnis aus genau einer rücknehmbaren Änderung an der Aufgabe `id`, die an der Wand aufleuchtet. */
+const changedOnWall = (id: string, result: string, change: Change) =>
+  changedTask(result, change, { id, page: WALL })
 
 const error = (result: string): ToolOutcome => ({ result, isError: true })
 
@@ -150,7 +130,7 @@ async function findTask(
   stores: TaskToolStores,
   input: Record<string, unknown>,
 ): Promise<Task | ToolOutcome> {
-  await ensureLoaded(stores)
+  await loadedTasks(stores.tasks)
   const id = String(input.task_id ?? '')
   const found = stores.tasks.tasks.find((t) => t.task_id === id && t.deleted_at === null)
   if (!found) return error(`Unbekannte task_id ${id}`)
@@ -170,10 +150,8 @@ async function createTask(
   input: Record<string, unknown>,
 ): Promise<ToolOutcome> {
   const title = String(input.title ?? '').trim()
-  if (!title) return error('Kein Titel')
-  if (title.length > TASK_TITLE_MAX_LENGTH) {
-    return error(`Titel zu lang: höchstens ${TASK_TITLE_MAX_LENGTH} Zeichen`)
-  }
+  const badTitle = invalidTitle(title, 'Kein Titel')
+  if (badTitle) return badTitle
   const points = input.points
   if (typeof points !== 'number' || !isValidPoints(points, 'standard')) {
     return error(
@@ -192,7 +170,7 @@ async function createTask(
     typeof input.assigned_to === 'string' && input.assigned_to ? input.assigned_to : null
   if (assignee && !isMember(stores, assignee)) return error(`Unbekannte user_id ${assignee}`)
 
-  await ensureLoaded(stores)
+  await loadedTasks(stores.tasks)
   // Wie die App: kein zweiter Zettel mit demselben Titel (→ CONTEXT.md „Duplikat").
   const existing = findDuplicateTask(stores.tasks.tasks, title)
   if (existing) {
@@ -216,7 +194,7 @@ async function createTask(
     return { ...error('Aufgabe nicht angelegt'), summary: `✗ Aufgabe nicht angelegt: ${title}` }
   }
   const id = created.task_id
-  return changedTask(id, `Aufgabe angelegt (id ${id}).`, {
+  return changedOnWall(id, `Aufgabe angelegt (id ${id}).`, {
     summary: `✓ neue Aufgabe: ${created.title}`,
     // Weich gelöscht wie in der App; eine neue Aufgabe hat noch keinen Verlauf,
     // und hätte sie inzwischen einen, bliebe er stehen.
@@ -240,7 +218,7 @@ async function assignTask(
     return { ...error('Nicht zugewiesen'), summary: `✗ nicht zugewiesen: ${found.title}` }
   }
   const who = userId ? memberName(stores, userId) : null
-  return changedTask(
+  return changedOnWall(
     id,
     who ? `${found.title} ist jetzt ${who} zugewiesen.` : `${found.title}: niemand zuständig.`,
     {
@@ -251,7 +229,7 @@ async function assignTask(
 }
 
 /** `completed` und `postponed_until` von jetzt: was die Rücknahme zurückschreibt. */
-const stateSnapshot = (task: Task) => ({
+const stateSnapshot = (task: Task): DirtySnapshot => ({
   task_id: task.task_id,
   completed: task.completed,
   postponed_until: task.postponed_until,
@@ -287,7 +265,7 @@ async function postponeTask(
     return { ...error('Nicht verschoben'), summary: `✗ nicht verschoben: ${found.title}` }
   }
   const day = formatPostponeDate(target)
-  return changedTask(id, `${found.title} verschoben auf ${day} (${target}).`, {
+  return changedOnWall(id, `${found.title} verschoben auf ${day} (${target}).`, {
     summary: `✓ ${found.title} verschoben auf ${day}`,
     undo: () => stores.tasks.restoreTaskState(before),
   })
@@ -305,7 +283,7 @@ async function markTaskDirty(
   if (!(await stores.tasks.markAsDirty(id))) {
     return { ...error('Nicht zurückgesetzt'), summary: `✗ nicht wieder dreckig: ${found.title}` }
   }
-  return changedTask(id, `${found.title} ist wieder dran; die Erledigungen bleiben im Verlauf.`, {
+  return changedOnWall(id, `${found.title} ist wieder dran; die Erledigungen bleiben im Verlauf.`, {
     summary: `✓ ${found.title} wieder dreckig`,
     undo: () => stores.tasks.restoreTaskState(before),
   })
@@ -339,12 +317,12 @@ async function deleteTask(
           // Scheitert, wenn inzwischen eine gleichnamige Aufgabe angelegt wurde (Duplikat).
           undo: () => stores.tasks.restoreTask(id),
         }
-        return {
-          result: `Aufgabe gelöscht (id ${id}); ihre Erledigungen bleiben im Verlauf.`,
-          summary: change.summary,
-          undo: change.undo,
-          changes: [change],
-        }
+        return changedTask(
+          `Aufgabe gelöscht (id ${id}); ihre Erledigungen bleiben im Verlauf.`,
+          change,
+          // Die App geht zur Wand; der Zettel leuchtet auf, wenn Rückgängig ihn zurückholt.
+          { id, page: WALL, removed: true },
+        )
       },
     },
   }
@@ -407,8 +385,6 @@ async function readWeeklyGoal(stores: TaskToolStores): Promise<ToolOutcome> {
       (left > 0 ? `Bis zum Ziel noch ${left} Punkte.` : 'Das Ziel ist erreicht.'),
   }
 }
-
-const TASK_ID = { type: 'string', description: 'ID der Aufgabe aus read_tasks' }
 
 export const taskTools = (stores: TaskToolStores): AssistantTool[] => [
   {

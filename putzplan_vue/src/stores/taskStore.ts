@@ -87,7 +87,7 @@ type RowSnapshot = Pick<
 type StampSnapshot = Pick<Task, 'task_id' | 'emphasis_level' | 'project_saying_index'>
 
 /** Was „wieder dreckig" anfasst und bei einem Fehlschlag zurückgesetzt wird. */
-type DirtySnapshot = Pick<Task, 'task_id' | 'completed' | 'postponed_until'>
+export type DirtySnapshot = Pick<Task, 'task_id' | 'completed' | 'postponed_until'>
 
 /**
  * `quiet` lässt den Erfolgs-Toast weg: der Assistent zeigt seinen eigenen, mit
@@ -1095,7 +1095,7 @@ export const useTaskStore = defineStore('tasks', () => {
   // Erfolgs-Toast, den zeigt dann der Aufrufer.
   const createQuickTask = async (
     quickData: { title: string; effort: number; note?: string },
-    options: { quiet?: boolean } = {},
+    { quiet = false }: WriteOptions = {},
   ): Promise<{ task: Task; completionId: string } | null> => {
     const householdStore = useHouseholdStore()
     const authStore = useAuthStore()
@@ -1160,8 +1160,8 @@ export const useTaskStore = defineStore('tasks', () => {
     // Header-Stats (Wochenpunkte) aktualisieren
     await householdStore.loadWeeklyCompletions({ force: true })
 
-    if (!options.quiet) toastStore.showToast('Quick-Aufgabe abgeschlossen', 'success', 3000)
-    return { task: task as Task, completionId: completion.completion_id as string }
+    if (!quiet) toastStore.showToast('Quick-Aufgabe abgeschlossen', 'success', 3000)
+    return { task, completionId: completion.completion_id }
   }
 
   // UPDATE - Task vollständig aktualisieren
@@ -1654,7 +1654,7 @@ export const useTaskStore = defineStore('tasks', () => {
 
   // DELETE COMPLETION - Lösche einen Task-Completion Eintrag aus Historie
   // Wichtig: Löscht NUR aus task_completions, ändert NICHT tasks.completed Status
-  const deleteCompletion = async (completionId: string, options: { quiet?: boolean } = {}) => {
+  const deleteCompletion = async (completionId: string, { quiet = false }: WriteOptions = {}) => {
     const toastStore = useToastStore()
     const householdStore = useHouseholdStore()
     isLoading.value = true
@@ -1698,7 +1698,7 @@ export const useTaskStore = defineStore('tasks', () => {
     // Die Punkte aus dem Wochenziel: das Löschen-Echo trägt nur die
     // `completion_id`, die Wochenliste zieht es nicht nach.
     await householdStore.loadWeeklyCompletions({ force: true })
-    if (!options.quiet) toastStore.showToast('Eintrag gelöscht', 'success', 3000)
+    if (!quiet) toastStore.showToast('Eintrag gelöscht', 'success', 3000)
     return true
   }
 

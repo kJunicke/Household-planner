@@ -23,10 +23,16 @@ export type AssistantPage =
   | { area: 'shopping' | 'packing' | 'todo'; listId: string }
   | { area: 'notes' }
   | { area: 'wall' }
+  | { area: 'history' }
 
 export interface ChangedEntry {
   id: string
   page: AssistantPage
+  /**
+   * Gelöscht: die App führt zu seiner Seite, aufleuchten kann er erst, wenn
+   * das Löschen zurückgenommen ist; dann ist er wieder da und leuchtet auf.
+   */
+  removed?: true
 }
 
 export interface ToolOutcome {

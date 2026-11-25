@@ -90,6 +90,41 @@ describe('the change trail of an open chat', () => {
   })
 })
 
+describe('a deleted entry in the change trail', () => {
+  const wall = { area: 'wall' } as const
+
+  it('leads to its page, but does not light up while it is gone', () => {
+    const trail = createChangeTrail()
+    trail.track(outcome([{ id: 'bad', page: wall, removed: true }], async () => true))
+    expect(trail.lastPage()).toEqual(wall)
+    expect(trail.changedOn(wall)).toEqual([])
+  })
+
+  it('lights up once the delete is undone, and the app follows it there', async () => {
+    const restored: string[] = []
+    const trail = createChangeTrail({ onRestored: (entry) => restored.push(entry.id) })
+    const deleted = trail.track({
+      result: 'ok',
+      changed: [{ id: 'bad', page: wall, removed: true }],
+      changes: [{ summary: '✓ Aufgabe gelöscht: Bad', undo: async () => true }],
+    })
+    trail.track(outcome([{ id: 'milch', page: einkauf }]))
+    expect(await deleted.changes![0]!.undo()).toBe(true)
+    expect(trail.changedOn(wall)).toEqual(['bad'])
+    expect(trail.lastPage()).toEqual(wall)
+    expect(restored).toEqual(['bad'])
+  })
+
+  it('stays dark when undoing the delete failed', async () => {
+    const trail = createChangeTrail()
+    const deleted = trail.track(
+      outcome([{ id: 'bad', page: wall, removed: true }], async () => false),
+    )
+    expect(await deleted.undo!()).toBe(false)
+    expect(trail.changedOn(wall)).toEqual([])
+  })
+})
+
 describe('the change trail across areas', () => {
   it('keeps notes apart from the shopping lists', () => {
     const trail = createChangeTrail()

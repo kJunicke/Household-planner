@@ -3,15 +3,22 @@
  *
  * Daraus folgt die App dem Chat: sie zeigt die Seite der letzten Änderung, und
  * beim Schließen leuchten die Einträge auf, die auf der dann gezeigten Seite
- * geändert wurden. Eine zurückgenommene Änderung fällt heraus.
+ * geändert wurden. Eine zurückgenommene Änderung fällt heraus; ein
+ * zurückgenommenes Löschen (`removed`) dagegen macht den Eintrag erst
+ * sichtbar: er leuchtet auf, und die App folgt ihm.
  */
 import type { AssistantPage, ChangedEntry, ToolOutcome } from './tools'
 
 const listOf = (page: AssistantPage) => ('listId' in page ? page.listId : null)
-const samePage = (a: AssistantPage, b: AssistantPage) =>
+export const samePage = (a: AssistantPage, b: AssistantPage) =>
   a.area === b.area && listOf(a) === listOf(b)
 
-export function createChangeTrail() {
+export function createChangeTrail({
+  onRestored,
+}: {
+  /** Ein Löschen wurde zurückgenommen: der Eintrag ist wieder da. */
+  onRestored?: (entry: ChangedEntry) => void
+} = {}) {
   // Je geänderten Eintrag ein eigener Datensatz: nimmt der zweite von zwei
   // Aufrufen an demselben Artikel zurück, bleibt der erste stehen.
   let records: { entry: ChangedEntry }[] = []
@@ -21,7 +28,14 @@ export function createChangeTrail() {
     (undo: () => Promise<boolean>, dropped: { entry: ChangedEntry }[]) =>
     async (): Promise<boolean> => {
       const ok = await undo()
-      if (ok) records = records.filter((r) => !dropped.includes(r))
+      if (!ok) return ok
+      records = records.filter((r) => !dropped.includes(r))
+      // Zurückgeholt ist die jüngste Änderung: sie steht nun hinten, sichtbar.
+      for (const { entry } of dropped.filter((r) => r.entry.removed)) {
+        const back = { id: entry.id, page: entry.page }
+        records.push({ entry: back })
+        onRestored?.(back)
+      }
       return ok
     }
 
@@ -59,7 +73,9 @@ export function createChangeTrail() {
 
     /** Die IDs der Einträge, die auf `page` geändert wurden, ohne Doppelte. */
     changedOn(page: AssistantPage): string[] {
-      const ids = records.filter((r) => samePage(r.entry.page, page)).map((r) => r.entry.id)
+      const ids = records
+        .filter((r) => !r.entry.removed && samePage(r.entry.page, page))
+        .map((r) => r.entry.id)
       return [...new Set(ids)]
     },
   }

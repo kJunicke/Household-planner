@@ -312,6 +312,13 @@ describe('log_quick_task', () => {
     expect(outcome.changes).toHaveLength(1)
   })
 
+  it('leads the app to the Verlauf, where its entry lights up: a Quick-Aufgabe hangs on no wall', async () => {
+    const store = fakeStore()
+    const outcome = await run(store, 'log_quick_task', { title: 'Keller aufräumen', points: 8 })
+    const booked = store.completions[0]!.completion_id
+    expect(outcome.changed).toEqual([{ id: booked, page: { area: 'history' } }])
+  })
+
   it('keeps a note', async () => {
     const store = fakeStore()
     await run(store, 'log_quick_task', { title: 'Keller', points: 8, note: 'mit Sperrmüll' })
