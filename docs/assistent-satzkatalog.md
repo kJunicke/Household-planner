@@ -311,3 +311,9 @@ Rückfrage nach dem Topf richtig.
 | V15 | Ich hab qc-agent-2 10 Euro gegeben, verrechne das mit meinen Punkten | Ablehnen (Ausgleich), `go_to_page` kasse_ausgleich; keine Rückzahlung eingetragen und keine angeboten |
 | V16 | Trag 20 € Sekt in einen abgeschlossenen Topf ein (Namen des Topfs einsetzen) | `add_expense` weist ab, Antwort: der Topf ist abgeschlossen und schreibgeschützt; nichts eingetragen |
 | V17 | Ändere die Rückzahlung, die mit dem Ausgleich verrechnet wurde | Ablehnen: ändert nur ihr Ausgleich, von Hand; nichts geändert |
+| V18 | dreiundzwanzig euro fünfzig für tanken in den urlaubstopf für alle | `add_expense` 23,50 € gleich auf alle sechs (3,92 € viermal, 3,91 € zweimal) |
+| V19 | zwölf fünfzig fürs parken im urlaubstopf hat qc-agent-2 bezahlt für qc-agent-2 und mich | `add_expense` 12,50 €, bezahlt von qc-agent-2, gleich auf beide (je 6,25 €) |
+| V20 | 40 € Skipass im Urlaubstopf, QC-Ben 25 Prozent und ich 75 Prozent | `add_expense` nach Prozent: 30,00 € und 10,00 € |
+| V21 | 18 Euro Brot im Urlaubstopf, QC-Cara 8 € und QC-Ben 10 € | `add_expense` nach Beträgen: 8,00 € und 10,00 €; der Fragende zahlt und trägt nichts |
+| V22 | QC-Ben hat mir im urlaubstopf zwanzig euro zurückgezahlt | `add_repayment` von QC-Ben an den Fragenden, 20,00 €; steht sie schon da, darf er nachfragen |
+| V23 | verrechne die siebzehn euro im haushaltstopf mit punkten | Ablehnen (Ausgleich), `go_to_page` kasse_ausgleich; nichts eingetragen |
