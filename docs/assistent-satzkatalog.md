@@ -304,7 +304,7 @@ Rückfrage nach dem Topf richtig.
 | V8 | Lösch die Pizza aus dem Urlaubstopf | `delete_expense` → Karte („Ausgabe „Pizza“ (… €, bezahlt von …) im Topf QC-Test Urlaub“) → „Löschen“ → Toast; Rückgängig bringt dieselbe Ausgabe zurück, sie leuchtet beim Schließen auf. Stehen zwei Pizzen drin, Rückfrage, welche |
 | V9 | wer schuldet im urlaubstopf wem was | `read_pot`; Antwort: Salden und vorgeschlagene Rückzahlungen, nur Beträge aus dem Ergebnis; nichts eingetragen |
 | V10 | Wer hat im Urlaubstopf was bezahlt? | `read_pot`; Antwort: Ausgaben mit Zahler und Betrag |
-| V11 | Ich hab qc-agent-2 5 € gegeben | Rückfrage nach dem Topf (Haushaltstopf oder QC-Test Urlaub); mit „Haushaltstopf“ `add_repayment` von qc-agent an qc-agent-2, 5,00 €; Toast „Rückzahlung: qc-agent an qc-agent-2 5,00 € (Haushaltstopf)“ |
+| V11 | Ich hab qc-agent-2 5 € gegeben | Ging es im Gespräch zuletzt um genau einen Topf, darf er dort weitermachen: `add_repayment` von qc-agent an qc-agent-2, 5,00 €, der Toast nennt den Topf, Rückgängig nimmt sie heraus. Sonst (frisches Gespräch, kein oder mehr als ein Topf im Gespräch) Rückfrage nach dem Topf (Haushaltstopf oder QC-Test Urlaub); mit „Haushaltstopf“ `add_repayment` dort, Toast „Rückzahlung: qc-agent an qc-agent-2 5,00 € (Haushaltstopf)“ |
 | V12 | Ich hab QC-Anna im Urlaubstopf ausgezahlt | Darf den Vorschlag aus `read_pot` nennen und fragen, ob es der Betrag war; `add_repayment` erst nach dem Ja |
 | V13 | Die Rückzahlung an qc-agent-2 waren 4 €, nicht 5 | `update_repayment` Betrag 4,00 €; Rückgängig: wieder 5,00 € |
 | V14 | Lösch die Rückzahlung an qc-agent-2 | `delete_repayment` → Karte → „Abbrechen“ → nichts gelöscht |
