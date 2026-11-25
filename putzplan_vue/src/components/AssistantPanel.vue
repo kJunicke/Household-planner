@@ -25,6 +25,7 @@ import {
   type ToolOutcome,
 } from '@/lib/assistant/tools'
 import { followApp } from '@/lib/assistant/followApp'
+import { withoutMarkdown } from '@/lib/assistant/plainText'
 import { useGoToPage } from '@/composables/useGoToPage'
 import { useAuthStore } from '@/stores/authStore'
 import { useGuestShareStore } from '@/stores/guestShareStore'
@@ -211,7 +212,7 @@ async function submit() {
       entries.value.push({ kind: action.isError ? 'error' : 'action', text: action.summary })
     }
     const answer = textOf(messages[messages.length - 1]!)
-    if (answer) entries.value.push({ kind: 'assistant', text: answer })
+    if (answer) entries.value.push({ kind: 'assistant', text: withoutMarkdown(answer) })
   } catch (error) {
     entries.value.push({
       kind: 'error',
