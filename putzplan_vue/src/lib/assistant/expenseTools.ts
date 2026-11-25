@@ -147,6 +147,24 @@ const fromTo = (store: Store, fromId: string, toId: string) =>
 const repaymentLine = (store: Store, r: PotRepayment) =>
   `${fromTo(store, r.from_participant_id, r.to_participant_id)} ${formatCents(r.amount_cents)}`
 
+const balanceText = (cents: number) =>
+  cents > 0
+    ? `hat ${formatCents(cents)} gut`
+    : cents < 0
+      ? `schuldet ${formatCents(-cents)}`
+      : 'ausgeglichen'
+
+/**
+ * „Salden jetzt: Kilian hat 5,00 € gut, Anna schuldet 5,00 €.“ — nach jeder
+ * Änderung, damit Claude einen Saldo nennt, statt ihn selbst nachzurechnen.
+ */
+function balancesNow(store: Store, potId: string): string {
+  const owing = [...store.balancesOf(potId)].filter(([, cents]) => cents !== 0)
+  if (owing.length === 0) return ' Salden jetzt: alle ausgeglichen.'
+  const parts = owing.map(([id, cents]) => `${store.participantName(id)} ${balanceText(cents)}`)
+  return ` Salden jetzt: ${parts.join(', ')}.`
+}
+
 function readPot(store: Store, input: Record<string, unknown>): ToolOutcome {
   const pot = findPot(store, input.pot_id)
   if (isError(pot)) return pot
@@ -167,13 +185,7 @@ function readPot(store: Store, input: Record<string, unknown>): ToolOutcome {
       p.user_id === null ? 'Gast' : null,
       current.has(p.participant_id) ? null : 'ehemalig, trägt nichts Neues',
     ].filter(Boolean)
-    const cents = balances.get(p.participant_id) ?? 0
-    const balance =
-      cents > 0
-        ? `hat ${formatCents(cents)} gut`
-        : cents < 0
-          ? `schuldet ${formatCents(-cents)}`
-          : 'ausgeglichen'
+    const balance = balanceText(balances.get(p.participant_id) ?? 0)
     return `- ${store.participantName(p.participant_id)} (${marks.join(', ')}): ${balance}`
   })
 
@@ -402,7 +414,9 @@ async function addExpense(
   const added = store.expensesOf(pot.pot_id).find((e) => e.expense_id === id)
   return changedInPot(
     `Ausgabe eingetragen (id ${id}) im Topf ${potTitle(pot)}: ` +
-      (added ? expenseLine(store, added) : line),
+      (added ? expenseLine(store, added) : line) +
+      '.' +
+      balancesNow(store, pot.pot_id),
     {
       summary: `✓ ${line} → ${potTitle(pot)}`,
       undo: () => settled(store.deleteExpense(id, QUIET)),
@@ -481,7 +495,7 @@ async function updateExpense(store: Store, input: Record<string, unknown>): Prom
   const changed = store.expensesOf(pot.pot_id).find((e) => e.expense_id === id)
   const line = `${before.description} → ${what.join(', ')}`
   return changedInPot(
-    `Geändert: ${changed ? expenseLine(store, changed) : line}.`,
+    `Geändert: ${changed ? expenseLine(store, changed) : line}.${balancesNow(store, pot.pot_id)}`,
     {
       summary: `✓ geändert: ${line}`,
       undo: () => settled(store.updateExpense(id, before)),
@@ -560,7 +574,8 @@ async function addRepayment(
     return { ...error('Rückzahlung nicht eingetragen.'), summary: `✗ nicht eingetragen: ${line}` }
   }
   return changedInPot(
-    `Rückzahlung eingetragen (id ${id}) im Topf ${potTitle(pot)}: ${line}.`,
+    `Rückzahlung eingetragen (id ${id}) im Topf ${potTitle(pot)}: ${line}.` +
+      balancesNow(store, pot.pot_id),
     {
       summary: `✓ Rückzahlung: ${line} (${potTitle(pot)})`,
       undo: () => settled(store.deleteRepayment(id, QUIET)),
@@ -633,7 +648,7 @@ async function updateRepayment(store: Store, input: Record<string, unknown>): Pr
   }
   const line = `${name} → ${what.join(', ')}`
   return changedInPot(
-    `Geändert: ${line}.`,
+    `Geändert: ${line}.${balancesNow(store, pot.pot_id)}`,
     {
       summary: `✓ geändert: ${line}`,
       undo: () => settled(store.updateRepayment(id, before)),

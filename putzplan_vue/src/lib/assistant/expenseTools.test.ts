@@ -650,6 +650,16 @@ describe('add_repayment', () => {
     expect(store.repayments).toEqual([])
   })
 
+  it('tells Claude the balances after the repayment, so it need not work them out', async () => {
+    const store = fakePots()
+    const outcome = await execute(store, 'add_repayment', {
+      pot_id: 'hp',
+      to_participant_id: 'h-anna',
+      amount: '50',
+    })
+    expect(outcome.result).toContain('Salden jetzt: Kilian hat 50,00 € gut, Anna schuldet 50,00 €.')
+  })
+
   it('rejects a repayment to oneself', async () => {
     const store = fakePots()
     const outcome = await execute(store, 'add_repayment', {
