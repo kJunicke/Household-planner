@@ -15,11 +15,15 @@ import { createClient } from 'jsr:@supabase/supabase-js@2'
 
 const MODEL = 'claude-haiku-5-5'
 const MAX_TOKENS = 1024
-/** Obergrenzen gegen versehentlich teure Aufrufe. */
+/**
+ * Obergrenzen gegen versehentlich teure Aufrufe. Werkzeuge mit Luft nach oben:
+ * Stufe 2 schickt 39 mit rund 20 000 Zeichen, die Töpfe bringen etwa acht dazu.
+ * Der Body fasst Werkzeuge und Übersicht ganz und lässt dem Verlauf rund 66 000.
+ */
 const MAX_MESSAGES = 40
-const MAX_BODY_CHARS = 100_000
-const MAX_TOOLS = 40
-const MAX_TOOLS_CHARS = 40_000
+const MAX_TOOLS = 64
+const MAX_TOOLS_CHARS = 64_000
+const MAX_BODY_CHARS = 150_000
 const MAX_DESCRIPTION_CHARS = 2_000
 
 const corsHeaders = {
