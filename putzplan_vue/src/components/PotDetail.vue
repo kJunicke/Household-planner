@@ -6,6 +6,8 @@ import { participantNameProblem, participantNameProblemText, potTitle } from '@/
 import { POT_PARTICIPANT_NAME_MAX_LENGTH } from '@/lib/limits'
 import { formatCents, suggestTransfers } from '@/lib/potLedger'
 import { entryChangeLine } from '@/lib/potEntryChange'
+import { flashedPotEntryIds } from '@/lib/assistant/followApp'
+import { FLASH_CLASS, useFlash } from '@/lib/assistant/flash'
 import ExpenseCreateModal from './ExpenseCreateModal.vue'
 import RepaymentCreateModal from './RepaymentCreateModal.vue'
 import GuestShareControls from './GuestShareControls.vue'
@@ -22,6 +24,8 @@ const emit = defineEmits<{ 'switch-identity': [] }>()
 
 const potStore = usePotStore()
 const router = useRouter()
+// Was der Assistent eingetragen oder geändert hat, leuchtet beim Schließen des Chats auf.
+useFlash(flashedPotEntryIds)
 
 const showCreateModal = ref(false)
 const editingExpense = ref<PotExpense | null>(null)
@@ -130,7 +134,7 @@ const handleRepaymentSubmit = (payload: Parameters<typeof potStore.createRepayme
     // Schlägt nur fehl, wenn die Rückzahlung inzwischen gelöscht ist; der Store meldet das.
     potStore.updateRepayment(editing.repayment_id, payload)
     repaymentModal.value = null
-  } else if (potStore.createRepayment(payload)) {
+  } else if (potStore.createRepayment(payload).applied) {
     repaymentModal.value = null
   }
 }
@@ -220,7 +224,7 @@ const handleSubmit = (payload: Parameters<typeof potStore.createExpense>[0]) => 
     // Schlägt nur fehl, wenn die Ausgabe inzwischen gelöscht ist; der Store meldet das.
     potStore.updateExpense(editingExpense.value.expense_id, payload)
     closeExpenseModal()
-  } else if (potStore.createExpense(payload)) {
+  } else if (potStore.createExpense(payload).applied) {
     closeExpenseModal()
   }
 }
@@ -349,7 +353,7 @@ const handleDelete = () => {
           <button
             v-if="entry.kind === 'expense'"
             type="button"
-            class="expense-item"
+            :class="['expense-item', { [FLASH_CLASS]: flashedPotEntryIds.has(entry.id) }]"
             :disabled="!isOpen"
             @click="openEdit(entry)"
           >
@@ -374,7 +378,10 @@ const handleDelete = () => {
           <button
             v-else
             type="button"
-            class="expense-item repayment-item"
+            :class="[
+              'expense-item repayment-item',
+              { [FLASH_CLASS]: flashedPotEntryIds.has(entry.id) },
+            ]"
             :disabled="!isOpen || !!entry.repayment.settlement_id"
             @click="openEdit(entry)"
           >

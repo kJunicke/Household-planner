@@ -25,6 +25,21 @@ import { useToastStore } from './toastStore'
 const UNDO_TOAST_MS = 8000
 
 /**
+ * Was ein Schreiben an Ausgaben und Rückzahlungen liefert: `applied`, sobald es
+ * optimistisch angewendet ist (die Oberfläche schließt dann ihr Formular),
+ * `settled` mit der Antwort der Datenbank (der Assistent meldet erst danach).
+ */
+export interface PotEntryWrite {
+  applied: boolean
+  settled: Promise<boolean>
+}
+
+/** `quiet`: ohne den eigenen Rückgängig-Hinweis; der Assistent zeigt seinen. */
+interface EntryWriteOptions {
+  quiet?: boolean
+}
+
+/**
  * **Töpfe** des Haushalts (CONTEXT.md § Topf): Töpfe, Teilnehmer, Ausgaben und
  * Rückzahlungen laden, live halten und Ausgaben eintragen. Gerechnet wird in
  * der Topf-Rechnung (`@/lib/potLedger`), nie hier.
@@ -375,7 +390,7 @@ export const usePotStore = defineStore('pot', () => {
      * Neuen Eintrag optimistisch anlegen. Die ID vergibt der Client, damit das
      * Realtime-Echo die optimistische Zeile trifft; die Zeitstempel setzt die Datenbank.
      */
-    const create = (build: (householdId: string) => T): boolean => {
+    const create = (build: (householdId: string) => T): PotEntryWrite & { id: string | null } => {
       const toastStore = useToastStore()
       // Nie still scheitern: ohne Haushaltsrahmen oder wenn schon das Bauen der
       // Zeile wirft, sagt eine Meldung, dass nichts eingetragen wurde.
@@ -386,9 +401,9 @@ export const usePotStore = defineStore('pot', () => {
       } catch (error) {
         console.error(`Error preparing ${table} row:`, error)
         toastStore.showToast(`${label} konnte nicht eingetragen werden`, 'error')
-        return false
+        return { applied: false, settled: Promise.resolve(false), id: null }
       }
-      const { applied } = runOptimistic<T>({
+      const write = runOptimistic<T>({
         entityId: idOf(row),
         apply: () => {
           putLocal(row)
@@ -404,18 +419,18 @@ export const usePotStore = defineStore('pot', () => {
         revert: () => dropLocal(idOf(row)),
         onError: () => toastStore.showToast(`${label} konnte nicht eingetragen werden`, 'error'),
       })
-      return applied
+      return { ...write, id: idOf(row) }
     }
 
-    const update = (id: string, patch: Partial<T>): boolean => {
+    const update = (id: string, patch: Partial<T>): PotEntryWrite => {
       const toastStore = useToastStore()
       if (!findLocal(id)) {
         // Inzwischen von jemand anderem gelöscht.
         toastStore.showToast(`${label} gibt es nicht mehr`, 'info')
-        return false
+        return { applied: false, settled: Promise.resolve(false) }
       }
       let changedBy: string | null = null
-      const { applied } = runOptimistic<T>({
+      return runOptimistic<T>({
         entityId: id,
         apply: () => {
           const before = findLocal(id)
@@ -439,16 +454,15 @@ export const usePotStore = defineStore('pot', () => {
         revert: (before) => reconcile(id, () => putLocal(before)),
         onError: () => toastStore.showToast(`${label} konnte nicht geändert werden`, 'error'),
       })
-      return applied
     }
 
     /**
      * Den gelöschten Eintrag unverändert wieder anlegen: dieselbe Kennung,
      * dieselben Zeitstempel, derselbe „zuletzt geändert von“.
      */
-    const restore = (row: T) => {
+    const restore = (row: T): PotEntryWrite => {
       const toastStore = useToastStore()
-      runOptimistic<T>({
+      return runOptimistic<T>({
         entityId: idOf(row),
         apply: () => {
           if (findLocal(idOf(row))) return null
@@ -465,13 +479,13 @@ export const usePotStore = defineStore('pot', () => {
       })
     }
 
-    /** Löschen mit Rückgängig-Hinweis. */
-    const remove = (id: string): boolean => {
+    /** Löschen mit Rückgängig-Hinweis (ohne mit `quiet`). */
+    const remove = (id: string, { quiet = false }: EntryWriteOptions = {}): PotEntryWrite => {
       const toastStore = useToastStore()
       const row = findLocal(id)
-      if (!row) return false
+      if (!row) return { applied: false, settled: Promise.resolve(false) }
       let undoToastId: string | null = null
-      const { applied } = runOptimistic<T>({
+      const write = runOptimistic<T>({
         entityId: id,
         apply: () => {
           dropLocal(id)
@@ -488,17 +502,17 @@ export const usePotStore = defineStore('pot', () => {
           toastStore.showToast(`${label} konnte nicht gelöscht werden`, 'error')
         },
       })
-      if (!applied) return false
+      if (!write.applied || quiet) return write
       // Rückgängig reiht sich hinter das noch laufende Löschen derselben
       // Kennung ein (Serialisierung in der optimistischen Schicht).
       undoToastId = toastStore.showToast(`${label} gelöscht`, 'info', UNDO_TOAST_MS, {
         label: 'Rückgängig',
         run: () => restore(row),
       })
-      return true
+      return write
     }
 
-    return { create, update, remove }
+    return { create, update, remove, restore }
   }
 
   const expenseWriter = entryWriter<PotExpense>({
@@ -528,7 +542,7 @@ export const usePotStore = defineStore('pot', () => {
     spentOn: string
     description: string
     split: ExpenseSplit
-  }): boolean => {
+  }) => {
     return expenseWriter.create((householdId) => {
       const now = new Date().toISOString()
       return {
@@ -558,7 +572,7 @@ export const usePotStore = defineStore('pot', () => {
       description: string
       split: ExpenseSplit
     },
-  ): boolean =>
+  ): PotEntryWrite =>
     expenseWriter.update(expenseId, {
       payer_participant_id: input.payerId,
       amount_cents: input.amountCents,
@@ -568,7 +582,11 @@ export const usePotStore = defineStore('pot', () => {
       split_values: toSplitValues(input.split),
     })
 
-  const deleteExpense = (expenseId: string): boolean => expenseWriter.remove(expenseId)
+  const deleteExpense = (expenseId: string, opts: EntryWriteOptions = {}): PotEntryWrite =>
+    expenseWriter.remove(expenseId, opts)
+
+  /** Eine gelöschte Ausgabe unverändert zurück: Kennung, Zeitstempel, „zuletzt geändert von“. */
+  const restoreExpense = (row: PotExpense): PotEntryWrite => expenseWriter.restore(row)
 
   /**
    * Rückzahlung eintragen: `fromId` hat `toId` im Topf `potId` Geld überwiesen.
@@ -580,7 +598,7 @@ export const usePotStore = defineStore('pot', () => {
     toId: string
     amountCents: number
     paidOn: string
-  }): boolean => {
+  }) => {
     return repaymentWriter.create((householdId) => {
       const now = new Date().toISOString()
       return {
@@ -601,7 +619,7 @@ export const usePotStore = defineStore('pot', () => {
   const updateRepayment = (
     repaymentId: string,
     input: { fromId: string; toId: string; amountCents: number; paidOn: string },
-  ): boolean =>
+  ): PotEntryWrite =>
     repaymentWriter.update(repaymentId, {
       from_participant_id: input.fromId,
       to_participant_id: input.toId,
@@ -609,7 +627,11 @@ export const usePotStore = defineStore('pot', () => {
       paid_on: input.paidOn,
     })
 
-  const deleteRepayment = (repaymentId: string): boolean => repaymentWriter.remove(repaymentId)
+  const deleteRepayment = (repaymentId: string, opts: EntryWriteOptions = {}): PotEntryWrite =>
+    repaymentWriter.remove(repaymentId, opts)
+
+  /** Eine gelöschte Rückzahlung unverändert zurück, wie `restoreExpense`. */
+  const restoreRepayment = (row: PotRepayment): PotEntryWrite => repaymentWriter.restore(row)
 
   // ---------------------------------------------------------------
   // Töpfe für einen Anlass
@@ -907,7 +929,9 @@ export const usePotStore = defineStore('pot', () => {
     createRepayment,
     updateExpense,
     deleteExpense,
+    restoreExpense,
     updateRepayment,
     deleteRepayment,
+    restoreRepayment,
   }
 })
