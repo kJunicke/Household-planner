@@ -14,6 +14,7 @@ import { guideTools } from './appGuide'
 import { checklistTools, type ListToolStores } from './listTools'
 import { navigationTools } from './navigationTools'
 import { notesTools, type NotesToolStore } from './notesTools'
+import { potTools, type PotToolStores } from './potTools'
 import { shoppingTools, type ShoppingToolStore } from './shoppingTools'
 import { taskCompleteTools } from './taskCompleteTools'
 import { taskTools, type TaskToolStores } from './taskTools'
@@ -24,6 +25,7 @@ export type AssistantPage =
   | { area: 'notes' }
   | { area: 'wall' }
   | { area: 'history' }
+  | { area: 'pot'; potId: string }
 
 export interface ChangedEntry {
   id: string
@@ -89,6 +91,8 @@ export interface ToolDeps {
   notes: NotesToolStore
   /** Die Aufgaben der Pinnwand, dazu das Wochenziel. */
   tasks: TaskToolStores
+  /** Töpfe für einen Anlass; fehlt in Tests anderer Bereiche. */
+  pots?: PotToolStores
   /** Bringt die App auf eine Seite (`createGoToPage`). */
   goToPage: (page: AppPage) => void
   /** Wer fragt; `null` abgemeldet. */
@@ -107,6 +111,7 @@ export function assistantTools(deps: ToolDeps): ToolRegistry {
     ...notesTools(deps.notes, deps.currentUserId),
     ...taskTools(deps.tasks),
     ...taskCompleteTools(deps.tasks.tasks),
+    ...(deps.pots ? potTools(deps.pots) : []),
     ...navigationTools(deps.goToPage),
     ...guideTools(),
   ]

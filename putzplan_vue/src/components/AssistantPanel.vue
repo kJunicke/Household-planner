@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * Chat mit dem Assistenten: Listen, Notizen und Aufgaben per Satz, mit Toast und
+ * Chat mit dem Assistenten: Listen, Notizen, Aufgaben und Töpfe per Satz, mit Toast und
  * Rückgängig je Änderung und einer Karte vor jedem Löschen.
  *
  * Der Verlauf lebt in dieser Komponente. Sie hängt im Header, der beim
@@ -29,6 +29,7 @@ import { useAuthStore } from '@/stores/authStore'
 import { useGuestShareStore } from '@/stores/guestShareStore'
 import { useHouseholdStore } from '@/stores/householdStore'
 import { useNotesStore } from '@/stores/notesStore'
+import { usePotStore } from '@/stores/potStore'
 import { usePackingStore } from '@/stores/packingStore'
 import { useShoppingStore } from '@/stores/shoppingStore'
 import { useTaskStore } from '@/stores/taskStore'
@@ -52,6 +53,11 @@ const tools = assistantTools({
   lists,
   notes: useNotesStore(),
   tasks: { tasks: useTaskStore(), household: useHouseholdStore(), today: () => new Date() },
+  pots: {
+    pots: usePotStore(),
+    household: useHouseholdStore(),
+    hasGuestLink: (potId: string) => guestShares.shares.some((s) => s.target_id === potId),
+  },
   goToPage,
   currentUserId: () => authStore.user?.id ?? null,
 })

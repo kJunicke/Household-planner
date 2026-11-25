@@ -6,6 +6,8 @@ import { participantNameProblem, participantNameProblemText, potTitle } from '@/
 import { POT_PARTICIPANT_NAME_MAX_LENGTH } from '@/lib/limits'
 import { formatCents, suggestTransfers } from '@/lib/potLedger'
 import { entryChangeLine } from '@/lib/potEntryChange'
+import { flashedPotIds } from '@/lib/assistant/followApp'
+import { FLASH_CLASS, useFlash } from '@/lib/assistant/flash'
 import ExpenseCreateModal from './ExpenseCreateModal.vue'
 import RepaymentCreateModal from './RepaymentCreateModal.vue'
 import GuestShareControls from './GuestShareControls.vue'
@@ -27,6 +29,9 @@ const showCreateModal = ref(false)
 const editingExpense = ref<PotExpense | null>(null)
 
 const title = computed(() => potTitle(props.pot))
+
+// Nach dem Assistenten (Topf angelegt, abgeschlossen, wieder geöffnet) leuchtet der Titel auf.
+useFlash(flashedPotIds)
 
 const balanceRows = computed(() => {
   const balances = potStore.balancesOf(props.pot.pot_id)
@@ -253,7 +258,7 @@ const handleDelete = () => {
       </div>
     </div>
 
-    <h2 class="pot-title">{{ title }}</h2>
+    <h2 :class="['pot-title', flashedPotIds.has(pot.pot_id) && FLASH_CLASS]">{{ title }}</h2>
     <div v-if="pot.closed_at" class="closed-banner">
       <i class="bi bi-lock me-1"></i> Abgeschlossen am {{ formatClosedAt(pot.closed_at) }} —
       schreibgeschützt

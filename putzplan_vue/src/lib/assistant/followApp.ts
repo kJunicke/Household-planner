@@ -7,8 +7,8 @@
  * liest `flashedShoppingIds`, die Ansicht der Pack- und To-do-Listen
  * `flashedChecklistIds`, die Notizen `flashedNoteIds`, die Pinnwand
  * `flashedTaskIds` (Zettel und Zeilen im Erledigt-Streifen), der Verlauf
- * `flashedCompletionIds` (eine Quick-Aufgabe), und lassen die Einträge
- * aufleuchten.
+ * `flashedCompletionIds` (eine Quick-Aufgabe), ein Topf `flashedPotIds` (sein
+ * Titel), und lassen die Einträge aufleuchten.
  */
 import { ref } from 'vue'
 import type { Router } from 'vue-router'
@@ -28,6 +28,8 @@ export const flashedNoteIds = ref<ReadonlySet<string>>(new Set())
 export const flashedTaskIds = ref<ReadonlySet<string>>(new Set())
 /** Die Erledigungen im Verlauf, die gerade aufleuchten. */
 export const flashedCompletionIds = ref<ReadonlySet<string>>(new Set())
+/** Die Töpfe, deren Titel gerade aufleuchtet. */
+export const flashedPotIds = ref<ReadonlySet<string>>(new Set())
 let flashTimer: number | undefined
 
 type FollowStore = Pick<ReturnType<typeof useShoppingStore>, 'currentListId' | 'currentItemId'>
@@ -67,6 +69,10 @@ export function followApp(
     if (router.currentRoute.value.name === 'notes') return { area: 'notes' }
     if (router.currentRoute.value.name === 'home') return { area: 'wall' }
     if (router.currentRoute.value.name === 'history') return { area: 'history' }
+    const potId = router.currentRoute.value.query.topf
+    if (router.currentRoute.value.name === 'kasse' && typeof potId === 'string') {
+      return { area: 'pot', potId }
+    }
     const area = listsTab()
     if (!area) return null
     const listId = area === 'shopping' ? shopping.currentListId : checklists[area].currentListId
@@ -85,6 +91,8 @@ export function followApp(
       flashedTaskIds.value = new Set(ids)
     } else if (page.area === 'history') {
       flashedCompletionIds.value = new Set(ids)
+    } else if (page.area === 'pot') {
+      flashedPotIds.value = new Set(ids)
     } else {
       flashedChecklistIds.value = new Set(ids)
     }
@@ -95,6 +103,7 @@ export function followApp(
       flashedNoteIds.value = new Set()
       flashedTaskIds.value = new Set()
       flashedCompletionIds.value = new Set()
+      flashedPotIds.value = new Set()
     }, FLASH_MS)
   }
 

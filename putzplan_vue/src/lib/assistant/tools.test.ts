@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import type { ListToolStores } from './listTools'
 import type { ShoppingToolStore } from './shoppingTools'
 import type { NotesToolStore } from './notesTools'
+import type { PotToolStores } from './potTools'
 import type { TaskToolStores } from './taskTools'
 import { assistantTools, undoFailedText } from './tools'
 
@@ -12,6 +13,7 @@ const registry = () =>
     lists: {} as ListToolStores,
     notes: { notes: [] } as unknown as NotesToolStore,
     tasks: {} as TaskToolStores,
+    pots: {} as PotToolStores,
     goToPage: () => {},
     currentUserId: () => 'me',
   })
@@ -56,6 +58,10 @@ describe('the tool registry', () => {
       'delete_task',
       'complete_task',
       'log_quick_task',
+      'create_pot',
+      'close_pot',
+      'reopen_pot',
+      'delete_pot',
       'go_to_page',
       'get_app_guide',
     ])

@@ -778,18 +778,22 @@ export const usePotStore = defineStore('pot', () => {
     return applied
   }
 
-  /** Abschließen (`closed: true`) oder wieder öffnen. Nie den Haushaltstopf. */
-  const setPotClosed = (potId: string, closed: boolean): boolean => {
+  /**
+   * Abschließen (`closed: true`) oder wieder öffnen. Nie den Haushaltstopf.
+   * `closedAt` setzt ein früheres Abschlussdatum wieder (Rückgängig des
+   * Assistenten nach dem Wieder öffnen); sonst gilt jetzt.
+   */
+  const setPotClosed = (potId: string, closed: boolean, closedAt?: string): boolean => {
     const toastStore = useToastStore()
     const pot = pots.value.find((p) => p.pot_id === potId)
     if (!pot || pot.kind !== 'event') return false
-    const closedAt = closed ? new Date().toISOString() : null
+    const closedAtValue = closed ? (closedAt ?? new Date().toISOString()) : null
     const { applied } = runOptimistic<{ before: string | null }>({
       entityId: potId,
       apply: () => {
         // Eingepackt: ein offener Topf hat `closed_at = null`, und `null` hieße „abbrechen“.
         const before = pot.closed_at
-        pot.closed_at = closedAt
+        pot.closed_at = closedAtValue
         return { before }
       },
       commit: async () => {
@@ -797,7 +801,7 @@ export const usePotStore = defineStore('pot', () => {
         // ohne zurückgegebene Zeile ist nichts geschehen.
         const { data, error } = await supabase
           .from('pots')
-          .update({ closed_at: closedAt })
+          .update({ closed_at: closedAtValue })
           .eq('pot_id', potId)
           .select('pot_id')
         if (error) throw error
