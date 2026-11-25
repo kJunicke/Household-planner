@@ -27,7 +27,8 @@ import type { useHouseholdStore } from '@/stores/householdStore'
 import type { usePotStore } from '@/stores/potStore'
 import { POT_NAME_MAX_LENGTH } from '@/lib/limits'
 import { hasGuestLink, type GuestLinkStore } from './guestLinks'
-import { undoAll, type AssistantTool, type Change, type ToolOutcome } from './tools'
+import { changedInPot, error, POT_ID, potPage } from './potToolShared'
+import type { AssistantTool, Change, ToolOutcome } from './tools'
 
 /** Die Teile der Stores, die die Werkzeuge brauchen; hereingereicht, damit Tests sie fälschen können. */
 export interface PotToolStores {
@@ -49,22 +50,9 @@ export interface PotToolStores {
   showPot: (potId: string) => void
 }
 
-const POT_ID = { type: 'string', description: 'ID des Topfs aus der Übersicht' }
-
-const error = (result: string): ToolOutcome => ({ result, isError: true })
-
-const potPage = (potId: string) => ({ area: 'pot', potId }) as const
-
 /** Ein Ergebnis aus genau einer rücknehmbaren Änderung am Topf `potId`; die App führt zu ihm. */
-function changedPot(potId: string, result: string, change: Change): ToolOutcome {
-  return {
-    result,
-    summary: change.summary,
-    undo: undoAll([change.undo]),
-    changed: [{ id: potId, page: potPage(potId) }],
-    changes: [change],
-  }
-}
+const changedPot = (potId: string, result: string, change: Change) =>
+  changedInPot(result, change, { id: potId, page: potPage(potId) })
 
 type Pot = PotToolStores['pots']['pots'][number]
 

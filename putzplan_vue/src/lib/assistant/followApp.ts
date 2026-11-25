@@ -8,8 +8,7 @@
  * `flashedChecklistIds`, die Notizen `flashedNoteIds`, die Pinnwand
  * `flashedTaskIds` (Zettel und Zeilen im Erledigt-Streifen), der Verlauf
  * `flashedCompletionIds` (eine Quick-Aufgabe), ein Topf `flashedPotIds` (sein
- * Titel) und `flashedPotEntryIds` (Ausgaben und Rückzahlungen), und lassen die
- * Einträge aufleuchten.
+ * Titel, seine Ausgaben und Rückzahlungen), und lassen die Einträge aufleuchten.
  */
 import { ref } from 'vue'
 import type { Router } from 'vue-router'
@@ -29,10 +28,12 @@ export const flashedNoteIds = ref<ReadonlySet<string>>(new Set())
 export const flashedTaskIds = ref<ReadonlySet<string>>(new Set())
 /** Die Erledigungen im Verlauf, die gerade aufleuchten. */
 export const flashedCompletionIds = ref<ReadonlySet<string>>(new Set())
-/** Die Töpfe, deren Titel gerade aufleuchtet. */
+/**
+ * Im offenen Topf, was gerade aufleuchtet: der Topf selbst (sein Titel; angelegt,
+ * abgeschlossen, wieder geöffnet) oder seine Ausgaben und Rückzahlungen. Die IDs
+ * sind verschieden, eine Menge trägt beides.
+ */
 export const flashedPotIds = ref<ReadonlySet<string>>(new Set())
-/** Die Ausgaben und Rückzahlungen im offenen Topf, die gerade aufleuchten. */
-export const flashedPotEntryIds = ref<ReadonlySet<string>>(new Set())
 let flashTimer: number | undefined
 
 type FollowStore = Pick<ReturnType<typeof useShoppingStore>, 'currentListId' | 'currentItemId'>
@@ -95,9 +96,7 @@ export function followApp(
     } else if (page.area === 'history') {
       flashedCompletionIds.value = new Set(ids)
     } else if (page.area === 'pot') {
-      // Der Topf selbst (Titel) oder seine Einträge: die IDs sind verschieden.
       flashedPotIds.value = new Set(ids)
-      flashedPotEntryIds.value = new Set(ids)
     } else {
       flashedChecklistIds.value = new Set(ids)
     }
@@ -109,7 +108,6 @@ export function followApp(
       flashedTaskIds.value = new Set()
       flashedCompletionIds.value = new Set()
       flashedPotIds.value = new Set()
-      flashedPotEntryIds.value = new Set()
     }, FLASH_MS)
   }
 

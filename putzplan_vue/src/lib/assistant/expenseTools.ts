@@ -21,13 +21,8 @@ import { formatCents, splitValidity, suggestTransfers, type ExpenseSplit } from 
 import { parsePotAmount, potTitle } from '@/lib/potRules'
 import { parseEuroCents } from '@/lib/settlementAmount'
 import { toIsoDate } from '@/lib/taskSchedule'
-import {
-  undoAll,
-  type AssistantTool,
-  type Change,
-  type ChangedEntry,
-  type ToolOutcome,
-} from './tools'
+import { changedInPot, error, POT_ID, potPage } from './potToolShared'
+import type { AssistantTool, ToolOutcome } from './tools'
 
 /**
  * Die Teile des potStore, die die Werkzeuge brauchen. Hereingereicht statt
@@ -67,24 +62,10 @@ const ENTRIES_MAX = 40
 
 const QUIET = { quiet: true }
 
-const error = (result: string): ToolOutcome => ({ result, isError: true })
 const isError = (value: unknown): value is ToolOutcome =>
   typeof value === 'object' && value !== null && 'isError' in value
 
-const potPage = (potId: string) => ({ area: 'pot', potId }) as const
-
 const settled = async (write: PotEntryWrite) => write.applied && (await write.settled)
-
-/** Ein Ergebnis aus genau einer rücknehmbaren Änderung, die im Topf aufleuchtet. */
-function changedEntry(result: string, change: Change, shown: ChangedEntry): ToolOutcome {
-  return {
-    result,
-    summary: change.summary,
-    undo: undoAll([change.undo]),
-    changed: [shown],
-    changes: [change],
-  }
-}
 
 const formatDay = (isoDate: string) => isoDate.split('-').reverse().join('.')
 
@@ -99,10 +80,11 @@ const BAD_AMOUNT =
   'Betrag ungültig: Euro größer 0 mit höchstens zwei Nachkommastellen, z. B. „34“ oder „12,50“. ' +
   'Nichts eingetragen; frag nach dem Betrag, statt zu runden.'
 
+const notLoaded = () => error('Die Töpfe sind noch nicht geladen; versuch es gleich noch einmal.')
+
 /** Der Topf zu `input.pot_id`, oder das Fehlerergebnis für Claude. */
 function findPot(store: Store, potId: unknown): Pot | ToolOutcome {
-  if (!store.loaded)
-    return error('Die Töpfe sind noch nicht geladen; versuch es gleich noch einmal.')
+  if (!store.loaded) return notLoaded()
   const id = String(potId ?? '')
   return store.pots.find((p) => p.pot_id === id) ?? error(`Unbekannte pot_id ${id}`)
 }
@@ -158,9 +140,12 @@ const expenseLine = (store: Store, e: PotExpense) =>
   `${e.description} ${formatCents(e.amount_cents)}, bezahlt von ` +
   `${store.participantName(e.payer_participant_id)}; ${splitLabel(store, e)}: ${sharesLine(store, e)}`
 
+/** „Kilian an Anna“ */
+const fromTo = (store: Store, fromId: string, toId: string) =>
+  `${store.participantName(fromId)} an ${store.participantName(toId)}`
+
 const repaymentLine = (store: Store, r: PotRepayment) =>
-  `${store.participantName(r.from_participant_id)} an ${store.participantName(r.to_participant_id)} ` +
-  formatCents(r.amount_cents)
+  `${fromTo(store, r.from_participant_id, r.to_participant_id)} ${formatCents(r.amount_cents)}`
 
 function readPot(store: Store, input: Record<string, unknown>): ToolOutcome {
   const pot = findPot(store, input.pot_id)
@@ -193,8 +178,7 @@ function readPot(store: Store, input: Record<string, unknown>): ToolOutcome {
   })
 
   const transfers = suggestTransfers(balances).map(
-    (t) =>
-      `- ${store.participantName(t.fromId)} an ${store.participantName(t.toId)} ${formatCents(t.amountCents)}`,
+    (t) => `- ${fromTo(store, t.fromId, t.toId)} ${formatCents(t.amountCents)}`,
   )
 
   type Line = { day: string; createdAt: string; text: string }
@@ -235,6 +219,16 @@ function readPot(store: Store, input: Record<string, unknown>): ToolOutcome {
 // ---------------------------------------------------------------
 // Ausgaben
 // ---------------------------------------------------------------
+
+/** Die Teilnehmer in der Reihenfolge des Topfs; an sie gehen Cent-Reste zuerst. */
+const potOrder = (store: Store, potId: string) =>
+  store.participantsOf(potId).map((p) => p.participant_id)
+
+/** Die ganze Gruppe einer Ausgabe, die `createdAt` angelegt wurde (oder wird). */
+const wholeGroupAt = (store: Store, potId: string, createdAt: string): ExpenseSplit => ({
+  kind: 'whole_group',
+  participantIds: store.wholeGroupCarriersAt(potId, createdAt),
+})
 
 /** Zwei Nachkommastellen höchstens, wie im Formular. */
 const hasTwoDecimals = (n: number) => Math.abs(n * 100 - Math.round(n * 100)) < 1e-6
@@ -277,10 +271,7 @@ function splitOf(
       break
     }
     case 'whole_group':
-      split = {
-        kind: 'whole_group',
-        participantIds: store.wholeGroupCarriersAt(pot.pot_id, createdAt),
-      }
+      split = wholeGroupAt(store, pot.pot_id, createdAt)
       break
     case 'ratio':
     case 'percent':
@@ -314,8 +305,7 @@ function splitOf(
       return error(`Unbekannte Aufteilung ${String(input.kind)}`)
   }
 
-  const order = store.participantsOf(pot.pot_id).map((p) => p.participant_id)
-  const validity = splitValidity({ amountCents, split }, order)
+  const validity = splitValidity({ amountCents, split }, potOrder(store, pot.pot_id))
   if (validity.valid) return split
   const ask = ' Nichts eingetragen; frag nach der Aufteilung.'
   switch (validity.reason) {
@@ -393,7 +383,7 @@ async function addExpense(
   if (isError(payerId)) return payerId
   const spentOn = input.spent_on === undefined ? toIsoDate(stores.today()) : input.spent_on
   if (!isIsoDate(spentOn)) return error('spent_on muss ein Datum YYYY-MM-DD sein.')
-  const split = splitOf(store, pot, input.split, amountCents, new Date().toISOString())
+  const split = splitOf(store, pot, input.split, amountCents, stores.today().toISOString())
   if (isError(split)) return split
 
   const write = store.createExpense({
@@ -410,7 +400,7 @@ async function addExpense(
     return { ...error('Ausgabe nicht eingetragen.'), summary: `✗ nicht eingetragen: ${line}` }
   }
   const added = store.expensesOf(pot.pot_id).find((e) => e.expense_id === id)
-  return changedEntry(
+  return changedInPot(
     `Ausgabe eingetragen (id ${id}) im Topf ${potTitle(pot)}: ` +
       (added ? expenseLine(store, added) : line),
     {
@@ -423,8 +413,7 @@ async function addExpense(
 
 /** Die Ausgabe zu `input.expense_id` in einem offenen Topf, oder das Fehlerergebnis. */
 function findExpense(store: Store, input: Record<string, unknown>): PotExpense | ToolOutcome {
-  if (!store.loaded)
-    return error('Die Töpfe sind noch nicht geladen; versuch es gleich noch einmal.')
+  if (!store.loaded) return notLoaded()
   const id = String(input.expense_id ?? '')
   const found = store.pots
     .flatMap((p) => store.expensesOf(p.pot_id))
@@ -471,14 +460,11 @@ async function updateExpense(store: Store, input: Record<string, unknown>): Prom
     what.push('neue Aufteilung')
   } else {
     // Ein neuer Betrag muss zur alten Aufteilung passen (Prozente, Beträge).
-    const order = store.participantsOf(pot.pot_id).map((p) => p.participant_id)
     const kept =
       before.split.kind === 'whole_group'
-        ? {
-            kind: 'whole_group' as const,
-            participantIds: store.wholeGroupCarriersAt(pot.pot_id, found.created_at),
-          }
+        ? wholeGroupAt(store, pot.pot_id, found.created_at)
         : before.split
+    const order = potOrder(store, pot.pot_id)
     if (!splitValidity({ amountCents: after.amountCents, split: kept }, order).valid) {
       return error(
         'Mit dem neuen Betrag geht die Aufteilung nach Beträgen nicht mehr auf. Nichts geändert; ' +
@@ -494,7 +480,7 @@ async function updateExpense(store: Store, input: Record<string, unknown>): Prom
   }
   const changed = store.expensesOf(pot.pot_id).find((e) => e.expense_id === id)
   const line = `${before.description} → ${what.join(', ')}`
-  return changedEntry(
+  return changedInPot(
     `Geändert: ${changed ? expenseLine(store, changed) : line}.`,
     {
       summary: `✓ geändert: ${line}`,
@@ -508,22 +494,22 @@ function deleteExpense(store: Store, input: Record<string, unknown>): ToolOutcom
   const found = findExpense(store, input)
   if (isError(found)) return found
   const row = { ...found, split_values: { ...found.split_values } }
-  const pot = potTitle(potOf(store, row.pot_id))
+  const potName = potTitle(potOf(store, row.pot_id))
   const amount = formatCents(row.amount_cents)
   return {
     result: 'Wartet auf die Bestätigung des Nutzers.',
     deleteCard: {
       what:
         `Ausgabe „${row.description}“ (${amount}, bezahlt von ` +
-        `${store.participantName(row.payer_participant_id)}) im Topf ${pot}`,
+        `${store.participantName(row.payer_participant_id)}) im Topf ${potName}`,
       confirm: async () => {
         if (!(await settled(store.deleteExpense(row.expense_id, QUIET)))) {
           return { ...error('Nichts gelöscht.'), summary: `✗ nicht gelöscht: ${row.description}` }
         }
-        return changedEntry(
+        return changedInPot(
           `Ausgabe gelöscht (id ${row.expense_id}).`,
           {
-            summary: `✓ Ausgabe gelöscht: ${row.description} ${amount} (${pot})`,
+            summary: `✓ Ausgabe gelöscht: ${row.description} ${amount} (${potName})`,
             undo: () => settled(store.restoreExpense(row)),
           },
           // Die App geht in den Topf; die Ausgabe leuchtet auf, wenn Rückgängig sie zurückholt.
@@ -552,12 +538,12 @@ async function addRepayment(
   const store = stores.pots
   const pot = writablePot(store, input.pot_id)
   if (isError(pot)) return pot
-  const rawFrom = typeof input.from_participant_id === 'string' && input.from_participant_id
-  const fromRaw = rawFrom || store.myParticipantId(pot.pot_id)
-  if (!fromRaw) {
+  const named = typeof input.from_participant_id === 'string' && input.from_participant_id
+  const sender = named || store.myParticipantId(pot.pot_id)
+  if (!sender) {
     return error(`Du bist im Topf ${potTitle(pot)} kein Teilnehmer: frag, wer überwiesen hat.`)
   }
-  const fromId = participantOf(store, pot, fromRaw)
+  const fromId = participantOf(store, pot, sender)
   if (isError(fromId)) return fromId
   const toId = participantOf(store, pot, String(input.to_participant_id ?? ''))
   if (isError(toId)) return toId
@@ -568,12 +554,12 @@ async function addRepayment(
   if (!isIsoDate(paidOn)) return error('paid_on muss ein Datum YYYY-MM-DD sein.')
 
   const write = store.createRepayment({ potId: pot.pot_id, fromId, toId, amountCents, paidOn })
-  const line = `${store.participantName(fromId)} an ${store.participantName(toId)} ${formatCents(amountCents)}`
+  const line = `${fromTo(store, fromId, toId)} ${formatCents(amountCents)}`
   const id = write.id
   if (!id || !(await settled(write))) {
     return { ...error('Rückzahlung nicht eingetragen.'), summary: `✗ nicht eingetragen: ${line}` }
   }
-  return changedEntry(
+  return changedInPot(
     `Rückzahlung eingetragen (id ${id}) im Topf ${potTitle(pot)}: ${line}.`,
     {
       summary: `✓ Rückzahlung: ${line} (${potTitle(pot)})`,
@@ -585,8 +571,7 @@ async function addRepayment(
 
 /** Die Rückzahlung zu `input.repayment_id`, die der Assistent ändern darf, oder das Fehlerergebnis. */
 function findRepayment(store: Store, input: Record<string, unknown>): PotRepayment | ToolOutcome {
-  if (!store.loaded)
-    return error('Die Töpfe sind noch nicht geladen; versuch es gleich noch einmal.')
+  if (!store.loaded) return notLoaded()
   const id = String(input.repayment_id ?? '')
   const found = store.pots
     .flatMap((p) => store.repaymentsOf(p.pot_id))
@@ -626,7 +611,7 @@ async function updateRepayment(store: Store, input: Record<string, unknown>): Pr
   if (after.fromId === after.toId)
     return error('Von und an wären dieselbe Person. Nichts geändert.')
   if (after.fromId !== before.fromId || after.toId !== before.toId) {
-    what.push(`${store.participantName(after.fromId)} an ${store.participantName(after.toId)}`)
+    what.push(fromTo(store, after.fromId, after.toId))
   }
   if (input.amount !== undefined) {
     const amountCents = amountOf(input.amount)
@@ -642,12 +627,12 @@ async function updateRepayment(store: Store, input: Record<string, unknown>): Pr
   if (what.length === 0) return error('Nichts zu ändern: die Rückzahlung steht schon so.')
 
   const id = found.repayment_id
-  const name = `Rückzahlung ${store.participantName(before.fromId)} an ${store.participantName(before.toId)}`
+  const name = `Rückzahlung ${fromTo(store, before.fromId, before.toId)}`
   if (!(await settled(store.updateRepayment(id, after)))) {
     return { ...error('Nicht geändert'), summary: `✗ nicht geändert: ${name}` }
   }
   const line = `${name} → ${what.join(', ')}`
-  return changedEntry(
+  return changedInPot(
     `Geändert: ${line}.`,
     {
       summary: `✓ geändert: ${line}`,
@@ -661,21 +646,21 @@ function deleteRepayment(store: Store, input: Record<string, unknown>): ToolOutc
   const found = findRepayment(store, input)
   if (isError(found)) return found
   const row = { ...found }
-  const pot = potTitle(potOf(store, row.pot_id))
-  const who = `${store.participantName(row.from_participant_id)} an ${store.participantName(row.to_participant_id)}`
+  const potName = potTitle(potOf(store, row.pot_id))
+  const who = fromTo(store, row.from_participant_id, row.to_participant_id)
   const amount = formatCents(row.amount_cents)
   return {
     result: 'Wartet auf die Bestätigung des Nutzers.',
     deleteCard: {
-      what: `Rückzahlung ${who} (${amount}) im Topf ${pot}`,
+      what: `Rückzahlung ${who} (${amount}) im Topf ${potName}`,
       confirm: async () => {
         if (!(await settled(store.deleteRepayment(row.repayment_id, QUIET)))) {
           return { ...error('Nichts gelöscht.'), summary: `✗ nicht gelöscht: Rückzahlung ${who}` }
         }
-        return changedEntry(
+        return changedInPot(
           `Rückzahlung gelöscht (id ${row.repayment_id}).`,
           {
-            summary: `✓ Rückzahlung gelöscht: ${who} ${amount} (${pot})`,
+            summary: `✓ Rückzahlung gelöscht: ${who} ${amount} (${potName})`,
             undo: () => settled(store.restoreRepayment(row)),
           },
           { id: row.repayment_id, page: potPage(row.pot_id), removed: true },
@@ -689,7 +674,6 @@ function deleteRepayment(store: Store, input: Record<string, unknown>): ToolOutc
 // Definitionen für Claude
 // ---------------------------------------------------------------
 
-const POT_ID = { type: 'string', description: 'ID des Topfs aus der Übersicht' }
 const AMOUNT = {
   type: 'string',
   description: 'Betrag in Euro genau wie gesagt, z. B. „34“ oder „12,50“; nie selbst gerundet',

@@ -6,7 +6,7 @@ import { participantNameProblem, participantNameProblemText, potTitle } from '@/
 import { POT_PARTICIPANT_NAME_MAX_LENGTH } from '@/lib/limits'
 import { formatCents, suggestTransfers } from '@/lib/potLedger'
 import { entryChangeLine } from '@/lib/potEntryChange'
-import { flashedPotEntryIds, flashedPotIds } from '@/lib/assistant/followApp'
+import { flashedPotIds } from '@/lib/assistant/followApp'
 import { FLASH_CLASS, useFlash } from '@/lib/assistant/flash'
 import ExpenseCreateModal from './ExpenseCreateModal.vue'
 import RepaymentCreateModal from './RepaymentCreateModal.vue'
@@ -31,8 +31,8 @@ const editingExpense = ref<PotExpense | null>(null)
 const title = computed(() => potTitle(props.pot))
 
 // Nach dem Assistenten leuchtet der Titel auf (Topf angelegt, abgeschlossen, wieder
-// geöffnet) oder die Ausgabe bzw. Rückzahlung, die er eingetragen oder geändert hat.
-// followApp füllt beide Mengen zugleich; eine Beobachtung genügt.
+// geöffnet) oder die Ausgabe bzw. Rückzahlung, die er eingetragen oder geändert hat;
+// beides steht in derselben Menge.
 useFlash(flashedPotIds)
 
 const balanceRows = computed(() => {
@@ -356,7 +356,7 @@ const handleDelete = () => {
           <button
             v-if="entry.kind === 'expense'"
             type="button"
-            :class="['expense-item', { [FLASH_CLASS]: flashedPotEntryIds.has(entry.id) }]"
+            :class="['expense-item', { [FLASH_CLASS]: flashedPotIds.has(entry.id) }]"
             :disabled="!isOpen"
             @click="openEdit(entry)"
           >
@@ -383,7 +383,7 @@ const handleDelete = () => {
             type="button"
             :class="[
               'expense-item repayment-item',
-              { [FLASH_CLASS]: flashedPotEntryIds.has(entry.id) },
+              { [FLASH_CLASS]: flashedPotIds.has(entry.id) },
             ]"
             :disabled="!isOpen || !!entry.repayment.settlement_id"
             @click="openEdit(entry)"
