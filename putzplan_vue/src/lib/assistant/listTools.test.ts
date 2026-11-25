@@ -234,11 +234,18 @@ function setup(
     opts,
   )
   const shopping = fakeShopping()
+  // Wie der echte Store: Gastlinks kennt er erst, wenn er geladen hat.
+  const guestLinks = {
+    shares: [] as { target_id: string }[],
+    load: async () => {
+      guestLinks.shares = (opts.sharedListIds ?? []).map((target_id) => ({ target_id }))
+    },
+  }
   const stores = {
     shopping,
     packing,
     todo,
-    hasGuestLink: (listId: string) => (opts.sharedListIds ?? []).includes(listId),
+    guestLinks,
   } as unknown as ListToolStores
   const registry = assistantTools({
     shopping: { lists: [], items: [] } as unknown as ShoppingToolStore,

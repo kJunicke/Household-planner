@@ -3,26 +3,30 @@
  * anlegen, abschließen, wieder öffnen und löschen. Ausgaben, Rückzahlungen und
  * Salden gehören nicht hierher.
  *
- * Grenzen (Spec D4, D5, D19):
+ * Grenzen:
  * - Den **Haushaltstopf** schließt und löscht kein Werkzeug; die Datenbank
  *   verbietet es ohnehin.
  * - Teilnehmer beim Anlegen sind Haushaltsmitglieder. Gäste kommen über den
- *   **Gastlink**, und den fasst der Assistent nicht an.
- * - Nichts hier verrechnet oder gleicht aus.
+ *   **Gastlink**; Gastlinks anlegen, erneuern oder beenden ist Sache des
+ *   Haushalts, von Hand, und der Assistent fasst sie nicht an.
+ * - Nichts hier verrechnet oder gleicht aus: einen **Ausgleich** trägt der
+ *   Assistent nie ein, auch nicht auf Bitte.
+ * - Was sich nicht ganz zurücknehmen ließe, tut der Assistent nicht; vor jedem
+ *   Löschen nennt eine Karte, was verloren geht.
  *
  * Was sich zurücknehmen lässt: Anlegen (solange der Topf leer ist), Abschließen
- * und Wieder öffnen ganz. Löschen nur bei einem leeren Topf (Spec D19: was sich
- * gar nicht zurücknehmen lässt, kann er nicht). Zurückholen kann der Client
- * einen Topf nur über `create_event_pot`: ein neuer Topf mit neuen Teilnehmern
- * (andere Kennungen, Anlagezeiten, offene Entscheidungen zur ganzen Gruppe).
- * An Ausgaben und Rückzahlungen hinge die Rechnung daran, und einen Gastlink
- * löscht die Datenbank mit; einen Topf mit einem davon löscht nur, wer es von
- * Hand im Topf tut, und dorthin führt das Werkzeug. Ein leerer Topf kommt mit
+ * und Wieder öffnen ganz. Löschen nur bei einem leeren Topf. Zurückholen kann
+ * der Client einen Topf nur über `create_event_pot`: ein neuer Topf mit neuen
+ * Teilnehmern (andere Kennungen, Anlagezeiten, offene Entscheidungen zur ganzen
+ * Gruppe). An Ausgaben und Rückzahlungen hinge die Rechnung daran, und einen
+ * Gastlink löscht die Datenbank mit; einen Topf mit einem davon löscht nur, wer
+ * es von Hand im Topf tut, und dorthin führt das Werkzeug. Ein leerer Topf kommt mit
  * Namen, Teilnehmern und Abschlussdatum zurück, nur mit neuer Kennung.
  */
 import type { useHouseholdStore } from '@/stores/householdStore'
 import type { usePotStore } from '@/stores/potStore'
 import { POT_NAME_MAX_LENGTH } from '@/lib/limits'
+import { hasGuestLink, type GuestLinkStore } from './guestLinks'
 import { undoAll, type AssistantTool, type Change, type ToolOutcome } from './tools'
 
 /** Die Teile der Stores, die die Werkzeuge brauchen; hereingereicht, damit Tests sie fälschen können. */
@@ -39,8 +43,8 @@ export interface PotToolStores {
     | 'deletePot'
   >
   household: Pick<ReturnType<typeof useHouseholdStore>, 'householdMembers'>
-  /** Ob der Topf einen Gastlink hat; der endet mit ihm. */
-  hasGuestLink: (potId: string) => boolean
+  /** Die Gastlinks des Haushalts; der eines Topfs endet mit ihm. */
+  guestLinks: GuestLinkStore
   /** Bringt die App in den Topf. */
   showPot: (potId: string) => void
 }
@@ -84,13 +88,13 @@ function countOf(n: number, one: string, many: string) {
 }
 
 /** Was im Topf steht und ihn unwiederbringlich machte, z. B. „2 Ausgaben und einen Gastlink“; leer: `null`. */
-function contents(stores: PotToolStores, potId: string): string | null {
+async function contents(stores: PotToolStores, potId: string): Promise<string | null> {
   const expenses = stores.pots.expensesOf(potId).length
   const repayments = stores.pots.repaymentsOf(potId).length
   const parts = [
     ...(expenses ? [countOf(expenses, 'Ausgabe', 'Ausgaben')] : []),
     ...(repayments ? [countOf(repayments, 'Rückzahlung', 'Rückzahlungen')] : []),
-    ...(stores.hasGuestLink(potId) ? ['einen Gastlink'] : []),
+    ...((await hasGuestLink(stores.guestLinks, potId)) ? ['einen Gastlink'] : []),
   ]
   if (parts.length === 0) return null
   const last = parts.pop()!
@@ -124,11 +128,7 @@ async function createPot(
   const names = members.filter((m) => wanted.includes(m.user_id)).map((m) => m.display_name)
   const undo = async () => {
     // Ein Rückgängig löscht den Topf; was inzwischen darin steht, ginge mit.
-    const hasContent =
-      stores.pots.expensesOf(potId).length > 0 ||
-      stores.pots.repaymentsOf(potId).length > 0 ||
-      stores.hasGuestLink(potId)
-    return !hasContent && stores.pots.deletePot(potId)
+    return (await contents(stores, potId)) === null && stores.pots.deletePot(potId)
   }
   return changedPot(
     potId,
@@ -179,10 +179,13 @@ function reopenPot(stores: PotToolStores, input: Record<string, unknown>): ToolO
  * ihn wieder ab, wenn er abgeschlossen war, mit dem alten Datum. Einen Topf mit
  * Inhalt löscht er nicht; er führt hin.
  */
-function deletePot(stores: PotToolStores, input: Record<string, unknown>): ToolOutcome {
+async function deletePot(
+  stores: PotToolStores,
+  input: Record<string, unknown>,
+): Promise<ToolOutcome> {
   const pot = findEventPot(stores, input)
   if (!isPot(pot)) return pot
-  const held = contents(stores, pot.pot_id)
+  const held = await contents(stores, pot.pot_id)
   if (held) {
     stores.showPot(pot.pot_id)
     return {
@@ -269,6 +272,6 @@ export const potTools = (stores: PotToolStores): AssistantTool[] => [
       '„Abbrechen“; frag darum nicht selbst nach, und melde das Löschen erst, wenn das Ergebnis ' +
       'es bestätigt.',
     input_schema: { type: 'object', properties: { pot_id: POT_ID }, required: ['pot_id'] },
-    execute: async (input) => deletePot(stores, input),
+    execute: (input) => deletePot(stores, input),
   },
 ]

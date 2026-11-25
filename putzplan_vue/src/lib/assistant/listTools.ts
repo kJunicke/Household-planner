@@ -24,6 +24,7 @@ import {
   type ChangedEntry,
   type ToolOutcome,
 } from './tools'
+import { hasGuestLink, type GuestLinkStore } from './guestLinks'
 
 /** Der Teil eines Checklisten-Stores (Packliste, To-do), den die Werkzeuge brauchen. */
 export type ChecklistToolStore = Pick<
@@ -67,8 +68,8 @@ export interface ListToolStores {
   >
   packing: ChecklistToolStore
   todo: ChecklistToolStore
-  /** Ob die Liste einen Gastlink hat; der endet mit ihr, und kein Rückgängig holt ihn zurück. */
-  hasGuestLink: (listId: string) => boolean
+  /** Die Gastlinks des Haushalts; der einer Liste endet mit ihr, und kein Rückgängig holt ihn zurück. */
+  guestLinks: GuestLinkStore
 }
 
 type Kind = 'packing' | 'todo'
@@ -658,8 +659,10 @@ const withEntries = (n: number) =>
  * Karte: den Gastlink löscht die Datenbank mit der Liste, ein neuer hätte ein
  * neues Geheimnis, und der Gast stünde ohne Zugang da.
  */
-const guestLinkLoss = (stores: Pick<ListToolStores, 'hasGuestLink'>, listId: string) =>
-  stores.hasGuestLink(listId) ? '; ihr Gastlink endet und kommt mit Rückgängig nicht zurück' : ''
+const guestLinkLoss = async (stores: Pick<ListToolStores, 'guestLinks'>, listId: string) =>
+  (await hasGuestLink(stores.guestLinks, listId))
+    ? '; ihr Gastlink endet und kommt mit Rückgängig nicht zurück'
+    : ''
 
 async function deleteChecklist(
   stores: ListToolStores,
@@ -677,7 +680,7 @@ async function deleteChecklist(
   return {
     result: 'Wartet auf die Bestätigung des Nutzers.',
     deleteCard: {
-      what: `${what}${guestLinkLoss(stores, listId)}`,
+      what: `${what}${await guestLinkLoss(stores, listId)}`,
       confirm: async () => {
         if (!(await store.deleteList(listId, { quiet: true }))) {
           return {
@@ -707,7 +710,10 @@ function withArticles(open: number, bought: number) {
  * mit denselben IDs zurück, samt Kategorien und Artikeln mit ihrer
  * Kaufhistorie; nur ein Gastlink kommt nicht wieder, das sagt die Karte.
  */
-function deleteShoppingList(stores: ListToolStores, input: Record<string, unknown>): ToolOutcome {
+async function deleteShoppingList(
+  stores: ListToolStores,
+  input: Record<string, unknown>,
+): Promise<ToolOutcome> {
   const listId = String(input.list_id ?? '')
   const { shopping } = stores
   const found = shopping.lists.find((l) => l.list_id === listId)
@@ -721,7 +727,7 @@ function deleteShoppingList(stores: ListToolStores, input: Record<string, unknow
   return {
     result: 'Wartet auf die Bestätigung des Nutzers.',
     deleteCard: {
-      what: `${what}${guestLinkLoss(stores, listId)}`,
+      what: `${what}${await guestLinkLoss(stores, listId)}`,
       confirm: async () => {
         if (!(await shopping.deleteList(listId))) {
           return {
@@ -1077,7 +1083,7 @@ export const checklistTools = (stores: ListToolStores): AssistantTool[] => [
       },
       required: ['list_id'],
     },
-    execute: async (input) => deleteShoppingList(stores, input),
+    execute: (input) => deleteShoppingList(stores, input),
   },
   {
     name: 'create_checklist_category',

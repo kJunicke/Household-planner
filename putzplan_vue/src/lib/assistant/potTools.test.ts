@@ -33,6 +33,12 @@ function fakeStores({
   fail = false,
 } = {}) {
   const shown: string[] = []
+  const guestStore = {
+    shares: [] as { target_id: string }[],
+    load: async () => {
+      guestStore.shares = guestLinks.map((target_id) => ({ target_id }))
+    },
+  }
   const state = {
     pots: pots.map((p) => ({ ...p })),
     participants: participants as PotParticipant[],
@@ -89,7 +95,8 @@ function fakeStores({
         { user_id: 'anna', display_name: 'Anna' },
       ],
     } as unknown as PotToolStores['household'],
-    hasGuestLink: (id) => guestLinks.includes(id),
+    // Wie der echte Store: was die App nicht geladen hat, kennt er nicht.
+    guestLinks: guestStore,
     showPot: (id) => shown.push(id),
   }
   return { state, stores, shown }
@@ -274,6 +281,15 @@ describe('delete_pot', () => {
       expect(shown, what).toEqual(['ski'])
       expect(potNamed(state, 'Skiurlaub'), what).toBeDefined()
     }
+  })
+
+  it('refuses a pot whose only content is a Gastlink the app has not loaded yet', async () => {
+    const { stores, shown } = fakeStores({ guestLinks: ['ski'] })
+    expect(stores.guestLinks.shares).toEqual([])
+    const outcome = await run(stores, 'delete_pot', { pot_id: 'ski' })
+    expect(outcome.deleteCard).toBeUndefined()
+    expect(outcome.result).toContain('einen Gastlink')
+    expect(shown).toEqual(['ski'])
   })
 
   it('names what the pot holds when it refuses', async () => {

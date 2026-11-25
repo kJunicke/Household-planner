@@ -46,7 +46,7 @@ const lists = {
   shopping: shoppingStore,
   packing: usePackingStore(),
   todo: useTodoStore(),
-  hasGuestLink: (listId: string) => guestShares.shares.some((s) => s.target_id === listId),
+  guestLinks: guestShares,
 }
 const tools = assistantTools({
   shopping: shoppingStore,
@@ -56,7 +56,7 @@ const tools = assistantTools({
   pots: {
     pots: usePotStore(),
     household: useHouseholdStore(),
-    hasGuestLink: (potId: string) => guestShares.shares.some((s) => s.target_id === potId),
+    guestLinks: guestShares,
     showPot: (potId: string) => goToPage({ area: 'pot', potId }),
   },
   expenses: { pots: usePotStore(), today: () => new Date() },
