@@ -210,7 +210,7 @@ Weicht der Stand ab, die Sätze sinngemäß anpassen und das im Ergebnis vermerk
 | --- | --- | --- |
 | R1 | (nach mehr als 30 Minuten ohne Frage) Was steht auf der Drogerieliste? | Trennlinie „Neues Gespräch“ im Chat, dann `read_shopping_list` wie in B1 |
 
-## S. Aufgaben anlegen, zuweisen, verschieben, wieder dreckig, löschen und lesen
+## S. Aufgaben anlegen, bearbeiten, zuweisen, verschieben, wieder dreckig, löschen und lesen
 
 Aufgaben stehen nicht in der Übersicht: vor jedem schreibenden Werkzeug ist `read_tasks` erlaubt.
 Jede Änderung führt die App auf die Pinnwand; beim Schließen des Chats leuchten Zettel und Zeilen im
@@ -221,7 +221,7 @@ Erledigt-Streifen auf. Ausgangslage: die Zettel „QC-Raster …“ und „QC-Te
 | --- | --- | --- |
 | S1 | Was ist gerade dran? | `read_tasks`; Antwort nennt die Aufgaben, die dran sind, nicht die erledigten |
 | S2 | Leg eine Aufgabe QC Keller aufräumen an, einmalig, acht Punkte | `create_task` one-time, 8 Punkte; Toast, neuer Zettel; Rückgängig nimmt ihn wieder ab |
-| S3 | leg noch eine aufgabe qc keller aufräumen an mit fünf punkten einmalig | Duplikat: nichts angelegt, Antwort nennt die bestehende Aufgabe |
+| S3 | leg noch eine aufgabe qc keller aufräumen an mit fünf punkten einmalig | Duplikat: nichts angelegt, Antwort nennt die bestehende Aufgabe; anbieten, ihre Punkte mit `update_task` zu ändern, darf er |
 | S4 | Leg eine Aufgabe QC Fenster innen putzen an | Rückfrage nach Punkten (und Typ), kein `create_task` ohne Punkte |
 | S5 | qc-agent-2 soll den Keller machen | `assign_task` QC Keller aufräumen → qc-agent-2; Befestigung in seiner Farbe; Rückgängig: wieder niemand |
 | S6 | Verschieb QC-Test Sieben auf Freitag | `postpone_task` until = kommender Freitag; Zeile „→ TT.MM.“ im Erledigt-Streifen; Rückgängig: wieder dran |
@@ -229,8 +229,11 @@ Erledigt-Streifen auf. Ausgangslage: die Zettel „QC-Raster …“ und „QC-Te
 | S8 | QC-Raster Bad ist wieder dreckig | `mark_task_dirty`; Zettel zurück an der Wand, Punkte bleiben; Rückgängig: wieder erledigt |
 | S9 | Wer hat zuletzt QC-Raster Bad geputzt? | `read_task_history` (mit task_id); Antwort: wer und wann, nichts erfunden |
 | S10 | Wie steht das Wochenziel? | `read_weekly_goal`; Antwort: Ziel, Punkte der Woche, Anteile ohne Rangliste |
-| S11 | Lösch die Aufgabe QC-Raster Bad | `delete_task` → Karte („ihre Erledigungen bleiben im Verlauf“) → „Löschen“ → Toast; Rückgängig hängt denselben Zettel wieder hin; die Punkte im Wochenziel bleiben die ganze Zeit |
+| S11 | Lösch die Aufgabe QC-Raster Bad | `delete_task` → Karte („ihre Erledigungen bleiben im Verlauf“, „Rückgängig nur, solange keine neue Aufgabe so heißt“) → „Löschen“ → Toast, die App auf der Pinnwand; Rückgängig hängt denselben Zettel wieder hin, er leuchtet beim Schließen auf; die Punkte im Wochenziel bleiben die ganze Zeit |
 | S12 | Lösch die Aufgabe QC Keller aufräumen | `delete_task` → Karte ohne Verlaufshinweis → „Abbrechen“ → nichts gelöscht |
+| S13 | Benenn QC Keller aufräumen um in QC Keller ausmisten und mach zehn Punkte draus | `update_task` Titel „QC Keller ausmisten“, 10 Punkte; Toast, der Zettel leuchtet auf; Rückgängig: wieder QC Keller aufräumen mit 8 Punkten |
+| S14 | qc-raster küche soll alle vierzehn tage dran sein | `update_task` QC-Raster Küche, recurrence_days 14 (bleibt unbewertet) |
+| S15 | Mach aus QC-Test Projekt eine einmalige Aufgabe | Ablehnen: ein Projekt bleibt Projekt (wie im Bearbeiten-Fenster); nichts geändert |
 
 ## T. Aufgaben erledigen und Quick-Aufgaben (`complete_task`, `log_quick_task`)
 
@@ -247,7 +250,7 @@ dabei zum ersten Mal bewertete Aufgabe ist wieder unbewertet.
 | T2b | die auf der Pinnwand | `complete_task` QC-Raster Fenster mit points 3 |
 | T3 | Küche ist geputzt | Rückfrage nach den Punkten (unbewertet) |
 | T3b | 4 | `complete_task` QC-Raster Küche mit points 4; dann Rückgängig im Toast: Küche wieder an der Wand und unbewertet, Wochenziel −4 |
-| T4 | ich hab gerade den dachboden aufgeräumt sechs punkte | `log_quick_task` „Dachboden aufräumen“ mit 6 Punkten (keine passende Aufgabe); Rückgängig nimmt die 6 Punkte wieder raus |
+| T4 | ich hab gerade den dachboden aufgeräumt sechs punkte | `log_quick_task` „Dachboden aufräumen“ mit 6 Punkten (keine passende Aufgabe); die App wechselt in den Verlauf, beim Schließen leuchtet der Eintrag dort auf; Rückgängig nimmt die 6 Punkte wieder raus |
 | T5 | Ich hab den Keller entrümpelt | Rückfrage nach den Punkten für eine Quick-Aufgabe, oder ob QC Keller aufräumen (aus S2, qc-agent-2 zugewiesen) gemeint ist; nie ablehnen, weil sie einem anderen zugewiesen ist |
 | T5b | nein, ich hab QC Keller aufräumen gemacht, die von qc-agent-2 | `complete_task` QC Keller aufräumen für den, der fragt (+8 P): zuweisen heißt zuständig, erledigen darf jeder; Rückgängig: wieder an der Wand, qc-agent-2 wieder zuständig, Wochenziel −8 |
 | T6b | trag qc-agent-2 eine Quick-Aufgabe Auto waschen mit 5 Punkten ein | Ablehnen: auch keine Quick-Aufgabe für ein anderes Mitglied; kein Werkzeug, das etwas ändert |
@@ -255,4 +258,4 @@ dabei zum ersten Mal bewertete Aufgabe ist wieder unbewertet.
 | T7 | Fenster nochmal geputzt, diesmal 6 Punkte | Rückfrage nach der Begründung (Abweichung: sonst 3); nichts erledigt. Fragt er dazu nach Pinnwand oder Liste, ist das auch richtig |
 | T7b | die Pinnwand, war extrem dreckig nach der Party | `complete_task` QC-Raster Fenster mit points 6, note mit der Begründung, again (schon erledigt): Toast „+6 P statt 3“ |
 | T8 | Ich hab zwei Stunden am QC-Test Projekt gearbeitet | Rückfrage nach den Punkten; mit Antwort `complete_task` am Projekt: Toast „Projekt-Arbeit: QC-Test Projekt (+… P)“, das Projekt bleibt offen |
-| T9 | Bad ist geputzt | QC-Raster Bad ist schon erledigt: Hinweis darauf und Frage, ob er es seitdem noch einmal geputzt hat; kein `complete_task` mit `again` von sich aus |
+| T9 | Bad ist geputzt | QC-Raster Bad ist schon erledigt: Hinweis darauf, wann, und Frage, ob er es seitdem noch einmal geputzt hat; kein `complete_task` mit `again` von sich aus |
