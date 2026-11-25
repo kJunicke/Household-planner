@@ -65,3 +65,40 @@ Einträge mit `assistant-flash`. Rückgängig lief über den Knopf im Toast.
 - Aufleuchten: der Pfeffer leuchtete nach zurückgenommener Kategorie (A6) trotzdem; auf Desktop blieb
 	einmal (nach A4 bis A7) das Aufleuchten ganz aus, auf Handybreite nicht wieder aufgetreten.
 - F2, G2 und N3 fragen seit E6 zu Recht nach QC Zelten oder Zelten Sommer; der Katalog erwartet das jetzt.
+
+## Lauf vom 25.11.2026, nach dem Fix-Durchgang
+
+Abschnitte S (mit den neuen S13 bis S15 für `update_task`) und T ganz, dazu N, O, Q und die berührten
+A6 und H2; gegen Version 16 der Edge Function, als QC 1 über den Dev-Server, je Breite ein frisches
+Gespräch (Seite neu geladen). Ohne SQL-Rückstellung: die Ausgangslage kam von Hand über den Store
+(QC Keller aufräumen gelöscht, QC-Raster Fenster und vor T auch QC-Raster Bad wieder dreckig, Küche
+wieder ohne Intervall). Bad und Fenster sind seit dem ersten Lauf bewertet (5 und 3), darum erledigt T1
+das Bad gleich mit 5 Punkten, statt nach Punkten zu fragen; die unbewertete Küche (T3) deckt das ab.
+
+| | Sätze | Erwartete Reaktion | Falsch zugeordnet |
+| --- | --- | --- | --- |
+| Desktop (1512 px) | 51 | 50 | 1 (T7b) |
+| Handybreite (390 px), nach der T7b-Korrektur | 51 | 47 | 4 (T5, N4, O1, O3) |
+
+- **Neu und bestanden:** `update_task` (S13 Titel und Punkte, Rückgängig: wieder QC Keller aufräumen
+	mit 8; S14 Intervall 14, bleibt unbewertet; S15 Projekt abgelehnt), beide Breiten.
+- **Aufleuchten:** S11 Rückgängig nach dem Löschen holt QC-Raster Bad zurück, es leuchtet beim
+	Schließen auf (Desktop, Chat offen) und sofort (Handy, Chat schon zu). T4 führt in den Verlauf, die
+	Quick-Aufgabe leuchtet dort. A6: nach dem Rückgängig des Artikels leuchtet Pfeffer nicht mehr (auf
+	dem Handy mit der neuen Kategorie „Scharfes“, weil Gewürze schon bestand).
+- **T9** nennt jetzt, wann („heute schon erledigt“), beide Breiten; S1 nennt es auch.
+- **S11 und S12:** die Karte sagt „Rückgängig nur, solange keine neue Aufgabe so heißt“.
+- **H2** stand schon erledigt; kein falsches Werkzeug mehr, nur `read_checklist`.
+- Rückgängig im Toast: S2, S5, S6, S8, S11, S13, T3b (Küche wieder unbewertet, −4), T5b. T4 nicht:
+	der Toast war nach dem Bildschirmfoto abgelaufen.
+
+| Satz | Was falsch lief | Korrektur | Wiederholt |
+| --- | --- | --- | --- |
+| T7b | Notiz „Die Pinnwand war extrem dreckig nach der Party“ | Beschreibung von `note`: ohne Angabe, welche Aufgabe gemeint ist | Handy ✓ |
+| T5 | Handy: erledigte QC Keller aufräumen auf „Keller entrümpelt“ ohne Rückfrage (Desktop fragte) | offen | – |
+| N4 | Handy: richtige Antwort, aber ohne `get_app_guide` | offen | – |
+| O1 | Handy: führte hin, sagte aber nur „Die Seite ist geöffnet“, nicht, dass es von Hand geht | offen | – |
+| O3 | Handy: korrigierte ungefragt eine erfundene Bedingung aus O2 | offen | – |
+
+N4, O1 und O3 fielen nach rund 45 Fragen im selben Gespräch, wie die bekannten Ausfälle langer
+Gespräche.
